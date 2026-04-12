@@ -1,0 +1,639 @@
+{% load static %}
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>ARABELA | Reservation</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Epilogue:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600&amp;family=Poppins:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-surface-variant": "#444748",
+                        "on-primary-container": "#8a8989",
+                        "surface-tint": "#5f5e5e",
+                        "surface-dim": "#dcd9d9",
+                        "error-container": "#ffdad6",
+                        "tertiary-fixed": "#e4e2e2",
+                        "surface-container-lowest": "#ffffff",
+                        "outline": "#747878",
+                        "error": "#ba1a1a",
+                        "on-primary-fixed-variant": "#474746",
+                        "primary-container": "#222222",
+                        "secondary": "#615e57",
+                        "primary": "#0b0c0c",
+                        "on-primary-fixed": "#1b1c1c",
+                        "on-secondary": "#ffffff",
+                        "on-secondary-container": "#67645d",
+                        "outline-variant": "#c4c7c7",
+                        "secondary-fixed-dim": "#cbc6bd",
+                        "tertiary-fixed-dim": "#c8c6c6",
+                        "on-tertiary-fixed-variant": "#474747",
+                        "surface-container-low": "#f6f3f2",
+                        "secondary-fixed": "#e7e2d9",
+                        "primary-fixed": "#e5e2e1",
+                        "on-error": "#ffffff",
+                        "on-secondary-fixed": "#1d1b16",
+                        "secondary-container": "#e7e2d9",
+                        "on-tertiary-fixed": "#1b1c1c",
+                        "primary-fixed-dim": "#c8c6c5",
+                        "tertiary-container": "#222222",
+                        "inverse-primary": "#c8c6c5",
+                        "on-surface": "#1b1c1c",
+                        "surface-container": "#f0eded",
+                        "surface": "#fcf9f8",
+                        "surface-container-highest": "#e5e2e1",
+                        "on-primary": "#ffffff",
+                        "on-tertiary": "#ffffff",
+                        "on-error-container": "#93000a",
+                        "surface-container-high": "#eae7e7",
+                        "tertiary": "#0b0c0c",
+                        "surface-bright": "#fcf9f8",
+                        "background": "#fcf9f8",
+                        "surface-variant": "#e5e2e1",
+                        "inverse-on-surface": "#f3f0ef",
+                        "on-secondary-fixed-variant": "#494640",
+                        "on-tertiary-container": "#8a8989",
+                        "inverse-surface": "#303030",
+                        "on-background": "#1b1c1c"
+                    },
+                    fontFamily: {
+                        "headline": ["Epilogue"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            background-color: #fcf9f8;
+            color: #1b1c1c;
+            -webkit-font-smoothing: antialiased;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+            font-size: 1.25rem;
+        }
+        input:focus {
+            outline: none;
+            border-color: #0b0c0c !important;
+            box-shadow: none !important;
+        }
+        .editorial-shadow {
+            box-shadow: 0 20px 40px rgba(27, 28, 28, 0.06);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 2px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.02);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #0b0c0c;
+        }
+        @keyframes subtleScroll {
+            0% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0); }
+        }
+        .scroll-hint {
+            animation: subtleScroll 3s ease-in-out infinite;
+        }
+        .ai-panel-shadow { box-shadow: -10px 0 30px rgba(0,0,0,0.1); }
+        .ai-scroll::-webkit-scrollbar { width: 2px; }
+        .ai-scroll::-webkit-scrollbar-track { background: transparent; }
+        .ai-scroll::-webkit-scrollbar-thumb { background: #e5e2e1; }
+
+        @keyframes reservation-invalid-shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-6px); }
+            20%, 40%, 60%, 80% { transform: translateX(6px); }
+        }
+        .animate-reservation-invalid-shake {
+            animation: reservation-invalid-shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+        }
+        .reservation-field-invalid input {
+            border-bottom-color: #ba1a1a !important;
+        }
+        .reservation-field-invalid label {
+            color: #ba1a1a !important;
+        }
+        #proof-payment-dropzone.reservation-proof-invalid {
+            border-color: #ba1a1a !important;
+            background-color: rgba(186, 26, 26, 0.06);
+        }
+    </style>
+</head>
+<body class="font-body selection:bg-primary-fixed selection:text-primary overflow-x-hidden">
+
+<!-- TOP NAVBAR: bag + account only (reservation flow) -->
+<header class="fixed top-0 w-full z-[70] bg-[#FAF4EB]/80 dark:bg-[#222222]/80 backdrop-blur-md border-b border-black/5">
+<nav class="flex justify-between items-center w-full px-8 h-20">
+    <div class="flex items-center gap-12">
+        <div class="flex-shrink-0">
+            <a href="{% url 'gowns:homepage' %}" class="block">
+                <h1 class="font-['Poppins',sans-serif] text-2xl font-bold tracking-tighter text-[#222222] dark:text-[#FAF4EB]">ARABELA</h1>
+            </a>
+        </div>
+    </div>
+    <div class="flex gap-6 items-center">
+        <button type="button" class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]" onclick="toggleCart()" aria-label="Open selection">
+            <span class="material-symbols-outlined">shopping_bag</span>
+        </button>
+        <a href="{% url 'accounts:login' %}">
+            <button type="button" class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]">
+                <span class="material-symbols-outlined">person</span>
+            </button>
+        </a>
+    </div>
+</nav>
+</header>
+
+<div id="cart-click-away" class="fixed inset-0 z-[84] bg-transparent pointer-events-none" onclick="toggleCart()" aria-hidden="true"></div>
+
+<aside id="cart-drawer" class="fixed top-0 right-0 h-full w-full md:w-[480px] bg-[#FAF4EB] z-[85] translate-x-full transform transition-transform duration-500 ease-in-out ai-panel-shadow flex flex-col" aria-hidden="true">
+    <header class="p-8 flex justify-between items-center border-b border-black/5 shrink-0">
+        <h2 class="text-sm font-bold tracking-[0.2em] uppercase text-on-surface flex items-center gap-3">
+            <span class="material-symbols-outlined text-primary" style='font-variation-settings: "FILL" 0;'>shopping_bag</span>
+            Your Selection
+        </h2>
+        <button type="button" class="hover:opacity-50 transition-opacity text-[#222222] dark:text-[#FAF4EB]" onclick="toggleCart()" aria-label="Close selection">
+            <span class="material-symbols-outlined text-2xl">close</span>
+        </button>
+    </header>
+    <div class="flex-1 overflow-y-auto ai-scroll px-8 py-4 space-y-10 min-h-0">
+        <div class="cart-line flex gap-4 group" data-unit-price="4500">
+            <div class="w-24 h-32 bg-surface-container-low overflow-hidden shrink-0">
+                <img alt="Structured Wool Blazer" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDvrOUto9vy9py6fxR-YxuiQ7pL4WzddWzTNeVPBgk4qOrjLVsLT4uDAoXaKs7u1i7RXCaNnzcYFP-p16uIuULPo9aHvnWqqA_8NjhDlYa18k4FVHck1C2Gz80q-qvohzTgGYhT6Joc0gU5AiqDMxwGulS-59idA4ehLkllD_ADzTgoq8jmuolfvGYkSJfCy3KM20GMCLiQ4Lfj9E1rAkuQUPYF2_YX-5lUAOQKHU6OqqLU5ym1Kz-EDW6FLRhJrERNMDEhuiHEs-c"/>
+            </div>
+            <div class="flex-1 flex flex-col justify-between py-1 min-w-0">
+                <div class="flex justify-between items-start gap-2">
+                    <div>
+                        <h3 class="text-sm font-medium text-on-surface leading-tight">Structured Wool Blazer</h3>
+                        <p class="text-[0.6875rem] text-on-secondary-container mt-1">Size: Large</p>
+                    </div>
+                    <button type="button" class="text-on-surface hover:text-error transition-colors shrink-0" onclick="cartRemoveLine(this)" aria-label="Remove item">
+                        <span class="material-symbols-outlined text-lg">close</span>
+                    </button>
+                </div>
+                <div class="flex justify-between items-end gap-2">
+                    <div class="flex items-center space-x-3">
+                        <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, -1)" aria-label="Decrease quantity">
+                            <span class="material-symbols-outlined text-xs">remove</span>
+                        </button>
+                        <span class="cart-qty text-xs font-medium tabular-nums">1</span>
+                        <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, 1)" aria-label="Increase quantity">
+                            <span class="material-symbols-outlined text-xs">add</span>
+                        </button>
+                    </div>
+                    <p class="cart-line-total font-['Inter',sans-serif] text-sm font-semibold text-on-surface tracking-wide tabular-nums shrink-0">₱ 4,500.00</p>
+                </div>
+            </div>
+        </div>
+        <div class="cart-line flex gap-4 group" data-unit-price="6200">
+            <div class="w-24 h-32 bg-surface-container-low overflow-hidden shrink-0">
+                <img alt="Emerald Silk Midi Dress" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
+            </div>
+            <div class="flex-1 flex flex-col justify-between py-1 min-w-0">
+                <div class="flex justify-between items-start gap-2">
+                    <div>
+                        <h3 class="text-sm font-medium text-on-surface leading-tight">Emerald Silk Midi Dress</h3>
+                        <p class="text-[0.6875rem] text-on-secondary-container mt-1">Size: Small</p>
+                    </div>
+                    <button type="button" class="text-on-surface hover:text-error transition-colors shrink-0" onclick="cartRemoveLine(this)" aria-label="Remove item">
+                        <span class="material-symbols-outlined text-lg">close</span>
+                    </button>
+                </div>
+                <div class="flex justify-between items-end gap-2">
+                    <div class="flex items-center space-x-3">
+                        <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, -1)" aria-label="Decrease quantity">
+                            <span class="material-symbols-outlined text-xs">remove</span>
+                        </button>
+                        <span class="cart-qty text-xs font-medium tabular-nums">1</span>
+                        <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, 1)" aria-label="Increase quantity">
+                            <span class="material-symbols-outlined text-xs">add</span>
+                        </button>
+                    </div>
+                    <p class="cart-line-total font-['Inter',sans-serif] text-sm font-semibold text-on-surface tracking-wide tabular-nums shrink-0">₱ 6,200.00</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <footer class="p-8 space-y-6 bg-surface-container-low border-t border-black/5 shrink-0">
+        <div class="space-y-2">
+            <div class="flex justify-between items-center">
+                <span class="text-xs uppercase tracking-widest text-secondary">subtotal</span>
+                <span id="cart-subtotal" class="font-['Inter',sans-serif] text-sm text-on-surface tabular-nums">₱ 10,700.00</span>
+            </div>
+            <div class="flex justify-between items-center">
+                <span class="text-xs uppercase tracking-widest text-secondary">Security Deposit</span>
+                <span id="cart-deposit" class="font-['Inter',sans-serif] text-sm text-on-surface tabular-nums">₱ 4,000.00</span>
+            </div>
+            <div class="pt-4 flex justify-between items-center border-t border-black/5">
+                <span class="text-sm font-bold uppercase tracking-[0.2rem] text-on-surface">Total Amount</span>
+                <span id="cart-total" class="font-['Epilogue',sans-serif] text-lg font-bold text-on-surface tabular-nums tracking-tight">₱ 14,700.00</span>
+            </div>
+        </div>
+        <a href="{% url 'gowns:reservation' %}" onclick="return saveCartAndProceedToReservation(event)" class="w-full bg-primary py-5 text-white uppercase text-xs font-bold tracking-[0.2rem] hover:bg-secondary transition-colors duration-300 inline-flex items-center justify-center no-underline">Proceed to Reservation</a>
+    </footer>
+</aside>
+
+<main class="pt-32 pb-24 px-6 md:px-12 lg:px-24 max-w-7xl mx-auto">
+<!-- Page Title -->
+<div class="mb-16">
+<h1 class="font-headline text-5xl md:text-7xl font-light tracking-tight text-primary leading-none">Reservation</h1>
+<p class="mt-4 font-label text-[0.6875rem] uppercase tracking-[0.2rem] text-secondary">Finalize Your Selection</p>
+<p id="reservation-items-count" class="mt-2 font-label text-[0.6875rem] uppercase tracking-[0.2rem] text-secondary"></p>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-16 items-start">
+<!-- Left Column: Forms -->
+<div class="lg:col-span-7 space-y-20">
+<!-- Reservation Info Section -->
+<section>
+<div class="flex items-center gap-4 mb-10">
+<span class="font-headline text-2xl">01</span>
+<h2 class="font-headline text-xl tracking-wide uppercase">Reservation Info</h2>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-10">
+<div class="relative">
+<input class="peer w-full bg-transparent border-0 border-b border-outline-variant/30 py-2 px-0 focus:ring-0 placeholder-transparent" id="first_name" placeholder=" " type="text">
+<label class="absolute left-0 -top-4 text-[0.6875rem] uppercase tracking-widest text-secondary transition-all peer-placeholder-shown:top-2 peer-placeholder-shown:text-sm peer-placeholder-shown:text-outline peer-focus:-top-4 peer-focus:text-[0.6875rem] peer-focus:text-primary" for="first_name">First Name</label>
+</div>
+<div class="relative">
+<input class="peer w-full bg-transparent border-0 border-b border-outline-variant/30 py-2 px-0 focus:ring-0 placeholder-transparent" id="last_name" placeholder=" " type="text">
+<label class="absolute left-0 -top-4 text-[0.6875rem] uppercase tracking-widest text-secondary transition-all peer-placeholder-shown:top-2 peer-placeholder-shown:text-sm peer-placeholder-shown:text-outline peer-focus:-top-4 peer-focus:text-[0.6875rem] peer-focus:text-primary" for="last_name">Last Name</label>
+</div>
+<div class="relative md:col-span-2">
+<input class="peer w-full bg-transparent border-0 border-b border-outline-variant/30 py-2 px-0 focus:ring-0 placeholder-transparent" id="address" placeholder=" " type="text">
+<label class="absolute left-0 -top-4 text-[0.6875rem] uppercase tracking-widest text-secondary transition-all peer-placeholder-shown:top-2 peer-placeholder-shown:text-sm peer-placeholder-shown:text-outline peer-focus:-top-4 peer-focus:text-[0.6875rem] peer-focus:text-primary" for="address">Street Address</label>
+</div>
+<div class="relative">
+<input class="peer w-full bg-transparent border-0 border-b border-outline-variant/30 py-2 px-0 focus:ring-0 placeholder-transparent" id="city" placeholder=" " type="text">
+<label class="absolute left-0 -top-4 text-[0.6875rem] uppercase tracking-widest text-secondary transition-all peer-placeholder-shown:top-2 peer-placeholder-shown:text-sm peer-placeholder-shown:text-outline peer-focus:-top-4 peer-focus:text-[0.6875rem] peer-focus:text-primary" for="city">City</label>
+</div>
+<div class="relative">
+<input class="peer w-full bg-transparent border-0 border-b border-outline-variant/30 py-2 px-0 focus:ring-0 placeholder-transparent" id="postal" placeholder=" " type="text">
+<label class="absolute left-0 -top-4 text-[0.6875rem] uppercase tracking-widest text-secondary transition-all peer-placeholder-shown:top-2 peer-placeholder-shown:text-sm peer-placeholder-shown:text-outline peer-focus:-top-4 peer-focus:text-[0.6875rem] peer-focus:text-primary" for="postal">Postal Code</label>
+</div>
+<div class="relative">
+<input class="peer w-full bg-transparent border-0 border-b border-outline-variant/30 py-2 px-0 focus:ring-0 placeholder-transparent" id="phone" placeholder=" " type="tel">
+<label class="absolute left-0 -top-4 text-[0.6875rem] uppercase tracking-widest text-secondary transition-all peer-placeholder-shown:top-2 peer-placeholder-shown:text-sm peer-placeholder-shown:text-outline peer-focus:-top-4 peer-focus:text-[0.6875rem] peer-focus:text-primary" for="phone">Cellphone No.</label>
+</div>
+</div>
+</section>
+<!-- Payment Details Section -->
+<section>
+<div class="flex items-center gap-4 mb-10">
+<span class="font-headline text-2xl">02</span>
+<h2 class="font-headline text-xl tracking-wide uppercase">Choose Your Payment Preference</h2>
+</div>
+<div class="space-y-6">
+<!-- Payment Cards -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<label class="cursor-pointer group" onclick="document.getElementById('gcash-modal').classList.remove('hidden')">
+<input class="hidden peer" name="payment_pref" type="radio" value="deposit">
+<div class="p-8 border border-outline-variant/30 bg-surface-container-low peer-checked:border-primary peer-checked:bg-white transition-all duration-300 editorial-shadow h-full">
+<h4 class="font-headline text-sm tracking-widest uppercase mb-2 group-hover:text-primary transition-colors">Pay Security Deposit Now (Required)</h4>
+<p class="text-[0.6875rem] text-secondary leading-relaxed normal-case">Get your deposit back the moment you return the item.</p>
+</div>
+</label>
+<label class="cursor-pointer group" onclick="document.getElementById('gcash-full-modal').classList.remove('hidden')">
+<input class="hidden peer" name="payment_pref" type="radio" value="full">
+<div class="p-8 border border-outline-variant/30 bg-surface-container-low peer-checked:border-primary peer-checked:bg-white transition-all duration-300 editorial-shadow h-full">
+<h4 class="font-headline text-sm tracking-widest uppercase mb-2 group-hover:text-primary transition-colors">Pay Full Amount Now</h4>
+<p class="text-[0.6875rem] text-secondary leading-relaxed normal-case">Settles both deposit and security deposit fee for a faster pick-up</p>
+</div>
+</label>
+</div>
+<!-- Proof of Payment Upload -->
+<div class="bg-surface-container-low p-10 editorial-shadow">
+<div class="flex flex-col gap-6">
+<div class="flex flex-col gap-1">
+<h3 class="text-[0.6875rem] uppercase tracking-widest text-secondary">Proof of Payment</h3>
+<p class="text-[0.55rem] tracking-widest text-outline-variant normal-case">Please upload a clear screenshot of your transaction receipt</p>
+</div>
+<label id="proof-payment-dropzone" class="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-outline-variant/30 hover:border-primary/50 transition-colors cursor-pointer group bg-white/50">
+<div class="flex flex-col items-center justify-center pt-5 pb-6">
+<span class="material-symbols-outlined text-4xl text-outline group-hover:text-primary transition-colors mb-4">cloud_upload</span>
+<p class="text-[0.6875rem] uppercase tracking-[0.15rem] text-outline group-hover:text-primary transition-colors">Upload Receipt</p>
+</div>
+<input class="hidden" id="proof_of_payment" name="proof_of_payment" type="file" accept="image/*">
+</label>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- Right Column: Order Summary (Sticky) -->
+<aside class="lg:col-span-5 lg:sticky lg:top-32">
+<div class="bg-surface-container-lowest p-8 md:p-12 editorial-shadow space-y-12">
+<!-- Rental Items Container (filled from bag via sessionStorage) -->
+<div class="max-h-[380px] overflow-y-auto pr-4 custom-scrollbar space-y-8 scroll-hint">
+<div id="reservation-items-root" class="space-y-8"></div>
+</div>
+<div class="space-y-6 pt-6 border-t border-outline-variant/10">
+<div class="flex justify-between items-center text-[0.6875rem] uppercase tracking-[0.15rem]">
+<span class="text-secondary">Rental Fee Subtotal</span>
+<span id="reservation-rental-subtotal" class="font-semibold text-primary">₱ 0</span>
+</div>
+<div class="flex justify-between items-start text-[0.6875rem] uppercase tracking-[0.15rem]">
+<div class="flex flex-col">
+<span class="text-secondary">Security Deposit</span>
+<span class="text-[0.55rem] tracking-widest text-outline-variant mt-1 normal-case">(Fully refundable upon return)</span>
+</div>
+<span id="reservation-security-deposit" class="font-semibold text-primary">₱ 0</span>
+</div>
+</div>
+<div class="pt-8 border-t border-primary/10">
+<div class="flex justify-between items-end mb-10">
+<div>
+<span class="font-headline text-xs uppercase tracking-[0.2rem] text-secondary">Total Amount&nbsp;</span>
+<div id="reservation-total-investment" class="font-headline text-4xl mt-1 tracking-tighter">₱ 0</div>
+</div>
+<div class="text-right">
+<span class="text-[0.6rem] uppercase tracking-widest text-outline-variant"></span>
+</div>
+</div>
+<button type="button" id="confirm-rental-btn" class="w-full bg-primary py-6 text-white text-[0.75rem] uppercase tracking-[0.25rem] font-medium hover:bg-secondary transition-all duration-300 flex items-center justify-center gap-3">
+                            Confirm Rental
+                            <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+<p class="text-center mt-6 text-[0.6rem] text-outline uppercase tracking-widest leading-relaxed">
+                            By placing this order, you agree to our <br>
+<a class="underline underline-offset-4 hover:text-primary" href="#">Rental Terms</a> and <span class="normal-case">Authenticity Guarantee</span>.
+                        </p>
+</div>
+</div>
+<!-- Trusted Badge -->
+<div class="mt-8 flex items-center justify-center gap-8 opacity-40">
+<span class="material-symbols-outlined text-2xl">verified_user</span>
+<span class="material-symbols-outlined text-2xl">shield_with_heart</span>
+<span class="material-symbols-outlined text-2xl">lock</span>
+</div>
+</aside>
+</div>
+</main>
+
+<!-- Footer (same structure / links as templates/collections.html) -->
+<footer class="bg-[#F6F3F2] dark:bg-[#1B1C1C] w-full py-12 px-8 border-t border-black/5 mt-4">
+    <div class="w-full max-w-[1920px] mx-auto">
+        <div class="flex flex-col sm:flex-row sm:flex-wrap items-start gap-x-8 sm:gap-x-10 md:gap-x-12 lg:gap-x-16 gap-y-8 text-left">
+            <div class="flex items-center gap-3 shrink-0">
+                <a href="{% url 'gowns:homepage' %}" class="text-lg font-bold text-[#222222] dark:text-[#FAF4EB] tracking-tighter font-body">ARABELA</a>
+                <a href="https://www.facebook.com/" target="_blank" rel="noopener noreferrer" class="inline-flex text-[#222222] dark:text-[#FAF4EB] scale-95 active:scale-90 transition-all hover:opacity-70" aria-label="Arabela on Facebook">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                </a>
+            </div>
+            <div class="shrink-0">
+                <p class="text-base font-medium text-[#222222] dark:text-[#FAF4EB] font-body mb-2">Rent</p>
+                <a href="{% url 'gowns:homepage' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body">How it works</a>
+            </div>
+            <div class="shrink-0">
+                <p class="text-base font-medium text-[#222222] dark:text-[#FAF4EB] font-body mb-2">Info</p>
+                <ul class="flex flex-col gap-1.5">
+                    <li>
+                        <a href="{% url 'gowns:collections' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">Search</a>
+                    </li>
+                    <li>
+                        <a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">About us</a>
+                    </li>
+                    <li>
+                        <a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">Contact us</a>
+                    </li>
+                    <li>
+                        <a href="{% url 'gowns:homepage' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">FAQs</a>
+                    </li>
+                    <li>
+                        <a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">Terms and conditions</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</footer>
+
+<!-- GCash Modal (Required Deposit) -->
+<div class="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-primary/20 backdrop-blur-sm transition-all duration-300 hidden" id="gcash-modal">
+<div class="absolute inset-0" onclick="document.getElementById('gcash-modal').classList.add('hidden')"></div>
+<div class="relative bg-white p-12 w-full max-w-sm editorial-shadow flex flex-col items-center gap-8">
+<button class="absolute top-6 right-6 text-primary/50 hover:text-primary transition-colors" onclick="document.getElementById('gcash-modal').classList.add('hidden')">
+<span class="material-symbols-outlined text-2xl">close</span>
+</button>
+<div class="text-center">
+<h3 class="font-headline text-lg uppercase tracking-widest mb-2">GCash Payment</h3>
+<p class="text-[0.6875rem] text-secondary tracking-widest uppercase">Scan to pay security deposit</p>
+</div>
+<div class="text-center mb-2">
+<span id="gcash-deposit-amount" class="font-headline text-base tracking-widest font-semibold">Amount: ₱0</span>
+</div><div class="w-64 h-64 border border-outline-variant/10 p-4 bg-white">
+<img alt="GCash QR Code" class="w-full h-full grayscale" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCPjwb6QQaJGgMbHP3q-WWNNt_IH2xBWMNSIzhXTdRzqBFPYhXm0UcOtOcWBnUIHbQdWvLfRCHZcpPiO7sXWexekJZHQeoonnsSbLVDOKaopszgaVpOcR0cX0P1Z-2duwoD3RUIIG-5VXI9u-HkTKh7kvwePdp4789lU83JmhzcEZL75DKBfYgPeyToWE96zHcAtTnrsc3IqPqVMztDNRE9nXmNHXroXN58-4mlr0W-wc8U3jh7KHzYZEW_km-CXtUrRD9h-lgigSU">
+</div>
+<a class="font-label text-[0.6875rem] uppercase tracking-[0.2rem] text-secondary hover:text-primary border-b border-secondary/30 hover:border-primary transition-all pb-1" href="#">
+      Download QR code
+    </a>
+</div>
+</div>
+<!-- GCash Modal (Full Payment) -->
+<div class="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-primary/20 backdrop-blur-sm transition-all duration-300 hidden" id="gcash-full-modal">
+<div class="absolute inset-0" onclick="document.getElementById('gcash-full-modal').classList.add('hidden')"></div>
+<div class="relative bg-white p-12 w-full max-w-sm editorial-shadow flex flex-col items-center gap-8">
+<button class="absolute top-6 right-6 text-primary/50 hover:text-primary transition-colors" onclick="document.getElementById('gcash-full-modal').classList.add('hidden')">
+<span class="material-symbols-outlined text-2xl">close</span>
+</button>
+<div class="text-center">
+<h3 class="font-headline text-lg uppercase tracking-widest mb-2">GCash Payment</h3>
+<p class="text-[0.6875rem] text-secondary tracking-widest uppercase">Scan to pay full amount</p>
+</div>
+<div class="text-center mb-2">
+<span id="gcash-full-amount" class="font-headline text-base tracking-widest font-semibold">Amount: ₱0</span>
+</div><div class="w-64 h-64 border border-outline-variant/10 p-4 bg-white">
+<img alt="GCash QR Code" class="w-full h-full grayscale" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCPjwb6QQaJGgMbHP3q-WWNNt_IH2xBWMNSIzhXTdRzqBFPYhXm0UcOtOcWBnUIHbQdWvLfRCHZcpPiO7sXWexekJZHQeoonnsSbLVDOKaopszgaVpOcR0cX0P1Z-2duwoD3RUIIG-5VXI9u-HkTKh7kvwePdp4789lU83JmhzcEZL75DKBfYgPeyToWE96zHcAtTnrsc3IqPqVMztDNRE9nXmNHXroXN58-4mlr0W-wc8U3jh7KHzYZEW_km-CXtUrRD9h-lgigSU">
+</div>
+<a class="font-label text-[0.6875rem] uppercase tracking-[0.2rem] text-secondary hover:text-primary border-b border-secondary/30 hover:border-primary transition-all pb-1" href="#">
+      Download QR code
+    </a>
+</div>
+</div>
+
+<script src="{% static 'js/reservation-flow.js' %}?v=peso1"></script>
+<script>
+    const SECURITY_DEPOSIT_PESOS = 2000;
+
+    function formatPeso(amount) {
+        return '₱ ' + Number(amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function updateCartTotals() {
+        let sub = 0;
+        let itemCount = 0;
+        document.querySelectorAll('#cart-drawer .cart-line').forEach(function (row) {
+            if (row.classList.contains('hidden')) return;
+            const unit = parseFloat(row.dataset.unitPrice || '0');
+            const qtyEl = row.querySelector('.cart-qty');
+            const qty = Math.max(1, parseInt(qtyEl.textContent, 10) || 1);
+            itemCount += qty;
+            const lineTotal = unit * qty;
+            sub += lineTotal;
+            const lt = row.querySelector('.cart-line-total');
+            if (lt) lt.textContent = formatPeso(lineTotal);
+        });
+        const deposit = itemCount * SECURITY_DEPOSIT_PESOS;
+        const subEl = document.getElementById('cart-subtotal');
+        const totEl = document.getElementById('cart-total');
+        const depEl = document.getElementById('cart-deposit');
+        if (subEl) subEl.textContent = formatPeso(sub);
+        if (depEl) depEl.textContent = formatPeso(deposit);
+        if (totEl) totEl.textContent = formatPeso(sub + deposit);
+    }
+
+    function cartAdjustQty(btn, delta) {
+        const row = btn.closest('.cart-line');
+        if (!row || row.classList.contains('hidden')) return;
+        const qtyEl = row.querySelector('.cart-qty');
+        let q = parseInt(qtyEl.textContent, 10) || 1;
+        q = Math.max(1, q + delta);
+        qtyEl.textContent = String(q);
+        updateCartTotals();
+    }
+
+    function cartRemoveLine(btn) {
+        const row = btn.closest('.cart-line');
+        if (!row) return;
+        row.classList.add('hidden');
+        updateCartTotals();
+    }
+
+    function closeCartDrawer() {
+        const drawer = document.getElementById('cart-drawer');
+        const scrim = document.getElementById('cart-click-away');
+        if (drawer) {
+            drawer.classList.add('translate-x-full');
+            drawer.setAttribute('aria-hidden', 'true');
+        }
+        if (scrim) scrim.classList.add('pointer-events-none');
+    }
+
+    function toggleCart() {
+        const drawer = document.getElementById('cart-drawer');
+        const scrim = document.getElementById('cart-click-away');
+        if (!drawer) return;
+        drawer.classList.toggle('translate-x-full');
+        const closed = drawer.classList.contains('translate-x-full');
+        drawer.setAttribute('aria-hidden', closed ? 'true' : 'false');
+        if (scrim) {
+            if (closed) scrim.classList.add('pointer-events-none');
+            else scrim.classList.remove('pointer-events-none');
+        }
+        if (!closed) updateCartTotals();
+    }
+
+    (function () {
+        var RESERVATION_FIELD_IDS = ['first_name', 'last_name', 'address', 'city', 'postal', 'phone'];
+
+        function clearReservationValidationVisuals() {
+            document.querySelectorAll('.reservation-field-invalid').forEach(function (el) {
+                el.classList.remove('reservation-field-invalid', 'animate-reservation-invalid-shake');
+            });
+            var proof = document.getElementById('proof-payment-dropzone');
+            if (proof) proof.classList.remove('reservation-proof-invalid', 'animate-reservation-invalid-shake');
+        }
+
+        function triggerReservationInvalidShake(el) {
+            if (!el) return;
+            el.classList.add('animate-reservation-invalid-shake');
+            setTimeout(function () {
+                el.classList.remove('animate-reservation-invalid-shake');
+            }, 400);
+        }
+
+        function validateReservationForm() {
+            clearReservationValidationVisuals();
+            var firstInvalid = null;
+            var invalidEls = [];
+
+            RESERVATION_FIELD_IDS.forEach(function (id) {
+                var input = document.getElementById(id);
+                if (!input) return;
+                var wrap = input.closest('.relative');
+                if (!input.value.trim()) {
+                    if (wrap) {
+                        wrap.classList.add('reservation-field-invalid');
+                        invalidEls.push(wrap);
+                        if (!firstInvalid) firstInvalid = wrap;
+                    }
+                }
+            });
+
+            var phoneInput = document.getElementById('phone');
+            if (phoneInput) {
+                var phoneVal = phoneInput.value.trim();
+                if (phoneVal.length > 0 && (!/^\d+$/.test(phoneVal) || phoneVal.length !== 11)) {
+                    var phoneWrap = phoneInput.closest('.relative');
+                    if (phoneWrap) {
+                        phoneWrap.classList.add('reservation-field-invalid');
+                        invalidEls.push(phoneWrap);
+                        if (!firstInvalid) firstInvalid = phoneWrap;
+                    }
+                }
+            }
+
+            var fileInput = document.getElementById('proof_of_payment');
+            var proofZone = document.getElementById('proof-payment-dropzone');
+            if (fileInput && proofZone && (!fileInput.files || fileInput.files.length === 0)) {
+                proofZone.classList.add('reservation-proof-invalid');
+                invalidEls.push(proofZone);
+                if (!firstInvalid) firstInvalid = proofZone;
+            }
+
+            if (invalidEls.length) {
+                invalidEls.forEach(triggerReservationInvalidShake);
+                if (firstInvalid && firstInvalid.scrollIntoView) {
+                    firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                return false;
+            }
+            return true;
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            var btn = document.getElementById('confirm-rental-btn');
+            if (btn) {
+                btn.addEventListener('click', function () {
+                    if (validateReservationForm()) {
+                        window.location.href = "{% url 'gowns:confirmation' %}";
+                    }
+                });
+            }
+
+            RESERVATION_FIELD_IDS.forEach(function (id) {
+                var input = document.getElementById(id);
+                if (!input) return;
+                var wrap = input.closest('.relative');
+                function clearField() {
+                    if (wrap) wrap.classList.remove('reservation-field-invalid');
+                }
+                input.addEventListener('focus', clearField);
+                input.addEventListener('input', clearField);
+            });
+
+            var proofInput = document.getElementById('proof_of_payment');
+            if (proofInput) {
+                proofInput.addEventListener('change', function () {
+                    var z = document.getElementById('proof-payment-dropzone');
+                    if (z) z.classList.remove('reservation-proof-invalid');
+                });
+            }
+        });
+    })();
+</script>
+</body>
+</html>

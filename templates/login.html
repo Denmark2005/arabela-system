@@ -1,0 +1,210 @@
+{% load static %}
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Epilogue:wght@400;700;800&family=Inter:wght@400;500;600&family=Poppins:wght@300;400;500;600&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary-fixed-dim": "#c8c6c5",
+                        "on-tertiary-container": "#8a8989",
+                        "on-secondary-fixed-variant": "#494640",
+                        "surface": "#fcf9f8",
+                        "primary-fixed": "#e5e2e1",
+                        "tertiary-fixed-dim": "#c8c6c6",
+                        "on-tertiary": "#ffffff",
+                        "background": "#fcf9f8",
+                        "outline": "#747878",
+                        "on-tertiary-fixed": "#1b1c1c",
+                        "surface-container": "#f0eded",
+                        "secondary-container": "#e7e2d9",
+                        "surface-container-low": "#f6f3f2",
+                        "secondary": "#615e57",
+                        "on-surface-variant": "#444748",
+                        "on-primary-fixed": "#1b1c1c",
+                        "on-primary-fixed-variant": "#474746",
+                        "on-background": "#1b1c1c",
+                        "tertiary": "#0b0c0c",
+                        "error": "#ba1a1a",
+                        "surface-container-high": "#eae7e7",
+                        "inverse-surface": "#303030",
+                        "surface-bright": "#fcf9f8",
+                        "on-tertiary-fixed-variant": "#474747",
+                        "on-error-container": "#93000a",
+                        "inverse-primary": "#c8c6c5",
+                        "on-error": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "primary-container": "#222222",
+                        "surface-container-highest": "#e5e2e1",
+                        "surface-dim": "#dcd9d9",
+                        "on-surface": "#1b1c1c",
+                        "on-secondary": "#ffffff",
+                        "tertiary-fixed": "#e4e2e2",
+                        "tertiary-container": "#222222",
+                        "on-secondary-container": "#67645d",
+                        "outline-variant": "#c4c7c7",
+                        "surface-container-lowest": "#ffffff",
+                        "secondary-fixed": "#e7e2d9",
+                        "inverse-on-surface": "#f3f0ef",
+                        "primary": "#0b0c0c",
+                        "surface-tint": "#5f5e5e",
+                        "secondary-fixed-dim": "#cbc6bd",
+                        "on-primary": "#ffffff",
+                        "surface-variant": "#e5e2e1",
+                        "on-secondary-fixed": "#1d1b16",
+                        "on-primary-container": "#8a8989"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "fontFamily": {
+                        "headline": ["Epilogue"],
+                        "body": ["Inter"],
+                        "label": ["Inter"],
+                        "poppins": ["Poppins"]
+                    }
+                }
+            }
+        }
+</script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in { animation: fadeIn 0.3s ease forwards; }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-6px); }
+            20%, 40%, 60%, 80% { transform: translateX(6px); }
+        }
+        .animate-invalid-shake {
+            animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+        }
+        
+        /* Fixed Border Logic: Error state vs Focus state */
+        .input-error-state {
+            border-color: #ba1a1a !important;
+            border-width: 2px !important;
+            border-radius: 0.85rem !important;
+            box-shadow: none !important; /* Removes blue/black glow while in error state */
+        }
+</style>
+</head>
+<body class="font-body text-on-surface antialiased bg-[#f4f4f4] selection:bg-primary-fixed">
+
+<main class="min-h-screen flex items-center justify-center p-6">
+    <section class="w-full max-w-md bg-white border border-neutral-200 rounded-2xl shadow-sm px-10 py-14">
+        <div class="w-full space-y-12">
+
+            <header class="space-y-4">
+                <div class="flex justify-center">
+                    <span class="font-headline text-4xl font-extrabold tracking-tighter text-on-surface uppercase">Arabela</span>
+                </div>
+            </header>
+
+            <form id="login_form" method="POST" action="{% url 'accounts:login' %}" novalidate>
+                {% csrf_token %}
+                <div class="space-y-12">
+                    <div class="space-y-4">
+                        <div class="relative">
+                            <input
+                                class="w-full bg-white border border-outline-variant/50 rounded-xl px-4 py-4 font-poppins text-on-surface focus:ring-2 focus:ring-primary focus:border-transparent transition-all placeholder:text-outline-variant/50 outline-none"
+                                id="email"
+                                name="email"
+                                placeholder="Email"
+                                type="email"
+                                value="{{ email|default:'' }}"
+                            />
+                        </div>
+
+                        <button
+                            type="submit"
+                            id="continue_button"
+                            class="w-full text-white font-poppins font-semibold py-4 rounded-xl transition-colors uppercase tracking-widest text-sm bg-black hover:bg-neutral-800">
+                            Continue
+                        </button>
+
+                        <div id="error_container" class="items-start gap-2 mt-4 font-poppins text-[0.75rem] text-error animate-fade-in {% if error %}flex{% else %}hidden{% endif %}">
+                            <span class="material-symbols-outlined text-[1rem] flex-shrink-0">error</span>
+                            <span id="error_text" class="tracking-tight">{{ error|default:'' }}</span>
+                        </div>
+
+                    </div>
+                </div>
+
+                <footer class="pt-12">
+                    <p class="font-poppins text-[0.6rem] text-outline uppercase tracking-widest text-center leading-relaxed">
+                        By continuing, you agree to Arabela's<br>
+                        <a class="text-on-surface underline underline-offset-4 decoration-outline-variant/50" href="#">Terms of Service</a>
+                        and
+                        <a class="text-on-surface underline underline-offset-4 decoration-outline-variant/50" href="#">Privacy Policy</a>.
+                    </p>
+                </footer>
+            </form>
+
+        </div>
+    </section>
+</main>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const form = document.getElementById('login_form');
+        const emailInput = document.getElementById('email');
+        const errorContainer = document.getElementById('error_container');
+        const errorText = document.getElementById('error_text');
+        
+        const genericErrorMessage = "Gmail account not found. Please check your spelling or create an account.";
+
+        const validateEmail = (email) => {
+            return String(email).toLowerCase().match(/^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/);
+        };
+
+        const triggerError = () => {
+            emailInput.classList.add('input-error-state', 'animate-invalid-shake');
+            errorText.innerText = genericErrorMessage;
+            errorContainer.classList.remove('hidden');
+            errorContainer.classList.add('flex');
+
+            setTimeout(() => {
+                emailInput.classList.remove('animate-invalid-shake');
+            }, 400);
+        };
+
+        form.addEventListener('submit', (e) => {
+            const emailValue = emailInput.value.trim();
+            // Any error (empty or invalid) now shows the same message
+            if (emailValue === "" || !validateEmail(emailValue)) {
+                e.preventDefault();
+                triggerError();
+            }
+        });
+
+        // Fix: Removes red state and allows normal black focus ring as soon as user clicks/types
+        emailInput.addEventListener('focus', () => {
+            emailInput.classList.remove('input-error-state');
+            errorContainer.classList.add('hidden');
+        });
+
+        emailInput.addEventListener('input', () => {
+            emailInput.classList.remove('input-error-state');
+            errorContainer.classList.add('hidden');
+        });
+    });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,767 @@
+{% load static %}
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ARABELA | Editorial Archive</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Epilogue:wght@300;400;700;800&family=Inter:wght@300;400;500;600&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-surface-variant": "#444748",
+              "on-primary-container": "#8a8989",
+              "surface-tint": "#5f5e5e",
+              "surface-dim": "#dcd9d9",
+              "error-container": "#ffdad6",
+              "tertiary-fixed": "#e4e2e2",
+              "surface-container-lowest": "#ffffff",
+              "outline": "#747878",
+              "error": "#ba1a1a",
+              "on-primary-fixed-variant": "#474746",
+              "primary-container": "#222222",
+              "secondary": "#615e57",
+              "primary": "#0b0c0c",
+              "on-primary-fixed": "#1b1c1c",
+              "on-secondary": "#ffffff",
+              "on-secondary-container": "#67645d",
+              "outline-variant": "#c4c7c7",
+              "secondary-fixed-dim": "#cbc6bd",
+              "tertiary-fixed-dim": "#c8c6c6",
+              "on-tertiary-fixed-variant": "#474747",
+              "surface-container-low": "#f6f3f2",
+              "secondary-fixed": "#e7e2d9",
+              "primary-fixed": "#e5e2e1",
+              "on-error": "#ffffff",
+              "on-secondary-fixed": "#1d1b16",
+              "secondary-container": "#e7e2d9",
+              "on-tertiary-fixed": "#1b1c1c",
+              "primary-fixed-dim": "#c8c6c5",
+              "tertiary-container": "#222222",
+              "inverse-primary": "#c8c6c5",
+              "on-surface": "#1b1c1c",
+              "surface-container": "#f0eded",
+              "surface": "#fcf9f8",
+              "surface-container-highest": "#e5e2e1",
+              "on-primary": "#ffffff",
+              "on-tertiary": "#ffffff",
+              "on-error-container": "#93000a",
+              "surface-container-high": "#eae7e7",
+              "tertiary": "#0b0c0c",
+              "surface-bright": "#fcf9f8",
+              "background": "#fcf9f8",
+              "surface-variant": "#e5e2e1",
+              "inverse-on-surface": "#f3f0ef",
+              "on-secondary-fixed-variant": "#494640",
+              "on-tertiary-container": "#8a8989",
+              "inverse-surface": "#303030",
+              "on-background": "#1b1c1c"
+            },
+            fontFamily: {
+              "headline": ["Poppins", "Epilogue"],
+              "body": ["Poppins", "Inter"],
+              "label": ["Poppins", "Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+</script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+            font-size: 1.25rem;
+        }
+        .editorial-shadow { box-shadow: 0 20px 40px rgba(27, 28, 28, 0.06); }
+        .silk-gradient { background: linear-gradient(135deg, #0b0c0c 0%, #222222 100%); }
+        .ai-panel-shadow { box-shadow: -10px 0 30px rgba(0,0,0,0.1); }
+        .ai-scroll::-webkit-scrollbar { width: 2px; }
+        .ai-scroll::-webkit-scrollbar-track { background: transparent; }
+        .ai-scroll::-webkit-scrollbar-thumb { background: #e5e2e1; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in { animation: fadeIn 0.4s ease forwards; }
+        #search-overlay {
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: translateY(-100%);
+            opacity: 0;
+            pointer-events: none;
+        }
+        #search-overlay.open {
+            transform: translateY(0);
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .group:hover .dropdown-menu {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+        .dropdown-menu {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: translateY(10px);
+            opacity: 0;
+            pointer-events: none;
+        }
+        body { font-family: 'Poppins', sans-serif; }
+</style>
+</head>
+<body class="bg-surface text-on-surface selection:bg-primary-fixed-dim overflow-x-hidden">
+
+<!-- TOP NAVBAR -->
+<header class="fixed top-0 w-full z-[70] bg-[#FAF4EB]/80 dark:bg-[#222222]/80 backdrop-blur-md border-b border-black/5">
+<nav class="flex justify-between items-center w-full px-8 h-20">
+    <div class="flex items-center gap-12">
+        <div class="flex-shrink-0">
+            <h1 class="text-2xl font-bold tracking-tighter text-[#222222] dark:text-[#FAF4EB]">ARABELA</h1>
+        </div>
+        <div class="hidden md:flex gap-8 items-center self-stretch">
+            <div class="relative group h-full flex items-center">
+                <a class="uppercase tracking-[0.1rem] text-[0.6875rem] text-[#615E57] dark:text-[#A09E99] hover:text-[#222222] dark:hover:text-white transition-colors duration-300" href="#">Rent</a>
+                <div class="dropdown-menu absolute top-full left-0 w-52 bg-white dark:bg-[#222222] shadow-[0_10px_30px_rgba(0,0,0,0.08)] border-t-2 border-[#222222] dark:border-[#FAF4EB] py-6 z-[80]" style="background-color: #F9F7F2;">
+                    <ul class="flex flex-col gap-4">
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">All</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Tops</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Bottoms</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Sets</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Dresses</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Suits</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Outerwear</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="relative group h-full flex items-center">
+                <a class="uppercase tracking-[0.1rem] text-[0.6875rem] text-[#615E57] dark:text-[#A09E99] hover:text-[#222222] dark:hover:text-white transition-colors duration-300" href="#">How it Works</a>
+                <div class="dropdown-menu absolute top-full left-0 w-48 bg-white dark:bg-[#222222] shadow-[0_10px_30px_rgba(0,0,0,0.08)] border-t-2 border-[#222222] dark:border-[#FAF4EB] py-6 z-[80]" style="background-color: #F9F7F2;">
+                    <ul class="flex flex-col gap-4">
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">FAQs</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="flex gap-6 items-center">
+        <button class="scale-95 active:scale-90 transition-all text-primary flex items-center gap-2 group" onclick="toggleAI()">
+            <span class="font-label text-[0.6rem] uppercase tracking-widest hidden lg:block opacity-0 group-hover:opacity-100 transition-opacity">Arabela Reccomends</span>
+            <span class="material-symbols-outlined" style='font-variation-settings: "FILL" 1;'>auto_fix_high</span>
+        </button>
+        <button class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]" onclick="toggleSearch()">
+            <span class="material-symbols-outlined" id="search-icon">search</span>
+        </button>
+        <button type="button" class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]" onclick="toggleCart()" aria-label="Open selection">
+            <span class="material-symbols-outlined">shopping_bag</span>
+        </button>
+        <!-- Profile/Login Button - Links to login page -->
+        <a href="{% url 'accounts:login' %}">
+            <button class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]">
+                <span class="material-symbols-outlined">person</span>
+            </button>
+        </a>
+    </div>
+</nav>
+</header>
+
+<!-- SEARCH OVERLAY: dimmed backdrop below panel closes same as X -->
+<div class="fixed top-20 left-0 right-0 bottom-0 z-[65] flex flex-col" id="search-overlay">
+    <div class="shrink-0 bg-[#FAF4EB] border-b border-black/5 shadow-lg" onclick="event.stopPropagation()">
+        <div class="container mx-auto px-8 py-12">
+            <div class="max-w-4xl mx-auto">
+                <div class="relative flex items-center mb-10">
+                    <span class="material-symbols-outlined absolute left-0 text-black/40 text-2xl">search</span>
+                    <input class="w-full bg-transparent border-0 border-b border-black/10 pl-10 pr-10 py-4 focus:ring-0 focus:border-primary text-2xl font-light placeholder:text-black/20" id="main-search-input" placeholder="Search here.." type="text"/>
+                    <button type="button" class="absolute right-0 text-black/40 hover:text-primary transition-colors" onclick="toggleSearch()">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-12">
+                    <div>
+                        <p class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-6">Quick Links</p>
+                        <ul class="space-y-4">
+                            <li><a class="text-sm hover:text-primary transition-colors border-b border-transparent hover:border-black/20 pb-0.5 inline-block" href="#">New Arrivals</a></li>
+                            <li><a class="text-sm hover:text-primary transition-colors border-b border-transparent hover:border-black/20 pb-0.5 inline-block" href="#">Best Sellers</a></li>
+                            <li><a class="text-sm hover:text-primary transition-colors border-b border-transparent hover:border-black/20 pb-0.5 inline-block" href="#">Designers</a></li>
+                        </ul>
+                    </div>
+                    <div>
+                        <p class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-6">Collections</p>
+                        <ul class="space-y-4">
+                            <li><a class="text-sm hover:text-primary transition-colors" href="#">Wedding</a></li>
+                            <li><a class="text-sm hover:text-primary transition-colors" href="#">Cocktail</a></li>
+                            <li><a class="text-sm hover:text-primary transition-colors" href="#">Black Tie</a></li>
+                            <li><a class="text-sm hover:text-primary transition-colors" href="#">Filipiniana</a></li>
+                        </ul>
+                    </div>
+                    <div>
+                        <p class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-6">Trending Search</p>
+                        <div class="flex flex-wrap gap-2">
+                            <span class="px-3 py-1 bg-black/5 rounded-full text-[0.65rem] uppercase tracking-wider cursor-pointer hover:bg-black/10">Silk Dress</span>
+                            <span class="px-3 py-1 bg-black/5 rounded-full text-[0.65rem] uppercase tracking-wider cursor-pointer hover:bg-black/10">Tailored Blazer</span>
+                            <span class="px-3 py-1 bg-black/5 rounded-full text-[0.65rem] uppercase tracking-wider cursor-pointer hover:bg-black/10">Velvet Gown</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="flex-1 min-h-0 w-full bg-transparent cursor-pointer" onclick="toggleSearch()" role="presentation" aria-hidden="true"></div>
+</div>
+
+<!-- AI: invisible click-away (no dim/blur on page; same close as X) -->
+<div id="ai-click-away" class="fixed inset-0 z-[69] bg-transparent pointer-events-none" onclick="toggleAI()" aria-hidden="true"></div>
+
+<!-- AI CONCIERGE PANEL -->
+<aside class="fixed top-0 right-0 h-full w-full md:w-[480px] bg-[#FAF4EB] z-[80] translate-x-full transform transition-transform duration-500 ease-in-out ai-panel-shadow flex flex-col" id="ai-concierge">
+    <div class="p-8 flex justify-between items-center border-b border-black/5">
+        <h2 class="text-sm font-bold tracking-[0.2em] uppercase flex items-center gap-3">
+            <span class="material-symbols-outlined text-primary" style='font-variation-settings: "FILL" 1;'>auto_fix_high</span>
+            Arabela Reccomends
+        </h2>
+        <button class="hover:rotate-90 transition-transform p-2" onclick="toggleAI()">
+            <span class="material-symbols-outlined">close</span>
+        </button>
+    </div>
+    <div class="flex-1 overflow-y-auto ai-scroll p-8 space-y-10" id="ai-content">
+        <div class="space-y-4 pt-4">
+            <p class="text-2xl font-light italic leading-tight text-primary">Find the definitive piece for your silhouette.</p>
+        </div>
+        <div class="space-y-6" id="occasion-picker">
+            <p class="text-[0.6875rem] uppercase tracking-[0.15em] text-on-surface-variant font-semibold">What is the occasion?</p>
+            <div class="flex flex-wrap gap-3">
+                <button class="px-6 py-3 border border-black/10 rounded-full text-[0.6rem] uppercase tracking-widest hover:bg-primary hover:text-white transition-all active:scale-95" onclick="selectOccasion('Birthday')">Birthday</button>
+                <button class="px-6 py-3 border border-black/10 rounded-full text-[0.6rem] uppercase tracking-widest hover:bg-primary hover:text-white transition-all active:scale-95" onclick="selectOccasion('Wedding')">Wedding</button>
+                <button class="px-6 py-3 border border-black/10 rounded-full text-[0.6rem] uppercase tracking-widest hover:bg-primary hover:text-white transition-all active:scale-95" onclick="selectOccasion('Editorial')">Editorial Shoot</button>
+                <button class="px-6 py-3 border border-black/10 rounded-full text-[0.6rem] uppercase tracking-widest hover:bg-primary hover:text-white transition-all active:scale-95" onclick="selectOccasion('Red Carpet')">Red Carpet</button>
+                <button class="px-6 py-3 border border-black/10 rounded-full text-[0.6rem] uppercase tracking-widest hover:bg-primary hover:text-white transition-all active:scale-95" onclick="selectOccasion('Private View')">Private View</button>
+            </div>
+        </div>
+        <div class="hidden space-y-10 pt-4 animate-fade-in" id="ai-results">
+            <div class="space-y-4">
+                <div class="flex items-center gap-2">
+                    <span class="w-1.5 h-1.5 bg-primary rounded-full"></span>
+                    <p class="text-lg font-light leading-snug text-primary" id="recommendation-text"></p>
+                </div>
+                <p class="text-[0.6875rem] uppercase tracking-[0.15em] text-on-surface-variant font-semibold">Curated Suggestions</p>
+            </div>
+            <div class="grid grid-cols-2 gap-6" id="suggestion-cards"></div>
+            <button class="text-[0.6rem] uppercase tracking-[0.2em] border-b border-primary/20 pb-1 hover:border-primary transition-all" onclick="resetAI()">Start Over</button>
+        </div>
+    </div>
+    <div class="p-8 border-t border-black/5 bg-surface-container-low">
+        <div class="relative">
+            <input class="w-full bg-transparent border-0 border-b border-black/10 py-4 focus:ring-0 focus:border-primary text-sm placeholder:text-black/20" placeholder="Describe the perfect gown for your occasion..." type="text" id="ai-chat-input"/>
+            <button class="absolute right-0 bottom-4" onclick="sendAIMessage()">
+                <span class="material-symbols-outlined">arrow_forward</span>
+            </button>
+        </div>
+        <p class="text-[0.6rem] text-on-surface-variant leading-relaxed mt-6 opacity-60">
+            AI recommendations tailored to your unique style and fitting requirements.
+        </p>
+    </div>
+</aside>
+
+<!-- Cart: invisible click-away (no dim/blur on page; same pattern as Arabela Recommends) -->
+<div id="cart-click-away" class="fixed inset-0 z-[84] bg-transparent pointer-events-none" onclick="toggleCart()" aria-hidden="true"></div>
+
+<!-- Cart / selection drawer -->
+<aside id="cart-drawer" class="fixed top-0 right-0 h-full w-full md:w-[480px] bg-[#FAF4EB] z-[85] translate-x-full transform transition-transform duration-500 ease-in-out ai-panel-shadow flex flex-col" aria-hidden="true">
+    <header class="p-8 flex justify-between items-center border-b border-black/5 shrink-0">
+        <h2 class="text-sm font-bold tracking-[0.2em] uppercase text-on-surface flex items-center gap-3">
+            <span class="material-symbols-outlined text-primary" style='font-variation-settings: "FILL" 0;'>shopping_bag</span>
+            Your Selection
+        </h2>
+        <button type="button" class="hover:opacity-50 transition-opacity text-[#222222] dark:text-[#FAF4EB]" onclick="toggleCart()" aria-label="Close selection">
+            <span class="material-symbols-outlined text-2xl">close</span>
+        </button>
+    </header>
+    <div class="flex-1 overflow-y-auto ai-scroll px-8 py-4 space-y-10 min-h-0">
+        <div class="cart-line flex gap-4 group" data-unit-price="4500">
+            <div class="w-24 h-32 bg-surface-container-low overflow-hidden shrink-0">
+                <img alt="Structured Wool Blazer" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDvrOUto9vy9py6fxR-YxuiQ7pL4WzddWzTNeVPBgk4qOrjLVsLT4uDAoXaKs7u1i7RXCaNnzcYFP-p16uIuULPo9aHvnWqqA_8NjhDlYa18k4FVHck1C2Gz80q-qvohzTgGYhT6Joc0gU5AiqDMxwGulS-59idA4ehLkllD_ADzTgoq8jmuolfvGYkSJfCy3KM20GMCLiQ4Lfj9E1rAkuQUPYF2_YX-5lUAOQKHU6OqqLU5ym1Kz-EDW6FLRhJrERNMDEhuiHEs-c"/>
+            </div>
+            <div class="flex-1 flex flex-col justify-between py-1 min-w-0">
+                <div class="flex justify-between items-start gap-2">
+                    <div>
+                        <h3 class="text-sm font-medium text-on-surface leading-tight">Structured Wool Blazer</h3>
+                        <p class="text-[0.6875rem] text-on-secondary-container mt-1">Size: Large</p>
+                    </div>
+                    <button type="button" class="text-on-surface hover:text-error transition-colors shrink-0" onclick="cartRemoveLine(this)" aria-label="Remove item">
+                        <span class="material-symbols-outlined text-lg">close</span>
+                    </button>
+                </div>
+                <div class="flex justify-between items-end gap-2">
+                    <div class="flex items-center space-x-3">
+                        <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, -1)" aria-label="Decrease quantity">
+                            <span class="material-symbols-outlined text-xs">remove</span>
+                        </button>
+                        <span class="cart-qty text-xs font-medium tabular-nums">1</span>
+                        <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, 1)" aria-label="Increase quantity">
+                            <span class="material-symbols-outlined text-xs">add</span>
+                        </button>
+                    </div>
+                    <p class="cart-line-total font-['Inter',sans-serif] text-sm font-semibold text-on-surface tracking-wide tabular-nums shrink-0">₱ 4,500.00</p>
+                </div>
+            </div>
+        </div>
+        <div class="cart-line flex gap-4 group" data-unit-price="6200">
+            <div class="w-24 h-32 bg-surface-container-low overflow-hidden shrink-0">
+                <img alt="Emerald Silk Midi Dress" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
+            </div>
+            <div class="flex-1 flex flex-col justify-between py-1 min-w-0">
+                <div class="flex justify-between items-start gap-2">
+                    <div>
+                        <h3 class="text-sm font-medium text-on-surface leading-tight">Emerald Silk Midi Dress</h3>
+                        <p class="text-[0.6875rem] text-on-secondary-container mt-1">Size: Small</p>
+                    </div>
+                    <button type="button" class="text-on-surface hover:text-error transition-colors shrink-0" onclick="cartRemoveLine(this)" aria-label="Remove item">
+                        <span class="material-symbols-outlined text-lg">close</span>
+                    </button>
+                </div>
+                <div class="flex justify-between items-end gap-2">
+                    <div class="flex items-center space-x-3">
+                        <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, -1)" aria-label="Decrease quantity">
+                            <span class="material-symbols-outlined text-xs">remove</span>
+                        </button>
+                        <span class="cart-qty text-xs font-medium tabular-nums">1</span>
+                        <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, 1)" aria-label="Increase quantity">
+                            <span class="material-symbols-outlined text-xs">add</span>
+                        </button>
+                    </div>
+                    <p class="cart-line-total font-['Inter',sans-serif] text-sm font-semibold text-on-surface tracking-wide tabular-nums shrink-0">₱ 6,200.00</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <footer class="p-8 space-y-6 bg-surface-container-low border-t border-black/5 shrink-0">
+        <div class="space-y-2">
+            <div class="flex justify-between items-center">
+                <span class="text-xs uppercase tracking-widest text-secondary">subtotal</span>
+                <span id="cart-subtotal" class="font-['Inter',sans-serif] text-sm text-on-surface tabular-nums">₱ 10,700.00</span>
+            </div>
+            <div class="flex justify-between items-center">
+                <span class="text-xs uppercase tracking-widest text-secondary">Security Deposit</span>
+                <span id="cart-deposit" class="font-['Inter',sans-serif] text-sm text-on-surface tabular-nums">₱ 4,000.00</span>
+            </div>
+            <div class="pt-4 flex justify-between items-center border-t border-black/5">
+                <span class="text-sm font-bold uppercase tracking-[0.2rem] text-on-surface">Total Amount</span>
+                <span id="cart-total" class="font-['Epilogue',sans-serif] text-lg font-bold text-on-surface tabular-nums tracking-tight">₱ 14,700.00</span>
+            </div>
+        </div>
+        <a href="{% url 'gowns:reservation' %}" onclick="return saveCartAndProceedToReservation(event)" class="w-full bg-primary py-5 text-white uppercase text-xs font-bold tracking-[0.2rem] hover:bg-secondary transition-colors duration-300 inline-flex items-center justify-center no-underline">Proceed to Reservation</a>
+    </footer>
+</aside>
+
+<!-- AI FLOATING BUTTON -->
+<button class="fixed bottom-10 right-10 z-[81] w-14 h-14 bg-primary text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all group overflow-hidden" onclick="toggleAI()">
+    <div class="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+    <span class="material-symbols-outlined relative z-10" style='font-variation-settings: "FILL" 1;'>auto_fix_high</span>
+</button>
+
+<main class="pt-20">
+
+    <!-- HERO SECTION -->
+    <section class="relative h-[90vh] w-full flex items-center overflow-hidden bg-surface">
+        <div class="absolute inset-0 z-0">
+            <!-- ARABELA HERO IMAGE: Replace with actual hero/banner photo of Arabela gown display or featured gown -->
+            <img alt="Arabela Gown Rental Hero Banner" class="w-full h-full object-cover opacity-90" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCF0IWJ_ITAQl1Pay4_MPE42w2HW6xF86kwWRn0XqGq595pRFbThp0KIlnSbWKV8u4L3rSJssJMOHOO1Il7NgK6EI-d_shMvK-QLUSW3eb7Pncs3tbE2mw8Fq0oiYla-gn267tDQL4e5J3T1tMNjU7LsC0QW-HfG7UPidqRc-4pVHZZPuPvedMURkdSSp7DRhGa9B9n4TGV50kRJMlzXbo8AhBtIJVjXe0TF0OcafvqTRbi0kONAMW_3p4mNqwGLN88_cs-lge7NPI"/>
+        </div>
+        <div class="container mx-auto px-8 relative z-10">
+            <div class="max-w-2xl">
+                <span class="font-label text-[0.6875rem] uppercase tracking-[0.2rem] text-on-surface mb-4 block">ARABELA | COLLECTION 2026</span>
+                <h2 class="font-headline text-[3.5rem] md:text-[5.5rem] leading-[0.9] font-extrabold tracking-tight text-on-surface mb-8">Rent The Dream</h2>
+                <p class="text-on-surface-variant max-w-sm mb-10 leading-relaxed">High-fashion gowns delivered with personalized care. Visit us for a personalized fitting and find your perfect look</p>
+                <!-- Links to Collections page -->
+                <a href="{% url 'gowns:collections' %}">
+                    <button class="silk-gradient text-on-primary px-12 py-5 font-label text-[0.6875rem] uppercase tracking-widest hover:bg-secondary transition-all">Explore Collections</button>
+                </a>
+            </div>
+        </div>
+        <div class="absolute bottom-10 right-8 flex items-center gap-4">
+            <span class="font-label text-[0.6875rem] uppercase tracking-widest text-on-surface">Scroll</span>
+            <div class="w-px h-12 bg-on-surface-variant opacity-30"></div>
+        </div>
+    </section>
+
+    <!-- CATEGORIES SECTION -->
+    <section class="py-32 bg-surface-container-low px-8">
+        <div class="container mx-auto grid grid-cols-1 md:grid-cols-12 gap-8 items-end">
+            <div class="md:col-span-5 relative">
+                <div class="aspect-[3/4] overflow-hidden bg-surface-container-lowest">
+                    <!-- ARABELA CATEGORY IMAGE: Replace with actual photo of women's gown collection -->
+                    <img alt="Arabela Women Gown Collection" class="w-full h-full object-cover transition-transform duration-700 hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDoXBFqStMnToVb80lpNcOu2L2sM791MrJmBW76ONWSN9NNxjYwIKr62lrtgKTsJUJ3EdwdmrXdEDzIHlQCq5cpBFNLIqmKKBHScdoIF8ax4ontDI3vyH_7UJJMwghVtSjqVoDofM_FIQR_XMOaK-QLh9v1H1Ub672NUBIJdFsaDRq5ICqksBDjNV55RZmXuFb6qC1v_poZpZMvRt7A5Qzegj5Go1Ot_xpj0qIyESs5_TLYUYBwEiG9fQi1e4y5MFTCzYsCtPcwQ-o"/>
+                </div>
+                <div class="absolute -bottom-8 -right-8 p-12 bg-surface-container-lowest editorial-shadow">
+                    <h3 class="font-headline text-2xl font-bold uppercase mb-2">Women</h3>
+                    <a class="font-label text-[0.6875rem] uppercase tracking-widest border-b border-primary pb-1" href="{% url 'gowns:collections' %}">Shop Collection</a>
+                </div>
+            </div>
+            <div class="md:col-span-2"></div>
+            <div class="md:col-span-5 relative mt-24 md:mt-0">
+                <div class="aspect-[3/4] overflow-hidden bg-surface-container-lowest">
+                    <!-- ARABELA CATEGORY IMAGE: Replace with actual photo of men's barong/suit collection -->
+                    <img alt="Arabela Men Collection" class="w-full h-full object-cover transition-transform duration-700 hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDvYD3Wun7AWJcPA4TmiIaIRFvTUXZ5TR4wigNkmxhOQLCFwpe1f_w-ahiG8-Zrzk7ITEqSLF1yUbyjxMjhdd0jc-YkxtfbSHXQ4KkCntSAigKZf-w_v3uAsvLEU32hL4GvtrokdVjzQ4W6agvmGeYODkHRsEBfNtPWWhBm5VB2NhY8piBhBRMTMeYjxxexO15JQFbyF6Ifx-y5Jb5ICNE6k2x1DVgKnaOKMWa2pNOE3XtKTIejAjLRu37UXWPoBM-xl8SiX9Vl4CA"/>
+                </div>
+                <div class="absolute -top-8 -left-8 p-12 bg-surface-container-lowest editorial-shadow">
+                    <h3 class="font-headline text-2xl font-bold uppercase mb-2">Men</h3>
+                    <a class="font-label text-[0.6875rem] uppercase tracking-widest border-b border-primary pb-1" href="{% url 'gowns:collections' %}">Explore Tailoring</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FEATURED GOWNS SECTION (The Archive) -->
+    <section class="py-32 bg-surface px-8">
+        <div class="container mx-auto">
+            <div class="flex flex-col md:flex-row justify-between items-baseline mb-20 gap-8">
+                <h2 class="font-headline text-[3.5rem] font-bold tracking-tighter">The Archive</h2>
+                <p class="text-on-surface-variant max-w-xs uppercase text-[0.6875rem] tracking-widest leading-loose">
+                    Hand-selected pieces from international runways and private collections. Redefining ownership through curation.
+                </p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-12">
+
+                <!-- FEATURED GOWNS FROM DATABASE -->
+                <!-- Django will loop through featured gowns here -->
+                {% for gown in featured_gowns %}
+                <div class="group cursor-pointer {% if forloop.counter == 2 or forloop.counter == 4 %}md:mt-16{% endif %}">
+                    <div class="relative overflow-hidden bg-surface-container-lowest mb-6">
+                        {% if gown.availability_status == 'Available' %}
+                        <div class="absolute left-0 top-1/4 z-10 bg-secondary-container text-on-secondary-container px-2 py-6 rounded-full">
+                            <span class="[writing-mode:vertical-rl] font-label text-[0.6rem] uppercase tracking-widest font-bold">Available Now</span>
+                        </div>
+                        {% endif %}
+                        <!-- ARABELA PRODUCT IMAGE: Replace src with {{ gown.photos.url }} once real gown photos are uploaded by admin -->
+                        <img alt="Arabela Gown - {{ gown.name }}" class="w-full aspect-[4/5] object-cover rounded-lg group-hover:scale-105 transition-transform duration-500" src="{{ gown.photos.url }}"/>
+                    </div>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h4 class="font-headline text-lg font-bold">{{ gown.name }}</h4>
+                            <p class="text-[0.6875rem] text-on-surface-variant uppercase tracking-widest mt-1">{{ gown.category }}</p>
+                        </div>
+                        <span class="text-[0.6875rem] font-bold">₱{{ gown.rental_price }} / Day</span>
+                    </div>
+                </div>
+                {% empty %}
+                <!-- PLACEHOLDER CARDS shown when no gowns in database yet -->
+                <div class="group cursor-pointer">
+                    <div class="relative overflow-hidden bg-surface-container-lowest mb-6">
+                        <div class="absolute left-0 top-1/4 z-10 bg-secondary-container text-on-secondary-container px-2 py-6 rounded-full">
+                            <span class="[writing-mode:vertical-rl] font-label text-[0.6rem] uppercase tracking-widest font-bold">Available Now</span>
+                        </div>
+                        <!-- ARABELA PRODUCT IMAGE: Replace with actual Arabela gown photo 1 -->
+                        <img alt="Arabela Featured Gown 1" class="w-full aspect-[4/5] object-cover rounded-lg group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDvrOUto9vy9py6fxR-YxuiQ7pL4WzddWzTNeVPBgk4qOrjLVsLT4uDAoXaKs7u1i7RXCaNnzcYFP-p16uIuULPo9aHvnWqqA_8NjhDlYa18k4FVHck1C2Gz80q-qvohzTgGYhT6Joc0gU5AiqDMxwGulS-59idA4ehLkllD_ADzTgoq8jmuolfvGYkSJfCy3KM20GMCLiQ4Lfj9E1rAkuQUPYF2_YX-5lUAOQKHU6OqqLU5ym1Kz-EDW6FLRhJrERNMDEhuiHEs-c"/>
+                        <div class="flex justify-between items-start p-2">
+                            <div>
+                                <h4 class="font-headline text-lg font-bold">Sample Gown 1</h4>
+                                <p class="text-[0.6875rem] text-on-surface-variant uppercase tracking-widest mt-1">Wedding</p>
+                            </div>
+                            <span class="text-[0.6875rem] font-bold">₱2,500 / Day</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="group cursor-pointer md:mt-16">
+                    <div class="relative overflow-hidden bg-surface-container-lowest mb-6">
+                        <!-- ARABELA PRODUCT IMAGE: Replace with actual Arabela gown photo 2 -->
+                        <img alt="Arabela Featured Gown 2" class="w-full aspect-[4/5] object-cover rounded-lg group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
+                        <div class="flex justify-between items-start p-2">
+                            <div>
+                                <h4 class="font-headline text-lg font-bold">Sample Gown 2</h4>
+                                <p class="text-[0.6875rem] text-on-surface-variant uppercase tracking-widest mt-1">Debut</p>
+                            </div>
+                            <span class="text-[0.6875rem] font-bold">₱3,000 / Day</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="group cursor-pointer">
+                    <div class="relative overflow-hidden bg-surface-container-lowest mb-6">
+                        <!-- ARABELA PRODUCT IMAGE: Replace with actual Arabela gown photo 3 -->
+                        <img alt="Arabela Featured Gown 3" class="w-full aspect-[4/5] object-cover rounded-lg group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBYT_7uAh7yYawKnAVaOi8NwHwM9qwJg74F_jbUOfG6vryMFn1VpuB5EjPDjlctw_MfsMEkBBlBsT0D-5AiXgWt-5vU0VzhhZGANp7RDv6b9l_6tIBIEqGVMtFeEEyxOYOKf6PifS195oTvAOTSbftZvdCtTWQCseMEdv-6fAUiT06k9VuoNX7g1ltYupfy1Fn74b4iZIqwejmxUW0STPI9yRTzOusCmrYImByjbk_m9b1UdtMq7c3xEo0p5N-lZ5QmqHsIUPGWlQY"/>
+                        <div class="flex justify-between items-start p-2">
+                            <div>
+                                <h4 class="font-headline text-lg font-bold">Sample Gown 3</h4>
+                                <p class="text-[0.6875rem] text-on-surface-variant uppercase tracking-widest mt-1">Graduation</p>
+                            </div>
+                            <span class="text-[0.6875rem] font-bold">₱2,000 / Day</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="group cursor-pointer md:mt-16">
+                    <div class="relative overflow-hidden bg-surface-container-lowest mb-6">
+                        <div class="absolute left-0 top-1/4 z-10 bg-secondary-container text-on-secondary-container px-2 py-6 rounded-full">
+                            <span class="[writing-mode:vertical-rl] font-label text-[0.6rem] uppercase tracking-widest font-bold">New Arrival</span>
+                        </div>
+                        <!-- ARABELA PRODUCT IMAGE: Replace with actual Arabela gown photo 4 -->
+                        <img alt="Arabela Featured Gown 4" class="w-full aspect-[4/5] object-cover rounded-lg group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA5RjcB-St3FYLokqdJWtfToKyHnDeR3Tu6EhVM79YSkA6bBTSU4tl7rZAAEgY_JP756fTwDY10jkUOp1hrXwu2GNrO9jjw43klIlAw4G0MiBDBkW6SRJ8z8IYOKAihezN7LM2aobs5oqzxnbVSGNnFoWUxGB9xeuCoFORYRDNLVSicCvy29b_6lyITgLYnLIxk8Ska5gk4Lub4OCWEXEEIFe4jkTHRRVfPAfF8h8FzMIzltXoG8hdtsMI0bnBcFWzWBxpeheTd4kI"/>
+                        <div class="flex justify-between items-start p-2">
+                            <div>
+                                <h4 class="font-headline text-lg font-bold">Sample Gown 4</h4>
+                                <p class="text-[0.6875rem] text-on-surface-variant uppercase tracking-widest mt-1">Formal</p>
+                            </div>
+                            <span class="text-[0.6875rem] font-bold">₱2,800 / Day</span>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+
+            </div>
+        </div>
+    </section>
+
+    <!-- NARRATIVE SECTION -->
+    <section class="py-32 bg-surface-container-low px-8 overflow-hidden">
+        <div class="container mx-auto grid grid-cols-1 md:grid-cols-2 gap-20 items-center">
+            <div class="order-2 md:order-1">
+                <!-- ARABELA STORE IMAGE: Replace with actual photo of Arabela Gown Rental shop interior or gowns on display -->
+                <img alt="Arabela Gown Rental Store" class="w-full h-auto rounded-lg grayscale" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDPoJ-CJc3c76J-itMK3Xu3-7H-QhmcbeTXcY_-9atbblNbhbvi3Y30ytcD6_3FLfpM5XX7ndXzS2SKGfKEPeoUB-gVDaK3TcHP39RWItFbbHGtasalNo2IyFaR3ktt5aIJHH0X7S7kCp45dxo-wOF7oSLQ3ycBSoCiZslRNzjjUNhA0eTA5onV5iPtvApJwmWkexxTQVhc-5JnOY9Ipnw7JnpTLbDzfp1V_iP686oZZCKa7XmFl7NIJGzfqZl1-_F16IDVdvu-GmQ"/>
+            </div>
+            <div class="order-1 md:order-2">
+                <h3 class="font-headline text-4xl font-bold mb-8 leading-tight">Conscious Luxury. <br/>Permanent Style.</h3>
+                <p class="text-on-surface-variant text-lg leading-relaxed mb-12">
+                    Arabela is more than a rental platform; it is a movement towards sustainable luxury. We believe in the power of beautiful objects and the importance of extending their lifecycle. Our archive is curated for those who value heritage over fast trends.
+                </p>
+                <div class="grid grid-cols-2 gap-12">
+                    <div>
+                        <span class="font-headline text-3xl font-extrabold block mb-2">500+</span>
+                        <span class="text-[0.6875rem] uppercase tracking-widest text-secondary">Archival Items</span>
+                    </div>
+                    <div>
+                        <span class="font-headline text-3xl font-extrabold block mb-2">100%</span>
+                        <span class="text-[0.6875rem] uppercase tracking-widest text-secondary">Authenticated</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+</main>
+
+<!-- FOOTER -->
+<footer class="bg-[#F6F3F2] dark:bg-[#1B1C1C] w-full py-12 px-8">
+    <div class="w-full max-w-[1920px] mx-auto">
+        <div class="flex flex-col sm:flex-row sm:flex-wrap items-start gap-x-8 sm:gap-x-10 md:gap-x-12 lg:gap-x-16 gap-y-8 text-left">
+            <div class="flex items-center gap-3 shrink-0">
+                <a href="{% url 'gowns:homepage' %}" class="text-lg font-bold text-[#222222] dark:text-[#FAF4EB] tracking-tighter font-body">ARABELA</a>
+                <a href="https://www.facebook.com/" target="_blank" rel="noopener noreferrer" class="inline-flex text-[#222222] dark:text-[#FAF4EB] scale-95 active:scale-90 transition-all hover:opacity-70" aria-label="Arabela on Facebook">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                </a>
+            </div>
+            <div class="shrink-0">
+                <p class="text-base font-medium text-[#222222] dark:text-[#FAF4EB] font-body mb-2">Rent</p>
+                <a href="{% url 'gowns:homepage' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body">How it works</a>
+            </div>
+            <div class="shrink-0">
+                <p class="text-base font-medium text-[#222222] dark:text-[#FAF4EB] font-body mb-2">Info</p>
+                <ul class="flex flex-col gap-1.5">
+                    <li>
+                        <button type="button" onclick="toggleSearch()" class="text-left text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white bg-transparent border-0 p-0 cursor-pointer font-body leading-snug">Search</button>
+                    </li>
+                    <li>
+                        <a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">About us</a>
+                    </li>
+                    <li>
+                        <a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">Contact us</a>
+                    </li>
+                    <li>
+                        <a href="{% url 'gowns:homepage' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">FAQs</a>
+                    </li>
+                    <li>
+                        <a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">Terms and conditions</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</footer>
+
+<script src="{% static 'js/reservation-flow.js' %}"></script>
+<script>
+    const recommendations = {
+        'Birthday': {
+            text: 'For a Birthday celebration, we suggest a vibrant evening gown or cocktail dress.',
+            items: [
+                { name: 'Column Gown', brand: 'Old Celine', price: '₱10,360', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA' },
+                { name: 'Silk Tuxedo', brand: 'Saint Laurent', price: '₱6,720', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDvrOUto9vy9py6fxR-YxuiQ7pL4WzddWzTNeVPBgk4qOrjLVsLT4uDAoXaKs7u1i7RXCaNnzcYFP-p16uIuULPo9aHvnWqqA_8NjhDlYa18k4FVHck1C2Gz80q-qvohzTgGYhT6Joc0gU5AiqDMxwGulS-59idA4ehLkllD_ADzTgoq8jmuolfvGYkSJfCy3KM20GMCLiQ4Lfj9E1rAkuQUPYF2_YX-5lUAOQKHU6OqqLU5ym1Kz-EDW6FLRhJrERNMDEhuiHEs-c' }
+            ]
+        },
+        'Wedding': {
+            text: 'Elegant and timeless. Consider an Asymmetric Silk silhouette or Minimalist Tailoring.',
+            items: [
+                { name: 'Asymmetric Dress', brand: 'Old Celine', price: '₱10,360', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA' },
+                { name: 'Ivory Blazer', brand: 'The Row', price: '₱8,900', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDvrOUto9vy9py6fxR-YxuiQ7pL4WzddWzTNeVPBgk4qOrjLVsLT4uDAoXaKs7u1i7RXCaNnzcYFP-p16uIuULPo9aHvnWqqA_8NjhDlYa18k4FVHck1C2Gz80q-qvohzTgGYhT6Joc0gU5AiqDMxwGulS-59idA4ehLkllD_ADzTgoq8jmuolfvGYkSJfCy3KM20GMCLiQ4Lfj9E1rAkuQUPYF2_YX-5lUAOQKHU6OqqLU5ym1Kz-EDW6FLRhJrERNMDEhuiHEs-c' }
+            ]
+        },
+        'Editorial': {
+            text: 'For an Editorial Shoot, prioritize avant-garde shapes and high-texture fabrics.',
+            items: [
+                { name: 'Deconstructed Knit', brand: 'Jacquemus', price: '₱6,160', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuA5RjcB-St3FYLokqdJWtfToKyHnDeR3Tu6EhVM79YSkA6bBTSU4tl7rZAAEgY_JP756fTwDY10jkUOp1hrXwu2GNrO9jjw43klIlAw4G0MiBDBkW6SRJ8z8IYOKAihezN7LM2aobs5oqzxnbVSGNnFoWUxGB9xeuCoFORYRDNLVSicCvy29b_6lyITgLYnLIxk8Ska5gk4Lub4OCWEXEEIFe4jkTHRRVfPAfF8h8FzMIzltXoG8hdtsMI0bnBcFWzWBxpeheTd4kI' },
+                { name: 'Avant Garment', brand: 'Loewe', price: '₱12,400', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDoXBFqStMnToVb80lpNcOu2L2sM791MrJmBW76ONWSN9NNxjYwIKr62lrtgKTsJUJ3EdwdmrXdEDzIHlQCq5cpBFNLIqmKKBHScdoIF8ax4ontDI3vyH_7UJJMwghVtSjqVoDofM_FIQR_XMOaK-QLh9v1H1Ub672NUBIJdFsaDRq5ICqksBDjNV55RZmXuFb6qC1v_poZpZMvRt7A5Qzegj5Go1Ot_xpj0qIyESs5_TLYUYBwEiG9fQi1e4y5MFTCzYsCtPcwQ-o' }
+            ]
+        },
+        'Red Carpet': {
+            text: 'For a Red Carpet event, go bold with a floor-length gown or dramatic silhouette.',
+            items: [
+                { name: 'Column Gown', brand: 'Old Celine', price: '₱10,360', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA' },
+                { name: 'Silk Tuxedo', brand: 'Saint Laurent', price: '₱6,720', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDvrOUto9vy9py6fxR-YxuiQ7pL4WzddWzTNeVPBgk4qOrjLVsLT4uDAoXaKs7u1i7RXCaNnzcYFP-p16uIuULPo9aHvnWqqA_8NjhDlYa18k4FVHck1C2Gz80q-qvohzTgGYhT6Joc0gU5AiqDMxwGulS-59idA4ehLkllD_ADzTgoq8jmuolfvGYkSJfCy3KM20GMCLiQ4Lfj9E1rAkuQUPYF2_YX-5lUAOQKHU6OqqLU5ym1Kz-EDW6FLRhJrERNMDEhuiHEs-c' }
+            ]
+        },
+        'Private View': {
+            text: 'For a Private View, opt for understated elegance with a tailored silhouette.',
+            items: [
+                { name: 'Asymmetric Dress', brand: 'Old Celine', price: '₱10,360', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA' },
+                { name: 'Ivory Blazer', brand: 'The Row', price: '₱8,900', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDvrOUto9vy9py6fxR-YxuiQ7pL4WzddWzTNeVPBgk4qOrjLVsLT4uDAoXaKs7u1i7RXCaNnzcYFP-p16uIuULPo9aHvnWqqA_8NjhDlYa18k4FVHck1C2Gz80q-qvohzTgGYhT6Joc0gU5AiqDMxwGulS-59idA4ehLkllD_ADzTgoq8jmuolfvGYkSJfCy3KM20GMCLiQ4Lfj9E1rAkuQUPYF2_YX-5lUAOQKHU6OqqLU5ym1Kz-EDW6FLRhJrERNMDEhuiHEs-c' }
+            ]
+        }
+    };
+
+    const SECURITY_DEPOSIT_PESOS = 2000;
+
+    function formatPeso(amount) {
+        return '₱ ' + Number(amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function updateCartTotals() {
+        let sub = 0;
+        let itemCount = 0;
+        document.querySelectorAll('#cart-drawer .cart-line').forEach(function (row) {
+            if (row.classList.contains('hidden')) return;
+            const unit = parseFloat(row.dataset.unitPrice || '0');
+            const qtyEl = row.querySelector('.cart-qty');
+            const qty = Math.max(1, parseInt(qtyEl.textContent, 10) || 1);
+            itemCount += qty;
+            const lineTotal = unit * qty;
+            sub += lineTotal;
+            const lt = row.querySelector('.cart-line-total');
+            if (lt) lt.textContent = formatPeso(lineTotal);
+        });
+        const deposit = itemCount * SECURITY_DEPOSIT_PESOS;
+        const subEl = document.getElementById('cart-subtotal');
+        const totEl = document.getElementById('cart-total');
+        const depEl = document.getElementById('cart-deposit');
+        if (subEl) subEl.textContent = formatPeso(sub);
+        if (depEl) depEl.textContent = formatPeso(deposit);
+        if (totEl) totEl.textContent = formatPeso(sub + deposit);
+    }
+
+    function cartAdjustQty(btn, delta) {
+        const row = btn.closest('.cart-line');
+        if (!row || row.classList.contains('hidden')) return;
+        const qtyEl = row.querySelector('.cart-qty');
+        let q = parseInt(qtyEl.textContent, 10) || 1;
+        q = Math.max(1, q + delta);
+        qtyEl.textContent = String(q);
+        updateCartTotals();
+    }
+
+    function cartRemoveLine(btn) {
+        const row = btn.closest('.cart-line');
+        if (!row) return;
+        row.classList.add('hidden');
+        updateCartTotals();
+    }
+
+    function closeCartDrawer() {
+        const drawer = document.getElementById('cart-drawer');
+        const scrim = document.getElementById('cart-click-away');
+        if (drawer) {
+            drawer.classList.add('translate-x-full');
+            drawer.setAttribute('aria-hidden', 'true');
+        }
+        if (scrim) scrim.classList.add('pointer-events-none');
+    }
+
+    function toggleCart() {
+        const drawer = document.getElementById('cart-drawer');
+        const scrim = document.getElementById('cart-click-away');
+        const search = document.getElementById('search-overlay');
+        const ai = document.getElementById('ai-concierge');
+        const aiScrim = document.getElementById('ai-click-away');
+
+        if (search) search.classList.remove('open');
+        if (ai) ai.classList.add('translate-x-full');
+        if (aiScrim) aiScrim.classList.add('pointer-events-none');
+
+        if (!drawer) return;
+        drawer.classList.toggle('translate-x-full');
+        const closed = drawer.classList.contains('translate-x-full');
+        drawer.setAttribute('aria-hidden', closed ? 'true' : 'false');
+        if (scrim) {
+            if (closed) scrim.classList.add('pointer-events-none');
+            else scrim.classList.remove('pointer-events-none');
+        }
+        if (!closed) updateCartTotals();
+    }
+
+    function toggleAI() {
+        const panel = document.getElementById('ai-concierge');
+        const scrim = document.getElementById('ai-click-away');
+        closeCartDrawer();
+        panel.classList.toggle('translate-x-full');
+        const closed = panel.classList.contains('translate-x-full');
+        if (scrim) {
+            if (closed) {
+                scrim.classList.add('pointer-events-none');
+            } else {
+                scrim.classList.remove('pointer-events-none');
+            }
+        }
+        const search = document.getElementById('search-overlay');
+        search.classList.remove('open');
+        if (!closed) panel.setAttribute('aria-hidden', 'false');
+        else panel.setAttribute('aria-hidden', 'true');
+    }
+
+    function toggleSearch() {
+        const search = document.getElementById('search-overlay');
+        const isOpening = !search.classList.contains('open');
+        closeCartDrawer();
+        search.classList.toggle('open');
+        if (isOpening) {
+            setTimeout(() => document.getElementById('main-search-input').focus(), 400);
+            document.getElementById('ai-concierge').classList.add('translate-x-full');
+            const scrim = document.getElementById('ai-click-away');
+            if (scrim) scrim.classList.add('pointer-events-none');
+        }
+    }
+
+    function selectOccasion(occ) {
+        const data = recommendations[occ] || recommendations['Wedding'];
+        const resultsDiv = document.getElementById('ai-results');
+        const textEl = document.getElementById('recommendation-text');
+        const cardsDiv = document.getElementById('suggestion-cards');
+        const picker = document.getElementById('occasion-picker');
+        picker.classList.add('opacity-40', 'pointer-events-none');
+        textEl.textContent = data.text;
+        cardsDiv.innerHTML = data.items.map(item => `
+            <div class="group cursor-pointer">
+                <div class="aspect-[4/5] overflow-hidden rounded mb-3 bg-surface-container-high">
+                    <img src="${item.img}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                </div>
+                <h5 class="text-[0.7rem] font-bold uppercase tracking-wider truncate">${item.brand}</h5>
+                <p class="text-[0.6rem] text-on-surface-variant uppercase tracking-widest mt-0.5">${item.name}</p>
+                <p class="text-[0.6rem] font-bold mt-1 text-primary">${item.price}</p>
+            </div>
+        `).join('');
+        resultsDiv.classList.remove('hidden');
+    }
+
+    function resetAI() {
+        document.getElementById('ai-results').classList.add('hidden');
+        document.getElementById('occasion-picker').classList.remove('opacity-40', 'pointer-events-none');
+    }
+
+    function sendAIMessage() {
+        const input = document.getElementById('ai-chat-input');
+        const message = input.value.trim();
+        if (!message) return;
+        // TODO: Connect to Django AI view at /ai-recommendation/
+        input.value = '';
+    }
+</script>
+</body>
+</html>
