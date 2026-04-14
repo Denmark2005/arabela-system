@@ -25,4 +25,5 @@ urlpatterns = [
     path('accounts/', include('accounts.urls')),
     path('reservations/', include('reservations.urls')),
     path('ai/', include('ai_recommendation.urls')),
+    path('admin-panel/', include('arabela_admin.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
