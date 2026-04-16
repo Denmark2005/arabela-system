@@ -101,12 +101,12 @@
         }
         .group:hover .dropdown-menu {
             opacity: 1;
-            transform: translateY(0);
+            transform: translateY(0) scale(1);
             pointer-events: auto;
         }
         .dropdown-menu {
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            transform: translateY(10px);
+            transition: all 0.4s cubic-bezier(0.23, 1, 0.320, 1);
+            transform: translateY(-15px) scale(0.92);
             opacity: 0;
             pointer-events: none;
         }
@@ -128,12 +128,12 @@
                 <div class="dropdown-menu absolute top-full left-0 w-52 bg-white dark:bg-[#222222] shadow-[0_10px_30px_rgba(0,0,0,0.08)] border-t-2 border-[#222222] dark:border-[#FAF4EB] py-6 z-[80]" style="background-color: #F9F7F2;">
                     <ul class="flex flex-col gap-4">
                         <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">All</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Tops</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Bottoms</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Sets</a></li>
                         <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Dresses</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Suits</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Outerwear</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Filipiniana</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Kids suit</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:collection_wedding' %}">Wedding</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Suit</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Bol gown</a></li>
                     </ul>
                 </div>
             </div>
@@ -180,22 +180,16 @@
                         <span class="material-symbols-outlined">close</span>
                     </button>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-12">
-                    <div>
-                        <p class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-6">Quick Links</p>
-                        <ul class="space-y-4">
-                            <li><a class="text-sm hover:text-primary transition-colors border-b border-transparent hover:border-black/20 pb-0.5 inline-block" href="#">New Arrivals</a></li>
-                            <li><a class="text-sm hover:text-primary transition-colors border-b border-transparent hover:border-black/20 pb-0.5 inline-block" href="#">Best Sellers</a></li>
-                            <li><a class="text-sm hover:text-primary transition-colors border-b border-transparent hover:border-black/20 pb-0.5 inline-block" href="#">Designers</a></li>
-                        </ul>
-                    </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
                     <div>
                         <p class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-6">Collections</p>
                         <ul class="space-y-4">
-                            <li><a class="text-sm hover:text-primary transition-colors" href="#">Wedding</a></li>
-                            <li><a class="text-sm hover:text-primary transition-colors" href="#">Cocktail</a></li>
-                            <li><a class="text-sm hover:text-primary transition-colors" href="#">Black Tie</a></li>
+                            <li><a class="text-sm hover:text-primary transition-colors" href="#">Dresses</a></li>
                             <li><a class="text-sm hover:text-primary transition-colors" href="#">Filipiniana</a></li>
+                            <li><a class="text-sm hover:text-primary transition-colors" href="#">Kids suit</a></li>
+                            <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collection_wedding' %}">Wedding</a></li>
+                            <li><a class="text-sm hover:text-primary transition-colors" href="#">Suit</a></li>
+                            <li><a class="text-sm hover:text-primary transition-colors" href="#">Bol gown</a></li>
                         </ul>
                     </div>
                     <div>
@@ -419,9 +413,9 @@
     <section class="py-32 bg-surface px-8">
         <div class="container mx-auto">
             <div class="flex flex-col md:flex-row justify-between items-baseline mb-20 gap-8">
-                <h2 class="font-headline text-[3.5rem] font-bold tracking-tighter">The Archive</h2>
-                <p class="text-on-surface-variant max-w-xs uppercase text-[0.6875rem] tracking-widest leading-loose">
-                    Hand-selected pieces from international runways and private collections. Redefining ownership through curation.
+                <h2 class="font-headline text-[3.5rem] font-bold tracking-tighter">Trending Now</h2>
+                <p class="text-on-surface-variant max-w-xs uppercase text-sm tracking-widest leading-loose font-semibold">
+                    Hand-picked collections for every occasion. Redefining style through sharing.
                 </p>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-4 gap-12">
@@ -461,7 +455,7 @@
                                 <h4 class="font-headline text-lg font-bold">Sample Gown 1</h4>
                                 <p class="text-[0.6875rem] text-on-surface-variant uppercase tracking-widest mt-1">Wedding</p>
                             </div>
-                            <span class="text-[0.6875rem] font-bold">₱2,500 / Day</span>
+                            <span class="text-[0.6875rem] font-bold">₱2,500</span>
                         </div>
                     </div>
                 </div>
@@ -472,9 +466,9 @@
                         <div class="flex justify-between items-start p-2">
                             <div>
                                 <h4 class="font-headline text-lg font-bold">Sample Gown 2</h4>
-                                <p class="text-[0.6875rem] text-on-surface-variant uppercase tracking-widest mt-1">Debut</p>
+                                <p class="text-[0.6875rem] text-on-surface-variant uppercase tracking-widest mt-1">Dresses</p>
                             </div>
-                            <span class="text-[0.6875rem] font-bold">₱3,000 / Day</span>
+                            <span class="text-[0.6875rem] font-bold">₱3,000</span>
                         </div>
                     </div>
                 </div>
@@ -485,9 +479,9 @@
                         <div class="flex justify-between items-start p-2">
                             <div>
                                 <h4 class="font-headline text-lg font-bold">Sample Gown 3</h4>
-                                <p class="text-[0.6875rem] text-on-surface-variant uppercase tracking-widest mt-1">Graduation</p>
+                                <p class="text-[0.6875rem] text-on-surface-variant uppercase tracking-widest mt-1">Suit</p>
                             </div>
-                            <span class="text-[0.6875rem] font-bold">₱2,000 / Day</span>
+                            <span class="text-[0.6875rem] font-bold">₱2,000</span>
                         </div>
                     </div>
                 </div>
@@ -501,9 +495,9 @@
                         <div class="flex justify-between items-start p-2">
                             <div>
                                 <h4 class="font-headline text-lg font-bold">Sample Gown 4</h4>
-                                <p class="text-[0.6875rem] text-on-surface-variant uppercase tracking-widest mt-1">Formal</p>
+                                <p class="text-[0.6875rem] text-on-surface-variant uppercase tracking-widest mt-1">Bol gown</p>
                             </div>
-                            <span class="text-[0.6875rem] font-bold">₱2,800 / Day</span>
+                            <span class="text-[0.6875rem] font-bold">₱2,800</span>
                         </div>
                     </div>
                 </div>

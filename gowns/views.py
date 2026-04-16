@@ -6,6 +6,9 @@ def homepage(request):
 def collections(request):
     return render(request, 'collections.html', {})
 
+def collection_wedding(request):
+    return render(request, 'wedding.html', {})
+
 def reservation(request):
     return render(request, 'reservation.html', {})
 

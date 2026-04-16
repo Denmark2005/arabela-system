@@ -90,12 +90,12 @@
         }
         .group:hover .dropdown-menu {
             opacity: 1;
-            transform: translateY(0);
+            transform: translateY(0) scale(1);
             pointer-events: auto;
         }
         .dropdown-menu {
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            transform: translateY(10px);
+            transition: all 0.4s cubic-bezier(0.23, 1, 0.320, 1);
+            transform: translateY(-15px) scale(0.92);
             opacity: 0;
             pointer-events: none;
         }
@@ -129,12 +129,12 @@
                 <div class="dropdown-menu absolute top-full left-0 w-52 bg-white dark:bg-[#222222] shadow-[0_10px_30px_rgba(0,0,0,0.08)] border-t-2 border-[#222222] dark:border-[#FAF4EB] py-6 z-[80]" style="background-color: #F9F7F2;">
                     <ul class="flex flex-col gap-4">
                         <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:collections' %}">All</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:collections' %}?category=Tops">Tops</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:collections' %}?category=Bottoms">Bottoms</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:collections' %}?category=Sets">Sets</a></li>
                         <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:collections' %}?category=Dresses">Dresses</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:collections' %}?category=Suits">Suits</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:collections' %}?category=Outerwear">Outerwear</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:collections' %}?category=Filipiniana">Filipiniana</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:collections' %}?category=Kids%20suit">Kids suit</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:collection_wedding' %}">Wedding</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:collections' %}?category=Suit">Suit</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:collections' %}?category=Bol%20gown">Bol gown</a></li>
                     </ul>
                 </div>
             </div>
@@ -180,22 +180,16 @@
                         <span class="material-symbols-outlined">close</span>
                     </button>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-12">
-                    <div>
-                        <p class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-6">Quick Links</p>
-                        <ul class="space-y-4">
-                            <li><a class="text-sm hover:text-primary transition-colors border-b border-transparent hover:border-black/20 pb-0.5 inline-block" href="{% url 'gowns:homepage' %}">Home</a></li>
-                            <li><a class="text-sm hover:text-primary transition-colors border-b border-transparent hover:border-black/20 pb-0.5 inline-block" href="{% url 'gowns:collections' %}">Rent</a></li>
-                            <li><a class="text-sm hover:text-primary transition-colors border-b border-transparent hover:border-black/20 pb-0.5 inline-block" href="{% url 'accounts:login' %}">Sign in</a></li>
-                        </ul>
-                    </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
                     <div>
                         <p class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-6">Collections</p>
                         <ul class="space-y-4">
                             <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collections' %}?category=Dresses">Dresses</a></li>
-                            <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collections' %}?category=Tops">Tops</a></li>
-                            <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collections' %}?category=Bottoms">Bottoms</a></li>
-                            <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collections' %}?category=Sets">Sets</a></li>
+                            <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collections' %}?category=Filipiniana">Filipiniana</a></li>
+                            <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collections' %}?category=Kids%20suit">Kids suit</a></li>
+                            <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collection_wedding' %}">Wedding</a></li>
+                            <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collections' %}?category=Suit">Suit</a></li>
+                            <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collections' %}?category=Bol%20gown">Bol gown</a></li>
                         </ul>
                     </div>
                     <div>
@@ -384,56 +378,56 @@
             </div>
         </a>
 
-        <!-- Category: Tops -->
-        <a href="{% url 'gowns:collections' %}?category=Tops" class="group cursor-pointer flex flex-col items-center">
+        <!-- Category: Filipiniana -->
+        <a href="{% url 'gowns:collections' %}?category=Filipiniana" class="group cursor-pointer flex flex-col items-center">
             <div class="relative mx-auto w-full max-w-[200px] sm:max-w-[220px] md:max-w-[240px] aspect-[3/5] overflow-hidden bg-surface-container-high rounded-sm">
-                <!-- ARABELA ACTUAL PRODUCT GOWNS HERE (Tops) -->
+                <!-- ARABELA ACTUAL PRODUCT GOWNS HERE (Filipiniana) -->
                 <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">Tops</span>
+                    <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">Filipiniana</span>
                     <span class="mt-2 block w-10 sm:w-12 border-t border-white" aria-hidden="true"></span>
                 </div>
             </div>
         </a>
 
-        <!-- Category: Bottoms -->
-        <a href="{% url 'gowns:collections' %}?category=Bottoms" class="group cursor-pointer flex flex-col items-center">
+        <!-- Category: Kids suit -->
+        <a href="{% url 'gowns:collections' %}?category=Kids%20suit" class="group cursor-pointer flex flex-col items-center">
             <div class="relative mx-auto w-full max-w-[200px] sm:max-w-[220px] md:max-w-[240px] aspect-[3/5] overflow-hidden bg-surface-container-high rounded-sm">
-                <!-- ARABELA ACTUAL PRODUCT GOWNS HERE (Bottoms) -->
+                <!-- ARABELA ACTUAL PRODUCT GOWNS HERE (Kids suit) -->
                 <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">Bottoms</span>
+                    <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">Kids suit</span>
                     <span class="mt-2 block w-10 sm:w-12 border-t border-white" aria-hidden="true"></span>
                 </div>
             </div>
         </a>
 
-        <!-- Category: Sets -->
-        <a href="{% url 'gowns:collections' %}?category=Sets" class="group cursor-pointer flex flex-col items-center">
+        <!-- Category: Wedding -->
+        <a href="{% url 'gowns:collection_wedding' %}" class="group cursor-pointer flex flex-col items-center">
             <div class="relative mx-auto w-full max-w-[200px] sm:max-w-[220px] md:max-w-[240px] aspect-[3/5] overflow-hidden bg-surface-container-high rounded-sm">
-                <!-- ARABELA ACTUAL PRODUCT GOWNS HERE (Sets) -->
+                <!-- ARABELA ACTUAL PRODUCT GOWNS HERE (Wedding) -->
                 <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">Sets</span>
+                    <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">Wedding</span>
                     <span class="mt-2 block w-10 sm:w-12 border-t border-white" aria-hidden="true"></span>
                 </div>
             </div>
         </a>
 
-        <!-- Category: Suits & Jumpsuits -->
-        <a href="{% url 'gowns:collections' %}?category=Suits" class="group cursor-pointer flex flex-col items-center">
+        <!-- Category: Suit -->
+        <a href="{% url 'gowns:collections' %}?category=Suit" class="group cursor-pointer flex flex-col items-center">
             <div class="relative mx-auto w-full max-w-[200px] sm:max-w-[220px] md:max-w-[240px] aspect-[3/5] overflow-hidden bg-surface-container-high rounded-sm">
-                <!-- ARABELA ACTUAL PRODUCT GOWNS HERE (Suits & Jumpsuits) -->
+                <!-- ARABELA ACTUAL PRODUCT GOWNS HERE (Suit) -->
                 <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span class="text-white font-body text-[0.6rem] sm:text-[0.65rem] font-medium uppercase tracking-[0.12em] text-center px-1 drop-shadow-sm leading-tight">Suits &amp; Jumpsuits</span>
+                    <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">Suit</span>
                     <span class="mt-2 block w-10 sm:w-12 border-t border-white" aria-hidden="true"></span>
                 </div>
             </div>
         </a>
 
-        <!-- Category: Outerwear -->
-        <a href="{% url 'gowns:collections' %}?category=Outerwear" class="group cursor-pointer flex flex-col items-center">
+        <!-- Category: Bol gown -->
+        <a href="{% url 'gowns:collections' %}?category=Bol%20gown" class="group cursor-pointer flex flex-col items-center">
             <div class="relative mx-auto w-full max-w-[200px] sm:max-w-[220px] md:max-w-[240px] aspect-[3/5] overflow-hidden bg-surface-container-high rounded-sm">
-                <!-- ARABELA ACTUAL PRODUCT GOWNS HERE (Outerwear) -->
+                <!-- ARABELA ACTUAL PRODUCT GOWNS HERE (Bol gown) -->
                 <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">Outerwear</span>
+                    <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">Bol gown</span>
                     <span class="mt-2 block w-10 sm:w-12 border-t border-white" aria-hidden="true"></span>
                 </div>
             </div>

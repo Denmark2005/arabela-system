@@ -8,33 +8,11 @@
       content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0"
     />
     <meta http-equiv="X-UA-Compatible" content="ie=edge" />
-    <title>Sign In | Arabela</title>
+    <title>Sign In| Arabela System Admin Panel</title>
     <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
-  <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet">
-  <style>
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(-5px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    .animate-fade-in { animation: fadeIn 0.3s ease forwards; }
-
-    @keyframes shake {
-      0%, 100% { transform: translateX(0); }
-      10%, 30%, 50%, 70%, 90% { transform: translateX(-6px); }
-      20%, 40%, 60%, 80% { transform: translateX(6px); }
-    }
-    .animate-invalid-shake {
-      animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
-    }
-
-    .input-error-state {
-      border-color: #ba1a1a !important;
-      border-width: 2px !important;
-    }
-  </style>
-  </head>
+  <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet"></head>
   <body
-    x-data="{ page: 'signin', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false }"
+    x-data="{ page: 'comingSoon', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false }"
     x-init="
          darkMode = JSON.parse(localStorage.getItem('darkMode'));
          $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)))"
@@ -50,16 +28,43 @@
     class="h-16 w-16 animate-spin rounded-full border-4 border-solid border-brand-500 border-t-transparent"
   ></div>
 </div>
+
     <!-- ===== Preloader End ===== -->
 
     <!-- ===== Page Wrapper Start ===== -->
     <div class="relative p-6 bg-white z-1 dark:bg-gray-900 sm:p-0">
       <div
-        class="relative flex flex-col justify-center w-full h-screen dark:bg-gray-900 sm:p-0"
+        class="relative flex flex-col justify-center w-full h-screen dark:bg-gray-900 sm:p-0 lg:flex-row"
       >
         <!-- Form -->
-        <div class="flex flex-col flex-1 w-full">
-          <div class="flex flex-col justify-center flex-1 w-full max-w-md mx-auto">
+        <div class="flex flex-col flex-1 w-full lg:w-1/2">
+          <div class="w-full max-w-md pt-10 mx-auto">
+            <a
+              href="{% url 'arabela_admin:dashboard' %}"
+              class="inline-flex items-center text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+            >
+              <svg
+                class="stroke-current"
+                xmlns="http://www.w3.org/2000/svg"
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                fill="none"
+              >
+                <path
+                  d="M12.7083 5L7.5 10.2083L12.7083 15.4167"
+                  stroke=""
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              Back to dashboard
+            </a>
+          </div>
+          <div
+            class="flex flex-col justify-center flex-1 w-full max-w-md mx-auto"
+          >
             <div>
               <div class="mb-5 sm:mb-8">
                 <h1
@@ -68,13 +73,12 @@
                   Sign In
                 </h1>
                 <p class="text-sm text-gray-500 dark:text-gray-400">
-                  Enter your email to sign in!
+                  Enter your email and password to sign in!
                 </p>
               </div>
               <div>
-                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-5 mb-5 sm:mb-8">
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-5">
                   <button
-                    type="button"
                     class="inline-flex items-center justify-center gap-3 py-3 text-sm font-normal text-gray-700 transition-colors bg-gray-100 rounded-lg px-7 hover:bg-gray-200 hover:text-gray-800 dark:bg-white/5 dark:text-white/90 dark:hover:bg-white/10"
                   >
                     <svg
@@ -103,6 +107,24 @@
                     </svg>
                     Sign in with Google
                   </button>
+                  <button
+                    class="inline-flex items-center justify-center gap-3 py-3 text-sm font-normal text-gray-700 transition-colors bg-gray-100 rounded-lg px-7 hover:bg-gray-200 hover:text-gray-800 dark:bg-white/5 dark:text-white/90 dark:hover:bg-white/10"
+                  >
+                    <svg
+                      width="21"
+                      class="fill-current"
+                      height="20"
+                      viewBox="0 0 21 20"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        d="M15.6705 1.875H18.4272L12.4047 8.75833L19.4897 18.125H13.9422L9.59717 12.4442L4.62554 18.125H1.86721L8.30887 10.7625L1.51221 1.875H7.20054L11.128 7.0675L15.6705 1.875ZM14.703 16.475H16.2305L6.37054 3.43833H4.73137L14.703 16.475Z"
+                      />
+                    </svg>
+
+                    Sign in with X
+                  </button>
                 </div>
                 <div class="relative py-3 sm:py-5">
                   <div class="absolute inset-0 flex items-center">
@@ -117,8 +139,7 @@
                     >
                   </div>
                 </div>
-                <form id="login_form" method="POST" action="{% url 'accounts:login' %}" novalidate>
-                  {% csrf_token %}
+                <form>
                   <div class="space-y-5">
                     <!-- Email -->
                     <div>
@@ -132,7 +153,6 @@
                         id="email"
                         name="email"
                         placeholder="info@gmail.com"
-                        value="{{ email|default:'' }}"
                         class="dark:bg-dark-900 h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
                       />
                     </div>
@@ -146,8 +166,6 @@
                       <div x-data="{ showPassword: false }" class="relative">
                         <input
                           :type="showPassword ? 'text' : 'password'"
-                          id="password"
-                          name="password"
                           placeholder="Enter your password"
                           class="dark:bg-dark-900 h-11 w-full rounded-lg border border-gray-300 bg-transparent py-2.5 pl-4 pr-11 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
                         />
@@ -190,7 +208,7 @@
                         </span>
                       </div>
                     </div>
-                    <!-- Checkbox & Forgot Password -->
+                    <!-- Checkbox -->
                     <div class="flex items-center justify-between">
                       <div x-data="{ checkboxToggle: false }">
                         <label
@@ -239,28 +257,20 @@
                     <!-- Button -->
                     <div>
                       <button
-                        type="submit"
                         class="flex items-center justify-center w-full px-4 py-3 text-sm font-medium text-white transition rounded-lg bg-brand-500 shadow-theme-xs hover:bg-brand-600"
                       >
                         Sign In
                       </button>
                     </div>
-                    <!-- Error Message -->
-                    <div id="error_container" class="items-start gap-2 mt-4 text-theme-sm text-error-500 animate-fade-in {% if error %}flex{% else %}hidden{% endif %}">
-                      <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                      </svg>
-                      <span id="error_text" class="tracking-tight">{{ error|default:'' }}</span>
-                    </div>
                   </div>
                 </form>
                 <div class="mt-5">
                   <p
-                    class="text-sm font-normal text-center text-gray-700 dark:text-gray-400"
+                    class="text-sm font-normal text-center text-gray-700 dark:text-gray-400 sm:text-start"
                   >
                     Don't have an account?
                     <a
-                      href="{% url 'accounts:signup' %}"
+                      href="/signup.html"
                       class="text-brand-500 hover:text-brand-600 dark:text-brand-400"
                       >Sign Up</a
                     >
@@ -271,6 +281,30 @@
           </div>
         </div>
 
+        <div
+          class="relative items-center hidden w-full h-full bg-brand-950 dark:bg-white/5 lg:grid lg:w-1/2"
+        >
+          <div class="flex items-center justify-center z-1">
+            <!-- ===== Common Grid Shape Start ===== -->
+            <div class="absolute right-0 top-0 -z-1 w-full max-w-[250px] xl:max-w-[450px]">
+  <img src="{% static 'arabela_admin/images/shape/grid-01.svg' %}" alt="grid" />
+</div>
+<div
+  class="absolute bottom-0 left-0 -z-1 w-full max-w-[250px] rotate-180 xl:max-w-[450px]"
+>
+  <img src="{% static 'arabela_admin/images/shape/grid-01.svg' %}" alt="grid" />
+</div>
+
+            <div class="flex flex-col items-center max-w-xs">
+              <a href="{% url 'arabela_admin:dashboard' %}" class="block mb-4">
+                <img src="{% static 'arabela_admin/images/logo/auth-logo.svg' %}" alt="Logo" />
+              </a>
+              <p class="text-center text-gray-400 dark:text-white/60">
+                Free and Open-Source Tailwind CSS Admin Dashboard Template
+              </p>
+            </div>
+          </div>
+        </div>
         <!-- Toggler -->
         <div class="fixed z-50 hidden bottom-6 right-6 sm:block">
           <button
@@ -310,66 +344,6 @@
       </div>
     </div>
     <!-- ===== Page Wrapper End ===== -->
-  <script defer src="{% static 'arabela_admin/bundle.js' %}"></script>
-  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const form = document.getElementById('login_form');
-      const emailInput = document.getElementById('email');
-      const passwordInput = document.getElementById('password');
-      const errorContainer = document.getElementById('error_container');
-      const errorText = document.getElementById('error_text');
-      
-      const genericErrorMessage = "Gmail account not found. Please check your spelling or create an account.";
-
-      const validateEmail = (email) => {
-        return String(email).toLowerCase().match(/^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/);
-      };
-
-      const triggerError = (input) => {
-        input.classList.add('input-error-state', 'animate-invalid-shake');
-        errorText.innerText = genericErrorMessage;
-        errorContainer.classList.remove('hidden');
-        errorContainer.classList.add('flex');
-
-        setTimeout(() => {
-          input.classList.remove('animate-invalid-shake');
-        }, 400);
-      };
-
-      form.addEventListener('submit', (e) => {
-        const emailValue = emailInput.value.trim();
-        const passwordValue = passwordInput.value.trim();
-        
-        if (emailValue === "" || !validateEmail(emailValue)) {
-          e.preventDefault();
-          triggerError(emailInput);
-        } else if (passwordValue === "") {
-          e.preventDefault();
-          triggerError(passwordInput);
-        }
-      });
-
-      emailInput.addEventListener('focus', () => {
-        emailInput.classList.remove('input-error-state');
-        errorContainer.classList.add('hidden');
-      });
-
-      emailInput.addEventListener('input', () => {
-        emailInput.classList.remove('input-error-state');
-        errorContainer.classList.add('hidden');
-      });
-
-      passwordInput.addEventListener('focus', () => {
-        passwordInput.classList.remove('input-error-state');
-        errorContainer.classList.add('hidden');
-      });
-
-      passwordInput.addEventListener('input', () => {
-        passwordInput.classList.remove('input-error-state');
-        errorContainer.classList.add('hidden');
-      });
-    });
-  </script>
-</body>
+  <script defer src="{% static 'arabela_admin/bundle.js' %}"></script></body>
 </html>
+

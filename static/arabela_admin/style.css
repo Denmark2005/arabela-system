@@ -4816,3 +4816,17 @@ span.flatpickr-weekday,
   inherits: false;
 }
 
+
+
+/* Arabela gold theme overrides */
+:root {
+  --color-brand-50: #f8f3ea;
+  --color-brand-100: #efe2cc;
+  --color-brand-300: #d6bd8f;
+  --color-brand-400: #c6a96a;
+  --color-brand-500: #b89559;
+  --color-brand-600: #a8894f;
+  --color-brand-800: #7b6138;
+  --color-brand-950: #382914;
+  --color-theme-purple-500: #b89559;
+}

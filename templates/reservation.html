@@ -131,6 +131,35 @@
             border-color: #ba1a1a !important;
             background-color: rgba(186, 26, 26, 0.06);
         }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+        #loading-overlay {
+            display: none;
+            position: fixed;
+            left: 0;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 999999;
+            background-color: #fcf9f8;
+            flex-layout: center;
+        }
+        #loading-overlay.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .loading-spinner {
+            width: 64px;
+            height: 64px;
+            border: 4px solid #e5e2e1;
+            border-top-color: #0b0c0c;
+            border-radius: 50%;
+        }
     </style>
 </head>
 <body class="font-body selection:bg-primary-fixed selection:text-primary overflow-x-hidden">
@@ -445,7 +474,7 @@
 <!-- GCash Modal (Full Payment) -->
 <div class="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-primary/20 backdrop-blur-sm transition-all duration-300 hidden" id="gcash-full-modal">
 <div class="absolute inset-0" onclick="document.getElementById('gcash-full-modal').classList.add('hidden')"></div>
-<div class="relative bg-white p-12 w-full max-w-sm editorial-shadow flex flex-col items-center gap-8">
+<div class="relative bg-white p-12 w-full max-w-sm editorial-shadow flex flex-col items-center gap-8"></div>
 <button class="absolute top-6 right-6 text-primary/50 hover:text-primary transition-colors" onclick="document.getElementById('gcash-full-modal').classList.add('hidden')">
 <span class="material-symbols-outlined text-2xl">close</span>
 </button>
@@ -462,6 +491,11 @@
       Download QR code
     </a>
 </div>
+</div>
+
+<!-- Loading Overlay -->
+<div id="loading-overlay">
+    <div class="loading-spinner animate-spin"></div>
 </div>
 
 <script src="{% static 'js/reservation-flow.js' %}?v=peso1"></script>
@@ -609,6 +643,10 @@
             if (btn) {
                 btn.addEventListener('click', function () {
                     if (validateReservationForm()) {
+                        var loadingOverlay = document.getElementById('loading-overlay');
+                        if (loadingOverlay) {
+                            loadingOverlay.classList.add('show');
+                        }
                         window.location.href = "{% url 'gowns:confirmation' %}";
                     }
                 });
