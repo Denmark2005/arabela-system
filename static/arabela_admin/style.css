@@ -656,7 +656,7 @@ svg{-ms-touch-action:none;touch-action:none}image,text,.jvm-zoomin,.jvm-zoomout{
     line-height: var(--tw-leading, var(--text-xs--line-height));
     --tw-font-weight: var(--font-weight-medium);
     font-weight: var(--font-weight-medium);
-    color: var(--color-brand-500);
+    color: var(--color-warning-500);
     text-transform: uppercase;
     &:is(.dark *) {
       color: var(--color-brand-400);
@@ -1037,9 +1037,9 @@ svg{-ms-touch-action:none;touch-action:none}image,text,.jvm-zoomin,.jvm-zoomout{
   }
   .menu-item-arrow-active {
     rotate: 180deg;
-    stroke: var(--color-brand-500);
+    stroke: var(--color-warning-500);
     &:is(.dark *) {
-      stroke: var(--color-brand-400);
+      stroke: var(--color-warning-400);
     }
   }
   .rotate-180 {
@@ -1386,13 +1386,13 @@ svg{-ms-touch-action:none;touch-action:none}image,text,.jvm-zoomin,.jvm-zoomout{
     }
   }
   .menu-dropdown-item-active {
-    background-color: var(--color-brand-50);
-    color: var(--color-brand-500);
+    background-color: var(--color-warning-50);
+    color: var(--color-warning-500);
     &:is(.dark *) {
-      background-color: color-mix(in oklab, var(--color-brand-500) 12%, transparent);
+      background-color: color-mix(in oklab, var(--color-warning-500) 12%, transparent);
     }
     &:is(.dark *) {
-      color: var(--color-brand-400);
+      color: var(--color-warning-400);
     }
   }
   .menu-dropdown-item-inactive {
@@ -1414,37 +1414,37 @@ svg{-ms-touch-action:none;touch-action:none}image,text,.jvm-zoomin,.jvm-zoomout{
     }
   }
   .menu-item-active {
-    background-color: var(--color-brand-50);
-    color: var(--color-brand-500);
+    background-color: var(--color-warning-50);
+    color: var(--color-warning-500);
     &:is(.dark *) {
-      background-color: color-mix(in oklab, var(--color-brand-500) 12%, transparent);
+      background-color: color-mix(in oklab, var(--color-warning-500) 12%, transparent);
     }
     &:is(.dark *) {
-      color: var(--color-brand-400);
+      color: var(--color-warning-400);
     }
   }
   .menu-dropdown-badge-inactive {
-    background-color: var(--color-brand-50);
+    background-color: var(--color-warning-50);
     &:is(:where(.group):hover *) {
       @media (hover: hover) {
-        background-color: var(--color-brand-100);
+        background-color: var(--color-warning-100);
       }
     }
     &:is(.dark *) {
-      background-color: color-mix(in oklab, var(--color-brand-500) 15%, transparent);
+      background-color: color-mix(in oklab, var(--color-warning-500) 15%, transparent);
     }
     &:is(.dark *) {
       &:is(:where(.group):hover *) {
         @media (hover: hover) {
-          background-color: color-mix(in oklab, var(--color-brand-500) 20%, transparent);
+          background-color: color-mix(in oklab, var(--color-warning-500) 20%, transparent);
         }
       }
     }
   }
   .menu-dropdown-badge-active {
-    background-color: var(--color-brand-100);
+    background-color: var(--color-warning-100);
     &:is(.dark *) {
-      background-color: color-mix(in oklab, var(--color-brand-500) 20%, transparent);
+      background-color: color-mix(in oklab, var(--color-warning-500) 20%, transparent);
     }
   }
   .bg-blue-500\/\[0\.08\] {
@@ -1562,9 +1562,9 @@ svg{-ms-touch-action:none;touch-action:none}image,text,.jvm-zoomin,.jvm-zoomout{
     }
   }
   .menu-item-icon-active {
-    fill: var(--color-brand-500);
+    fill: var(--color-warning-500);
     &:is(.dark *) {
-      fill: var(--color-brand-400);
+      fill: var(--color-warning-400);
     }
   }
   .fill-current {
@@ -3665,6 +3665,54 @@ svg{-ms-touch-action:none;touch-action:none}image,text,.jvm-zoomin,.jvm-zoomout{
   display: -ms-flexbox;
   display: flex;
 }
+.sidebar {
+  -webkit-transition: all 300ms ease-in-out !important;
+  transition: all 300ms ease-in-out !important;
+}
+.menu-item {
+  -webkit-transition: background-color 200ms ease-in-out, color 200ms ease-in-out, fill 200ms ease-in-out;
+  transition: background-color 200ms ease-in-out, color 200ms ease-in-out, fill 200ms ease-in-out;
+}
+.menu-item-inactive {
+  -webkit-transition: background-color 200ms ease-in-out, color 200ms ease-in-out, fill 200ms ease-in-out;
+  transition: background-color 200ms ease-in-out, color 200ms ease-in-out, fill 200ms ease-in-out;
+}
+.menu-item-active {
+  -webkit-transition: background-color 200ms ease-in-out, color 200ms ease-in-out, fill 200ms ease-in-out;
+  transition: background-color 200ms ease-in-out, color 200ms ease-in-out, fill 200ms ease-in-out;
+}
+.menu-item-arrow {
+  -webkit-transition: stroke 200ms ease-in-out, -webkit-transform 300ms ease-in-out;
+  transition: stroke 200ms ease-in-out, -webkit-transform 300ms ease-in-out;
+  transition: transform 300ms ease-in-out, stroke 200ms ease-in-out;
+  transition: transform 300ms ease-in-out, stroke 200ms ease-in-out, -webkit-transform 300ms ease-in-out;
+}
+.translate {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  -webkit-transition: max-height 400ms ease-in-out, opacity 300ms ease-in-out;
+  transition: max-height 400ms ease-in-out, opacity 300ms ease-in-out;
+  pointer-events: none;
+}
+.translate.block {
+  max-height: 2000px;
+  opacity: 1;
+  pointer-events: auto;
+  -webkit-transition: max-height 400ms ease-in-out, opacity 300ms ease-in-out;
+  transition: max-height 400ms ease-in-out, opacity 300ms ease-in-out;
+}
+.translate.hidden {
+  max-height: 0;
+  opacity: 0;
+  pointer-events: none;
+  -webkit-transition: max-height 400ms ease-in-out, opacity 300ms ease-in-out;
+  transition: max-height 400ms ease-in-out, opacity 300ms ease-in-out;
+}
+.menu-dropdown-item {
+  -webkit-transition: background-color 200ms ease-in-out, color 200ms ease-in-out;
+  transition: background-color 200ms ease-in-out, color 200ms ease-in-out;
+}
 .tableCheckbox:checked ~ span span {
   opacity: 100%;
 }
@@ -4816,17 +4864,3 @@ span.flatpickr-weekday,
   inherits: false;
 }
 
-
-
-/* Arabela gold theme overrides */
-:root {
-  --color-brand-50: #f8f3ea;
-  --color-brand-100: #efe2cc;
-  --color-brand-300: #d6bd8f;
-  --color-brand-400: #c6a96a;
-  --color-brand-500: #b89559;
-  --color-brand-600: #a8894f;
-  --color-brand-800: #7b6138;
-  --color-brand-950: #382914;
-  --color-theme-purple-500: #b89559;
-}

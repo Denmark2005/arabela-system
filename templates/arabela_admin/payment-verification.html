@@ -1,19 +1,56 @@
-<head><link rel="icon" href="favicon.ico"><link href="style.css" rel="stylesheet"></head><aside
+{% load static %}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0"
+    />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <title>
+      Payment Verification | Arabela System Admin Panel
+    </title>
+    <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
+  <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet"></head>
+  <body
+    x-data="{ page: 'payment-verification', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false }"
+    x-init="
+         darkMode = JSON.parse(localStorage.getItem('darkMode'));
+         $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)))"
+    :class="{'dark bg-gray-900': darkMode === true}"
+  >
+    <!-- ===== Preloader Start ===== -->
+    <div
+  x-show="loaded"
+  x-init="window.addEventListener('DOMContentLoaded', () => {setTimeout(() => loaded = false, 500)})"
+  class="fixed left-0 top-0 z-999999 flex h-screen w-screen items-center justify-center bg-white dark:bg-black"
+>
+  <div
+    class="h-16 w-16 animate-spin rounded-full border-4 border-solid border-black border-t-transparent" style="border-color: #000 !important; border-top-color: transparent !important;"
+  ></div>
+</div>
+
+    <!-- ===== Preloader End ===== -->
+
+    <!-- ===== Page Wrapper Start ===== -->
+    <div class="flex h-screen overflow-hidden">
+      <!-- ===== Sidebar Start ===== -->
+      <aside
   :class="sidebarToggle ? 'translate-x-0 lg:w-[90px]' : '-translate-x-full'"
-  class="sidebar fixed left-0 top-0 z-9999 flex h-screen w-[290px] flex-col overflow-y-hidden border-r border-gray-200 bg-white px-5 duration-300 ease-linear dark:border-gray-800 dark:bg-black lg:static lg:translate-x-0"
-  @click.outside="sidebarToggle = false"
+  class="sidebar fixed left-0 top-0 z-9999 flex h-screen w-[290px] flex-col overflow-y-hidden border-r border-gray-200 bg-white px-5 dark:border-gray-800 dark:bg-black lg:static lg:translate-x-0"
 >
   <!-- SIDEBAR HEADER -->
   <div
     :class="sidebarToggle ? 'justify-center' : 'justify-between'"
-    class="sidebar-header flex items-center gap-2 pb-7 pt-8"
+    class="flex items-center gap-2 pt-8 sidebar-header pb-7"
   >
-    <a href="index.html">
+    <a href="{% url 'arabela_admin:dashboard' %}">
       <span class="logo" :class="sidebarToggle ? 'hidden' : ''">
-        <img class="dark:hidden" src="src/images/logo/logo.svg" alt="Logo" />
+        <img class="dark:hidden" src="{% static 'arabela_admin/images/logo/logo.svg' %}" alt="Logo" />
         <img
           class="hidden dark:block"
-          src="src/images/logo/logo-dark.svg"
+          src="{% static 'arabela_admin/images/logo/logo-dark.svg' %}"
           alt="Logo"
         />
       </span>
@@ -23,7 +60,7 @@
   <!-- SIDEBAR HEADER -->
 
   <div
-    class="no-scrollbar flex flex-col overflow-y-auto duration-300 ease-linear"
+    class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
     <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown' || page === 'condition' || page === 'categories') { selected = 'InventoryManagement' } else if (page === 'clients' || page === 'abuse') { selected = 'CustomerManagement' } else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'FinancialReport' }">
@@ -39,7 +76,7 @@
 
           <svg
             :class="sidebarToggle ? 'lg:block hidden' : 'hidden'"
-            class="menu-group-icon mx-auto fill-current"
+            class="mx-auto fill-current menu-group-icon"
             width="24"
             height="24"
             viewBox="0 0 24 24"
@@ -55,7 +92,7 @@
           </svg>
         </h3>
 
-        <ul class="mb-6 flex flex-col gap-4">
+        <ul class="flex flex-col gap-4 mb-6">
           <!-- Menu Item Dashboard -->
           <li>
             <a
@@ -108,94 +145,20 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="translate transform overflow-hidden"
+              class="overflow-hidden transform translate"
               :class="(selected === 'Dashboard') ? 'block' :'hidden'"
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
-                class="menu-dropdown mt-2 flex flex-col gap-1 pl-9"
+                class="flex flex-col gap-1 mt-2 menu-dropdown pl-9"
               >
                 <li>
                   <a
-                    href="index.html"
+                    href="{% url 'arabela_admin:dashboard' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'ecommerce' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
-                    eCommerce
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="analytics.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'analytics' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Analytics
-                    <span class="absolute right-3 flex items-center gap-1">
-                      <span
-                        class="menu-dropdown-badge"
-                        :class="page === 'analytics' ? 'menu-dropdown-badge-active' : 'menu-dropdown-badge-inactive'"
-                      >
-                        Pro
-                      </span>
-                    </span>
-                  </a>
-                </li>
-                <li>
-                  <a
-                    class="menu-dropdown-item group"
-                    href="marketing.html"
-                    :class="page === 'marketing' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Marketing
-                    <span class="absolute right-3 flex items-center gap-1">
-                      <span
-                        class="menu-dropdown-badge"
-                        :class="page === 'marketing' ? 'menu-dropdown-badge-active' : 'menu-dropdown-badge-inactive'"
-                      >
-                        Pro
-                      </span>
-                    </span>
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="crm.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'crm' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    CRM
-                    <span class="absolute right-3 flex items-center gap-1">
-                      <span
-                        class="menu-dropdown-badge"
-                        :class="page === 'crm' ? 'menu-dropdown-badge-active' : 'menu-dropdown-badge-inactive'"
-                      >
-                        Pro
-                      </span>
-                    </span>
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="stocks.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'stocks' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Stocks
-                    <span class="absolute right-3 flex items-center gap-1">
-                      <span
-                        class="menu-dropdown-badge"
-                        :class="page === 'stocks' ? 'menu-dropdown-badge-active' : 'menu-dropdown-badge-inactive'"
-                      >
-                        New
-                      </span>
-                      <span
-                        class="menu-dropdown-badge"
-                        :class="page === 'stocks' ? 'menu-dropdown-badge-active' : 'menu-dropdown-badge-inactive'"
-                      >
-                        Pro
-                      </span>
-                    </span>
+                    Rental Overview
                   </a>
                 </li>
               </ul>
@@ -256,7 +219,7 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="translate transform overflow-hidden"
+              class="transform overflow-hidden translate"
               :class="(selected === 'BookingsSchedule') ? 'block' :'hidden'"
             >
               <ul
@@ -265,7 +228,7 @@
               >
                 <li>
                   <a
-                    href="rental-schedule.html"
+                    href="{% url 'arabela_admin:calendar' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'rental' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
@@ -581,105 +544,6 @@
           </li>
           <!-- Menu Item Profile -->
 
-          <!-- Menu Item Task -->
-          <li>
-            <a
-              href="#"
-              @click.prevent="selected = (selected === 'Task' ? '':'Task')"
-              class="menu-item group"
-              :class=" (selected === 'Task') || (page === 'taskList' || page === 'taskKanban') ? 'menu-item-active' : 'menu-item-inactive'"
-            >
-              <svg
-                :class="(selected === 'Task') || (page === 'taskList' || page === 'taskKanban') ? 'menu-item-icon-active'  :'menu-item-icon-inactive'"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  fill-rule="evenodd"
-                  clip-rule="evenodd"
-                  d="M7.75586 5.50098C7.75586 5.08676 8.09165 4.75098 8.50586 4.75098H18.4985C18.9127 4.75098 19.2485 5.08676 19.2485 5.50098L19.2485 15.4956C19.2485 15.9098 18.9127 16.2456 18.4985 16.2456H8.50586C8.09165 16.2456 7.75586 15.9098 7.75586 15.4956V5.50098ZM8.50586 3.25098C7.26322 3.25098 6.25586 4.25834 6.25586 5.50098V6.26318H5.50195C4.25931 6.26318 3.25195 7.27054 3.25195 8.51318V18.4995C3.25195 19.7422 4.25931 20.7495 5.50195 20.7495H15.4883C16.7309 20.7495 17.7383 19.7421 17.7383 18.4995L17.7383 17.7456H18.4985C19.7411 17.7456 20.7485 16.7382 20.7485 15.4956L20.7485 5.50097C20.7485 4.25833 19.7411 3.25098 18.4985 3.25098H8.50586ZM16.2383 17.7456H8.50586C7.26322 17.7456 6.25586 16.7382 6.25586 15.4956V7.76318H5.50195C5.08774 7.76318 4.75195 8.09897 4.75195 8.51318V18.4995C4.75195 18.9137 5.08774 19.2495 5.50195 19.2495H15.4883C15.9025 19.2495 16.2383 18.9137 16.2383 18.4995L16.2383 17.7456Z"
-                  fill=""
-                />
-              </svg>
-
-              <span
-                class="menu-item-text"
-                :class="sidebarToggle ? 'lg:hidden' : ''"
-              >
-                Task
-              </span>
-
-              <svg
-                class="menu-item-arrow"
-                :class="[(selected === 'Task') ? 'menu-item-arrow-active' : 'menu-item-arrow-inactive', sidebarToggle ? 'lg:hidden' : '' ]"
-                width="20"
-                height="20"
-                viewBox="0 0 20 20"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M4.79175 7.39584L10.0001 12.6042L15.2084 7.39585"
-                  stroke=""
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-            </a>
-
-            <!-- Dropdown Menu Start -->
-            <div
-              class="translate transform overflow-hidden"
-              :class="(selected === 'Task') ? 'block' :'hidden'"
-            >
-              <ul
-                :class="sidebarToggle ? 'lg:hidden' : 'flex'"
-                class="menu-dropdown mt-2 flex flex-col gap-1 pl-9"
-              >
-                <li>
-                  <a
-                    href="task-list.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'taskList' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    List
-                    <span class="absolute right-3 flex items-center gap-1">
-                      <span
-                        class="menu-dropdown-badge"
-                        :class="page === 'taskList' ? 'menu-dropdown-badge-active' : 'menu-dropdown-badge-inactive'"
-                      >
-                        Pro
-                      </span>
-                    </span>
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="task-kanban.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'taskKanban' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Kanban
-                    <span class="absolute right-3 flex items-center gap-1">
-                      <span
-                        class="menu-dropdown-badge"
-                        :class="page === 'taskKanban' ? 'menu-dropdown-badge-active' : 'menu-dropdown-badge-inactive'"
-                      >
-                        Pro
-                      </span>
-                    </span>
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <!-- Dropdown Menu End -->
-          </li>
-          <!-- Menu Item Task -->
-
           <!-- Menu Item Forms -->
           <li>
             <a
@@ -732,12 +596,12 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="translate transform overflow-hidden"
+              class="overflow-hidden transform translate"
               :class="(selected === 'Forms') ? 'block' :'hidden'"
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
-                class="menu-dropdown mt-2 flex flex-col gap-1 pl-9"
+                class="flex flex-col gap-1 mt-2 menu-dropdown pl-9"
               >
                 <li>
                   <a
@@ -746,15 +610,6 @@
                     :class="page === 'formElements' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
                     Form Elements
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="form-layout.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'formLayout' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Form Layout
                   </a>
                 </li>
               </ul>
@@ -815,12 +670,12 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="translate transform overflow-hidden"
+              class="overflow-hidden transform translate"
               :class="(selected === 'Tables') ? 'block' :'hidden'"
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
-                class="menu-dropdown mt-2 flex flex-col gap-1 pl-9"
+                class="flex flex-col gap-1 mt-2 menu-dropdown pl-9"
               >
                 <li>
                   <a
@@ -829,23 +684,6 @@
                     :class="page === 'basicTables' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
                     Basic Tables
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="data-tables.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'dataTables' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Data Tables
-                    <span class="absolute right-3 flex items-center gap-1">
-                      <span
-                        class="menu-dropdown-badge"
-                        :class="page === 'dataTables' ? 'menu-dropdown-badge-active' : 'menu-dropdown-badge-inactive'"
-                      >
-                        Pro
-                      </span>
-                    </span>
                   </a>
                 </li>
               </ul>
@@ -906,64 +744,13 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="translate transform overflow-hidden"
+              class="overflow-hidden transform translate"
               :class="(selected === 'Pages') ? 'block' :'hidden'"
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
-                class="menu-dropdown mt-2 flex flex-col gap-1 pl-9"
+                class="flex flex-col gap-1 mt-2 menu-dropdown pl-9"
               >
-                <li>
-                  <a
-                    href="file-manager.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'fileManager' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    File Manager
-                    <span class="absolute right-3 flex items-center gap-1">
-                      <span
-                        class="menu-dropdown-badge"
-                        :class="page === 'fileManager' ? 'menu-dropdown-badge-active' : 'menu-dropdown-badge-inactive'"
-                      >
-                        Pro
-                      </span>
-                    </span>
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="pricing-tables.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'pricingTables' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Pricing Tables
-                    <span class="absolute right-3 flex items-center gap-1">
-                      <span
-                        class="menu-dropdown-badge"
-                        :class="page === 'pricingTables' ? 'menu-dropdown-badge-active' : 'menu-dropdown-badge-inactive'"
-                      >
-                        Pro
-                      </span>
-                    </span>
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="faq.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'faq' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Faq's
-                    <span class="absolute right-3 flex items-center gap-1">
-                      <span
-                        class="menu-dropdown-badge"
-                        :class="page === 'faq' ? 'menu-dropdown-badge-active' : 'menu-dropdown-badge-inactive'"
-                      >
-                        Pro
-                      </span>
-                    </span>
-                  </a>
-                </li>
                 <li>
                   <a
                     href="blank.html"
@@ -971,304 +758,13 @@
                     :class="page === 'blank' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
                     Blank Page
-                    <span class="absolute right-3 flex items-center gap-1">
-                      <span
-                        class="menu-dropdown-badge"
-                        :class="page === 'blank' ? 'menu-dropdown-badge-active' : 'menu-dropdown-badge-inactive'"
-                      >
-                        Pro
-                      </span>
-                    </span>
                   </a>
                 </li>
-                <li>
-                  <a
-                    href="500.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'page500' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    500 Error
-                    <span class="absolute right-3 flex items-center gap-1">
-                      <span
-                        class="menu-dropdown-badge"
-                        :class="page === 'page500' ? 'menu-dropdown-badge-active' : 'menu-dropdown-badge-inactive'"
-                      >
-                        Pro
-                      </span>
-                    </span>
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="503.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'page503' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    503 Error
-                    <span class="absolute right-3 flex items-center gap-1">
-                      <span
-                        class="menu-dropdown-badge"
-                        :class="page === 'page503' ? 'menu-dropdown-badge-active' : 'menu-dropdown-badge-inactive'"
-                      >
-                        Pro
-                      </span>
-                    </span>
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="coming-soon.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'comingSoon' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Coming Soon
-                    <span class="absolute right-3 flex items-center gap-1">
-                      <span
-                        class="menu-dropdown-badge"
-                        :class="page === 'comingSoon' ? 'menu-dropdown-badge-active' : 'menu-dropdown-badge-inactive'"
-                      >
-                        Pro
-                      </span>
-                    </span>
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="maintenance.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'termsCondition' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Maintenance
-                    <span class="absolute right-3 flex items-center gap-1">
-                      <span
-                        class="menu-dropdown-badge"
-                        :class="page === 'termsCondition' ? 'menu-dropdown-badge-active' : 'menu-dropdown-badge-inactive'"
-                      >
-                        Pro
-                      </span>
-                    </span>
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="success.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'success' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Success
-                    <span class="absolute right-3 flex items-center gap-1">
-                      <span
-                        class="menu-dropdown-badge"
-                        :class="page === 'success' ? 'menu-dropdown-badge-active' : 'menu-dropdown-badge-inactive'"
-                      >
-                        Pro
-                      </span>
-                    </span>
-                  </a>
-                </li>
-              </ul>
+                </ul>
             </div>
             <!-- Dropdown Menu End -->
           </li>
           <!-- Menu Item Pages -->
-        </ul>
-      </div>
-
-      <!-- Support Group -->
-      <div>
-        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
-          <span
-            class="menu-group-title"
-            :class="sidebarToggle ? 'lg:hidden' : ''"
-          >
-            Support
-          </span>
-
-          <svg
-            :class="sidebarToggle ? 'lg:block hidden' : 'hidden'"
-            class="menu-group-icon mx-auto fill-current"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              fill-rule="evenodd"
-              clip-rule="evenodd"
-              d="M5.99915 10.2451C6.96564 10.2451 7.74915 11.0286 7.74915 11.9951V12.0051C7.74915 12.9716 6.96564 13.7551 5.99915 13.7551C5.03265 13.7551 4.24915 12.9716 4.24915 12.0051V11.9951C4.24915 11.0286 5.03265 10.2451 5.99915 10.2451ZM17.9991 10.2451C18.9656 10.2451 19.7491 11.0286 19.7491 11.9951V12.0051C19.7491 12.9716 18.9656 13.7551 17.9991 13.7551C17.0326 13.7551 16.2491 12.9716 16.2491 12.0051V11.9951C16.2491 11.0286 17.0326 10.2451 17.9991 10.2451ZM13.7491 11.9951C13.7491 11.0286 12.9656 10.2451 11.9991 10.2451C11.0326 10.2451 10.2491 11.0286 10.2491 11.9951V12.0051C10.2491 12.9716 11.0326 13.7551 11.9991 13.7551C12.9656 13.7551 13.7491 12.9716 13.7491 12.0051V11.9951Z"
-              fill=""
-            />
-          </svg>
-        </h3>
-
-        <ul class="mb-6 flex flex-col gap-4">
-          <!-- Menu Item Chat -->
-          <li>
-            <a
-              href="chat.html"
-              @click="selected = (selected === 'Chat' ? '':'Chat')"
-              class="menu-item group"
-              :class=" (selected === 'Chat') && (page === 'chat') ? 'menu-item-active' : 'menu-item-inactive'"
-            >
-              <svg
-                :class="(selected === 'Chat') && (page === 'chat') ? 'menu-item-icon-active'  :'menu-item-icon-inactive'"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  fill-rule="evenodd"
-                  clip-rule="evenodd"
-                  d="M4.00002 12.0957C4.00002 7.67742 7.58174 4.0957 12 4.0957C16.4183 4.0957 20 7.67742 20 12.0957C20 16.514 16.4183 20.0957 12 20.0957H5.06068L6.34317 18.8132C6.48382 18.6726 6.56284 18.4818 6.56284 18.2829C6.56284 18.084 6.48382 17.8932 6.34317 17.7526C4.89463 16.304 4.00002 14.305 4.00002 12.0957ZM12 2.5957C6.75332 2.5957 2.50002 6.849 2.50002 12.0957C2.50002 14.4488 3.35633 16.603 4.77303 18.262L2.71969 20.3154C2.50519 20.5299 2.44103 20.8525 2.55711 21.1327C2.6732 21.413 2.94668 21.5957 3.25002 21.5957H12C17.2467 21.5957 21.5 17.3424 21.5 12.0957C21.5 6.849 17.2467 2.5957 12 2.5957ZM7.62502 10.8467C6.93467 10.8467 6.37502 11.4063 6.37502 12.0967C6.37502 12.787 6.93467 13.3467 7.62502 13.3467H7.62512C8.31548 13.3467 8.87512 12.787 8.87512 12.0967C8.87512 11.4063 8.31548 10.8467 7.62512 10.8467H7.62502ZM10.75 12.0967C10.75 11.4063 11.3097 10.8467 12 10.8467H12.0001C12.6905 10.8467 13.2501 11.4063 13.2501 12.0967C13.2501 12.787 12.6905 13.3467 12.0001 13.3467H12C11.3097 13.3467 10.75 12.787 10.75 12.0967ZM16.375 10.8467C15.6847 10.8467 15.125 11.4063 15.125 12.0967C15.125 12.787 15.6847 13.3467 16.375 13.3467H16.3751C17.0655 13.3467 17.6251 12.787 17.6251 12.0967C17.6251 11.4063 17.0655 10.8467 16.3751 10.8467H16.375Z"
-                  fill=""
-                />
-              </svg>
-
-              <span
-                class="menu-item-text"
-                :class="sidebarToggle ? 'lg:hidden' : ''"
-              >
-                Chat
-              </span>
-            </a>
-          </li>
-          <!-- Menu Item Chat -->
-
-          <!-- Menu Item Inbox -->
-          <li>
-            <a
-              href="#"
-              @click.prevent="selected = (selected === 'Email' ? '':'Email')"
-              class="menu-item group"
-              :class="(selected === 'Email') || (page === 'inbox' || page === 'inboxDetails') ? 'menu-item-active' : 'menu-item-inactive'"
-            >
-              <svg
-                :class="(selected === 'Email') || (page === 'inbox' || page === 'inboxDetails') ? 'menu-item-icon-active'  :'menu-item-icon-inactive'"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  fill-rule="evenodd"
-                  clip-rule="evenodd"
-                  d="M3.5 8.187V17.25C3.5 17.6642 3.83579 18 4.25 18H19.75C20.1642 18 20.5 17.6642 20.5 17.25V8.18747L13.2873 13.2171C12.5141 13.7563 11.4866 13.7563 10.7134 13.2171L3.5 8.187ZM20.5 6.2286C20.5 6.23039 20.5 6.23218 20.5 6.23398V6.24336C20.4976 6.31753 20.4604 6.38643 20.3992 6.42905L12.4293 11.9867C12.1716 12.1664 11.8291 12.1664 11.5713 11.9867L3.60116 6.42885C3.538 6.38481 3.50035 6.31268 3.50032 6.23568C3.50028 6.10553 3.60577 6 3.73592 6H20.2644C20.3922 6 20.4963 6.10171 20.5 6.2286ZM22 6.25648V17.25C22 18.4926 20.9926 19.5 19.75 19.5H4.25C3.00736 19.5 2 18.4926 2 17.25V6.23398C2 6.22371 2.00021 6.2135 2.00061 6.20333C2.01781 5.25971 2.78812 4.5 3.73592 4.5H20.2644C21.2229 4.5 22 5.27697 22.0001 6.23549C22.0001 6.24249 22.0001 6.24949 22 6.25648Z"
-                  fill=""
-                />
-              </svg>
-
-              <span
-                class="menu-item-text"
-                :class="sidebarToggle ? 'lg:hidden' : ''"
-              >
-                Email
-              </span>
-
-              <svg
-                class="menu-item-arrow absolute right-2.5 top-1/2 -translate-y-1/2 stroke-current"
-                :class="[(selected === 'Email') ? 'menu-item-arrow-active' : 'menu-item-arrow-inactive', sidebarToggle ? 'lg:hidden' : '' ]"
-                width="20"
-                height="20"
-                viewBox="0 0 20 20"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M4.79175 7.39584L10.0001 12.6042L15.2084 7.39585"
-                  stroke=""
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-            </a>
-
-            <!-- Dropdown Menu Start -->
-            <div
-              class="translate transform overflow-hidden"
-              :class="(selected === 'Email') ? 'block' :'hidden'"
-            >
-              <ul
-                :class="sidebarToggle ? 'lg:hidden' : 'flex'"
-                class="menu-dropdown mt-2 flex flex-col gap-1 pl-9"
-              >
-                <li>
-                  <a
-                    href="inbox.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'inbox' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Inbox
-                    <span class="absolute right-3 flex items-center gap-1">
-                      <span
-                        class="menu-dropdown-badge"
-                        :class="page === 'inbox' ? 'menu-dropdown-badge-active' : 'menu-dropdown-badge-inactive'"
-                      >
-                        Pro
-                      </span>
-                    </span>
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="inbox-details.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'inboxDetails' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Details
-                    <span class="absolute right-3 flex items-center gap-1">
-                      <span
-                        class="menu-dropdown-badge"
-                        :class="page === 'inboxDetails' ? 'menu-dropdown-badge-active' : 'menu-dropdown-badge-inactive'"
-                      >
-                        Pro
-                      </span>
-                    </span>
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <!-- Dropdown Menu End -->
-          </li>
-          <!-- Menu Item Inbox -->
-
-          <!-- Menu Item Invoice -->
-          <li>
-            <a
-              href="invoice.html"
-              @click="selected = (selected === 'Invoice' ? '':'Invoice')"
-              class="menu-item group"
-              :class=" (selected === 'Invoice') && (page === 'invoice') ? 'menu-item-active' : 'menu-item-inactive'"
-            >
-              <svg
-                :class="(selected === 'Invoice') && (page === 'invoice') ? 'menu-item-icon-active'  :'menu-item-icon-inactive'"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  fill-rule="evenodd"
-                  clip-rule="evenodd"
-                  d="M19.5 19.75C19.5 20.9926 18.4926 22 17.25 22H6.75C5.50736 22 4.5 20.9926 4.5 19.75V9.62105C4.5 9.02455 4.73686 8.45247 5.15851 8.03055L10.5262 2.65951C10.9482 2.23725 11.5207 2 12.1177 2H17.25C18.4926 2 19.5 3.00736 19.5 4.25V19.75ZM17.25 20.5C17.6642 20.5 18 20.1642 18 19.75V4.25C18 3.83579 17.6642 3.5 17.25 3.5H12.248L12.2509 7.49913C12.2518 8.7424 11.2442 9.75073 10.0009 9.75073H6V19.75C6 20.1642 6.33579 20.5 6.75 20.5H17.25ZM7.05913 8.25073L10.7488 4.55876L10.7509 7.5002C10.7512 7.91462 10.4153 8.25073 10.0009 8.25073H7.05913ZM8.25 14.5C8.25 14.0858 8.58579 13.75 9 13.75H15C15.4142 13.75 15.75 14.0858 15.75 14.5C15.75 14.9142 15.4142 15.25 15 15.25H9C8.58579 15.25 8.25 14.9142 8.25 14.5ZM8.25 17.5C8.25 17.0858 8.58579 16.75 9 16.75H12C12.4142 16.75 12.75 17.0858 12.75 17.5C12.75 17.9142 12.4142 18.25 12 18.25H9C8.58579 18.25 8.25 17.9142 8.25 17.5Z"
-                  fill=""
-                />
-              </svg>
-
-              <span
-                class="menu-item-text"
-                :class="sidebarToggle ? 'lg:hidden' : ''"
-              >
-                Invoice
-              </span>
-            </a>
-          </li>
-          <!-- Menu Item Invoice -->
         </ul>
       </div>
 
@@ -1284,7 +780,7 @@
 
           <svg
             :class="sidebarToggle ? 'lg:block hidden' : 'hidden'"
-            class="menu-group-icon mx-auto fill-current"
+            class="mx-auto fill-current menu-group-icon"
             width="24"
             height="24"
             viewBox="0 0 24 24"
@@ -1300,19 +796,19 @@
           </svg>
         </h3>
 
-        <ul class="mb-6 flex flex-col gap-4">
+        <ul class="flex flex-col gap-4 mb-6">
           
 
           <!-- Menu Item Ui Elements -->
           <li>
             <a
               href="#"
-              @click.prevent="selected = (selected === 'UiElements' ? '':'UiElements')"
+              @click.prevent="selected = (selected === 'UIElements' ? '':'UIElements')"
               class="menu-item group"
-              :class="(selected === 'UiElements') || (page === 'alerts' || page === 'badge' || page === 'breadcrumb' || page === 'buttons' || page === 'buttonsGroup' || page === 'cards'|| page === 'carousel' || page === 'dropdowns' || page === 'list' || page === 'modals' || page === 'notifications' || page === 'pagination' || page === 'popovers' || page === 'progress' || page === 'spinners' || page === 'tooltips' ) ? 'menu-item-active' : 'menu-item-inactive'"
+              :class="(selected === 'UIElements') || (page === 'alerts' || page === 'badge' || page === 'buttons' || page === 'buttonsGroup' || page === 'cards'|| page === 'carousel' || page === 'dropdowns' || page === 'list' || page === 'modals' ) ? 'menu-item-active' : 'menu-item-inactive'"
             >
               <svg
-                :class="(selected === 'UiElements') || (page === 'alerts' || page === 'badge' || page === 'breadcrumb' || page === 'buttons' || page === 'buttonsGroup' || page === 'cards'|| page === 'carousel' || page === 'dropdowns' || page === 'list' || page === 'modals' || page === 'notifications' || page === 'pagination' || page === 'popovers' || page === 'progress' || page === 'spinners' || page === 'tooltips' ) ? 'menu-item-icon-active'  :'menu-item-icon-inactive'"
+                :class="(selected === 'UIElements') || (page === 'alerts' || page === 'badge' || page === 'breadcrumb' || page === 'buttons' || page === 'buttonsGroup' || page === 'cards'|| page === 'carousel' || page === 'dropdowns' || page === 'list' || page === 'modals' || page === 'notifications' || page === 'popovers' || page === 'progress' || page === 'spinners' || page === 'tooltips' ) ? 'menu-item-icon-active'  :'menu-item-icon-inactive'"
                 width="24"
                 height="24"
                 viewBox="0 0 24 24"
@@ -1331,12 +827,12 @@
                 class="menu-item-text"
                 :class="sidebarToggle ? 'lg:hidden' : ''"
               >
-                Ui Elements
+                UI Elements
               </span>
 
               <svg
                 class="menu-item-arrow absolute right-2.5 top-1/2 -translate-y-1/2 stroke-current"
-                :class="[(selected === 'UiElements') ? 'menu-item-arrow-active' : 'menu-item-arrow-inactive', sidebarToggle ? 'lg:hidden' : '' ]"
+                :class="[(selected === 'UIElements') ? 'menu-item-arrow-active' : 'menu-item-arrow-inactive', sidebarToggle ? 'lg:hidden' : '' ]"
                 width="20"
                 height="20"
                 viewBox="0 0 20 20"
@@ -1355,12 +851,12 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="translate transform overflow-hidden"
-              :class="(selected === 'UiElements') ? 'block' :'hidden'"
+              class="overflow-hidden transform translate"
+              :class="(selected === 'UIElements') ? 'block' :'hidden'"
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
-                class="menu-dropdown mt-2 flex flex-col gap-1 pl-9"
+                class="flex flex-col gap-1 mt-2 menu-dropdown pl-9"
               >
                 <li>
                   <a
@@ -1369,17 +865,17 @@
                     :class="page === 'alerts' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
                     Alerts
-                    <span class="absolute right-3 flex items-center gap-1">
-                      <span
-                        class="menu-dropdown-badge"
-                        :class="page === 'alerts' ? 'menu-dropdown-badge-active' : 'menu-dropdown-badge-inactive'"
-                      >
-                        Pro
-                      </span>
-                    </span>
                   </a>
                 </li>
-
+                <li>
+                  <a
+                    href="badge.html"
+                    class="menu-dropdown-item group"
+                    :class="page === 'badge' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Badges
+                  </a>
+                </li>
                 <li>
                   <a
                     href="buttons.html"
@@ -1387,34 +883,9 @@
                     :class="page === 'buttons' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
                     Buttons
-                    <span class="absolute right-3 flex items-center gap-1">
-                      <span
-                        class="menu-dropdown-badge"
-                        :class="page === 'buttons' ? 'menu-dropdown-badge-active' : 'menu-dropdown-badge-inactive'"
-                      >
-                        Pro
-                      </span>
-                    </span>
                   </a>
                 </li>
-                <li>
-                  <a
-                    href="pagination.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'pagination' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Pagination
-                    <span class="absolute right-3 flex items-center gap-1">
-                      <span
-                        class="menu-dropdown-badge"
-                        :class="page === 'pagination' ? 'menu-dropdown-badge-active' : 'menu-dropdown-badge-inactive'"
-                      >
-                        Pro
-                      </span>
-                    </span>
-                  </a>
-                </li>
-              </ul>
+                </ul>
             </div>
             <!-- Dropdown Menu End -->
           </li>
@@ -1424,29 +895,20 @@
         </ul>
       </div>
     </nav>
-    <!-- Sidebar Menu -->
-
-    <!-- Promo Box -->
-    <div
-      :class="sidebarToggle ? 'lg:hidden' : ''"
-      class="mx-auto mb-10 w-full max-w-60 rounded-2xl bg-gray-50 px-4 py-5 text-center dark:bg-white/[0.03]"
-    >
-      <h3 class="mb-2 font-semibold text-gray-900 dark:text-white">
-        TailAdmin Pro
-      </h3>
-      <p class="mb-4 text-theme-sm text-gray-500 dark:text-gray-400">
-        Get All Dashboards and 300+ UI Elements
-      </p>
-      <a
-        href="https://tailadmin.com/pricing"
-        target="_blank"
-        rel="nofollow"
-        class="flex items-center justify-center rounded-lg bg-brand-500 p-3 text-theme-sm font-medium text-white hover:bg-brand-600"
-      >
-        Upgrade Plan
-      </a>
-    </div>
-    <!-- Promo Box -->
-  </div>
+    <!-- Sidebar Menu --></div>
 </aside>
-<script defer src="bundle.js"></script>
+
+      <!-- ===== Sidebar End ===== -->
+
+      <!-- ===== Content Area Start ===== -->
+      <div class="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden bg-slate-50 dark:bg-gray-950">
+        <main class="min-h-screen p-6 lg:p-8">
+          <div class="rounded-3xl border border-gray-200 bg-white/50 p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/80">
+            <h1 class="text-2xl font-semibold text-slate-900 dark:text-white">Payment Verification</h1>
+            <p class="mt-2 text-sm text-slate-600 dark:text-slate-400">This page opens the Financial Report section automatically on load.</p>
+          </div>
+        </main>
+      </div>
+    </div>
+    <script defer src="{% static 'arabela_admin/bundle.js' %}"></script></body>
+</html>

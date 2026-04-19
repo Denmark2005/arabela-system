@@ -6,8 +6,9 @@
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>ARABELA | Editorial Archive</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<link href="https://fonts.googleapis.com/css2?family=Epilogue:wght@300;400;700;800&family=Inter:wght@300;400;500;600&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Epilogue:wght@300;400;700;800&family=Inter:wght@300;400;500;600&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link rel="preload" as="image" type="image/png" href="{% static 'images/hero-silk.png' %}">
 <script id="tailwind-config">
       tailwind.config = {
         darkMode: "class",
@@ -78,7 +79,118 @@
             font-size: 1.25rem;
         }
         .editorial-shadow { box-shadow: 0 20px 40px rgba(27, 28, 28, 0.06); }
-        .silk-gradient { background: linear-gradient(135deg, #0b0c0c 0%, #222222 100%); }
+        header.homepage-header { background: rgba(250,244,235,0.8); backdrop-filter: blur(18px); }
+        header.homepage-header nav a,
+        header.homepage-header nav button,
+        header.homepage-header nav button span.material-symbols-outlined {
+            color: #111827 !important;
+        }
+        header.homepage-header .dropdown-menu {
+            background: rgba(255,255,255,0.96);
+            border-color: rgba(148,163,184,0.24);
+        }
+        header.homepage-header .dropdown-menu a {
+            color: #111827 !important;
+        }
+        main .homepage-hero {
+            position: relative;
+            overflow: hidden;
+            background-color: #E1DFDA;
+            background-image: url("{% static 'images/hero-silk.png' %}");
+            background-repeat: no-repeat;
+            background-size: cover;
+            background-position: center center;
+        }
+        body .text-primary { color: #111827 !important; }
+        body .bg-primary { background-color: #111827 !important; }
+        body .border-primary { border-color: #E1DFDA !important; }
+        body .hover\:text-primary:hover { color: #111827 !important; }
+        body .hover\:bg-primary:hover { background-color: #111827 !important; }
+        body .hover\:border-primary:hover { border-color: #E1DFDA !important; }
+        body .focus\:border-primary:focus { border-color: #111827 !important; }
+        body .focus\:ring-primary:focus { --tw-ring-color: rgba(17,24,39,0.28) !important; }
+        main .homepage-hero::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: rgba(255,255,255,0.02);
+            pointer-events: none;
+        }
+        main .homepage-hero-content {
+            position: relative;
+            z-index: 10;
+        }
+        main .homepage-hero-label,
+        main .homepage-trending-label,
+        main .homepage-category-label {
+            font-family: "Poppins", sans-serif !important;
+            font-weight: 300 !important;
+            font-size: 0.75rem !important;
+            letter-spacing: 0.35em !important;
+            text-transform: uppercase !important;
+            color: #111827 !important;
+        }
+        main .homepage-hero-title,
+        main .homepage-trending-heading,
+        main .homepage-about-heading {
+            font-family: "Playfair Display", serif !important;
+            font-weight: 700 !important;
+            color: #111827 !important;
+            line-height: 0.92 !important;
+        }
+        main .homepage-hero-title {
+            font-size: clamp(4rem, 6vw, 7rem) !important;
+        }
+        main .homepage-trending-heading {
+            font-size: clamp(4rem, 6vw, 7rem) !important;
+        }
+        main .homepage-about-heading {
+            font-size: clamp(3rem, 4.5vw, 4.5rem) !important;
+        }
+        main .homepage-hero-description,
+        main .homepage-about-paragraph,
+        main .homepage-trending-copy {
+            font-family: "Poppins", sans-serif !important;
+            font-weight: 400 !important;
+            color: rgba(17, 24, 39, 0.88) !important;
+            line-height: 1.8 !important;
+        }
+        main .homepage-hero-description {
+            font-size: 1rem !important;
+        }
+        main .homepage-about-paragraph {
+            font-size: 1rem !important;
+        }
+        main .homepage-trending-copy {
+            font-size: 0.78rem !important;
+            letter-spacing: 0.35em !important;
+            text-transform: uppercase !important;
+            color: rgba(17, 24, 39, 0.72) !important;
+        }
+        main .homepage-hero-button,
+        main .homepage-stat-value,
+        main .homepage-stat-label {
+            font-family: "Poppins", sans-serif !important;
+            letter-spacing: 0.2em !important;
+            text-transform: uppercase !important;
+        }
+        main .homepage-hero-button {
+            font-weight: 500 !important;
+            color: #ffffff !important;
+            background-color: #111827 !important;
+            box-shadow: 0 24px 45px rgba(17, 24, 39, 0.18);
+        }
+        main .homepage-stat-value {
+            font-weight: 500 !important;
+            color: #111827 !important;
+            font-size: clamp(2.5rem, 4vw, 3.5rem) !important;
+            line-height: 1 !important;
+        }
+        main .homepage-stat-label {
+            font-weight: 300 !important;
+            color: #111827 !important;
+            font-size: 0.75rem !important;
+        }
         .ai-panel-shadow { box-shadow: -10px 0 30px rgba(0,0,0,0.1); }
         .ai-scroll::-webkit-scrollbar { width: 2px; }
         .ai-scroll::-webkit-scrollbar-track { background: transparent; }
@@ -116,7 +228,7 @@
 <body class="bg-surface text-on-surface selection:bg-primary-fixed-dim overflow-x-hidden">
 
 <!-- TOP NAVBAR -->
-<header class="fixed top-0 w-full z-[70] bg-[#FAF4EB]/80 dark:bg-[#222222]/80 backdrop-blur-md border-b border-black/5">
+<header class="fixed top-0 w-full z-[70] homepage-header bg-[#FAF4EB]/80 dark:bg-[#222222]/80 backdrop-blur-md border-b border-black/5">
 <nav class="flex justify-between items-center w-full px-8 h-20">
     <div class="flex items-center gap-12">
         <div class="flex-shrink-0">
@@ -133,7 +245,7 @@
                         <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Kids suit</a></li>
                         <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:collection_wedding' %}">Wedding</a></li>
                         <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Suit</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Bol gown</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Ball gown</a></li>
                     </ul>
                 </div>
             </div>
@@ -148,7 +260,7 @@
         </div>
     </div>
     <div class="flex gap-6 items-center">
-        <button class="scale-95 active:scale-90 transition-all text-primary flex items-center gap-2 group" onclick="toggleAI()">
+        <button class="scale-95 active:scale-90 transition-all text-slate-900 flex items-center gap-2 group" onclick="toggleAI()">
             <span class="font-label text-[0.6rem] uppercase tracking-widest hidden lg:block opacity-0 group-hover:opacity-100 transition-opacity">Arabela Reccomends</span>
             <span class="material-symbols-outlined" style='font-variation-settings: "FILL" 1;'>auto_fix_high</span>
         </button>
@@ -176,7 +288,7 @@
                 <div class="relative flex items-center mb-10">
                     <span class="material-symbols-outlined absolute left-0 text-black/40 text-2xl">search</span>
                     <input class="w-full bg-transparent border-0 border-b border-black/10 pl-10 pr-10 py-4 focus:ring-0 focus:border-primary text-2xl font-light placeholder:text-black/20" id="main-search-input" placeholder="Search here.." type="text"/>
-                    <button type="button" class="absolute right-0 text-black/40 hover:text-primary transition-colors" onclick="toggleSearch()">
+                    <button type="button" class="absolute right-0 text-black/40 hover:text-slate-900 transition-colors" onclick="toggleSearch()">
                         <span class="material-symbols-outlined">close</span>
                     </button>
                 </div>
@@ -189,7 +301,7 @@
                             <li><a class="text-sm hover:text-primary transition-colors" href="#">Kids suit</a></li>
                             <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collection_wedding' %}">Wedding</a></li>
                             <li><a class="text-sm hover:text-primary transition-colors" href="#">Suit</a></li>
-                            <li><a class="text-sm hover:text-primary transition-colors" href="#">Bol gown</a></li>
+                            <li><a class="text-sm hover:text-primary transition-colors" href="#">Ball gown</a></li>
                         </ul>
                     </div>
                     <div>
@@ -228,11 +340,11 @@
         <div class="space-y-6" id="occasion-picker">
             <p class="text-[0.6875rem] uppercase tracking-[0.15em] text-on-surface-variant font-semibold">What is the occasion?</p>
             <div class="flex flex-wrap gap-3">
-                <button class="px-6 py-3 border border-black/10 rounded-full text-[0.6rem] uppercase tracking-widest hover:bg-primary hover:text-white transition-all active:scale-95" onclick="selectOccasion('Birthday')">Birthday</button>
-                <button class="px-6 py-3 border border-black/10 rounded-full text-[0.6rem] uppercase tracking-widest hover:bg-primary hover:text-white transition-all active:scale-95" onclick="selectOccasion('Wedding')">Wedding</button>
-                <button class="px-6 py-3 border border-black/10 rounded-full text-[0.6rem] uppercase tracking-widest hover:bg-primary hover:text-white transition-all active:scale-95" onclick="selectOccasion('Editorial')">Editorial Shoot</button>
-                <button class="px-6 py-3 border border-black/10 rounded-full text-[0.6rem] uppercase tracking-widest hover:bg-primary hover:text-white transition-all active:scale-95" onclick="selectOccasion('Red Carpet')">Red Carpet</button>
-                <button class="px-6 py-3 border border-black/10 rounded-full text-[0.6rem] uppercase tracking-widest hover:bg-primary hover:text-white transition-all active:scale-95" onclick="selectOccasion('Private View')">Private View</button>
+                <button class="px-6 py-3 border border-black/10 rounded-full text-[0.6rem] uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all active:scale-95" onclick="selectOccasion('Birthday')">Birthday</button>
+                <button class="px-6 py-3 border border-black/10 rounded-full text-[0.6rem] uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all active:scale-95" onclick="selectOccasion('Wedding')">Wedding</button>
+                <button class="px-6 py-3 border border-black/10 rounded-full text-[0.6rem] uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all active:scale-95" onclick="selectOccasion('Editorial')">Editorial Shoot</button>
+                <button class="px-6 py-3 border border-black/10 rounded-full text-[0.6rem] uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all active:scale-95" onclick="selectOccasion('Red Carpet')">Red Carpet</button>
+                <button class="px-6 py-3 border border-black/10 rounded-full text-[0.6rem] uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all active:scale-95" onclick="selectOccasion('Private View')">Private View</button>
             </div>
         </div>
         <div class="hidden space-y-10 pt-4 animate-fade-in" id="ai-results">
@@ -352,7 +464,7 @@
 </aside>
 
 <!-- AI FLOATING BUTTON -->
-<button class="fixed bottom-10 right-10 z-[81] w-14 h-14 bg-primary text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all group overflow-hidden" onclick="toggleAI()">
+<button class="fixed bottom-10 right-10 z-[81] w-14 h-14 bg-[#111827] text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all group overflow-hidden" onclick="toggleAI()">
     <div class="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
     <span class="material-symbols-outlined relative z-10" style='font-variation-settings: "FILL" 1;'>auto_fix_high</span>
 </button>
@@ -360,25 +472,21 @@
 <main class="pt-20">
 
     <!-- HERO SECTION -->
-    <section class="relative h-[90vh] w-full flex items-center overflow-hidden bg-surface">
-        <div class="absolute inset-0 z-0">
-            <!-- ARABELA HERO IMAGE: Replace with actual hero/banner photo of Arabela gown display or featured gown -->
-            <img alt="Arabela Gown Rental Hero Banner" class="w-full h-full object-cover opacity-90" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCF0IWJ_ITAQl1Pay4_MPE42w2HW6xF86kwWRn0XqGq595pRFbThp0KIlnSbWKV8u4L3rSJssJMOHOO1Il7NgK6EI-d_shMvK-QLUSW3eb7Pncs3tbE2mw8Fq0oiYla-gn267tDQL4e5J3T1tMNjU7LsC0QW-HfG7UPidqRc-4pVHZZPuPvedMURkdSSp7DRhGa9B9n4TGV50kRJMlzXbo8AhBtIJVjXe0TF0OcafvqTRbi0kONAMW_3p4mNqwGLN88_cs-lge7NPI"/>
-        </div>
-        <div class="container mx-auto px-8 relative z-10">
+    <section class="relative h-[90vh] w-full flex items-center overflow-hidden homepage-hero">
+        <div class="container mx-auto px-8 relative z-10 homepage-hero-content">
             <div class="max-w-2xl">
-                <span class="font-label text-[0.6875rem] uppercase tracking-[0.2rem] text-on-surface mb-4 block">ARABELA | COLLECTION 2026</span>
-                <h2 class="font-headline text-[3.5rem] md:text-[5.5rem] leading-[0.9] font-extrabold tracking-tight text-on-surface mb-8">Rent The Dream</h2>
-                <p class="text-on-surface-variant max-w-sm mb-10 leading-relaxed">High-fashion gowns delivered with personalized care. Visit us for a personalized fitting and find your perfect look</p>
+                <span class="font-label homepage-hero-label mb-4 block">ARABELA | COLLECTION 2026</span>
+                <h2 class="font-headline homepage-hero-title leading-[0.9] font-extrabold tracking-tight mb-8">Rent The Dream</h2>
+                <p class="homepage-hero-description max-w-sm mb-10">High-fashion gowns delivered with personalized care. Visit us for a personalized fitting and find your perfect look.</p>
                 <!-- Links to Collections page -->
-                <a href="{% url 'gowns:collections' %}">
-                    <button class="silk-gradient text-on-primary px-12 py-5 font-label text-[0.6875rem] uppercase tracking-widest hover:bg-secondary transition-all">Explore Collections</button>
+                <a href="{% url 'gowns:collections' %}" class="inline-flex rounded-full overflow-hidden">
+                    <span class="homepage-hero-button inline-flex items-center justify-center px-12 py-5">Explore Collections</span>
                 </a>
             </div>
         </div>
         <div class="absolute bottom-10 right-8 flex items-center gap-4">
-            <span class="font-label text-[0.6875rem] uppercase tracking-widest text-on-surface">Scroll</span>
-            <div class="w-px h-12 bg-on-surface-variant opacity-30"></div>
+            <span class="font-label text-[0.6875rem] uppercase tracking-widest text-slate-900">Scroll</span>
+            <div class="w-px h-12 bg-slate-900/20"></div>
         </div>
     </section>
 
@@ -391,7 +499,7 @@
                     <img alt="Arabela Women Gown Collection" class="w-full h-full object-cover transition-transform duration-700 hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDoXBFqStMnToVb80lpNcOu2L2sM791MrJmBW76ONWSN9NNxjYwIKr62lrtgKTsJUJ3EdwdmrXdEDzIHlQCq5cpBFNLIqmKKBHScdoIF8ax4ontDI3vyH_7UJJMwghVtSjqVoDofM_FIQR_XMOaK-QLh9v1H1Ub672NUBIJdFsaDRq5ICqksBDjNV55RZmXuFb6qC1v_poZpZMvRt7A5Qzegj5Go1Ot_xpj0qIyESs5_TLYUYBwEiG9fQi1e4y5MFTCzYsCtPcwQ-o"/>
                 </div>
                 <div class="absolute -bottom-8 -right-8 p-12 bg-surface-container-lowest editorial-shadow">
-                    <h3 class="font-headline text-2xl font-bold uppercase mb-2">Women</h3>
+                    <h3 class="font-headline homepage-category-label mb-2">Women</h3>
                     <a class="font-label text-[0.6875rem] uppercase tracking-widest border-b border-primary pb-1" href="{% url 'gowns:collections' %}">Shop Collection</a>
                 </div>
             </div>
@@ -402,7 +510,7 @@
                     <img alt="Arabela Men Collection" class="w-full h-full object-cover transition-transform duration-700 hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDvYD3Wun7AWJcPA4TmiIaIRFvTUXZ5TR4wigNkmxhOQLCFwpe1f_w-ahiG8-Zrzk7ITEqSLF1yUbyjxMjhdd0jc-YkxtfbSHXQ4KkCntSAigKZf-w_v3uAsvLEU32hL4GvtrokdVjzQ4W6agvmGeYODkHRsEBfNtPWWhBm5VB2NhY8piBhBRMTMeYjxxexO15JQFbyF6Ifx-y5Jb5ICNE6k2x1DVgKnaOKMWa2pNOE3XtKTIejAjLRu37UXWPoBM-xl8SiX9Vl4CA"/>
                 </div>
                 <div class="absolute -top-8 -left-8 p-12 bg-surface-container-lowest editorial-shadow">
-                    <h3 class="font-headline text-2xl font-bold uppercase mb-2">Men</h3>
+                    <h3 class="font-headline homepage-category-label mb-2">Men</h3>
                     <a class="font-label text-[0.6875rem] uppercase tracking-widest border-b border-primary pb-1" href="{% url 'gowns:collections' %}">Explore Tailoring</a>
                 </div>
             </div>
@@ -413,8 +521,8 @@
     <section class="py-32 bg-surface px-8">
         <div class="container mx-auto">
             <div class="flex flex-col md:flex-row justify-between items-baseline mb-20 gap-8">
-                <h2 class="font-headline text-[3.5rem] font-bold tracking-tighter">Trending Now</h2>
-                <p class="text-on-surface-variant max-w-xs uppercase text-sm tracking-widest leading-loose font-semibold">
+                <h2 class="font-headline homepage-trending-heading tracking-tighter">Trending Now</h2>
+                <p class="homepage-trending-copy max-w-xs leading-loose">
                     Hand-picked collections for every occasion. Redefining style through sharing.
                 </p>
             </div>
@@ -495,7 +603,7 @@
                         <div class="flex justify-between items-start p-2">
                             <div>
                                 <h4 class="font-headline text-lg font-bold">Sample Gown 4</h4>
-                                <p class="text-[0.6875rem] text-on-surface-variant uppercase tracking-widest mt-1">Bol gown</p>
+                                <p class="text-[0.6875rem] text-on-surface-variant uppercase tracking-widest mt-1">Ball gown</p>
                             </div>
                             <span class="text-[0.6875rem] font-bold">₱2,800</span>
                         </div>
@@ -515,18 +623,18 @@
                 <img alt="Arabela Gown Rental Store" class="w-full h-auto rounded-lg grayscale" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDPoJ-CJc3c76J-itMK3Xu3-7H-QhmcbeTXcY_-9atbblNbhbvi3Y30ytcD6_3FLfpM5XX7ndXzS2SKGfKEPeoUB-gVDaK3TcHP39RWItFbbHGtasalNo2IyFaR3ktt5aIJHH0X7S7kCp45dxo-wOF7oSLQ3ycBSoCiZslRNzjjUNhA0eTA5onV5iPtvApJwmWkexxTQVhc-5JnOY9Ipnw7JnpTLbDzfp1V_iP686oZZCKa7XmFl7NIJGzfqZl1-_F16IDVdvu-GmQ"/>
             </div>
             <div class="order-1 md:order-2">
-                <h3 class="font-headline text-4xl font-bold mb-8 leading-tight">Conscious Luxury. <br/>Permanent Style.</h3>
-                <p class="text-on-surface-variant text-lg leading-relaxed mb-12">
+                <h3 class="font-headline homepage-about-heading mb-8 leading-tight">Conscious Luxury. <br/>Permanent Style.</h3>
+                <p class="homepage-about-paragraph text-on-surface-variant mb-12">
                     Arabela is more than a rental platform; it is a movement towards sustainable luxury. We believe in the power of beautiful objects and the importance of extending their lifecycle. Our archive is curated for those who value heritage over fast trends.
                 </p>
                 <div class="grid grid-cols-2 gap-12">
                     <div>
-                        <span class="font-headline text-3xl font-extrabold block mb-2">500+</span>
-                        <span class="text-[0.6875rem] uppercase tracking-widest text-secondary">Archival Items</span>
+                        <span class="homepage-stat-value block mb-2">50+</span>
+                        <span class="homepage-stat-label text-secondary">curated categories designed for your most memorable moments.</span>
                     </div>
                     <div>
-                        <span class="font-headline text-3xl font-extrabold block mb-2">100%</span>
-                        <span class="text-[0.6875rem] uppercase tracking-widest text-secondary">Authenticated</span>
+                        <span class="homepage-stat-value block mb-2">100%</span>
+                        <span class="homepage-stat-label text-secondary">Quality Guaranteed</span>
                     </div>
                 </div>
             </div>
