@@ -2,17 +2,9 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0"
-    />
-    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
-    <title>
-      Blank Page | Arabela System Admin Panel
-    </title>
-    <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
-  <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet"></head>
+    <title>Blank | Arabela System Admin Panel</title>
+    {% include 'arabela_admin/partials/_head.html' %}
+  </head>
   <body
     x-data="{ page: 'blank', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false }"
     x-init="
@@ -20,18 +12,7 @@
          $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)))"
     :class="{'dark bg-gray-900': darkMode === true}"
   >
-    <!-- ===== Preloader Start ===== -->
-    <div
-  x-show="loaded"
-  x-init="window.addEventListener('DOMContentLoaded', () => {setTimeout(() => loaded = false, 500)})"
-  class="fixed left-0 top-0 z-999999 flex h-screen w-screen items-center justify-center bg-white dark:bg-black"
->
-  <div
-    class="h-16 w-16 animate-spin rounded-full border-4 border-solid border-black border-t-transparent" style="border-color: #000 !important; border-top-color: transparent !important;"
-  ></div>
-</div>
-
-    <!-- ===== Preloader End ===== -->
+    {% include 'arabela_admin/partials/_preloader.html' %}
 
     <!-- ===== Page Wrapper Start ===== -->
     <div class="flex h-screen overflow-hidden">
@@ -1734,7 +1715,7 @@
                   class="text-sm text-gray-500 dark:text-gray-400 sm:text-base"
                 >
                   Start putting content on grids or panels, you can also use
-                  different combinations of grids. Please check out the
+                  different combinations of grids.Please check out the
                   dashboard and other pages
                 </p>
               </div>
@@ -1746,7 +1727,7 @@
       <!-- ===== Content Area End ===== -->
     </div>
     <!-- ===== Page Wrapper End ===== -->
-  <script defer src="{% static 'arabela_admin/bundle.js' %}"></script></body>
+  {% include 'arabela_admin/partials/_scripts.html' %}</body>
 </html>
 
 

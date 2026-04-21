@@ -79,7 +79,7 @@
             font-size: 1.25rem;
         }
         .editorial-shadow { box-shadow: 0 20px 40px rgba(27, 28, 28, 0.06); }
-        header.homepage-header { background: rgba(250,244,235,0.8); backdrop-filter: blur(18px); }
+        header.homepage-header { background: rgba(255,255,255,0.8); backdrop-filter: blur(18px); }
         header.homepage-header nav a,
         header.homepage-header nav button,
         header.homepage-header nav button span.material-symbols-outlined {
@@ -225,10 +225,10 @@
         body { font-family: 'Poppins', sans-serif; }
 </style>
 </head>
-<body class="bg-surface text-on-surface selection:bg-primary-fixed-dim overflow-x-hidden">
+<body class="bg-white text-on-surface selection:bg-primary-fixed-dim overflow-x-hidden">
 
 <!-- TOP NAVBAR -->
-<header class="fixed top-0 w-full z-[70] homepage-header bg-[#FAF4EB]/80 dark:bg-[#222222]/80 backdrop-blur-md border-b border-black/5">
+<header class="fixed top-0 w-full z-[70] homepage-header bg-white/80 dark:bg-[#222222]/80 backdrop-blur-md border-b border-black/5">
 <nav class="flex justify-between items-center w-full px-8 h-20">
     <div class="flex items-center gap-12">
         <div class="flex-shrink-0">
@@ -237,7 +237,7 @@
         <div class="hidden md:flex gap-8 items-center self-stretch">
             <div class="relative group h-full flex items-center">
                 <a class="uppercase tracking-[0.1rem] text-[0.6875rem] text-[#615E57] dark:text-[#A09E99] hover:text-[#222222] dark:hover:text-white transition-colors duration-300" href="#">Rent</a>
-                <div class="dropdown-menu absolute top-full left-0 w-52 bg-white dark:bg-[#222222] shadow-[0_10px_30px_rgba(0,0,0,0.08)] border-t-2 border-[#222222] dark:border-[#FAF4EB] py-6 z-[80]" style="background-color: #F9F7F2;">
+                <div class="dropdown-menu absolute top-full left-0 w-52 bg-white dark:bg-[#222222] shadow-[0_10px_30px_rgba(0,0,0,0.08)] border-t-2 border-[#222222] dark:border-[#FAF4EB] py-6 z-[80]" style="background-color: #ffffff;">
                     <ul class="flex flex-col gap-4">
                         <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">All</a></li>
                         <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Dresses</a></li>
@@ -251,7 +251,7 @@
             </div>
             <div class="relative group h-full flex items-center">
                 <a class="uppercase tracking-[0.1rem] text-[0.6875rem] text-[#615E57] dark:text-[#A09E99] hover:text-[#222222] dark:hover:text-white transition-colors duration-300" href="#">How it Works</a>
-                <div class="dropdown-menu absolute top-full left-0 w-48 bg-white dark:bg-[#222222] shadow-[0_10px_30px_rgba(0,0,0,0.08)] border-t-2 border-[#222222] dark:border-[#FAF4EB] py-6 z-[80]" style="background-color: #F9F7F2;">
+                <div class="dropdown-menu absolute top-full left-0 w-48 bg-white dark:bg-[#222222] shadow-[0_10px_30px_rgba(0,0,0,0.08)] border-t-2 border-[#222222] dark:border-[#FAF4EB] py-6 z-[80]" style="background-color: #ffffff;">
                     <ul class="flex flex-col gap-4">
                         <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">FAQs</a></li>
                     </ul>
@@ -282,12 +282,12 @@
 
 <!-- SEARCH OVERLAY: dimmed backdrop below panel closes same as X -->
 <div class="fixed top-20 left-0 right-0 bottom-0 z-[65] flex flex-col" id="search-overlay">
-    <div class="shrink-0 bg-[#FAF4EB] border-b border-black/5 shadow-lg" onclick="event.stopPropagation()">
+    <div class="shrink-0 bg-white border-b border-black/5 shadow-lg" onclick="event.stopPropagation()">
         <div class="container mx-auto px-8 py-12">
             <div class="max-w-4xl mx-auto">
                 <div class="relative flex items-center mb-10">
                     <span class="material-symbols-outlined absolute left-0 text-black/40 text-2xl">search</span>
-                    <input class="w-full bg-transparent border-0 border-b border-black/10 pl-10 pr-10 py-4 focus:ring-0 focus:border-primary text-2xl font-light placeholder:text-black/20" id="main-search-input" placeholder="Search here.." type="text"/>
+                    <input class="w-full bg-white border border-black/20 border-0 border-b pl-10 pr-10 py-4 focus:ring-0 focus:border-black text-2xl font-light placeholder:text-black/20 rounded-none" id="main-search-input" placeholder="Search here.." type="text"/>
                     <button type="button" class="absolute right-0 text-black/40 hover:text-slate-900 transition-colors" onclick="toggleSearch()">
                         <span class="material-symbols-outlined">close</span>
                     </button>
@@ -307,9 +307,9 @@
                     <div>
                         <p class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-6">Trending Search</p>
                         <div class="flex flex-wrap gap-2">
-                            <span class="px-3 py-1 bg-black/5 rounded-full text-[0.65rem] uppercase tracking-wider cursor-pointer hover:bg-black/10">Silk Dress</span>
-                            <span class="px-3 py-1 bg-black/5 rounded-full text-[0.65rem] uppercase tracking-wider cursor-pointer hover:bg-black/10">Tailored Blazer</span>
-                            <span class="px-3 py-1 bg-black/5 rounded-full text-[0.65rem] uppercase tracking-wider cursor-pointer hover:bg-black/10">Velvet Gown</span>
+                            <span class="px-3 py-1 bg-white border border-black/20 rounded-full text-[0.65rem] uppercase tracking-wider cursor-pointer hover:bg-gray-50">Silk Dress</span>
+                            <span class="px-3 py-1 bg-white border border-black/20 rounded-full text-[0.65rem] uppercase tracking-wider cursor-pointer hover:bg-gray-50">Tailored Blazer</span>
+                            <span class="px-3 py-1 bg-white border border-black/20 rounded-full text-[0.65rem] uppercase tracking-wider cursor-pointer hover:bg-gray-50">Velvet Gown</span>
                         </div>
                     </div>
                 </div>
@@ -323,7 +323,7 @@
 <div id="ai-click-away" class="fixed inset-0 z-[69] bg-transparent pointer-events-none" onclick="toggleAI()" aria-hidden="true"></div>
 
 <!-- AI CONCIERGE PANEL -->
-<aside class="fixed top-0 right-0 h-full w-full md:w-[480px] bg-[#FAF4EB] z-[80] translate-x-full transform transition-transform duration-500 ease-in-out ai-panel-shadow flex flex-col" id="ai-concierge">
+<aside class="fixed top-0 right-0 h-full w-full md:w-[480px] bg-white z-[80] translate-x-full transform transition-transform duration-500 ease-in-out shadow-none flex flex-col" id="ai-concierge">
     <div class="p-8 flex justify-between items-center border-b border-black/5">
         <h2 class="text-sm font-bold tracking-[0.2em] uppercase flex items-center gap-3">
             <span class="material-symbols-outlined text-primary" style='font-variation-settings: "FILL" 1;'>auto_fix_high</span>
@@ -340,11 +340,11 @@
         <div class="space-y-6" id="occasion-picker">
             <p class="text-[0.6875rem] uppercase tracking-[0.15em] text-on-surface-variant font-semibold">What is the occasion?</p>
             <div class="flex flex-wrap gap-3">
-                <button class="px-6 py-3 border border-black/10 rounded-full text-[0.6rem] uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all active:scale-95" onclick="selectOccasion('Birthday')">Birthday</button>
-                <button class="px-6 py-3 border border-black/10 rounded-full text-[0.6rem] uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all active:scale-95" onclick="selectOccasion('Wedding')">Wedding</button>
-                <button class="px-6 py-3 border border-black/10 rounded-full text-[0.6rem] uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all active:scale-95" onclick="selectOccasion('Editorial')">Editorial Shoot</button>
-                <button class="px-6 py-3 border border-black/10 rounded-full text-[0.6rem] uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all active:scale-95" onclick="selectOccasion('Red Carpet')">Red Carpet</button>
-                <button class="px-6 py-3 border border-black/10 rounded-full text-[0.6rem] uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all active:scale-95" onclick="selectOccasion('Private View')">Private View</button>
+                <button class="px-6 py-3 bg-white border border-black rounded-full text-[0.6rem] uppercase tracking-widest text-black hover:bg-gray-50 transition-all active:scale-95" onclick="selectOccasion('Birthday')">Birthday</button>
+                <button class="px-6 py-3 bg-white border border-black rounded-full text-[0.6rem] uppercase tracking-widest text-black hover:bg-gray-50 transition-all active:scale-95" onclick="selectOccasion('Wedding')">Wedding</button>
+                <button class="px-6 py-3 bg-white border border-black rounded-full text-[0.6rem] uppercase tracking-widest text-black hover:bg-gray-50 transition-all active:scale-95" onclick="selectOccasion('Editorial')">Editorial Shoot</button>
+                <button class="px-6 py-3 bg-white border border-black rounded-full text-[0.6rem] uppercase tracking-widest text-black hover:bg-gray-50 transition-all active:scale-95" onclick="selectOccasion('Red Carpet')">Red Carpet</button>
+                <button class="px-6 py-3 bg-white border border-black rounded-full text-[0.6rem] uppercase tracking-widest text-black hover:bg-gray-50 transition-all active:scale-95" onclick="selectOccasion('Private View')">Private View</button>
             </div>
         </div>
         <div class="hidden space-y-10 pt-4 animate-fade-in" id="ai-results">
@@ -359,10 +359,10 @@
             <button class="text-[0.6rem] uppercase tracking-[0.2em] border-b border-primary/20 pb-1 hover:border-primary transition-all" onclick="resetAI()">Start Over</button>
         </div>
     </div>
-    <div class="p-8 border-t border-black/5 bg-surface-container-low">
+    <div class="p-8 border-t border-black/5 bg-white">
         <div class="relative">
-            <input class="w-full bg-transparent border-0 border-b border-black/10 py-4 focus:ring-0 focus:border-primary text-sm placeholder:text-black/20" placeholder="Describe the perfect gown for your occasion..." type="text" id="ai-chat-input"/>
-            <button class="absolute right-0 bottom-4" onclick="sendAIMessage()">
+            <input class="w-full bg-white border border-black/10 py-4 px-4 focus:ring-0 focus:border-black text-sm placeholder:text-black/20 rounded" placeholder="Describe the perfect gown for your occasion..." type="text" id="ai-chat-input"/>
+            <button class="absolute right-0 bottom-4 mr-4" onclick="sendAIMessage()">
                 <span class="material-symbols-outlined">arrow_forward</span>
             </button>
         </div>
@@ -376,7 +376,7 @@
 <div id="cart-click-away" class="fixed inset-0 z-[84] bg-transparent pointer-events-none" onclick="toggleCart()" aria-hidden="true"></div>
 
 <!-- Cart / selection drawer -->
-<aside id="cart-drawer" class="fixed top-0 right-0 h-full w-full md:w-[480px] bg-[#FAF4EB] z-[85] translate-x-full transform transition-transform duration-500 ease-in-out ai-panel-shadow flex flex-col" aria-hidden="true">
+<aside id="cart-drawer" class="fixed top-0 right-0 h-full w-full md:w-[480px] bg-white z-[85] translate-x-full transform transition-transform duration-500 ease-in-out shadow-none flex flex-col" aria-hidden="true">
     <header class="p-8 flex justify-between items-center border-b border-black/5 shrink-0">
         <h2 class="text-sm font-bold tracking-[0.2em] uppercase text-on-surface flex items-center gap-3">
             <span class="material-symbols-outlined text-primary" style='font-variation-settings: "FILL" 0;'>shopping_bag</span>
@@ -388,8 +388,8 @@
     </header>
     <div class="flex-1 overflow-y-auto ai-scroll px-8 py-4 space-y-10 min-h-0">
         <div class="cart-line flex gap-4 group" data-unit-price="4500">
-            <div class="w-24 h-32 bg-surface-container-low overflow-hidden shrink-0">
-                <img alt="Structured Wool Blazer" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDvrOUto9vy9py6fxR-YxuiQ7pL4WzddWzTNeVPBgk4qOrjLVsLT4uDAoXaKs7u1i7RXCaNnzcYFP-p16uIuULPo9aHvnWqqA_8NjhDlYa18k4FVHck1C2Gz80q-qvohzTgGYhT6Joc0gU5AiqDMxwGulS-59idA4ehLkllD_ADzTgoq8jmuolfvGYkSJfCy3KM20GMCLiQ4Lfj9E1rAkuQUPYF2_YX-5lUAOQKHU6OqqLU5ym1Kz-EDW6FLRhJrERNMDEhuiHEs-c"/>
+            <div class="w-24 h-32 bg-white border border-black/10 overflow-hidden shrink-0">
+                <img alt="Structured Wool Blazer" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
             </div>
             <div class="flex-1 flex flex-col justify-between py-1 min-w-0">
                 <div class="flex justify-between items-start gap-2">
@@ -416,7 +416,7 @@
             </div>
         </div>
         <div class="cart-line flex gap-4 group" data-unit-price="6200">
-            <div class="w-24 h-32 bg-surface-container-low overflow-hidden shrink-0">
+            <div class="w-24 h-32 bg-white border border-black/10 overflow-hidden shrink-0">
                 <img alt="Emerald Silk Midi Dress" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
             </div>
             <div class="flex-1 flex flex-col justify-between py-1 min-w-0">
@@ -444,7 +444,7 @@
             </div>
         </div>
     </div>
-    <footer class="p-8 space-y-6 bg-surface-container-low border-t border-black/5 shrink-0">
+    <footer class="p-8 space-y-6 bg-white border-t border-black/5 shrink-0">
         <div class="space-y-2">
             <div class="flex justify-between items-center">
                 <span class="text-xs uppercase tracking-widest text-secondary">subtotal</span>
@@ -459,12 +459,12 @@
                 <span id="cart-total" class="font-['Epilogue',sans-serif] text-lg font-bold text-on-surface tabular-nums tracking-tight">₱ 14,700.00</span>
             </div>
         </div>
-        <a href="{% url 'gowns:reservation' %}" onclick="return saveCartAndProceedToReservation(event)" class="w-full bg-primary py-5 text-white uppercase text-xs font-bold tracking-[0.2rem] hover:bg-secondary transition-colors duration-300 inline-flex items-center justify-center no-underline">Proceed to Reservation</a>
+        <a href="{% url 'gowns:reservation' %}" onclick="return saveCartAndProceedToReservation(event)" class="w-full bg-white border border-black text-black uppercase text-xs font-bold tracking-[0.2rem] py-5 hover:bg-gray-50 transition-colors duration-300 inline-flex items-center justify-center no-underline">Proceed to Reservation</a>
     </footer>
 </aside>
 
 <!-- AI FLOATING BUTTON -->
-<button class="fixed bottom-10 right-10 z-[81] w-14 h-14 bg-[#111827] text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all group overflow-hidden" onclick="toggleAI()">
+<button class="fixed bottom-10 right-10 z-[81] w-14 h-14 bg-white text-black border border-black rounded-full flex items-center justify-center shadow-none hover:bg-gray-50 active:scale-95 transition-all group overflow-hidden" onclick="toggleAI()">
     <div class="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
     <span class="material-symbols-outlined relative z-10" style='font-variation-settings: "FILL" 1;'>auto_fix_high</span>
 </button>
@@ -491,7 +491,7 @@
     </section>
 
     <!-- CATEGORIES SECTION -->
-    <section class="py-32 bg-surface-container-low px-8">
+    <section class="py-32 bg-white px-8">
         <div class="container mx-auto grid grid-cols-1 md:grid-cols-12 gap-8 items-end">
             <div class="md:col-span-5 relative">
                 <div class="aspect-[3/4] overflow-hidden bg-surface-container-lowest">
@@ -518,7 +518,7 @@
     </section>
 
     <!-- FEATURED GOWNS SECTION (The Archive) -->
-    <section class="py-32 bg-surface px-8">
+    <section class="py-32 bg-white px-8">
         <div class="container mx-auto">
             <div class="flex flex-col md:flex-row justify-between items-baseline mb-20 gap-8">
                 <h2 class="font-headline homepage-trending-heading tracking-tighter">Trending Now</h2>
@@ -557,7 +557,7 @@
                             <span class="[writing-mode:vertical-rl] font-label text-[0.6rem] uppercase tracking-widest font-bold">Available Now</span>
                         </div>
                         <!-- ARABELA PRODUCT IMAGE: Replace with actual Arabela gown photo 1 -->
-                        <img alt="Arabela Featured Gown 1" class="w-full aspect-[4/5] object-cover rounded-lg group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDvrOUto9vy9py6fxR-YxuiQ7pL4WzddWzTNeVPBgk4qOrjLVsLT4uDAoXaKs7u1i7RXCaNnzcYFP-p16uIuULPo9aHvnWqqA_8NjhDlYa18k4FVHck1C2Gz80q-qvohzTgGYhT6Joc0gU5AiqDMxwGulS-59idA4ehLkllD_ADzTgoq8jmuolfvGYkSJfCy3KM20GMCLiQ4Lfj9E1rAkuQUPYF2_YX-5lUAOQKHU6OqqLU5ym1Kz-EDW6FLRhJrERNMDEhuiHEs-c"/>
+                        <img alt="Arabela Featured Gown 1" class="w-full aspect-[4/5] object-cover rounded-lg group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
                         <div class="flex justify-between items-start p-2">
                             <div>
                                 <h4 class="font-headline text-lg font-bold">Sample Gown 1</h4>
@@ -583,7 +583,7 @@
                 <div class="group cursor-pointer">
                     <div class="relative overflow-hidden bg-surface-container-lowest mb-6">
                         <!-- ARABELA PRODUCT IMAGE: Replace with actual Arabela gown photo 3 -->
-                        <img alt="Arabela Featured Gown 3" class="w-full aspect-[4/5] object-cover rounded-lg group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBYT_7uAh7yYawKnAVaOi8NwHwM9qwJg74F_jbUOfG6vryMFn1VpuB5EjPDjlctw_MfsMEkBBlBsT0D-5AiXgWt-5vU0VzhhZGANp7RDv6b9l_6tIBIEqGVMtFeEEyxOYOKf6PifS195oTvAOTSbftZvdCtTWQCseMEdv-6fAUiT06k9VuoNX7g1ltYupfy1Fn74b4iZIqwejmxUW0STPI9yRTzOusCmrYImByjbk_m9b1UdtMq7c3xEo0p5N-lZ5QmqHsIUPGWlQY"/>
+                        <img alt="Arabela Featured Gown 3" class="w-full aspect-[4/5] object-cover rounded-lg group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
                         <div class="flex justify-between items-start p-2">
                             <div>
                                 <h4 class="font-headline text-lg font-bold">Sample Gown 3</h4>
@@ -599,7 +599,7 @@
                             <span class="[writing-mode:vertical-rl] font-label text-[0.6rem] uppercase tracking-widest font-bold">New Arrival</span>
                         </div>
                         <!-- ARABELA PRODUCT IMAGE: Replace with actual Arabela gown photo 4 -->
-                        <img alt="Arabela Featured Gown 4" class="w-full aspect-[4/5] object-cover rounded-lg group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA5RjcB-St3FYLokqdJWtfToKyHnDeR3Tu6EhVM79YSkA6bBTSU4tl7rZAAEgY_JP756fTwDY10jkUOp1hrXwu2GNrO9jjw43klIlAw4G0MiBDBkW6SRJ8z8IYOKAihezN7LM2aobs5oqzxnbVSGNnFoWUxGB9xeuCoFORYRDNLVSicCvy29b_6lyITgLYnLIxk8Ska5gk4Lub4OCWEXEEIFe4jkTHRRVfPAfF8h8FzMIzltXoG8hdtsMI0bnBcFWzWBxpeheTd4kI"/>
+                        <img alt="Arabela Featured Gown 4" class="w-full aspect-[4/5] object-cover rounded-lg group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
                         <div class="flex justify-between items-start p-2">
                             <div>
                                 <h4 class="font-headline text-lg font-bold">Sample Gown 4</h4>
@@ -616,7 +616,7 @@
     </section>
 
     <!-- NARRATIVE SECTION -->
-    <section class="py-32 bg-surface-container-low px-8 overflow-hidden">
+    <section class="py-32 bg-white px-8 overflow-hidden">
         <div class="container mx-auto grid grid-cols-1 md:grid-cols-2 gap-20 items-center">
             <div class="order-2 md:order-1">
                 <!-- ARABELA STORE IMAGE: Replace with actual photo of Arabela Gown Rental shop interior or gowns on display -->
@@ -644,7 +644,7 @@
 </main>
 
 <!-- FOOTER -->
-<footer class="bg-[#F6F3F2] dark:bg-[#1B1C1C] w-full py-12 px-8">
+<footer class="bg-white dark:bg-[#1B1C1C] w-full py-12 px-8">
     <div class="w-full max-w-[1920px] mx-auto">
         <div class="flex flex-col sm:flex-row sm:flex-wrap items-start gap-x-8 sm:gap-x-10 md:gap-x-12 lg:gap-x-16 gap-y-8 text-left">
             <div class="flex items-center gap-3 shrink-0">

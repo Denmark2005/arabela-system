@@ -108,7 +108,7 @@
 <body class="font-body selection:bg-primary-fixed selection:text-primary min-h-screen flex flex-col overflow-x-hidden">
 
 <!-- TOP NAVBAR (same pattern as reservation.html) -->
-<header class="fixed top-0 w-full z-[70] bg-[#FAF4EB]/80 dark:bg-[#222222]/80 backdrop-blur-md border-b border-black/5">
+<header class="fixed top-0 w-full z-[70] bg-white/80 dark:bg-[#222222]/80 backdrop-blur-md border-b border-black/5">
 <nav class="flex justify-between items-center w-full px-8 h-20">
     <div class="flex items-center gap-12">
         <div class="flex-shrink-0">
@@ -132,7 +132,7 @@
 
 <div id="cart-click-away" class="fixed inset-0 z-[84] bg-transparent pointer-events-none" onclick="toggleCart()" aria-hidden="true"></div>
 
-<aside id="cart-drawer" class="fixed top-0 right-0 h-full w-full md:w-[480px] bg-[#FAF4EB] z-[85] translate-x-full transform transition-transform duration-500 ease-in-out ai-panel-shadow flex flex-col" aria-hidden="true">
+<aside id="cart-drawer" class="fixed top-0 right-0 h-full w-full md:w-[480px] bg-white z-[85] translate-x-full transform transition-transform duration-500 ease-in-out shadow-none flex flex-col" aria-hidden="true">
     <header class="p-8 flex justify-between items-center border-b border-black/5 shrink-0">
         <h2 class="text-sm font-bold tracking-[0.2em] uppercase text-on-surface flex items-center gap-3">
             <span class="material-symbols-outlined text-primary" style='font-variation-settings: "FILL" 0;'>shopping_bag</span>
@@ -200,7 +200,7 @@
             </div>
         </div>
     </div>
-    <footer class="p-8 space-y-6 bg-surface-container-low border-t border-black/5 shrink-0">
+    <footer class="p-8 space-y-6 bg-white border-t border-black/5 shrink-0">
         <div class="space-y-2">
             <div class="flex justify-between items-center">
                 <span class="text-xs uppercase tracking-widest text-secondary">subtotal</span>
@@ -248,7 +248,7 @@
 </main>
 
 <!-- Footer (confirmation page: single row) -->
-<footer class="bg-[#F6F3F2] dark:bg-[#1B1C1C] w-full py-12 px-8 border-t border-black/5 mt-auto">
+<footer class="bg-white dark:bg-[#1B1C1C] w-full py-12 px-8 border-t border-black/5 mt-auto">
     <div class="w-full max-w-[1920px] mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 text-left">
         <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
             <div class="flex items-center gap-3 shrink-0">

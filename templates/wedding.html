@@ -112,10 +112,10 @@
         body { font-family: 'Poppins', sans-serif; }
 </style>
 </head>
-<body class="bg-surface text-on-surface selection:bg-primary-fixed-dim overflow-x-hidden">
+<body class="bg-white text-on-surface selection:bg-primary-fixed-dim overflow-x-hidden">
 
 <!-- TOP NAVBAR -->
-<header class="fixed top-0 w-full z-[70] bg-[#FAF4EB]/80 dark:bg-[#222222]/80 backdrop-blur-md border-b border-black/5">
+<header class="fixed top-0 w-full z-[70] bg-white/80 dark:bg-[#222222]/80 backdrop-blur-md border-b border-black/5">
 <nav class="flex justify-between items-center w-full px-8 h-20">
     <div class="flex items-center gap-12">
         <div class="flex-shrink-0">
@@ -126,7 +126,7 @@
         <div class="hidden md:flex gap-8 items-center self-stretch">
             <div class="relative group h-full flex items-center">
                 <span class="uppercase tracking-[0.1rem] text-[0.6875rem] text-[#615E57] dark:text-[#A09E99] cursor-default">Rent</span>
-                <div class="dropdown-menu absolute top-full left-0 w-52 bg-white dark:bg-[#222222] shadow-[0_10px_30px_rgba(0,0,0,0.08)] border-t-2 border-[#222222] dark:border-[#FAF4EB] py-6 z-[80]" style="background-color: #F9F7F2;">
+                <div class="dropdown-menu absolute top-full left-0 w-52 bg-white dark:bg-[#222222] shadow-[0_10px_30px_rgba(0,0,0,0.08)] border-t-2 border-[#222222] dark:border-[#FAF4EB] py-6 z-[80]" style="background-color: #ffffff;">
                     <ul class="flex flex-col gap-4">
                         <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:collections' %}">All</a></li>
                         <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:collections' %}?category=Dresses">Dresses</a></li>
@@ -140,7 +140,7 @@
             </div>
             <div class="relative group h-full flex items-center">
                 <a class="uppercase tracking-[0.1rem] text-[0.6875rem] text-[#615E57] dark:text-[#A09E99] hover:text-[#222222] dark:hover:text-white transition-colors duration-300" href="{% url 'gowns:homepage' %}">How it Works</a>
-                <div class="dropdown-menu absolute top-full left-0 w-48 bg-white dark:bg-[#222222] shadow-[0_10px_30px_rgba(0,0,0,0.08)] border-t-2 border-[#222222] dark:border-[#FAF4EB] py-6 z-[80]" style="background-color: #F9F7F2;">
+                <div class="dropdown-menu absolute top-full left-0 w-48 bg-white dark:bg-[#222222] shadow-[0_10px_30px_rgba(0,0,0,0.08)] border-t-2 border-[#222222] dark:border-[#FAF4EB] py-6 z-[80]" style="background-color: #ffffff;">
                     <ul class="flex flex-col gap-4">
                         <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:homepage' %}">FAQs</a></li>
                     </ul>
@@ -170,12 +170,12 @@
 
 <!-- SEARCH OVERLAY -->
 <div class="fixed top-20 left-0 right-0 bottom-0 z-[65] flex flex-col" id="search-overlay">
-    <div class="shrink-0 bg-[#FAF4EB] border-b border-black/5 shadow-lg" onclick="event.stopPropagation()">
+    <div class="shrink-0 bg-white border-b border-black/5 shadow-lg" onclick="event.stopPropagation()">
         <div class="container mx-auto px-8 py-12">
             <div class="max-w-4xl mx-auto">
                 <div class="relative flex items-center mb-10">
                     <span class="material-symbols-outlined absolute left-0 text-black/40 text-2xl">search</span>
-                    <input class="w-full bg-transparent border-0 border-b border-black/10 pl-10 pr-10 py-4 focus:ring-0 focus:border-primary text-2xl font-light placeholder:text-black/20" id="main-search-input" placeholder="Search here.." type="text"/>
+                    <input class="w-full bg-white border border-black/20 border-0 border-b pl-10 pr-10 py-4 focus:ring-0 focus:border-black text-2xl font-light placeholder:text-black/20 rounded-none" id="main-search-input" placeholder="Search here.." type="text"/>
                     <button type="button" class="absolute right-0 text-black/40 hover:text-primary transition-colors" onclick="toggleSearch()">
                         <span class="material-symbols-outlined">close</span>
                     </button>
@@ -195,9 +195,9 @@
                     <div>
                         <p class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-6">Trending Search</p>
                         <div class="flex flex-wrap gap-2">
-                            <span class="px-3 py-1 bg-black/5 rounded-full text-[0.65rem] uppercase tracking-wider cursor-pointer hover:bg-black/10">Silk Dress</span>
-                            <span class="px-3 py-1 bg-black/5 rounded-full text-[0.65rem] uppercase tracking-wider cursor-pointer hover:bg-black/10">Tailored Blazer</span>
-                            <span class="px-3 py-1 bg-black/5 rounded-full text-[0.65rem] uppercase tracking-wider cursor-pointer hover:bg-black/10">Velvet Gown</span>
+                            <span class="px-3 py-1 bg-white border border-black/20 rounded-full text-[0.65rem] uppercase tracking-wider cursor-pointer hover:bg-gray-50">Silk Dress</span>
+                            <span class="px-3 py-1 bg-white border border-black/20 rounded-full text-[0.65rem] uppercase tracking-wider cursor-pointer hover:bg-gray-50">Tailored Blazer</span>
+                            <span class="px-3 py-1 bg-white border border-black/20 rounded-full text-[0.65rem] uppercase tracking-wider cursor-pointer hover:bg-gray-50">Velvet Gown</span>
                         </div>
                     </div>
                 </div>
@@ -211,11 +211,11 @@
 <main class="pt-32 pb-20 px-8">
     <!-- Collection Header -->
     <section class="mb-16 max-w-[1400px] mx-auto">
-        <h1 class="font-headline text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight text-on-surface leading-[0.9] mb-12">Wedding</h1>
+        <h1 class="font-headline text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight text-on-surface leading-[0.9] mb-12 text-center">Wedding</h1>
         <div class="flex gap-4 flex-wrap">
-            <button class="px-6 py-2.5 rounded-full border border-outline-variant text-[0.65rem] font-bold tracking-[0.15em] hover:bg-surface-container-low transition-colors uppercase">BROWSE</button>
-            <button class="px-6 py-2.5 rounded-full border border-outline-variant text-[0.65rem] font-bold tracking-[0.15em] hover:bg-surface-container-low transition-colors uppercase">SORT BY</button>
-            <button class="px-6 py-2.5 rounded-full border border-outline-variant text-[0.65rem] font-bold tracking-[0.15em] hover:bg-surface-container-low transition-colors uppercase">REFINE</button>
+            <button class="px-6 py-2.5 rounded-full border border-black bg-white text-black text-[0.65rem] font-bold tracking-[0.15em] hover:bg-gray-50 transition-colors uppercase">BROWSE</button>
+            <button class="px-6 py-2.5 rounded-full border border-black bg-white text-black text-[0.65rem] font-bold tracking-[0.15em] hover:bg-gray-50 transition-colors uppercase">SORT BY</button>
+            <button class="px-6 py-2.5 rounded-full border border-black bg-white text-black text-[0.65rem] font-bold tracking-[0.15em] hover:bg-gray-50 transition-colors uppercase">REFINE</button>
         </div>
     </section>
 
@@ -224,8 +224,8 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             <!-- Item 1: Valencia Lace -->
             <div class="group cursor-pointer">
-                <div class="relative bg-surface-container-low aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center">
-                    <img alt="Valencia Lace" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAeCTHt4mhKHlq1KHFcPMRzbFn5d1Z-XqqzwW8P2tAewb6SuZ1LMMRQQau8MtbFzXazcpTNh-mf1fdY3yJlMZcokJR7ZX8sw0O4WlawobRG8-q5hZa8oGgFMVckOW7GJfSKtaSWAxArQoeLLn9BWgj70fn1lHJ1l8COhYpw0M9EBCqVepNmUSe15bdRYaU1M6Xr2QBFnlGMwTMAWlCor_obMGPEYTJxeWuPeU4OD9gD-jjJAl3Finyhlxr6Ju6-U9NTir3kI5c97Uw"/>
+                    <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
+                    <img alt="Valencia Lace" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
                     <button class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90">
                         <span class="material-symbols-outlined text-[1rem]">add</span>
                     </button>
@@ -238,8 +238,8 @@
 
             <!-- Item 2: Archive Satin -->
             <div class="group cursor-pointer">
-                <div class="relative bg-surface-container-low aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center">
-                    <img alt="Archive Satin" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCuRw_gKXvZIXtEi_9jRitDtBjvpx-1STqVTwE-4Rl-wSzDWNK9SFrEF6i3P0T_B2WEOh9-v21yiC8wskovG8iC7HoBPPoaF3KlosVHr-nmqJ9l9fsIwbH2XT64MPThb0KQeG01iGT4WiNnPpb9Eu2vUznojXXvr_dH_1QyOrpAtOiaqzp78PfIvVyldzigHjRHu_7Z7LYqCiDPSKqH64l8SEp5VPidX5A1oSxqFYwgZ16ebU9_PykLtAu3IlLp6yqGVyBVVenepy8"/>
+                <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
+                    <img alt="Archive Satin" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
                     <button class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90">
                         <span class="material-symbols-outlined text-[1rem]">add</span>
                     </button>
@@ -252,8 +252,8 @@
 
             <!-- Item 3: Florence Organza -->
             <div class="group cursor-pointer">
-                <div class="relative bg-surface-container-low aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center">
-                    <img alt="Florence Organza" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCH5KO0zUiXpG3Cj6CbEpHEWFDsjHiBc9sdmfm45kRYToF3yriC9YzKsrFOR4JKWKLqkPtZcNfJRjix_44AsIJB3WwHUtVYQ71G2_RcFBkIF8N3zeFtzWZQnC5z68-2QfK3e0z3tKQ65fNiotBkGa3HTiRtXFLGShGuLEnm68vLQMm16I2qcLfIbTPe3G8fh-U8GR8U2QkewSaW7wCV3jD96Y_Q6D99GjEPEDkGtYNXXMRKVfsnxljqvLb-gNjOG05S6H1YM5cMYK0"/>
+                <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
+                    <img alt="Florence Organza" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
                     <button class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90">
                         <span class="material-symbols-outlined text-[1rem]">add</span>
                     </button>
@@ -266,8 +266,8 @@
 
             <!-- Item 4: Modernist Crepe -->
             <div class="group cursor-pointer">
-                <div class="relative bg-surface-container-low aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center">
-                    <img alt="Modernist Crepe" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDkPB4g7ZL0nuioZAq2whsTvJtuVmgI1gHnrnTuYaweL-SVJJ7dg5Lh8bZB7H5IrlDaZMdQIuo_gKrvSZdsjdGwBYu6g3Wb83q7Gkul1ebuFO8JRufk7DX0nD3gajf0mXiCeDogrwCBaFMtiJsIxkqnratDdSsM4hGkRZ1KRiDVQFjBcazY7iC-I7SJbytt72mQkGQsBFMGUMd_eRtGE1brU4h0d8ukYS6N7zgUu3jxqbSD-hgZwn2-yQxX8PlPwbW1S1sFkBfZpBY"/>
+                <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
+                    <img alt="Modernist Crepe" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
                     <button class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90">
                         <span class="material-symbols-outlined text-[1rem]">add</span>
                     </button>
@@ -280,8 +280,8 @@
 
             <!-- Item 5: Opulence Pearl -->
             <div class="group cursor-pointer">
-                <div class="relative bg-surface-container-low aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center">
-                    <img alt="Opulence Pearl" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCpI9s_vmt0qqTmbUmNpK-NZ9C9R6VPT3vcxrV349Eos8Rk3IvO0dXLaYwSf13ls9ajFK81pZDX24XkPfy-ZYH_1CzJ0CzA3DQhdf_rqJ6w99fZuYySHrSRbCMhD14elvuziNaMxWDzRr1avsoLbUTi9EJhFJN_UajSgAAFzCT0Urs7bwMlojZ7gf9r1gvsSK4IxkTJqEF3T6D8JoL8S-WDc9RWD7DM01thwbk4G5eUogxw9Z1IclskjSBq5UVS68VFAbCuyP5dtFk"/>
+                <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
+                    <img alt="Opulence Pearl" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
                     <button class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90">
                         <span class="material-symbols-outlined text-[1rem]">add</span>
                     </button>
@@ -294,8 +294,8 @@
 
             <!-- Item 6: Heritage Lace -->
             <div class="group cursor-pointer">
-                <div class="relative bg-surface-container-low aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center">
-                    <img alt="Heritage Lace" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDnL87iSGsNsiKQZJ_6KzZCqPnHXCfa-uswNYCFkcx-WCJilW1A6xxfc8kc1lriJIQPmSRNQIB8q9_pCSflE1S1i228rXVIz_HqayFcUd-CESdchYXEnmnlDUGFO9qj5PpxZ_csqaNHn6NeRl41VkUjvkUNNap5L7N8TNf52XGPJI1MUBGBUI6hZOQL3A11xamF4wWFrsoe6rmWjI0PeB07Q4o1ja0du-9GXE1Y4nKKBFu9pCqYlcRuTVkN0n2oQRudPYa5N2r3qPI"/>
+                <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
+                    <img alt="Heritage Lace" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
                     <button class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90">
                         <span class="material-symbols-outlined text-[1rem]">add</span>
                     </button>
@@ -308,8 +308,8 @@
 
             <!-- Item 7: City Reception -->
             <div class="group cursor-pointer">
-                <div class="relative bg-surface-container-low aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center">
-                    <img alt="City Reception" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDkPB4g7ZL0nuioZAq2whsTvJtuVmgI1gHnrnTuYaweL-SVJJ7dg5Lh8bZB7H5IrlDaZMdQIuo_gKrvSZdsjdGwBYu6g3Wb83q7Gkul1ebuFO8JRufk7DX0nD3gajf0mXiCeDogrwCBaFMtiJsIxkqnratDdSsM4hGkRZ1KRiDVQFjBcazY7iC-I7SJbytt72mQkGQsBFMGUMd_eRtGE1brU4h0d8ukYS6N7zgUu3jxqbSD-hgZwn2-yQxX8PlPwbW1S1sFkBfZpBY"/>
+                <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
+                    <img alt="City Reception" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
                     <button class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90">
                         <span class="material-symbols-outlined text-[1rem]">add</span>
                     </button>
@@ -322,8 +322,8 @@
 
             <!-- Item 8: Lumiere Silk -->
             <div class="group cursor-pointer">
-                <div class="relative bg-surface-container-low aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center">
-                    <img alt="Lumiere Silk" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuByEXo0RdBw_VmqTeEZ-Vg0mG1B4Ytc40bH4Jw8fVIoAuEpR0kRN35FZd-UoAwbs39l0zXAg9xgcQ8C0Xh3JBsqltu5kld7hilR62PROxuj5N2RB2lb7dc1s2Gvv7LB7gJ_dyC2pnqF6f3tJoeV1YVASA7GIJHDgj9Q3DGoMwPU4ZjtuO17LTqoaYnh6fL7HX_sHiWEnn-0NdG1mOS56rrdoIWP0ANP4OQguqh-4oSkbab3Ciee8dXMRPLiJPS2-c9C78cChMe3Yac"/>
+                <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
+                    <img alt="Lumiere Silk" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
                     <button class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90">
                         <span class="material-symbols-outlined text-[1rem]">add</span>
                     </button>
@@ -352,7 +352,7 @@
 </main>
 
 <!-- FOOTER -->
-<footer class="bg-[#F6F3F2] dark:bg-[#1B1C1C] w-full py-12 px-8 mt-24">
+<footer class="bg-white dark:bg-[#1B1C1C] w-full py-12 px-8 mt-24">
     <div class="w-full max-w-[1920px] mx-auto">
         <div class="flex flex-col sm:flex-row sm:flex-wrap items-start gap-x-8 sm:gap-x-10 md:gap-x-12 lg:gap-x-16 gap-y-8 text-left">
             <div class="flex items-center gap-3 shrink-0">

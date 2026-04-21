@@ -10,7 +10,8 @@
     <meta http-equiv="X-UA-Compatible" content="ie=edge" />
     <title>Calendar | Arabela System Admin Panel</title>
     <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
-  <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet"></head>
+  <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet">
+  <link href="{% static 'arabela_admin/css/calendar.css' %}" rel="stylesheet"></head>
   <body
     x-data="{ page: 'rental', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false }"
     x-init="
@@ -2035,137 +2036,8 @@
     </div>
     <!-- ===== Page Wrapper End ===== -->
   <script defer src="{% static 'arabela_admin/bundle.js' %}"></script>
-  <style>
-    .status-legend-item {
-      color: #1f2937;
-      opacity: 1;
-    }
-    .dark .status-legend-item {
-      color: #ffffff !important;
-      opacity: 1 !important;
-      text-shadow: 0 1px 1px rgba(0, 0, 0, 0.45);
-    }
-    .fc .fc-daygrid-day-events {
-      margin: 0 !important;
-    }
-    .fc .fc-daygrid-event-harness,
-    .fc .fc-daygrid-event-harness-abs {
-      left: 0 !important;
-      right: 0 !important;
-    }
-    .fc .fc-daygrid-event-harness .fc-daygrid-event,
-    .fc .fc-daygrid-event-harness-abs .fc-daygrid-event {
-      margin-left: 0 !important;
-      margin-right: 0 !important;
-      width: 100% !important;
-    }
-    .fc .fc-daygrid-event.fc-event-start {
-      margin-left: 0 !important;
-    }
-    .event-fc-color {
-      border-width: 1px !important;
-      box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
-    }
-    .event-fc-color .fc-event-title {
-      font-weight: 600 !important;
-      font-size: 13px !important;
-      color: #111827 !important;
-      letter-spacing: 0.1px;
-    }
-    .event-fc-color .fc-event-time {
-      color: #ffffff !important;
-      font-weight: 600 !important;
-      font-size: 12px !important;
-      margin-right: 4px !important;
-    }
-    .fc-daygrid-event .fc-event-time,
-    .fc-daygrid-event .fc-daygrid-event-dot,
-    .event-fc-color .fc-event-time,
-    .event-fc-color .fc-daygrid-event-dot {
-      display: none !important;
-    }
-    .event-fc-color.fc-bg-primary {
-      background-color: #fde68a !important;
-      border-color: #f4c948 !important;
-      color: #7c5a00 !important;
-    }
-    .event-fc-color.fc-bg-primary .fc-daygrid-event-dot {
-      background-color: #7c5a00 !important;
-    }
-    .event-fc-color.fc-bg-success {
-      background-color: #bbf7d0 !important;
-      border-color: #4ade80 !important;
-      color: #166534 !important;
-    }
-    .event-fc-color.fc-bg-success .fc-daygrid-event-dot {
-      background-color: #166534 !important;
-    }
-    .event-fc-color.fc-bg-danger {
-      background-color: #fca5a5 !important;
-      border-color: #ef4444 !important;
-      color: #991b1b !important;
-    }
-    .event-fc-color.fc-bg-danger .fc-daygrid-event-dot {
-      background-color: #991b1b !important;
-    }
-    .event-fc-color.fc-bg-return {
-      background-color: #bfdbfe !important;
-      border-color: #60a5fa !important;
-      color: #1e3a8a !important;
-    }
-    .event-fc-color.fc-bg-return .fc-daygrid-event-dot {
-      background-color: #1e3a8a !important;
-    }
-  </style>
-  <script>
-    // Keep gown names in events and map status by color only.
-    window.addEventListener("load", function () {
-      const calendarRoot = document.getElementById("calendar");
-      if (!calendarRoot) return;
 
-      const mappings = [
-        { match: "Event Conf.", time: "09:00 AM", gown: "Classic Gown", cls: "fc-bg-primary" },
-        { match: "Seminar #4", time: "10:30 AM", gown: "Satin Gown", cls: "fc-bg-success" },
-        { match: "Meeting #5", time: "04:00 PM", gown: "Velvet Gown", cls: "fc-bg-return" },
-        { match: "Submission #1", time: "04:00 PM", gown: "Mermaid Gown", cls: "fc-bg-danger" },
-        { match: "Seminar #6", time: "09:30 AM", gown: "Ball Gown", cls: "fc-bg-primary" },
-        { match: "Meeting 3", time: "10:30 AM", gown: "Lace Gown", cls: "fc-bg-return" },
-        { match: "Meetup #", time: "12:00 PM", gown: "A-line Gown", cls: "fc-bg-success" },
-        { match: "Submission", time: "02:30 PM", gown: "Cocktail Gown", cls: "fc-bg-danger" },
-        { match: "Attend event", time: "07:00 AM", gown: "Tulle Gown", cls: "fc-bg-return" },
-        { match: "Project submission #2", time: "11:00 AM", gown: "Bridal Gown", cls: "fc-bg-success" }
-      ];
-
-      function applyReservationLabels() {
-        calendarRoot.querySelectorAll(".fc-event").forEach((eventEl) => {
-          const titleEl = eventEl.querySelector(".fc-event-title");
-          if (!titleEl) return;
-          const original = titleEl.textContent.trim();
-          const map = mappings.find((m) => original.includes(m.match));
-          if (!map) return;
-
-          titleEl.textContent = `${map.time} ${map.gown}`;
-          eventEl.classList.remove("fc-bg-danger", "fc-bg-success", "fc-bg-primary", "fc-bg-warning", "fc-bg-return");
-          eventEl.classList.add("event-fc-color", map.cls);
-        });
-
-        // Force same card width/alignment for every status chip in each day cell.
-        calendarRoot.querySelectorAll(".fc-daygrid-day-events .fc-daygrid-event-harness, .fc-daygrid-day-events .fc-daygrid-event-harness-abs").forEach((harness) => {
-          harness.style.setProperty("left", "6px", "important");
-          harness.style.setProperty("right", "6px", "important");
-        });
-        calendarRoot.querySelectorAll(".fc-daygrid-day-events .fc-daygrid-event").forEach((eventEl) => {
-          eventEl.style.setProperty("width", "calc(100% - 12px)", "important");
-          eventEl.style.setProperty("margin-left", "0", "important");
-          eventEl.style.setProperty("margin-right", "0", "important");
-        });
-      }
-
-      applyReservationLabels();
-      const observer = new MutationObserver(() => applyReservationLabels());
-      observer.observe(calendarRoot, { childList: true, subtree: true });
-    });
-  </script>
+  <script src="{% static 'arabela_admin/js/calendar.js' %}"></script>
 </body>
 </html>
 

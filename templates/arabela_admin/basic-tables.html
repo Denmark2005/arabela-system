@@ -2,17 +2,9 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0"
-    />
-    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
-    <title>
-      Basic Tables | Arabela System Admin Panel
-    </title>
-    <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
-  <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet"></head>
+    <title>Basic Tables | Arabela System Admin Panel</title>
+    {% include 'arabela_admin/partials/_head.html' %}
+  </head>
   <body
     x-data="{ page: 'basicTables', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false }"
     x-init="
@@ -21,16 +13,7 @@
     :class="{'dark bg-gray-900': darkMode === true}"
   >
     <!-- ===== Preloader Start ===== -->
-    <div
-  x-show="loaded"
-  x-init="window.addEventListener('DOMContentLoaded', () => {setTimeout(() => loaded = false, 500)})"
-  class="fixed left-0 top-0 z-999999 flex h-screen w-screen items-center justify-center bg-white dark:bg-black"
->
-  <div
-    class="h-16 w-16 animate-spin rounded-full border-4 border-solid border-black border-t-transparent" style="border-color: #000 !important; border-top-color: transparent !important;"
-  ></div>
-</div>
-
+    {% include 'arabela_admin/partials/_preloader.html' %}
     <!-- ===== Preloader End ===== -->
 
     <!-- ===== Page Wrapper Start ===== -->
@@ -1999,7 +1982,7 @@
       <!-- ===== Content Area End ===== -->
     </div>
     <!-- ===== Page Wrapper End ===== -->
-  <script defer src="{% static 'arabela_admin/bundle.js' %}"></script></body>
+  {% include 'arabela_admin/partials/_scripts.html' %}</body>
 </html>
 
 

@@ -165,7 +165,7 @@
 <body class="font-body selection:bg-primary-fixed selection:text-primary overflow-x-hidden">
 
 <!-- TOP NAVBAR: bag + account only (reservation flow) -->
-<header class="fixed top-0 w-full z-[70] bg-[#FAF4EB]/80 dark:bg-[#222222]/80 backdrop-blur-md border-b border-black/5">
+<header class="fixed top-0 w-full z-[70] bg-white/80 dark:bg-[#222222]/80 backdrop-blur-md border-b border-black/5">
 <nav class="flex justify-between items-center w-full px-8 h-20">
     <div class="flex items-center gap-12">
         <div class="flex-shrink-0">
@@ -189,7 +189,7 @@
 
 <div id="cart-click-away" class="fixed inset-0 z-[84] bg-transparent pointer-events-none" onclick="toggleCart()" aria-hidden="true"></div>
 
-<aside id="cart-drawer" class="fixed top-0 right-0 h-full w-full md:w-[480px] bg-[#FAF4EB] z-[85] translate-x-full transform transition-transform duration-500 ease-in-out ai-panel-shadow flex flex-col" aria-hidden="true">
+<aside id="cart-drawer" class="fixed top-0 right-0 h-full w-full md:w-[480px] bg-white z-[85] translate-x-full transform transition-transform duration-500 ease-in-out shadow-none flex flex-col" aria-hidden="true">
     <header class="p-8 flex justify-between items-center border-b border-black/5 shrink-0">
         <h2 class="text-sm font-bold tracking-[0.2em] uppercase text-on-surface flex items-center gap-3">
             <span class="material-symbols-outlined text-primary" style='font-variation-settings: "FILL" 0;'>shopping_bag</span>
@@ -330,21 +330,21 @@
 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 <label class="cursor-pointer group" onclick="document.getElementById('gcash-modal').classList.remove('hidden')">
 <input class="hidden peer" name="payment_pref" type="radio" value="deposit">
-<div class="p-8 border border-outline-variant/30 bg-surface-container-low peer-checked:border-primary peer-checked:bg-white transition-all duration-300 editorial-shadow h-full">
+<div class="p-8 border border-outline-variant/30 bg-white peer-checked:border-primary peer-checked:bg-gray-50 transition-all duration-300 editorial-shadow h-full border-black/10">
 <h4 class="font-headline text-sm tracking-widest uppercase mb-2 group-hover:text-primary transition-colors">Pay Security Deposit Now (Required)</h4>
 <p class="text-[0.6875rem] text-secondary leading-relaxed normal-case">Get your deposit back the moment you return the item.</p>
 </div>
 </label>
 <label class="cursor-pointer group" onclick="document.getElementById('gcash-full-modal').classList.remove('hidden')">
 <input class="hidden peer" name="payment_pref" type="radio" value="full">
-<div class="p-8 border border-outline-variant/30 bg-surface-container-low peer-checked:border-primary peer-checked:bg-white transition-all duration-300 editorial-shadow h-full">
+<div class="p-8 border border-outline-variant/30 bg-white peer-checked:border-primary peer-checked:bg-gray-50 transition-all duration-300 editorial-shadow h-full border-black/10">
 <h4 class="font-headline text-sm tracking-widest uppercase mb-2 group-hover:text-primary transition-colors">Pay Full Amount Now</h4>
 <p class="text-[0.6875rem] text-secondary leading-relaxed normal-case">Settles both deposit and security deposit fee for a faster pick-up</p>
 </div>
 </label>
 </div>
 <!-- Proof of Payment Upload -->
-<div class="bg-surface-container-low p-10 editorial-shadow">
+<div class="bg-white border border-black/10 p-10 editorial-shadow">
 <div class="flex flex-col gap-6">
 <div class="flex flex-col gap-1">
 <h3 class="text-[0.6875rem] uppercase tracking-widest text-secondary">Proof of Payment</h3>
@@ -364,7 +364,7 @@
 </div>
 <!-- Right Column: Order Summary (Sticky) -->
 <aside class="lg:col-span-5 lg:sticky lg:top-32">
-<div class="bg-surface-container-lowest p-8 md:p-12 editorial-shadow space-y-12">
+<div class="bg-white border border-black/10 p-8 md:p-12 editorial-shadow space-y-12">
 <!-- Rental Items Container (filled from bag via sessionStorage) -->
 <div class="max-h-[380px] overflow-y-auto pr-4 custom-scrollbar space-y-8 scroll-hint">
 <div id="reservation-items-root" class="space-y-8"></div>
@@ -413,7 +413,7 @@
 </main>
 
 <!-- Footer (same structure / links as templates/collections.html) -->
-<footer class="bg-[#F6F3F2] dark:bg-[#1B1C1C] w-full py-12 px-8 border-t border-black/5 mt-4">
+<footer class="bg-white dark:bg-[#1B1C1C] w-full py-12 px-8 border-t border-black/5 mt-4">
     <div class="w-full max-w-[1920px] mx-auto">
         <div class="flex flex-col sm:flex-row sm:flex-wrap items-start gap-x-8 sm:gap-x-10 md:gap-x-12 lg:gap-x-16 gap-y-8 text-left">
             <div class="flex items-center gap-3 shrink-0">
