@@ -1,282 +1,34 @@
+{% extends "base.html" %}
 {% load static %}
-<!DOCTYPE html>
-<html class="light" lang="en">
-<head>
-<meta charset="utf-8">
-<meta content="width=device-width, initial-scale=1.0" name="viewport">
-<title>ARABELA | Reservation</title>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<link href="https://fonts.googleapis.com/css2?family=Epilogue:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600&amp;family=Poppins:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
-<script id="tailwind-config">
-        tailwind.config = {
-            darkMode: "class",
-            theme: {
-                extend: {
-                    colors: {
-                        "on-surface-variant": "#444748",
-                        "on-primary-container": "#8a8989",
-                        "surface-tint": "#5f5e5e",
-                        "surface-dim": "#dcd9d9",
-                        "error-container": "#ffdad6",
-                        "tertiary-fixed": "#e4e2e2",
-                        "surface-container-lowest": "#ffffff",
-                        "outline": "#747878",
-                        "error": "#ba1a1a",
-                        "on-primary-fixed-variant": "#474746",
-                        "primary-container": "#222222",
-                        "secondary": "#615e57",
-                        "primary": "#0b0c0c",
-                        "on-primary-fixed": "#1b1c1c",
-                        "on-secondary": "#ffffff",
-                        "on-secondary-container": "#67645d",
-                        "outline-variant": "#c4c7c7",
-                        "secondary-fixed-dim": "#cbc6bd",
-                        "tertiary-fixed-dim": "#c8c6c6",
-                        "on-tertiary-fixed-variant": "#474747",
-                        "surface-container-low": "#f6f3f2",
-                        "secondary-fixed": "#e7e2d9",
-                        "primary-fixed": "#e5e2e1",
-                        "on-error": "#ffffff",
-                        "on-secondary-fixed": "#1d1b16",
-                        "secondary-container": "#e7e2d9",
-                        "on-tertiary-fixed": "#1b1c1c",
-                        "primary-fixed-dim": "#c8c6c5",
-                        "tertiary-container": "#222222",
-                        "inverse-primary": "#c8c6c5",
-                        "on-surface": "#1b1c1c",
-                        "surface-container": "#f0eded",
-                        "surface": "#fcf9f8",
-                        "surface-container-highest": "#e5e2e1",
-                        "on-primary": "#ffffff",
-                        "on-tertiary": "#ffffff",
-                        "on-error-container": "#93000a",
-                        "surface-container-high": "#eae7e7",
-                        "tertiary": "#0b0c0c",
-                        "surface-bright": "#fcf9f8",
-                        "background": "#fcf9f8",
-                        "surface-variant": "#e5e2e1",
-                        "inverse-on-surface": "#f3f0ef",
-                        "on-secondary-fixed-variant": "#494640",
-                        "on-tertiary-container": "#8a8989",
-                        "inverse-surface": "#303030",
-                        "on-background": "#1b1c1c"
-                    },
-                    fontFamily: {
-                        "headline": ["Epilogue"],
-                        "body": ["Inter"],
-                        "label": ["Inter"]
-                    },
-                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
-                },
-            },
-        }
-    </script>
-<style>
-        body {
-            background-color: #fcf9f8;
-            color: #1b1c1c;
-            -webkit-font-smoothing: antialiased;
-        }
-        .material-symbols-outlined {
-            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
-            vertical-align: middle;
-            font-size: 1.25rem;
-        }
-        input:focus {
-            outline: none;
-            border-color: #0b0c0c !important;
-            box-shadow: none !important;
-        }
-        .editorial-shadow {
-            box-shadow: 0 20px 40px rgba(27, 28, 28, 0.06);
-        }
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 2px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: rgba(0, 0, 0, 0.02);
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #0b0c0c;
-        }
-        @keyframes subtleScroll {
-            0% { transform: translateY(0); }
-            50% { transform: translateY(-10px); }
-            100% { transform: translateY(0); }
-        }
-        .scroll-hint {
-            animation: subtleScroll 3s ease-in-out infinite;
-        }
-        .ai-panel-shadow { box-shadow: -10px 0 30px rgba(0,0,0,0.1); }
-        .ai-scroll::-webkit-scrollbar { width: 2px; }
-        .ai-scroll::-webkit-scrollbar-track { background: transparent; }
-        .ai-scroll::-webkit-scrollbar-thumb { background: #e5e2e1; }
 
-        @keyframes reservation-invalid-shake {
-            0%, 100% { transform: translateX(0); }
-            10%, 30%, 50%, 70%, 90% { transform: translateX(-6px); }
-            20%, 40%, 60%, 80% { transform: translateX(6px); }
-        }
-        .animate-reservation-invalid-shake {
-            animation: reservation-invalid-shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
-        }
-        .reservation-field-invalid input {
-            border-bottom-color: #ba1a1a !important;
-        }
-        .reservation-field-invalid label {
-            color: #ba1a1a !important;
-        }
-        #proof-payment-dropzone.reservation-proof-invalid {
-            border-color: #ba1a1a !important;
-            background-color: rgba(186, 26, 26, 0.06);
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        .animate-spin {
-            animation: spin 1s linear infinite;
-        }
-        #loading-overlay {
-            display: none;
-            position: fixed;
-            left: 0;
-            top: 0;
-            right: 0;
-            bottom: 0;
-            z-index: 999999;
-            background-color: #fcf9f8;
-            flex-layout: center;
-        }
-        #loading-overlay.show {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .loading-spinner {
-            width: 64px;
-            height: 64px;
-            border: 4px solid #e5e2e1;
-            border-top-color: #0b0c0c;
-            border-radius: 50%;
-        }
-    </style>
-</head>
-<body class="font-body selection:bg-primary-fixed selection:text-primary overflow-x-hidden">
+{% block title %}ARABELA | Reservation{% endblock %}
 
-<!-- TOP NAVBAR: bag + account only (reservation flow) -->
-<header class="fixed top-0 w-full z-[70] bg-white/80 dark:bg-[#222222]/80 backdrop-blur-md border-b border-black/5">
-<nav class="flex justify-between items-center w-full px-8 h-20">
-    <div class="flex items-center gap-12">
-        <div class="flex-shrink-0">
-            <a href="{% url 'gowns:homepage' %}" class="block">
-                <h1 class="font-['Poppins',sans-serif] text-2xl font-bold tracking-tighter text-[#222222] dark:text-[#FAF4EB]">ARABELA</h1>
-            </a>
-        </div>
-    </div>
-    <div class="flex gap-6 items-center">
-        <button type="button" class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]" onclick="toggleCart()" aria-label="Open selection">
-            <span class="material-symbols-outlined">shopping_bag</span>
-        </button>
-        <a href="{% url 'accounts:login' %}">
-            <button type="button" class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]">
-                <span class="material-symbols-outlined">person</span>
-            </button>
-        </a>
-    </div>
-</nav>
-</header>
+{% block extra_head %}
+  <style>
+    input:focus { outline: none; border-color: #0b0c0c !important; box-shadow: none !important; }
+    .custom-scrollbar::-webkit-scrollbar { width: 2px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.02); }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #0b0c0c; }
+    @keyframes subtleScroll { 0% { transform: translateY(0); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0); } }
+    .scroll-hint { animation: subtleScroll 3s ease-in-out infinite; }
+    @keyframes reservation-invalid-shake {
+      0%, 100% { transform: translateX(0); }
+      10%, 30%, 50%, 70%, 90% { transform: translateX(-6px); }
+      20%, 40%, 60%, 80% { transform: translateX(6px); }
+    }
+    .animate-reservation-invalid-shake { animation: reservation-invalid-shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+    .reservation-field-invalid input { border-bottom-color: #ba1a1a !important; }
+    .reservation-field-invalid label { color: #ba1a1a !important; }
+    #proof-payment-dropzone.reservation-proof-invalid { border-color: #ba1a1a !important; background-color: rgba(186, 26, 26, 0.06); }
+    #loading-overlay { display: none; position: fixed; inset: 0; z-index: 999999; background-color: #ffffff; }
+    #loading-overlay.show { display: flex; align-items: center; justify-content: center; }
+    .loading-spinner { width: 64px; height: 64px; border: 4px solid #e5e2e1; border-top-color: #0b0c0c; border-radius: 50%; }
+  </style>
+{% endblock %}
 
-<div id="cart-click-away" class="fixed inset-0 z-[84] bg-transparent pointer-events-none" onclick="toggleCart()" aria-hidden="true"></div>
+{% block main_class %}pt-32 pb-24 px-6 md:px-12 lg:px-24 max-w-7xl mx-auto{% endblock %}
 
-<aside id="cart-drawer" class="fixed top-0 right-0 h-full w-full md:w-[480px] bg-white z-[85] translate-x-full transform transition-transform duration-500 ease-in-out shadow-none flex flex-col" aria-hidden="true">
-    <header class="p-8 flex justify-between items-center border-b border-black/5 shrink-0">
-        <h2 class="text-sm font-bold tracking-[0.2em] uppercase text-on-surface flex items-center gap-3">
-            <span class="material-symbols-outlined text-primary" style='font-variation-settings: "FILL" 0;'>shopping_bag</span>
-            Your Selection
-        </h2>
-        <button type="button" class="hover:opacity-50 transition-opacity text-[#222222] dark:text-[#FAF4EB]" onclick="toggleCart()" aria-label="Close selection">
-            <span class="material-symbols-outlined text-2xl">close</span>
-        </button>
-    </header>
-    <div class="flex-1 overflow-y-auto ai-scroll px-8 py-4 space-y-10 min-h-0">
-        <div class="cart-line flex gap-4 group" data-unit-price="4500">
-            <div class="w-24 h-32 bg-surface-container-low overflow-hidden shrink-0">
-                <img alt="Structured Wool Blazer" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDvrOUto9vy9py6fxR-YxuiQ7pL4WzddWzTNeVPBgk4qOrjLVsLT4uDAoXaKs7u1i7RXCaNnzcYFP-p16uIuULPo9aHvnWqqA_8NjhDlYa18k4FVHck1C2Gz80q-qvohzTgGYhT6Joc0gU5AiqDMxwGulS-59idA4ehLkllD_ADzTgoq8jmuolfvGYkSJfCy3KM20GMCLiQ4Lfj9E1rAkuQUPYF2_YX-5lUAOQKHU6OqqLU5ym1Kz-EDW6FLRhJrERNMDEhuiHEs-c"/>
-            </div>
-            <div class="flex-1 flex flex-col justify-between py-1 min-w-0">
-                <div class="flex justify-between items-start gap-2">
-                    <div>
-                        <h3 class="text-sm font-medium text-on-surface leading-tight">Structured Wool Blazer</h3>
-                        <p class="text-[0.6875rem] text-on-secondary-container mt-1">Size: Large</p>
-                    </div>
-                    <button type="button" class="text-on-surface hover:text-error transition-colors shrink-0" onclick="cartRemoveLine(this)" aria-label="Remove item">
-                        <span class="material-symbols-outlined text-lg">close</span>
-                    </button>
-                </div>
-                <div class="flex justify-between items-end gap-2">
-                    <div class="flex items-center space-x-3">
-                        <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, -1)" aria-label="Decrease quantity">
-                            <span class="material-symbols-outlined text-xs">remove</span>
-                        </button>
-                        <span class="cart-qty text-xs font-medium tabular-nums">1</span>
-                        <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, 1)" aria-label="Increase quantity">
-                            <span class="material-symbols-outlined text-xs">add</span>
-                        </button>
-                    </div>
-                    <p class="cart-line-total font-['Inter',sans-serif] text-sm font-semibold text-on-surface tracking-wide tabular-nums shrink-0">₱ 4,500.00</p>
-                </div>
-            </div>
-        </div>
-        <div class="cart-line flex gap-4 group" data-unit-price="6200">
-            <div class="w-24 h-32 bg-surface-container-low overflow-hidden shrink-0">
-                <img alt="Emerald Silk Midi Dress" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-            </div>
-            <div class="flex-1 flex flex-col justify-between py-1 min-w-0">
-                <div class="flex justify-between items-start gap-2">
-                    <div>
-                        <h3 class="text-sm font-medium text-on-surface leading-tight">Emerald Silk Midi Dress</h3>
-                        <p class="text-[0.6875rem] text-on-secondary-container mt-1">Size: Small</p>
-                    </div>
-                    <button type="button" class="text-on-surface hover:text-error transition-colors shrink-0" onclick="cartRemoveLine(this)" aria-label="Remove item">
-                        <span class="material-symbols-outlined text-lg">close</span>
-                    </button>
-                </div>
-                <div class="flex justify-between items-end gap-2">
-                    <div class="flex items-center space-x-3">
-                        <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, -1)" aria-label="Decrease quantity">
-                            <span class="material-symbols-outlined text-xs">remove</span>
-                        </button>
-                        <span class="cart-qty text-xs font-medium tabular-nums">1</span>
-                        <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, 1)" aria-label="Increase quantity">
-                            <span class="material-symbols-outlined text-xs">add</span>
-                        </button>
-                    </div>
-                    <p class="cart-line-total font-['Inter',sans-serif] text-sm font-semibold text-on-surface tracking-wide tabular-nums shrink-0">₱ 6,200.00</p>
-                </div>
-            </div>
-        </div>
-    </div>
-    <footer class="p-8 space-y-6 bg-surface-container-low border-t border-black/5 shrink-0">
-        <div class="space-y-2">
-            <div class="flex justify-between items-center">
-                <span class="text-xs uppercase tracking-widest text-secondary">subtotal</span>
-                <span id="cart-subtotal" class="font-['Inter',sans-serif] text-sm text-on-surface tabular-nums">₱ 10,700.00</span>
-            </div>
-            <div class="flex justify-between items-center">
-                <span class="text-xs uppercase tracking-widest text-secondary">Security Deposit</span>
-                <span id="cart-deposit" class="font-['Inter',sans-serif] text-sm text-on-surface tabular-nums">₱ 4,000.00</span>
-            </div>
-            <div class="pt-4 flex justify-between items-center border-t border-black/5">
-                <span class="text-sm font-bold uppercase tracking-[0.2rem] text-on-surface">Total Amount</span>
-                <span id="cart-total" class="font-['Epilogue',sans-serif] text-lg font-bold text-on-surface tabular-nums tracking-tight">₱ 14,700.00</span>
-            </div>
-        </div>
-        <a href="{% url 'gowns:reservation' %}" onclick="return saveCartAndProceedToReservation(event)" class="w-full bg-primary py-5 text-white uppercase text-xs font-bold tracking-[0.2rem] hover:bg-secondary transition-colors duration-300 inline-flex items-center justify-center no-underline">Proceed to Reservation</a>
-    </footer>
-</aside>
-
-<main class="pt-32 pb-24 px-6 md:px-12 lg:px-24 max-w-7xl mx-auto">
+{% block content %}
 <!-- Page Title -->
 <div class="mb-16">
 <h1 class="font-headline text-5xl md:text-7xl font-light tracking-tight text-primary leading-none">Reservation</h1>
@@ -407,48 +159,9 @@
 <span class="material-symbols-outlined text-2xl">verified_user</span>
 <span class="material-symbols-outlined text-2xl">shield_with_heart</span>
 <span class="material-symbols-outlined text-2xl">lock</span>
-</div>
-</aside>
-</div>
-</main>
-
-<!-- Footer (same structure / links as templates/collections.html) -->
-<footer class="bg-white dark:bg-[#1B1C1C] w-full py-12 px-8 border-t border-black/5 mt-4">
-    <div class="w-full max-w-[1920px] mx-auto">
-        <div class="flex flex-col sm:flex-row sm:flex-wrap items-start gap-x-8 sm:gap-x-10 md:gap-x-12 lg:gap-x-16 gap-y-8 text-left">
-            <div class="flex items-center gap-3 shrink-0">
-                <a href="{% url 'gowns:homepage' %}" class="text-lg font-bold text-[#222222] dark:text-[#FAF4EB] tracking-tighter font-body">ARABELA</a>
-                <a href="https://www.facebook.com/" target="_blank" rel="noopener noreferrer" class="inline-flex text-[#222222] dark:text-[#FAF4EB] scale-95 active:scale-90 transition-all hover:opacity-70" aria-label="Arabela on Facebook">
-                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-                </a>
-            </div>
-            <div class="shrink-0">
-                <p class="text-base font-medium text-[#222222] dark:text-[#FAF4EB] font-body mb-2">Rent</p>
-                <a href="{% url 'gowns:homepage' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body">How it works</a>
-            </div>
-            <div class="shrink-0">
-                <p class="text-base font-medium text-[#222222] dark:text-[#FAF4EB] font-body mb-2">Info</p>
-                <ul class="flex flex-col gap-1.5">
-                    <li>
-                        <a href="{% url 'gowns:collections' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">Search</a>
-                    </li>
-                    <li>
-                        <a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">About us</a>
-                    </li>
-                    <li>
-                        <a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">Contact us</a>
-                    </li>
-                    <li>
-                        <a href="{% url 'gowns:homepage' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">FAQs</a>
-                    </li>
-                    <li>
-                        <a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">Terms and conditions</a>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </div>
-</footer>
+ </div>
+ </aside>
+ </div>
 
 <!-- GCash Modal (Required Deposit) -->
 <div class="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-primary/20 backdrop-blur-sm transition-all duration-300 hidden" id="gcash-modal">
@@ -498,78 +211,10 @@
     <div class="loading-spinner animate-spin"></div>
 </div>
 
-<script src="{% static 'js/reservation-flow.js' %}?v=peso1"></script>
+{% endblock %}
+
+{% block extra_scripts %}
 <script>
-    const SECURITY_DEPOSIT_PESOS = 2000;
-
-    function formatPeso(amount) {
-        return '₱ ' + Number(amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
-
-    function updateCartTotals() {
-        let sub = 0;
-        let itemCount = 0;
-        document.querySelectorAll('#cart-drawer .cart-line').forEach(function (row) {
-            if (row.classList.contains('hidden')) return;
-            const unit = parseFloat(row.dataset.unitPrice || '0');
-            const qtyEl = row.querySelector('.cart-qty');
-            const qty = Math.max(1, parseInt(qtyEl.textContent, 10) || 1);
-            itemCount += qty;
-            const lineTotal = unit * qty;
-            sub += lineTotal;
-            const lt = row.querySelector('.cart-line-total');
-            if (lt) lt.textContent = formatPeso(lineTotal);
-        });
-        const deposit = itemCount * SECURITY_DEPOSIT_PESOS;
-        const subEl = document.getElementById('cart-subtotal');
-        const totEl = document.getElementById('cart-total');
-        const depEl = document.getElementById('cart-deposit');
-        if (subEl) subEl.textContent = formatPeso(sub);
-        if (depEl) depEl.textContent = formatPeso(deposit);
-        if (totEl) totEl.textContent = formatPeso(sub + deposit);
-    }
-
-    function cartAdjustQty(btn, delta) {
-        const row = btn.closest('.cart-line');
-        if (!row || row.classList.contains('hidden')) return;
-        const qtyEl = row.querySelector('.cart-qty');
-        let q = parseInt(qtyEl.textContent, 10) || 1;
-        q = Math.max(1, q + delta);
-        qtyEl.textContent = String(q);
-        updateCartTotals();
-    }
-
-    function cartRemoveLine(btn) {
-        const row = btn.closest('.cart-line');
-        if (!row) return;
-        row.classList.add('hidden');
-        updateCartTotals();
-    }
-
-    function closeCartDrawer() {
-        const drawer = document.getElementById('cart-drawer');
-        const scrim = document.getElementById('cart-click-away');
-        if (drawer) {
-            drawer.classList.add('translate-x-full');
-            drawer.setAttribute('aria-hidden', 'true');
-        }
-        if (scrim) scrim.classList.add('pointer-events-none');
-    }
-
-    function toggleCart() {
-        const drawer = document.getElementById('cart-drawer');
-        const scrim = document.getElementById('cart-click-away');
-        if (!drawer) return;
-        drawer.classList.toggle('translate-x-full');
-        const closed = drawer.classList.contains('translate-x-full');
-        drawer.setAttribute('aria-hidden', closed ? 'true' : 'false');
-        if (scrim) {
-            if (closed) scrim.classList.add('pointer-events-none');
-            else scrim.classList.remove('pointer-events-none');
-        }
-        if (!closed) updateCartTotals();
-    }
-
     (function () {
         var RESERVATION_FIELD_IDS = ['first_name', 'last_name', 'address', 'city', 'postal', 'phone'];
 
@@ -673,5 +318,4 @@
         });
     })();
 </script>
-</body>
-</html>
+{% endblock %}

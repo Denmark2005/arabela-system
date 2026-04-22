@@ -1,333 +1,52 @@
-{% load static %}
-<!DOCTYPE html>
-<html class="light" lang="en">
-<head>
-<meta charset="utf-8">
-<meta content="width=device-width, initial-scale=1.0" name="viewport">
-<title>ARABELA | Confirmation</title>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<link href="https://fonts.googleapis.com/css2?family=Epilogue:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600&amp;family=Poppins:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
-<script id="tailwind-config">
-        tailwind.config = {
-            darkMode: "class",
-            theme: {
-                extend: {
-                    colors: {
-                        "on-surface-variant": "#444748",
-                        "on-primary-container": "#8a8989",
-                        "surface-tint": "#5f5e5e",
-                        "surface-dim": "#dcd9d9",
-                        "error-container": "#ffdad6",
-                        "tertiary-fixed": "#e4e2e2",
-                        "surface-container-lowest": "#ffffff",
-                        "outline": "#747878",
-                        "error": "#ba1a1a",
-                        "on-primary-fixed-variant": "#474746",
-                        "primary-container": "#222222",
-                        "secondary": "#615e57",
-                        "primary": "#0b0c0c",
-                        "on-primary-fixed": "#1b1c1c",
-                        "on-secondary": "#ffffff",
-                        "on-secondary-container": "#67645d",
-                        "outline-variant": "#c4c7c7",
-                        "secondary-fixed-dim": "#cbc6bd",
-                        "tertiary-fixed-dim": "#c8c6c6",
-                        "on-tertiary-fixed-variant": "#474747",
-                        "surface-container-low": "#f6f3f2",
-                        "secondary-fixed": "#e7e2d9",
-                        "primary-fixed": "#e5e2e1",
-                        "on-error": "#ffffff",
-                        "on-secondary-fixed": "#1d1b16",
-                        "secondary-container": "#e7e2d9",
-                        "on-tertiary-fixed": "#1b1c1c",
-                        "primary-fixed-dim": "#c8c6c5",
-                        "tertiary-container": "#222222",
-                        "inverse-primary": "#c8c6c5",
-                        "on-surface": "#1b1c1c",
-                        "surface-container": "#f0eded",
-                        "surface": "#fcf9f8",
-                        "surface-container-highest": "#e5e2e1",
-                        "on-primary": "#ffffff",
-                        "on-tertiary": "#ffffff",
-                        "on-error-container": "#93000a",
-                        "surface-container-high": "#eae7e7",
-                        "tertiary": "#0b0c0c",
-                        "surface-bright": "#fcf9f8",
-                        "background": "#fcf9f8",
-                        "surface-variant": "#e5e2e1",
-                        "inverse-on-surface": "#f3f0ef",
-                        "on-secondary-fixed-variant": "#494640",
-                        "on-tertiary-container": "#8a8989",
-                        "inverse-surface": "#303030",
-                        "on-background": "#1b1c1c"
-                    },
-                    fontFamily: {
-                        "headline": ["Poppins", "Epilogue", "sans-serif"],
-                        "body": ["Poppins", "Inter", "sans-serif"],
-                        "label": ["Poppins", "Inter", "sans-serif"]
-                    },
-                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
-                    animation: {
-                        "success-pop": "success-pop 1s cubic-bezier(0.34, 1.56, 0.64, 1) forwards",
-                        "fade-in-up": "fade-in-up 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards 0.3s",
-                    },
-                    keyframes: {
-                        "success-pop": {
-                            "0%": { transform: "scale(0.5)", opacity: "0" },
-                            "100%": { transform: "scale(1)", opacity: "1" },
-                        },
-                        "fade-in-up": {
-                            "0%": { transform: "translateY(20px)", opacity: "0" },
-                            "100%": { transform: "translateY(0)", opacity: "1" },
-                        }
-                    }
-                },
-            },
-        }
-    </script>
-<style>
-        body {
-            background-color: #ffffff;
-            color: #1b1c1c;
-            -webkit-font-smoothing: antialiased;
-        }
-        .material-symbols-outlined {
-            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
-            vertical-align: middle;
-        }
-        .editorial-shadow {
-            box-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.05);
-        }
-        .ai-panel-shadow { box-shadow: -10px 0 30px rgba(0,0,0,0.1); }
-        .ai-scroll::-webkit-scrollbar { width: 2px; }
-        .ai-scroll::-webkit-scrollbar-track { background: transparent; }
-        .ai-scroll::-webkit-scrollbar-thumb { background: #e5e2e1; }
-    </style>
-</head>
-<body class="font-body selection:bg-primary-fixed selection:text-primary min-h-screen flex flex-col overflow-x-hidden">
+{% extends "base.html" %}
 
-<!-- TOP NAVBAR (same pattern as reservation.html) -->
-<header class="fixed top-0 w-full z-[70] bg-white/80 dark:bg-[#222222]/80 backdrop-blur-md border-b border-black/5">
-<nav class="flex justify-between items-center w-full px-8 h-20">
-    <div class="flex items-center gap-12">
-        <div class="flex-shrink-0">
-            <a href="{% url 'gowns:homepage' %}" class="block">
-                <h1 class="font-['Poppins',sans-serif] text-2xl font-bold tracking-tighter text-[#222222] dark:text-[#FAF4EB]">ARABELA</h1>
-            </a>
-        </div>
+{% block title %}ARABELA | Confirmation{% endblock %}
+
+{% block body_class %}min-h-screen flex flex-col{% endblock %}
+
+{% block extra_head %}
+  <style>
+    .editorial-shadow { box-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.05); }
+    @keyframes success-pop {
+      0% { transform: scale(0.5); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    @keyframes fade-in-up {
+      0% { transform: translateY(20px); opacity: 0; }
+      100% { transform: translateY(0); opacity: 1; }
+    }
+    .animate-success-pop { animation: success-pop 1s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+    .animate-fade-in-up { animation: fade-in-up 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards 0.3s; }
+  </style>
+{% endblock %}
+
+{% block main_class %}flex-grow flex items-center justify-center pt-32 pb-24 px-6{% endblock %}
+
+{% block content %}
+  <div class="max-w-3xl w-full bg-white border border-[#E5E2E1]/50 editorial-shadow p-12 md:p-24 text-center animate-fade-in-up opacity-0">
+    <div class="mb-10">
+      <div class="inline-flex items-center justify-center w-20 h-20 rounded-full border mb-8 animate-success-pop opacity-0 border-green-500/20">
+        <span class="material-symbols-outlined text-4xl font-light text-green-500">check</span>
+      </div>
+      <h1 class="font-headline text-4xl md:text-6xl font-light tracking-tight text-primary leading-[1.1] mb-4">
+        Reservation Complete.
+      </h1>
+      <h2 class="font-headline text-[0.7rem] md:text-[0.8rem] tracking-[0.3em] uppercase text-secondary/60 font-medium">
+        Waiting for Approval
+      </h2>
     </div>
-    <div class="flex gap-6 items-center">
-        <button type="button" class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]" onclick="toggleCart()" aria-label="Open selection">
-            <span class="material-symbols-outlined">shopping_bag</span>
-        </button>
-        <a href="{% url 'accounts:login' %}">
-            <button type="button" class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]">
-                <span class="material-symbols-outlined">person</span>
-            </button>
-        </a>
+    <div class="max-w-lg mx-auto">
+      <p class="font-body text-base leading-relaxed font-light mb-12 text-primary">
+        Your selection is now reserved. <b>Our team</b> is currently finalizing your booking details. A confirmation will be sent to your account shortly, followed by your pick-up instructions.
+      </p>
     </div>
-</nav>
-</header>
-
-<div id="cart-click-away" class="fixed inset-0 z-[84] bg-transparent pointer-events-none" onclick="toggleCart()" aria-hidden="true"></div>
-
-<aside id="cart-drawer" class="fixed top-0 right-0 h-full w-full md:w-[480px] bg-white z-[85] translate-x-full transform transition-transform duration-500 ease-in-out shadow-none flex flex-col" aria-hidden="true">
-    <header class="p-8 flex justify-between items-center border-b border-black/5 shrink-0">
-        <h2 class="text-sm font-bold tracking-[0.2em] uppercase text-on-surface flex items-center gap-3">
-            <span class="material-symbols-outlined text-primary" style='font-variation-settings: "FILL" 0;'>shopping_bag</span>
-            Your Selection
-        </h2>
-        <button type="button" class="hover:opacity-50 transition-opacity text-[#222222] dark:text-[#FAF4EB]" onclick="toggleCart()" aria-label="Close selection">
-            <span class="material-symbols-outlined text-2xl">close</span>
-        </button>
-    </header>
-    <div class="flex-1 overflow-y-auto ai-scroll px-8 py-4 space-y-10 min-h-0">
-        <div class="cart-line flex gap-4 group" data-unit-price="4500">
-            <div class="w-24 h-32 bg-surface-container-low overflow-hidden shrink-0">
-                <img alt="Structured Wool Blazer" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDvrOUto9vy9py6fxR-YxuiQ7pL4WzddWzTNeVPBgk4qOrjLVsLT4uDAoXaKs7u1i7RXCaNnzcYFP-p16uIuULPo9aHvnWqqA_8NjhDlYa18k4FVHck1C2Gz80q-qvohzTgGYhT6Joc0gU5AiqDMxwGulS-59idA4ehLkllD_ADzTgoq8jmuolfvGYkSJfCy3KM20GMCLiQ4Lfj9E1rAkuQUPYF2_YX-5lUAOQKHU6OqqLU5ym1Kz-EDW6FLRhJrERNMDEhuiHEs-c"/>
-            </div>
-            <div class="flex-1 flex flex-col justify-between py-1 min-w-0">
-                <div class="flex justify-between items-start gap-2">
-                    <div>
-                        <h3 class="text-sm font-medium text-on-surface leading-tight">Structured Wool Blazer</h3>
-                        <p class="text-[0.6875rem] text-on-secondary-container mt-1">Size: Large</p>
-                    </div>
-                    <button type="button" class="text-on-surface hover:text-error transition-colors shrink-0" onclick="cartRemoveLine(this)" aria-label="Remove item">
-                        <span class="material-symbols-outlined text-lg">close</span>
-                    </button>
-                </div>
-                <div class="flex justify-between items-end gap-2">
-                    <div class="flex items-center space-x-3">
-                        <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, -1)" aria-label="Decrease quantity">
-                            <span class="material-symbols-outlined text-xs">remove</span>
-                        </button>
-                        <span class="cart-qty text-xs font-medium tabular-nums">1</span>
-                        <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, 1)" aria-label="Increase quantity">
-                            <span class="material-symbols-outlined text-xs">add</span>
-                        </button>
-                    </div>
-                    <p class="cart-line-total font-['Inter',sans-serif] text-sm font-semibold text-on-surface tracking-wide tabular-nums shrink-0">₱ 4,500.00</p>
-                </div>
-            </div>
-        </div>
-        <div class="cart-line flex gap-4 group" data-unit-price="6200">
-            <div class="w-24 h-32 bg-surface-container-low overflow-hidden shrink-0">
-                <img alt="Emerald Silk Midi Dress" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-            </div>
-            <div class="flex-1 flex flex-col justify-between py-1 min-w-0">
-                <div class="flex justify-between items-start gap-2">
-                    <div>
-                        <h3 class="text-sm font-medium text-on-surface leading-tight">Emerald Silk Midi Dress</h3>
-                        <p class="text-[0.6875rem] text-on-secondary-container mt-1">Size: Small</p>
-                    </div>
-                    <button type="button" class="text-on-surface hover:text-error transition-colors shrink-0" onclick="cartRemoveLine(this)" aria-label="Remove item">
-                        <span class="material-symbols-outlined text-lg">close</span>
-                    </button>
-                </div>
-                <div class="flex justify-between items-end gap-2">
-                    <div class="flex items-center space-x-3">
-                        <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, -1)" aria-label="Decrease quantity">
-                            <span class="material-symbols-outlined text-xs">remove</span>
-                        </button>
-                        <span class="cart-qty text-xs font-medium tabular-nums">1</span>
-                        <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, 1)" aria-label="Increase quantity">
-                            <span class="material-symbols-outlined text-xs">add</span>
-                        </button>
-                    </div>
-                    <p class="cart-line-total font-['Inter',sans-serif] text-sm font-semibold text-on-surface tracking-wide tabular-nums shrink-0">₱ 6,200.00</p>
-                </div>
-            </div>
-        </div>
+    <div class="flex flex-col items-center gap-8">
+      <a href="{% url 'gowns:collections' %}" class="w-full md:w-64 px-10 py-5 bg-primary text-white text-[0.65rem] uppercase tracking-[0.3em] font-medium hover:bg-secondary transition-all duration-500 flex items-center justify-center no-underline text-center">
+        View My Orders
+      </a>
+      <a class="font-label text-[0.6rem] uppercase tracking-[0.3em] text-secondary hover:text-primary transition-colors border-b border-transparent hover:border-primary/20 pb-1" href="{% url 'gowns:homepage' %}">
+        Back to Home
+      </a>
     </div>
-    <footer class="p-8 space-y-6 bg-white border-t border-black/5 shrink-0">
-        <div class="space-y-2">
-            <div class="flex justify-between items-center">
-                <span class="text-xs uppercase tracking-widest text-secondary">subtotal</span>
-                <span id="cart-subtotal" class="font-['Inter',sans-serif] text-sm text-on-surface tabular-nums">₱ 10,700.00</span>
-            </div>
-            <div class="flex justify-between items-center">
-                <span class="text-xs uppercase tracking-widest text-secondary">Security Deposit</span>
-                <span id="cart-deposit" class="font-['Inter',sans-serif] text-sm text-on-surface tabular-nums">₱ 4,000.00</span>
-            </div>
-            <div class="pt-4 flex justify-between items-center border-t border-black/5">
-                <span class="text-sm font-bold uppercase tracking-[0.2rem] text-on-surface">Total Amount</span>
-                <span id="cart-total" class="font-['Epilogue',sans-serif] text-lg font-bold text-on-surface tabular-nums tracking-tight">₱ 14,700.00</span>
-            </div>
-        </div>
-        <a href="{% url 'gowns:reservation' %}" onclick="return saveCartAndProceedToReservation(event)" class="w-full bg-primary py-5 text-white uppercase text-xs font-bold tracking-[0.2rem] hover:bg-secondary transition-colors duration-300 inline-flex items-center justify-center no-underline">Proceed to Reservation</a>
-    </footer>
-</aside>
-
-<!-- Main Content: Confirmation State -->
-<main class="flex-grow flex items-center justify-center pt-32 pb-24 px-6">
-<div class="max-w-3xl w-full bg-white border border-[#E5E2E1]/50 editorial-shadow p-12 md:p-24 text-center animate-fade-in-up opacity-0">
-<div class="mb-10">
-<div class="inline-flex items-center justify-center w-20 h-20 rounded-full border mb-8 animate-success-pop opacity-0 border-green-500/20">
-<span class="material-symbols-outlined text-4xl font-light text-green-500">check</span>
-</div>
-<h1 class="font-headline text-4xl md:text-6xl font-light tracking-tight text-primary leading-[1.1] mb-4">
-                    Reservation Complete.
-                </h1>
-<h2 class="font-headline text-[0.7rem] md:text-[0.8rem] tracking-[0.3em] uppercase text-secondary/60 font-medium">
-                    Waiting for Approval
-                </h2>
-</div>
-<div class="max-w-lg mx-auto">
-<p class="font-body text-base leading-relaxed font-light mb-12 text-primary">Your selection is now reserved. <b>Our team</b> is currently finalizing your booking details. A confirmation will be sent to your account shortly, followed by your pick-up instructions.</p>
-</div>
-<div class="flex flex-col items-center gap-8">
-<a href="{% url 'gowns:collections' %}" class="w-full md:w-64 px-10 py-5 bg-primary text-white text-[0.65rem] uppercase tracking-[0.3em] font-medium hover:bg-secondary transition-all duration-500 flex items-center justify-center no-underline text-center">
-                    View My Orders
-                </a>
-<a class="font-label text-[0.6rem] uppercase tracking-[0.3em] text-secondary hover:text-primary transition-colors border-b border-transparent hover:border-primary/20 pb-1" href="{% url 'gowns:homepage' %}">
-                    Back to Home
-                </a>
-</div>
-</div>
-</main>
-
-<!-- Footer (confirmation page: single row) -->
-<footer class="bg-white dark:bg-[#1B1C1C] w-full py-12 px-8 border-t border-black/5 mt-auto">
-    <div class="w-full max-w-[1920px] mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 text-left">
-        <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
-            <div class="flex items-center gap-3 shrink-0">
-                <a href="{% url 'gowns:homepage' %}" class="text-lg font-bold text-[#222222] dark:text-[#FAF4EB] tracking-tighter font-body">ARABELA</a>
-                <a href="https://www.facebook.com/" target="_blank" rel="noopener noreferrer" class="inline-flex text-[#222222] dark:text-[#FAF4EB] scale-95 active:scale-90 transition-all hover:opacity-70" aria-label="Arabela on Facebook">
-                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-                </a>
-            </div>
-            <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
-                <a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity hover:text-[#222222] dark:hover:text-white font-body">Sustainability</a>
-                <a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity hover:text-[#222222] dark:hover:text-white font-body">Contact</a>
-                <a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity hover:text-[#222222] dark:hover:text-white font-body">Terms and conditions</a>
-            </div>
-        </div>
-        <p class="text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] font-body shrink-0 sm:text-right">© 2026 Arabela. All rights reserved.</p>
-    </div>
-</footer>
-
-<script src="{% static 'js/reservation-flow.js' %}?v=peso1"></script>
-<script>
-    const SECURITY_DEPOSIT_PESOS = 2000;
-
-    function formatPeso(amount) {
-        return '₱ ' + Number(amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
-
-    function updateCartTotals() {
-        let sub = 0;
-        let itemCount = 0;
-        document.querySelectorAll('#cart-drawer .cart-line').forEach(function (row) {
-            if (row.classList.contains('hidden')) return;
-            const unit = parseFloat(row.dataset.unitPrice || '0');
-            const qtyEl = row.querySelector('.cart-qty');
-            const qty = Math.max(1, parseInt(qtyEl.textContent, 10) || 1);
-            itemCount += qty;
-            const lineTotal = unit * qty;
-            sub += lineTotal;
-            const lt = row.querySelector('.cart-line-total');
-            if (lt) lt.textContent = formatPeso(lineTotal);
-        });
-        const deposit = itemCount * SECURITY_DEPOSIT_PESOS;
-        const subEl = document.getElementById('cart-subtotal');
-        const totEl = document.getElementById('cart-total');
-        const depEl = document.getElementById('cart-deposit');
-        if (subEl) subEl.textContent = formatPeso(sub);
-        if (depEl) depEl.textContent = formatPeso(deposit);
-        if (totEl) totEl.textContent = formatPeso(sub + deposit);
-    }
-
-    function cartAdjustQty(btn, delta) {
-        const row = btn.closest('.cart-line');
-        if (!row || row.classList.contains('hidden')) return;
-        const qtyEl = row.querySelector('.cart-qty');
-        let q = parseInt(qtyEl.textContent, 10) || 1;
-        q = Math.max(1, q + delta);
-        qtyEl.textContent = String(q);
-        updateCartTotals();
-    }
-
-    function cartRemoveLine(btn) {
-        const row = btn.closest('.cart-line');
-        if (!row) return;
-        row.classList.add('hidden');
-        updateCartTotals();
-    }
-
-    function toggleCart() {
-        const drawer = document.getElementById('cart-drawer');
-        const scrim = document.getElementById('cart-click-away');
-        if (!drawer) return;
-        drawer.classList.toggle('translate-x-full');
-        const closed = drawer.classList.contains('translate-x-full');
-        drawer.setAttribute('aria-hidden', closed ? 'true' : 'false');
-        if (scrim) {
-            if (closed) scrim.classList.add('pointer-events-none');
-            else scrim.classList.remove('pointer-events-none');
-        }
-        if (!closed) updateCartTotals();
-    }
-</script>
-</body>
-</html>
+  </div>
+{% endblock %}

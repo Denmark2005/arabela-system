@@ -1,214 +1,10 @@
-{% load static %}
-<!DOCTYPE html>
-<html class="light" lang="en">
-<head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>ARABELA | Wedding Collection</title>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<link href="https://fonts.googleapis.com/css2?family=Epilogue:wght@300;400;700;800&family=Inter:wght@300;400;500;600&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
-<script id="tailwind-config">
-      tailwind.config = {
-        darkMode: "class",
-        theme: {
-          extend: {
-            colors: {
-              "on-surface-variant": "#444748",
-              "on-primary-container": "#8a8989",
-              "surface-tint": "#5f5e5e",
-              "surface-dim": "#dcd9d9",
-              "error-container": "#ffdad6",
-              "tertiary-fixed": "#e4e2e2",
-              "surface-container-lowest": "#ffffff",
-              "outline": "#747878",
-              "error": "#ba1a1a",
-              "on-primary-fixed-variant": "#474746",
-              "primary-container": "#222222",
-              "secondary": "#615e57",
-              "primary": "#0b0c0c",
-              "on-primary-fixed": "#1b1c1c",
-              "on-secondary": "#ffffff",
-              "on-secondary-container": "#67645d",
-              "outline-variant": "#c4c7c7",
-              "secondary-fixed-dim": "#cbc6bd",
-              "tertiary-fixed-dim": "#c8c6c6",
-              "on-tertiary-fixed-variant": "#474747",
-              "surface-container-low": "#f6f3f2",
-              "secondary-fixed": "#e7e2d9",
-              "primary-fixed": "#e5e2e1",
-              "on-error": "#ffffff",
-              "on-secondary-fixed": "#1d1b16",
-              "secondary-container": "#e7e2d9",
-              "on-tertiary-fixed": "#1b1c1c",
-              "primary-fixed-dim": "#c8c6c5",
-              "tertiary-container": "#222222",
-              "inverse-primary": "#c8c6c5",
-              "on-surface": "#1b1c1c",
-              "surface-container": "#f0eded",
-              "surface": "#fcf9f8",
-              "surface-container-highest": "#e5e2e1",
-              "on-primary": "#ffffff",
-              "on-tertiary": "#ffffff",
-              "on-error-container": "#93000a",
-              "surface-container-high": "#eae7e7",
-              "tertiary": "#0b0c0c",
-              "surface-bright": "#fcf9f8",
-              "background": "#fcf9f8",
-              "surface-variant": "#e5e2e1",
-              "inverse-on-surface": "#f3f0ef",
-              "on-secondary-fixed-variant": "#494640",
-              "on-tertiary-container": "#8a8989",
-              "inverse-surface": "#303030",
-              "on-background": "#1b1c1c"
-            },
-            fontFamily: {
-              "headline": ["Poppins", "Epilogue"],
-              "body": ["Poppins", "Inter"],
-              "label": ["Poppins", "Inter"]
-            },
-            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
-          },
-        },
-      }
-</script>
-<style>
-        .material-symbols-outlined {
-            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
-            font-size: 1.25rem;
-        }
-        .editorial-shadow { box-shadow: 0 20px 40px rgba(27, 28, 28, 0.06); }
-        .ai-panel-shadow { box-shadow: -10px 0 30px rgba(0,0,0,0.1); }
-        .ai-scroll::-webkit-scrollbar { width: 2px; }
-        .ai-scroll::-webkit-scrollbar-track { background: transparent; }
-        .ai-scroll::-webkit-scrollbar-thumb { background: #e5e2e1; }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fade-in { animation: fadeIn 0.4s ease forwards; }
-        #search-overlay {
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            transform: translateY(-100%);
-            opacity: 0;
-            pointer-events: none;
-        }
-        #search-overlay.open {
-            transform: translateY(0);
-            opacity: 1;
-            pointer-events: auto;
-        }
-        .group:hover .dropdown-menu {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-            pointer-events: auto;
-        }
-        .dropdown-menu {
-            transition: all 0.4s cubic-bezier(0.23, 1, 0.320, 1);
-            transform: translateY(-15px) scale(0.92);
-            opacity: 0;
-            pointer-events: none;
-        }
-        body { font-family: 'Poppins', sans-serif; }
-</style>
-</head>
-<body class="bg-white text-on-surface selection:bg-primary-fixed-dim overflow-x-hidden">
+{% extends "base.html" %}
 
-<!-- TOP NAVBAR -->
-<header class="fixed top-0 w-full z-[70] bg-white/80 dark:bg-[#222222]/80 backdrop-blur-md border-b border-black/5">
-<nav class="flex justify-between items-center w-full px-8 h-20">
-    <div class="flex items-center gap-12">
-        <div class="flex-shrink-0">
-            <a href="{% url 'gowns:homepage' %}" class="block">
-                <h1 class="text-2xl font-bold tracking-tighter text-[#222222] dark:text-[#FAF4EB]">ARABELA</h1>
-            </a>
-        </div>
-        <div class="hidden md:flex gap-8 items-center self-stretch">
-            <div class="relative group h-full flex items-center">
-                <span class="uppercase tracking-[0.1rem] text-[0.6875rem] text-[#615E57] dark:text-[#A09E99] cursor-default">Rent</span>
-                <div class="dropdown-menu absolute top-full left-0 w-52 bg-white dark:bg-[#222222] shadow-[0_10px_30px_rgba(0,0,0,0.08)] border-t-2 border-[#222222] dark:border-[#FAF4EB] py-6 z-[80]" style="background-color: #ffffff;">
-                    <ul class="flex flex-col gap-4">
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:collections' %}">All</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:collections' %}?category=Dresses">Dresses</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:collections' %}?category=Filipiniana">Filipiniana</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:collections' %}?category=Kids%20suit">Kids suit</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:collection_wedding' %}">Wedding</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:collections' %}?category=Suit">Suit</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:collections' %}?category=Ball%20gown">Ball gown</a></li>
-                    </ul>
-                </div>
-            </div>
-            <div class="relative group h-full flex items-center">
-                <a class="uppercase tracking-[0.1rem] text-[0.6875rem] text-[#615E57] dark:text-[#A09E99] hover:text-[#222222] dark:hover:text-white transition-colors duration-300" href="{% url 'gowns:homepage' %}">How it Works</a>
-                <div class="dropdown-menu absolute top-full left-0 w-48 bg-white dark:bg-[#222222] shadow-[0_10px_30px_rgba(0,0,0,0.08)] border-t-2 border-[#222222] dark:border-[#FAF4EB] py-6 z-[80]" style="background-color: #ffffff;">
-                    <ul class="flex flex-col gap-4">
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:homepage' %}">FAQs</a></li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="flex gap-6 items-center">
-        <button type="button" class="scale-95 active:scale-90 transition-all text-primary flex items-center gap-2 group" onclick="toggleAI()" aria-label="Arabela Recommends">
-            <span class="font-label text-[0.6rem] uppercase tracking-widest hidden lg:block opacity-0 group-hover:opacity-100 transition-opacity">Arabela Recommends</span>
-            <span class="material-symbols-outlined" style='font-variation-settings: "FILL" 1;'>auto_fix_high</span>
-        </button>
-        <button type="button" class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]" onclick="toggleSearch()" aria-label="Search">
-            <span class="material-symbols-outlined" id="search-icon">search</span>
-        </button>
-        <button type="button" class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]" onclick="toggleCart()" aria-label="Open selection">
-            <span class="material-symbols-outlined">shopping_bag</span>
-        </button>
-        <a href="{% url 'accounts:login' %}">
-            <button type="button" class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]">
-                <span class="material-symbols-outlined">person</span>
-            </button>
-        </a>
-    </div>
-</nav>
-</header>
+{% block title %}ARABELA | Wedding Collection{% endblock %}
 
-<!-- SEARCH OVERLAY -->
-<div class="fixed top-20 left-0 right-0 bottom-0 z-[65] flex flex-col" id="search-overlay">
-    <div class="shrink-0 bg-white border-b border-black/5 shadow-lg" onclick="event.stopPropagation()">
-        <div class="container mx-auto px-8 py-12">
-            <div class="max-w-4xl mx-auto">
-                <div class="relative flex items-center mb-10">
-                    <span class="material-symbols-outlined absolute left-0 text-black/40 text-2xl">search</span>
-                    <input class="w-full bg-white border border-black/20 border-0 border-b pl-10 pr-10 py-4 focus:ring-0 focus:border-black text-2xl font-light placeholder:text-black/20 rounded-none" id="main-search-input" placeholder="Search here.." type="text"/>
-                    <button type="button" class="absolute right-0 text-black/40 hover:text-primary transition-colors" onclick="toggleSearch()">
-                        <span class="material-symbols-outlined">close</span>
-                    </button>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
-                    <div>
-                        <p class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-6">Collections</p>
-                        <ul class="space-y-4">
-                            <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collections' %}?category=Dresses">Dresses</a></li>
-                            <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collections' %}?category=Filipiniana">Filipiniana</a></li>
-                            <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collections' %}?category=Kids%20suit">Kids suit</a></li>
-                            <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collection_wedding' %}">Wedding</a></li>
-                            <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collections' %}?category=Suit">Suit</a></li>
-                            <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collections' %}?category=Ball%20gown">Ball gown</a></li>
-                        </ul>
-                    </div>
-                    <div>
-                        <p class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-6">Trending Search</p>
-                        <div class="flex flex-wrap gap-2">
-                            <span class="px-3 py-1 bg-white border border-black/20 rounded-full text-[0.65rem] uppercase tracking-wider cursor-pointer hover:bg-gray-50">Silk Dress</span>
-                            <span class="px-3 py-1 bg-white border border-black/20 rounded-full text-[0.65rem] uppercase tracking-wider cursor-pointer hover:bg-gray-50">Tailored Blazer</span>
-                            <span class="px-3 py-1 bg-white border border-black/20 rounded-full text-[0.65rem] uppercase tracking-wider cursor-pointer hover:bg-gray-50">Velvet Gown</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="flex-1 min-h-0 w-full bg-transparent cursor-pointer" onclick="toggleSearch()" role="presentation" aria-hidden="true"></div>
-</div>
+{% block main_class %}pt-32 pb-20 px-8{% endblock %}
 
-<!-- MAIN CONTENT -->
-<main class="pt-32 pb-20 px-8">
+{% block content %}
     <!-- Collection Header -->
     <section class="mb-16 max-w-[1400px] mx-auto">
         <h1 class="font-headline text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight text-on-surface leading-[0.9] mb-12 text-center">Wedding</h1>
@@ -223,10 +19,10 @@
     <section class="max-w-[1400px] mx-auto">
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             <!-- Item 1: Valencia Lace -->
-            <div class="group cursor-pointer">
-                    <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
+            <a href="{% url 'gowns:product_detail' slug='valencia-lace' %}" class="group cursor-pointer block">
+                <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
                     <img alt="Valencia Lace" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-                    <button class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90">
+                    <button type="button" class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90" onclick="event.preventDefault(); event.stopPropagation();">
                         <span class="material-symbols-outlined text-[1rem]">add</span>
                     </button>
                 </div>
@@ -234,13 +30,13 @@
                     <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Valencia Lace</h3>
                     <p class="text-[0.9rem] font-body font-medium text-on-surface">₱12,500</p>
                 </div>
-            </div>
+            </a>
 
             <!-- Item 2: Archive Satin -->
-            <div class="group cursor-pointer">
+            <a href="{% url 'gowns:product_detail' slug='archive-satin' %}" class="group cursor-pointer block">
                 <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
                     <img alt="Archive Satin" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-                    <button class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90">
+                    <button type="button" class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90" onclick="event.preventDefault(); event.stopPropagation();">
                         <span class="material-symbols-outlined text-[1rem]">add</span>
                     </button>
                 </div>
@@ -248,13 +44,13 @@
                     <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Archive Satin</h3>
                     <p class="text-[0.9rem] font-body font-medium text-on-surface">₱18,200</p>
                 </div>
-            </div>
+            </a>
 
             <!-- Item 3: Florence Organza -->
-            <div class="group cursor-pointer">
+            <a href="{% url 'gowns:product_detail' slug='florence-organza' %}" class="group cursor-pointer block">
                 <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
                     <img alt="Florence Organza" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-                    <button class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90">
+                    <button type="button" class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90" onclick="event.preventDefault(); event.stopPropagation();">
                         <span class="material-symbols-outlined text-[1rem]">add</span>
                     </button>
                 </div>
@@ -262,13 +58,13 @@
                     <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Florence Organza</h3>
                     <p class="text-[0.9rem] font-body font-medium text-on-surface">₱15,800</p>
                 </div>
-            </div>
+            </a>
 
             <!-- Item 4: Modernist Crepe -->
-            <div class="group cursor-pointer">
+            <a href="{% url 'gowns:product_detail' slug='modernist-crepe' %}" class="group cursor-pointer block">
                 <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
                     <img alt="Modernist Crepe" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-                    <button class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90">
+                    <button type="button" class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90" onclick="event.preventDefault(); event.stopPropagation();">
                         <span class="material-symbols-outlined text-[1rem]">add</span>
                     </button>
                 </div>
@@ -276,13 +72,13 @@
                     <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Modernist Crepe</h3>
                     <p class="text-[0.9rem] font-body font-medium text-on-surface">₱9,900</p>
                 </div>
-            </div>
+            </a>
 
             <!-- Item 5: Opulence Pearl -->
-            <div class="group cursor-pointer">
+            <a href="{% url 'gowns:product_detail' slug='opulence-pearl' %}" class="group cursor-pointer block">
                 <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
                     <img alt="Opulence Pearl" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-                    <button class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90">
+                    <button type="button" class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90" onclick="event.preventDefault(); event.stopPropagation();">
                         <span class="material-symbols-outlined text-[1rem]">add</span>
                     </button>
                 </div>
@@ -290,13 +86,13 @@
                     <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Opulence Pearl</h3>
                     <p class="text-[0.9rem] font-body font-medium text-on-surface">₱24,500</p>
                 </div>
-            </div>
+            </a>
 
             <!-- Item 6: Heritage Lace -->
-            <div class="group cursor-pointer">
+            <a href="{% url 'gowns:product_detail' slug='heritage-lace' %}" class="group cursor-pointer block">
                 <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
                     <img alt="Heritage Lace" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-                    <button class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90">
+                    <button type="button" class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90" onclick="event.preventDefault(); event.stopPropagation();">
                         <span class="material-symbols-outlined text-[1rem]">add</span>
                     </button>
                 </div>
@@ -304,13 +100,13 @@
                     <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Heritage Lace</h3>
                     <p class="text-[0.9rem] font-body font-medium text-on-surface">₱21,000</p>
                 </div>
-            </div>
+            </a>
 
             <!-- Item 7: City Reception -->
-            <div class="group cursor-pointer">
+            <a href="{% url 'gowns:product_detail' slug='city-reception' %}" class="group cursor-pointer block">
                 <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
                     <img alt="City Reception" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-                    <button class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90">
+                    <button type="button" class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90" onclick="event.preventDefault(); event.stopPropagation();">
                         <span class="material-symbols-outlined text-[1rem]">add</span>
                     </button>
                 </div>
@@ -318,13 +114,13 @@
                     <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">City Reception</h3>
                     <p class="text-[0.9rem] font-body font-medium text-on-surface">₱8,500</p>
                 </div>
-            </div>
+            </a>
 
             <!-- Item 8: Lumiere Silk -->
-            <div class="group cursor-pointer">
+            <a href="{% url 'gowns:product_detail' slug='lumiere-silk' %}" class="group cursor-pointer block">
                 <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
                     <img alt="Lumiere Silk" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-                    <button class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90">
+                    <button type="button" class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90" onclick="event.preventDefault(); event.stopPropagation();">
                         <span class="material-symbols-outlined text-[1rem]">add</span>
                     </button>
                 </div>
@@ -332,7 +128,7 @@
                     <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Lumiere Silk</h3>
                     <p class="text-[0.9rem] font-body font-medium text-on-surface">₱14,200</p>
                 </div>
-            </div>
+            </a>
         </div>
     </section>
 
@@ -349,62 +145,4 @@
             </button>
         </div>
     </div>
-</main>
-
-<!-- FOOTER -->
-<footer class="bg-white dark:bg-[#1B1C1C] w-full py-12 px-8 mt-24">
-    <div class="w-full max-w-[1920px] mx-auto">
-        <div class="flex flex-col sm:flex-row sm:flex-wrap items-start gap-x-8 sm:gap-x-10 md:gap-x-12 lg:gap-x-16 gap-y-8 text-left">
-            <div class="flex items-center gap-3 shrink-0">
-                <a href="{% url 'gowns:homepage' %}" class="text-lg font-bold text-[#222222] dark:text-[#FAF4EB] tracking-tighter font-body">ARABELA</a>
-                <a href="https://www.facebook.com/" target="_blank" rel="noopener noreferrer" class="inline-flex text-[#222222] dark:text-[#FAF4EB] scale-95 active:scale-90 transition-all hover:opacity-70" aria-label="Arabela on Facebook">
-                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-                </a>
-            </div>
-            <div class="shrink-0">
-                <p class="text-base font-medium text-[#222222] dark:text-[#FAF4EB] font-body mb-2">Rent</p>
-                <a href="{% url 'gowns:homepage' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body">How it works</a>
-            </div>
-            <div class="shrink-0">
-                <p class="text-base font-medium text-[#222222] dark:text-[#FAF4EB] font-body mb-2">Info</p>
-                <ul class="flex flex-col gap-1.5">
-                    <li>
-                        <button type="button" onclick="toggleSearch()" class="text-left text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white bg-transparent border-0 p-0 cursor-pointer font-body leading-snug">Search</button>
-                    </li>
-                    <li>
-                        <a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">About us</a>
-                    </li>
-                    <li>
-                        <a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">Contact us</a>
-                    </li>
-                    <li>
-                        <a href="{% url 'gowns:homepage' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">FAQs</a>
-                    </li>
-                    <li>
-                        <a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">Terms and conditions</a>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </div>
-</footer>
-
-<script>
-function toggleSearch() {
-    const searchOverlay = document.getElementById('search-overlay');
-    const searchIcon = document.getElementById('search-icon');
-    searchOverlay.classList.toggle('open');
-    searchIcon.textContent = searchOverlay.classList.contains('open') ? 'close' : 'search';
-}
-
-function toggleCart() {
-    console.log('Cart toggled');
-}
-
-function toggleAI() {
-    console.log('AI Panel toggled');
-}
-</script>
-
-</body>
-</html>
+{% endblock %}

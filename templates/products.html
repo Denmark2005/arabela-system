@@ -1,0 +1,370 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}ARABELA | Product Detail{% endblock %}
+
+{% block extra_head %}
+<style>
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .product-calendar-day { transition: background-color .2s ease, color .2s ease; }
+  .product-calendar-day:hover { background: rgba(11,12,12,0.06); }
+  .product-calendar-day[aria-disabled="true"] { color: rgba(27,28,28,0.25); pointer-events: none; }
+  .product-calendar-day[data-selected="start"],
+  .product-calendar-day[data-selected="end"] { background: #0b0c0c; color: #ffffff; font-weight: 700; }
+  .product-calendar-day[data-selected="in-range"] { background: rgba(11,12,12,0.10); color: #0b0c0c; }
+</style>
+{% endblock %}
+
+{% block main_class %}pt-24 pb-20{% endblock %}
+
+{% block content %}
+<div class="max-w-[1440px] mx-auto px-8 grid grid-cols-1 lg:grid-cols-12 gap-12">
+  <!-- Gallery Section -->
+  <div class="lg:col-span-7 flex flex-col gap-4">
+    <div class="relative overflow-hidden bg-white aspect-[3/4] border-none shadow-none">
+      <img alt="{{ product.title }}" class="w-full h-full object-cover" src="{{ product.image }}" />
+      {% if product.availability %}
+      <div class="absolute top-8 left-0 py-2 px-4 bg-secondary-container text-on-secondary-container rounded-r-full font-label text-[0.625rem] tracking-widest uppercase font-bold">
+        {{ product.availability }}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Booking & Info Section -->
+  <div class="lg:col-span-5 flex flex-col gap-10 sticky top-28 h-fit">
+    <div class="space-y-2">
+      <span class="font-label text-[0.6875rem] tracking-[0.2rem] uppercase text-secondary">{{ product.collection }}</span>
+      <h2 class="font-headline text-4xl lg:text-5xl font-bold tracking-tighter leading-none">{{ product.title }}</h2>
+      <div class="flex items-baseline gap-2 pt-2">
+        <span class="font-headline text-2xl">{{ product.price }}</span>
+        <span class="font-label text-[0.6875rem] tracking-widest text-secondary uppercase">/ Day</span>
+      </div>
+    </div>
+
+    <div class="space-y-4">
+      <p class="text-body-md text-on-surface/80 leading-relaxed font-light">
+        Hand-draped from heritage textiles, tailored for a clean editorial silhouette. Designed to photograph beautifully and move with effortless precision—crafted for modern luxury.
+      </p>
+      <div class="flex gap-4 border-t border-outline-variant/15 pt-4">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-[1rem]">dry_cleaning</span>
+          <span class="font-label text-[0.625rem] tracking-widest uppercase">Eco-Dry Cleaned</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-[1rem]">local_shipping</span>
+          <span class="font-label text-[0.625rem] tracking-widest uppercase">Delivery Ready</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Size Selection -->
+    <div class="space-y-4">
+      <div class="flex justify-between items-center">
+        <label class="font-label text-[0.6875rem] tracking-widest uppercase font-bold">Select Size</label>
+        <button type="button" class="font-label text-[0.625rem] tracking-widest uppercase underline underline-offset-4 decoration-outline-variant">Size Guide</button>
+      </div>
+      <div class="flex gap-3">
+        <button type="button" class="w-12 h-12 flex items-center justify-center border border-on-surface text-on-surface font-body text-sm hover:bg-on-surface hover:text-white transition-all">S</button>
+        <button type="button" class="w-12 h-12 flex items-center justify-center border border-outline-variant/30 text-on-surface font-body text-sm hover:border-on-surface transition-all">M</button>
+        <button type="button" class="w-12 h-12 flex items-center justify-center border border-outline-variant/30 text-on-surface font-body text-sm hover:border-on-surface transition-all">L</button>
+        <button type="button" class="w-12 h-12 flex items-center justify-center border border-outline-variant/30 text-on-surface/30 font-body text-sm cursor-not-allowed" aria-disabled="true">XL</button>
+      </div>
+    </div>
+
+    <!-- Rental Date Picker (with JS logic) -->
+    <div class="space-y-4">
+      <label class="font-label text-[0.6875rem] tracking-widest uppercase font-bold">Select Rental Dates</label>
+      <div class="bg-white p-6 rounded-lg border border-outline-variant/15 shadow-none">
+        <div class="flex justify-between items-center mb-6">
+          <span id="product-cal-title" class="font-headline font-bold text-sm uppercase tracking-widest">October 2024</span>
+          <div class="flex gap-4">
+            <button type="button" class="material-symbols-outlined cursor-pointer text-sm" id="product-cal-prev" aria-label="Previous month">chevron_left</button>
+            <button type="button" class="material-symbols-outlined cursor-pointer text-sm" id="product-cal-next" aria-label="Next month">chevron_right</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-7 gap-2 text-center mb-2">
+          <span class="font-label text-[0.5rem] text-secondary">M</span>
+          <span class="font-label text-[0.5rem] text-secondary">T</span>
+          <span class="font-label text-[0.5rem] text-secondary">W</span>
+          <span class="font-label text-[0.5rem] text-secondary">T</span>
+          <span class="font-label text-[0.5rem] text-secondary">F</span>
+          <span class="font-label text-[0.5rem] text-secondary">S</span>
+          <span class="font-label text-[0.5rem] text-secondary">S</span>
+        </div>
+
+        <div id="product-cal-grid" class="grid grid-cols-7 gap-y-2 text-center text-[0.75rem] font-medium"></div>
+
+        <div class="mt-6 pt-4 border-t border-outline-variant/15 flex justify-between items-center">
+          <div>
+            <p class="font-label text-[0.55rem] text-secondary uppercase tracking-widest">Rental Period</p>
+            <p id="product-cal-range" class="text-[0.75rem] font-bold">Select dates</p>
+          </div>
+          <span class="material-symbols-outlined text-secondary">calendar_today</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rent Now Button -->
+    <div class="pt-6 space-y-4">
+      <button type="button" class="w-full bg-primary hover:bg-secondary text-white py-5 font-headline font-bold uppercase tracking-[0.2rem] text-xs transition-colors duration-300">
+        Rent Now
+      </button>
+      <p class="text-center font-label text-[0.625rem] tracking-widest uppercase text-secondary">Return shipping included in rental fee</p>
+    </div>
+  </div>
+</div>
+
+<!-- You May Also Like Section (kept) -->
+<section class="mt-40 max-w-[1440px] mx-auto px-8">
+  <div class="text-center mb-20">
+    <h3 class="font-headline text-3xl font-bold tracking-[0.3em] uppercase">You May Also Like</h3>
+  </div>
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-12">
+    <div class="group cursor-pointer">
+      <div class="aspect-[4/5] bg-surface-container overflow-hidden mb-6 relative border-none shadow-none">
+        <img alt="Accessory pairing" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAn_L2qYp46RscfR942n4U_Y9L6iJ5U8i_3q6I6-p4M_L0L4S5_7S8_9T0_U1V2W3X4Y5Z6a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2A3B4C5D6E7F8G9H0I1J2K3L4M5N6O7P8Q9R0S1T2U3V4W5X6Y7Z8" />
+      </div>
+      <div class="text-center">
+        <p class="font-label text-[0.625rem] tracking-[0.2em] uppercase text-secondary mb-2">wedding</p>
+        <h4 class="font-headline font-bold text-sm tracking-widest uppercase">ORBIT GOLD EARRINGS</h4>
+        <p class="text-[0.6875rem] mt-2 text-on-surface-variant font-light tracking-widest">₱45</p>
+      </div>
+    </div>
+    <div class="group cursor-pointer">
+      <div class="aspect-[4/5] bg-surface-container overflow-hidden mb-6 relative border-none shadow-none">
+        <img alt="Shoes pairing" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCe6Ixx1F3eFVjQo3pnv1G_gD5rTPaFw9-i4xqUSQfJZ9-izuEU99iCkW5jxNZrfqkqJ66G2o75uDSXCxYmqSYFXuprDLWHhP8u_kYM63VugYXJsC35eoCbz8LUKVPbLNLD3c8an8h7nN_XRvSkWQRM0NLPhqsSjZfnzsagz2f5TdRhJXZ0IsySHXYMrkzXPoCFOC66Rl7kyUMD4GLJC4f7PJ3V40CakKauiMgw2S4kmlOwznl1TtlViwIIjacf2s8eOZjUkbsAFZo" />
+      </div>
+      <div class="text-center">
+        <p class="font-label text-[0.625rem] tracking-[0.2em] uppercase text-secondary mb-2">wedding</p>
+        <h4 class="font-headline font-bold text-sm tracking-widest uppercase">STILLETO SILHOUETTE</h4>
+        <p class="text-[0.6875rem] mt-2 text-on-surface-variant font-light tracking-widest">₱65</p>
+      </div>
+    </div>
+    <div class="group cursor-pointer">
+      <div class="aspect-[4/5] bg-surface-container overflow-hidden mb-6 relative border-none shadow-none">
+        <img alt="Bag pairing" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCzg2rqbbbY5wHEXqWY6FhrLIFCKKt6r4MhNB6DYtnaRD2wi4ps2cRJeZtQo7c9ykwzMDKCsqJfJMIze6F7P0VSD1fHB4SSQex16A6y7WYU9Qgp8dNVhs_ciN1GscHXkKmXQlBMnCNLW2F6oXIRGdOfR4NipdQJ0v15zEUkZrbR76jHL9ZIidYwIeGay-B2xE7BTgZsqgF-gG9PS9fimbNV-PGdTVIhhvkeZY6TcbnDqTPx4ITkvN17su4oAOn6A2xklfpu1jGoOKs" />
+      </div>
+      <div class="text-center">
+        <p class="font-label text-[0.625rem] tracking-[0.2em] uppercase text-secondary mb-2">wedding</p>
+        <h4 class="font-headline font-bold text-sm tracking-widest uppercase">ARCHITECTURAL CLUTCH</h4>
+        <p class="text-[0.6875rem] mt-2 text-on-surface-variant font-light tracking-widest">₱50</p>
+      </div>
+    </div>
+    <div class="group cursor-pointer">
+      <div class="aspect-[4/5] bg-surface-container overflow-hidden mb-6 relative border-none shadow-none">
+        <img alt="Alternate Gown" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCksqUveIKsKLyU9N0WFJ2F-hWP2s8i9zgIJTzRrL7RvlvcYxWTBFGIuxSJRaoEirdINiCcbNbk4PAkevLXnJDNyV2-WU93RgJFVT-BqLrjeo_eaZWc2zN18ZpGfF3Rn9MCYp_9H4gZry3I53Ve-IxrgmUTar-ZMmfVUpEoqAVgPKaQj7rq8rmSPX1jOtheWhM3bUE_sqzAN6jw_o77iGCO2J4ZiqhN_AQVy_c0dTv8dnPI-BfmTIIiml6aj_yG5IUDOyXGDN8w190" />
+      </div>
+      <div class="text-center">
+        <p class="font-label text-[0.625rem] tracking-[0.2em] uppercase text-secondary mb-2">wedding</p>
+        <h4 class="font-headline font-bold text-sm tracking-widest uppercase">FLORAL SILK SLIP</h4>
+        <p class="text-[0.6875rem] mt-2 text-on-surface-variant font-light tracking-widest">₱155</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ Section (kept) -->
+<section class="mt-40 max-w-[800px] mx-auto px-8 pb-32">
+  <div class="mb-16">
+    <h3 class="font-headline text-3xl font-bold tracking-tighter uppercase mb-2">FAQ</h3>
+    <div class="w-12 h-[1px] bg-on-surface"></div>
+  </div>
+  <div class="space-y-0 divide-y divide-outline-variant/30">
+    <div class="group py-8 cursor-pointer">
+      <div class="flex justify-between items-center">
+        <h4 class="font-label text-[0.8125rem] tracking-[0.15em] uppercase font-medium">Payment Options</h4>
+        <span class="text-[0.75rem] transition-transform group-hover:translate-y-1">∨</span>
+      </div>
+    </div>
+    <div class="group py-8 cursor-pointer">
+      <div class="flex justify-between items-center">
+        <h4 class="font-label text-[0.8125rem] tracking-[0.15em] uppercase font-medium">Reservation Policy</h4>
+        <span class="text-[0.75rem] transition-transform group-hover:translate-y-1">∨</span>
+      </div>
+    </div>
+    <div class="group py-8 cursor-pointer">
+      <div class="flex justify-between items-center">
+        <h4 class="font-label text-[0.8125rem] tracking-[0.15em] uppercase font-medium">The Rental Process</h4>
+        <span class="text-[0.75rem] transition-transform group-hover:translate-y-1">∨</span>
+      </div>
+    </div>
+    <div class="group py-8 cursor-pointer">
+      <div class="flex justify-between items-center">
+        <h4 class="font-label text-[0.8125rem] tracking-[0.15em] uppercase font-medium">Cleaning &amp; Care</h4>
+        <span class="text-[0.75rem] transition-transform group-hover:translate-y-1">∨</span>
+      </div>
+    </div>
+    <div class="group py-8 cursor-pointer">
+      <div class="flex justify-between items-center">
+        <h4 class="font-label text-[0.8125rem] tracking-[0.15em] uppercase font-medium">Loss &amp; Damage</h4>
+        <span class="text-[0.75rem] transition-transform group-hover:translate-y-1">∨</span>
+      </div>
+    </div>
+    <div class="group py-8 cursor-pointer">
+      <div class="flex justify-between items-center">
+        <h4 class="font-label text-[0.8125rem] tracking-[0.15em] uppercase font-medium">Late Returns</h4>
+        <span class="text-[0.75rem] transition-transform group-hover:translate-y-1">∨</span>
+      </div>
+    </div>
+    <div class="group py-8 cursor-pointer">
+      <div class="flex justify-between items-center">
+        <h4 class="font-label text-[0.8125rem] tracking-[0.15em] uppercase font-medium">Cancellations</h4>
+        <span class="text-[0.75rem] transition-transform group-hover:translate-y-1">∨</span>
+      </div>
+    </div>
+    <div class="group py-8 cursor-pointer">
+      <div class="flex justify-between items-center">
+        <h4 class="font-label text-[0.8125rem] tracking-[0.15em] uppercase font-medium">Shipping &amp; Delivery</h4>
+        <span class="text-[0.75rem] transition-transform group-hover:translate-y-1">∨</span>
+      </div>
+    </div>
+    <div class="group py-8 cursor-pointer">
+      <div class="flex justify-between items-center">
+        <h4 class="font-label text-[0.8125rem] tracking-[0.15em] uppercase font-medium">Authenticity Guarantee</h4>
+        <span class="text-[0.75rem] transition-transform group-hover:translate-y-1">∨</span>
+      </div>
+    </div>
+    <div class="group py-8 cursor-pointer">
+      <div class="flex justify-between items-center">
+        <h4 class="font-label text-[0.8125rem] tracking-[0.15em] uppercase font-medium">Fit &amp; Sizing</h4>
+        <span class="text-[0.75rem] transition-transform group-hover:translate-y-1">∨</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="mt-24">
+    <h2 class="text-3xl font-bold tracking-tighter text-[#222222] mb-4">ARABELA</h2>
+    <a class="hover:opacity-60 transition-opacity" href="#">
+      <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M22.675 0h-21.35C.597 0 0 .597 0 1.326v21.348C0 23.403.597 24 1.325 24H12.82v-9.294H9.692v-3.622h3.128V8.413c0-3.1 1.893-4.788 4.659-4.788 1.325 0 2.463.099 2.795.143v3.24l-1.918.001c-1.504 0-1.795.715-1.795 1.763v2.313h3.587l-.467 3.622h-3.12V24h6.116c.73 0 1.325-.597 1.325-1.326V1.326C24 .597 23.403 0 22.675 0z"></path>
+      </svg>
+    </a>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  (function () {
+    const titleEl = document.getElementById('product-cal-title');
+    const gridEl = document.getElementById('product-cal-grid');
+    const rangeEl = document.getElementById('product-cal-range');
+    const prevBtn = document.getElementById('product-cal-prev');
+    const nextBtn = document.getElementById('product-cal-next');
+
+    if (!titleEl || !gridEl || !rangeEl || !prevBtn || !nextBtn) return;
+
+    const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    const today = new Date();
+
+    let viewYear = today.getFullYear();
+    let viewMonth = today.getMonth();
+
+    let start = null;
+    let end = null;
+
+    function ymd(d) {
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+
+    function sameDay(a, b) {
+      return a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+    }
+
+    function fmt(d) {
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+
+    function setRangeText() {
+      if (!start) rangeEl.textContent = 'Select dates';
+      else if (!end) rangeEl.textContent = `${fmt(start)} — …`;
+      else rangeEl.textContent = `${fmt(start)} — ${fmt(end)}`;
+    }
+
+    function isInRange(d) {
+      if (!start || !end) return false;
+      const t = d.getTime();
+      return t > start.getTime() && t < end.getTime();
+    }
+
+    function render() {
+      titleEl.textContent = `${monthNames[viewMonth]} ${viewYear}`;
+      gridEl.innerHTML = '';
+
+      const first = new Date(viewYear, viewMonth, 1);
+      // Convert Sunday(0) -> 6 so Monday starts at 0
+      const mondayIndex = (first.getDay() + 6) % 7;
+      const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+
+      // leading blanks
+      for (let i = 0; i < mondayIndex; i++) {
+        const span = document.createElement('span');
+        span.className = 'text-on-surface/20 py-2';
+        span.textContent = '';
+        gridEl.appendChild(span);
+      }
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const d = new Date(viewYear, viewMonth, day);
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'py-2 product-calendar-day';
+        btn.textContent = String(day);
+        btn.dataset.date = ymd(d);
+
+        if (sameDay(d, start)) btn.dataset.selected = 'start';
+        else if (sameDay(d, end)) btn.dataset.selected = 'end';
+        else if (isInRange(d)) btn.dataset.selected = 'in-range';
+
+        btn.addEventListener('click', function () {
+          const clicked = new Date(viewYear, viewMonth, day);
+          if (!start || (start && end)) {
+            start = clicked;
+            end = null;
+          } else {
+            if (clicked.getTime() < start.getTime()) {
+              end = start;
+              start = clicked;
+            } else {
+              end = clicked;
+            }
+          }
+          setRangeText();
+          render();
+        });
+
+        gridEl.appendChild(btn);
+      }
+    }
+
+    prevBtn.addEventListener('click', function () {
+      viewMonth -= 1;
+      if (viewMonth < 0) {
+        viewMonth = 11;
+        viewYear -= 1;
+      }
+      render();
+    });
+
+    nextBtn.addEventListener('click', function () {
+      viewMonth += 1;
+      if (viewMonth > 11) {
+        viewMonth = 0;
+        viewYear += 1;
+      }
+      render();
+    });
+
+    setRangeText();
+    render();
+  })();
+</script>
+{% endblock %}
+
