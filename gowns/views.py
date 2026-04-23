@@ -9,6 +9,21 @@ def collections(request):
 def collection_wedding(request):
     return render(request, 'wedding.html', {})
 
+def collection_dresses(request):
+    return render(request, 'dresses.html', {})
+
+def collection_filipiniana(request):
+    return render(request, 'filipiniana.html', {})
+
+def collection_kid_suit(request):
+    return render(request, 'kid_suit.html', {})
+
+def collection_ball_gown(request):
+    return render(request, 'ball_gown.html', {})
+
+def collection_suit(request):
+    return render(request, 'suit.html', {})
+
 def product_detail(request, slug: str):
     wedding_products = {
         "valencia-lace": {

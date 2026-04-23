@@ -7,12 +7,105 @@
 <style>
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-  .product-calendar-day { transition: background-color .2s ease, color .2s ease; }
+  /* Keep hover responsive, but avoid "stretching/sliding" highlight transitions */
+  .product-calendar-day { transition: none; }
   .product-calendar-day:hover { background: rgba(11,12,12,0.06); }
   .product-calendar-day[aria-disabled="true"] { color: rgba(27,28,28,0.25); pointer-events: none; }
   .product-calendar-day[data-selected="start"],
   .product-calendar-day[data-selected="end"] { background: #0b0c0c; color: #ffffff; font-weight: 700; }
   .product-calendar-day[data-selected="in-range"] { background: rgba(11,12,12,0.10); color: #0b0c0c; }
+  .product-calendar-day[data-selected="adjacent"] {
+    background: rgba(11,12,12,0.14);
+    color: #0b0c0c;
+  }
+
+  /* Selection snap animation: fade + subtle scale */
+  .product-calendar-day[data-selected="start"],
+  .product-calendar-day[data-selected="adjacent"] {
+    transform-origin: center;
+    animation: product-cal-snap 200ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+
+  @keyframes product-cal-snap {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  /* Rental period reveal: springy height expand (pushes button smoothly) */
+  #product-cal-dates {
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transform: translateY(-4px);
+    will-change: max-height, opacity, transform;
+    transition:
+      max-height 350ms cubic-bezier(0.34, 1.56, 0.64, 1),
+      opacity 180ms ease-out,
+      transform 180ms ease-out;
+  }
+
+  #product-cal-dates.is-open {
+    max-height: 120px;
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* Staggered entrance for lines */
+  #product-cal-dates .product-cal-line {
+    opacity: 0;
+    transform: translateY(10px);
+    will-change: opacity, transform;
+    transition: opacity 220ms ease-out, transform 220ms ease-out;
+  }
+
+  #product-cal-dates.is-open .product-cal-line {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  #product-cal-dates.is-open .product-cal-line--start { transition-delay: 0ms; }
+  #product-cal-dates.is-open .product-cal-line--return { transition-delay: 50ms; }
+
+  /* Cross-dissolve for number updates */
+  .product-cal-xfade {
+    display: inline-block;
+    position: relative;
+    vertical-align: bottom;
+    line-height: 1.1;
+  }
+
+  .product-cal-xfade > .product-cal-xfade-old,
+  .product-cal-xfade > .product-cal-xfade-new {
+    display: inline-block;
+    will-change: opacity;
+  }
+
+  .product-cal-xfade > .product-cal-xfade-new {
+    position: absolute;
+    left: 0;
+    top: 0;
+    opacity: 0;
+  }
+
+  .product-cal-xfade.is-animating > .product-cal-xfade-old {
+    opacity: 0;
+    transition: opacity 180ms ease-out;
+  }
+
+  .product-cal-xfade.is-animating > .product-cal-xfade-new {
+    opacity: 1;
+    transition: opacity 180ms ease-out;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .product-calendar-day { transition: none; }
+    .product-calendar-day[data-selected="start"],
+    .product-calendar-day[data-selected="adjacent"] { animation: none; }
+    #product-cal-dates { transition: none; transform: none; }
+    #product-cal-dates .product-cal-line { transition: none; transform: none; }
+    .product-cal-xfade.is-animating > .product-cal-xfade-old,
+    .product-cal-xfade.is-animating > .product-cal-xfade-new { transition: none; }
+  }
 </style>
 {% endblock %}
 
@@ -51,10 +144,6 @@
         <div class="flex items-center gap-2">
           <span class="material-symbols-outlined text-[1rem]">dry_cleaning</span>
           <span class="font-label text-[0.625rem] tracking-widest uppercase">Eco-Dry Cleaned</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <span class="material-symbols-outlined text-[1rem]">local_shipping</span>
-          <span class="font-label text-[0.625rem] tracking-widest uppercase">Delivery Ready</span>
         </div>
       </div>
     </div>
@@ -101,6 +190,16 @@
           <div>
             <p class="font-label text-[0.55rem] text-secondary uppercase tracking-widest">Rental Period</p>
             <p id="product-cal-range" class="text-[0.75rem] font-bold">Select dates</p>
+            <div id="product-cal-dates" class="mt-1 space-y-0.5" aria-hidden="true">
+              <p class="product-cal-line product-cal-line--start text-[0.75rem] font-bold">
+                <span class="font-label text-[0.55rem] text-secondary uppercase tracking-widest font-medium">Start Date</span>
+                <span class="ml-2 tabular-nums" id="product-cal-start-date"></span>
+              </p>
+              <p class="product-cal-line product-cal-line--return text-[0.75rem] font-bold">
+                <span class="font-label text-[0.55rem] text-secondary uppercase tracking-widest font-medium">Return Date</span>
+                <span class="ml-2 tabular-nums" id="product-cal-return-date"></span>
+              </p>
+            </div>
           </div>
           <span class="material-symbols-outlined text-secondary">calendar_today</span>
         </div>
@@ -110,7 +209,7 @@
     <!-- Rent Now Button -->
     <div class="pt-6 space-y-4">
       <button type="button" class="w-full bg-primary hover:bg-secondary text-white py-5 font-headline font-bold uppercase tracking-[0.2rem] text-xs transition-colors duration-300">
-        Rent Now
+        Book Now
       </button>
       <p class="text-center font-label text-[0.625rem] tracking-widest uppercase text-secondary">Return shipping included in rental fee</p>
     </div>
@@ -252,10 +351,13 @@
     const titleEl = document.getElementById('product-cal-title');
     const gridEl = document.getElementById('product-cal-grid');
     const rangeEl = document.getElementById('product-cal-range');
+    const datesWrapEl = document.getElementById('product-cal-dates');
+    const startDateEl = document.getElementById('product-cal-start-date');
+    const returnDateEl = document.getElementById('product-cal-return-date');
     const prevBtn = document.getElementById('product-cal-prev');
     const nextBtn = document.getElementById('product-cal-next');
 
-    if (!titleEl || !gridEl || !rangeEl || !prevBtn || !nextBtn) return;
+    if (!titleEl || !gridEl || !rangeEl || !datesWrapEl || !startDateEl || !returnDateEl || !prevBtn || !nextBtn) return;
 
     const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
     const today = new Date();
@@ -263,8 +365,8 @@
     let viewYear = today.getFullYear();
     let viewMonth = today.getMonth();
 
-    let start = null;
-    let end = null;
+    // Fixed-offset snap selection: always a 5-day block centered on the clicked date
+    let center = null;
 
     function ymd(d) {
       const yyyy = d.getFullYear();
@@ -281,16 +383,92 @@
       return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     }
 
-    function setRangeText() {
-      if (!start) rangeEl.textContent = 'Select dates';
-      else if (!end) rangeEl.textContent = `${fmt(start)} — …`;
-      else rangeEl.textContent = `${fmt(start)} — ${fmt(end)}`;
+    function fmtMDY(d) {
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const yyyy = d.getFullYear();
+      return `${mm}/${dd}/${yyyy}`;
     }
 
-    function isInRange(d) {
-      if (!start || !end) return false;
-      const t = d.getTime();
-      return t > start.getTime() && t < end.getTime();
+    function crossDissolve(containerEl, nextText) {
+      if (!containerEl) return;
+      const prevText = (containerEl.dataset.value || '').trim();
+      if (prevText === nextText) return;
+
+      containerEl.dataset.value = nextText;
+
+      // First paint: just set final value (the container reveal handles the "entrance" feel)
+      if (!prevText) {
+        containerEl.textContent = nextText;
+        return;
+      }
+
+      containerEl.classList.add('product-cal-xfade');
+      containerEl.classList.remove('is-animating');
+      containerEl.innerHTML = '';
+
+      const oldSpan = document.createElement('span');
+      oldSpan.className = 'product-cal-xfade-old tabular-nums';
+      oldSpan.textContent = prevText;
+
+      const newSpan = document.createElement('span');
+      newSpan.className = 'product-cal-xfade-new tabular-nums';
+      newSpan.textContent = nextText;
+
+      containerEl.appendChild(oldSpan);
+      containerEl.appendChild(newSpan);
+
+      // Ensure layout, then trigger
+      void containerEl.offsetWidth;
+      containerEl.classList.add('is-animating');
+
+      window.setTimeout(() => {
+        containerEl.classList.remove('is-animating');
+        containerEl.innerHTML = '';
+        containerEl.textContent = nextText;
+      }, 220);
+    }
+
+    function setRangeText() {
+      if (!center) {
+        rangeEl.textContent = 'Select dates';
+        datesWrapEl.classList.remove('is-open');
+        datesWrapEl.setAttribute('aria-hidden', 'true');
+        startDateEl.textContent = '';
+        returnDateEl.textContent = '';
+        startDateEl.dataset.value = '';
+        returnDateEl.dataset.value = '';
+        return;
+      }
+      const a = new Date(center.getFullYear(), center.getMonth(), center.getDate() - 2);
+      const b = new Date(center.getFullYear(), center.getMonth(), center.getDate() + 2);
+      rangeEl.textContent = '';
+      const wasClosed = !datesWrapEl.classList.contains('is-open');
+      datesWrapEl.setAttribute('aria-hidden', 'false');
+
+      if (wasClosed) {
+        // Set values before opening so the staggered entrance reveals meaningful content.
+        startDateEl.dataset.value = fmtMDY(a);
+        returnDateEl.dataset.value = fmtMDY(b);
+        startDateEl.textContent = fmtMDY(a);
+        returnDateEl.textContent = fmtMDY(b);
+
+        datesWrapEl.classList.remove('is-open');
+        void datesWrapEl.offsetWidth; // restart transitions
+        datesWrapEl.classList.add('is-open');
+        return;
+      }
+
+      crossDissolve(startDateEl, fmtMDY(a));
+      crossDissolve(returnDateEl, fmtMDY(b));
+    }
+
+    function isAdjacentToStart(d) {
+      if (!center) return false;
+      const a = new Date(center.getFullYear(), center.getMonth(), center.getDate());
+      const b = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      const diffDays = Math.round((b.getTime() - a.getTime()) / 86400000);
+      return diffDays !== 0 && Math.abs(diffDays) <= 2;
     }
 
     function render() {
@@ -319,23 +497,15 @@
         btn.textContent = String(day);
         btn.dataset.date = ymd(d);
 
-        if (sameDay(d, start)) btn.dataset.selected = 'start';
-        else if (sameDay(d, end)) btn.dataset.selected = 'end';
-        else if (isInRange(d)) btn.dataset.selected = 'in-range';
+        // Selection styling: clicked date is black (use existing "start" styling),
+        // ±2 days are gray ("adjacent"). No cumulative ranges.
+        if (sameDay(d, center)) btn.dataset.selected = 'start';
+        else if (isAdjacentToStart(d)) btn.dataset.selected = 'adjacent';
 
         btn.addEventListener('click', function () {
           const clicked = new Date(viewYear, viewMonth, day);
-          if (!start || (start && end)) {
-            start = clicked;
-            end = null;
-          } else {
-            if (clicked.getTime() < start.getTime()) {
-              end = start;
-              start = clicked;
-            } else {
-              end = clicked;
-            }
-          }
+          // Reset-on-click: replace the entire selection state immediately
+          center = clicked;
           setRangeText();
           render();
         });

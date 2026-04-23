@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block title %}ARABELA | Suit Collection{% endblock %}
+
+{% block main_class %}pt-32 pb-20 px-8{% endblock %}
+
+{% block content %}
+    <section class="mb-16 max-w-[1400px] mx-auto">
+        <h1 class="font-headline text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight text-on-surface leading-[0.9] mb-12 text-center">Suit</h1>
+        <div class="flex gap-4 flex-wrap">
+            <button class="px-6 py-2.5 rounded-full border border-black bg-white text-black text-[0.65rem] font-bold tracking-[0.15em] hover:bg-gray-50 transition-colors uppercase">BROWSE</button>
+            <button class="px-6 py-2.5 rounded-full border border-black bg-white text-black text-[0.65rem] font-bold tracking-[0.15em] hover:bg-gray-50 transition-colors uppercase">SORT BY</button>
+            <button class="px-6 py-2.5 rounded-full border border-black bg-white text-black text-[0.65rem] font-bold tracking-[0.15em] hover:bg-gray-50 transition-colors uppercase">REFINE</button>
+        </div>
+    </section>
+
+    <section class="max-w-[1400px] mx-auto">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            <a href="{% url 'gowns:product_detail' slug='valencia-lace' %}" class="group cursor-pointer block">
+                <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
+                    <img alt="Valencia Lace" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
+                    <button type="button" class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90" onclick="event.preventDefault(); event.stopPropagation();">
+                        <span class="material-symbols-outlined text-[1rem]">add</span>
+                    </button>
+                </div>
+                <div class="space-y-2">
+                    <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Valencia Lace</h3>
+                    <p class="text-[0.9rem] font-body font-medium text-on-surface">₱12,500</p>
+                </div>
+            </a>
+
+            <a href="{% url 'gowns:product_detail' slug='archive-satin' %}" class="group cursor-pointer block">
+                <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
+                    <img alt="Archive Satin" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
+                    <button type="button" class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90" onclick="event.preventDefault(); event.stopPropagation();">
+                        <span class="material-symbols-outlined text-[1rem]">add</span>
+                    </button>
+                </div>
+                <div class="space-y-2">
+                    <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Archive Satin</h3>
+                    <p class="text-[0.9rem] font-body font-medium text-on-surface">₱18,200</p>
+                </div>
+            </a>
+
+            <a href="{% url 'gowns:product_detail' slug='florence-organza' %}" class="group cursor-pointer block">
+                <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
+                    <img alt="Florence Organza" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
+                    <button type="button" class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90" onclick="event.preventDefault(); event.stopPropagation();">
+                        <span class="material-symbols-outlined text-[1rem]">add</span>
+                    </button>
+                </div>
+                <div class="space-y-2">
+                    <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Florence Organza</h3>
+                    <p class="text-[0.9rem] font-body font-medium text-on-surface">₱15,800</p>
+                </div>
+            </a>
+
+            <a href="{% url 'gowns:product_detail' slug='modernist-crepe' %}" class="group cursor-pointer block">
+                <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
+                    <img alt="Modernist Crepe" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
+                    <button type="button" class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90" onclick="event.preventDefault(); event.stopPropagation();">
+                        <span class="material-symbols-outlined text-[1rem]">add</span>
+                    </button>
+                </div>
+                <div class="space-y-2">
+                    <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Modernist Crepe</h3>
+                    <p class="text-[0.9rem] font-body font-medium text-on-surface">₱9,900</p>
+                </div>
+            </a>
+
+            <a href="{% url 'gowns:product_detail' slug='opulence-pearl' %}" class="group cursor-pointer block">
+                <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
+                    <img alt="Opulence Pearl" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
+                    <button type="button" class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90" onclick="event.preventDefault(); event.stopPropagation();">
+                        <span class="material-symbols-outlined text-[1rem]">add</span>
+                    </button>
+                </div>
+                <div class="space-y-2">
+                    <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Opulence Pearl</h3>
+                    <p class="text-[0.9rem] font-body font-medium text-on-surface">₱24,500</p>
+                </div>
+            </a>
+
+            <a href="{% url 'gowns:product_detail' slug='heritage-lace' %}" class="group cursor-pointer block">
+                <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
+                    <img alt="Heritage Lace" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
+                    <button type="button" class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90" onclick="event.preventDefault(); event.stopPropagation();">
+                        <span class="material-symbols-outlined text-[1rem]">add</span>
+                    </button>
+                </div>
+                <div class="space-y-2">
+                    <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Heritage Lace</h3>
+                    <p class="text-[0.9rem] font-body font-medium text-on-surface">₱21,000</p>
+                </div>
+            </a>
+
+            <a href="{% url 'gowns:product_detail' slug='city-reception' %}" class="group cursor-pointer block">
+                <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
+                    <img alt="City Reception" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
+                    <button type="button" class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90" onclick="event.preventDefault(); event.stopPropagation();">
+                        <span class="material-symbols-outlined text-[1rem]">add</span>
+                    </button>
+                </div>
+                <div class="space-y-2">
+                    <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">City Reception</h3>
+                    <p class="text-[0.9rem] font-body font-medium text-on-surface">₱8,500</p>
+                </div>
+            </a>
+
+            <a href="{% url 'gowns:product_detail' slug='lumiere-silk' %}" class="group cursor-pointer block">
+                <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
+                    <img alt="Lumiere Silk" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
+                    <button type="button" class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90" onclick="event.preventDefault(); event.stopPropagation();">
+                        <span class="material-symbols-outlined text-[1rem]">add</span>
+                    </button>
+                </div>
+                <div class="space-y-2">
+                    <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Lumiere Silk</h3>
+                    <p class="text-[0.9rem] font-body font-medium text-on-surface">₱14,200</p>
+                </div>
+            </a>
+        </div>
+    </section>
+
+    <div class="mt-16 flex justify-center">
+        <div class="flex flex-col items-center gap-12">
+            <button class="group flex items-center gap-4 hover:opacity-50 transition-all duration-500">
+                <span class="font-body text-[0.65rem] uppercase tracking-[0.4em] font-light text-on-surface">Next</span>
+                <span class="material-symbols-outlined text-[1rem] font-extralight transition-transform duration-500 group-hover:translate-x-2">arrow_forward</span>
+            </button>
+            <div class="h-[1px] w-24 bg-on-surface/10"></div>
+            <button class="font-label text-[0.6rem] uppercase tracking-[0.3em] text-on-surface/40 hover:text-on-surface transition-all duration-300 bg-transparent border-0 p-0 cursor-pointer">
+                Explore More Suit Pieces
+            </button>
+        </div>
+    </div>
+{% endblock %}
+
