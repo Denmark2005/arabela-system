@@ -25,6 +25,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('gowns.urls')),
     path('accounts/', include('accounts.urls')),
+    path('accounts/', include('allauth.urls')),
     path('reservations/', include('reservations.urls')),
     path('ai/', include('ai_recommendation.urls')),
     path('admin-panel/', include('arabela_admin.urls')),

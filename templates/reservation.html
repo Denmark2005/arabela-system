@@ -217,6 +217,9 @@
 <script>
     (function () {
         var RESERVATION_FIELD_IDS = ['first_name', 'last_name', 'address', 'city', 'postal', 'phone'];
+        var CART_STORAGE_KEY = 'arabela_cart';
+        var RESERVATION_STORAGE_KEY = 'arabela_reservation_cart';
+        var BOOK_NOW_CONTEXT_KEY = 'arabela_book_now_context';
 
         function clearReservationValidationVisuals() {
             document.querySelectorAll('.reservation-field-invalid').forEach(function (el) {
@@ -283,6 +286,16 @@
             return true;
         }
 
+        function clearReservationSelections() {
+            try {
+                localStorage.removeItem(CART_STORAGE_KEY);
+                localStorage.removeItem(BOOK_NOW_CONTEXT_KEY);
+            } catch (err) {}
+            try {
+                sessionStorage.removeItem(RESERVATION_STORAGE_KEY);
+            } catch (err2) {}
+        }
+
         document.addEventListener('DOMContentLoaded', function () {
             var btn = document.getElementById('confirm-rental-btn');
             if (btn) {
@@ -292,6 +305,7 @@
                         if (loadingOverlay) {
                             loadingOverlay.classList.add('show');
                         }
+                        clearReservationSelections();
                         window.location.href = "{% url 'gowns:confirmation' %}";
                     }
                 });

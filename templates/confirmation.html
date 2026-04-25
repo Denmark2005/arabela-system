@@ -41,7 +41,7 @@
       </p>
     </div>
     <div class="flex flex-col items-center gap-8">
-      <a href="{% url 'gowns:collections' %}" class="w-full md:w-64 px-10 py-5 bg-primary text-white text-[0.65rem] uppercase tracking-[0.3em] font-medium hover:bg-secondary transition-all duration-500 flex items-center justify-center no-underline text-center">
+      <a href="{% url 'gowns:orders' %}" class="w-full md:w-64 px-10 py-5 bg-primary text-white text-[0.65rem] uppercase tracking-[0.3em] font-medium hover:bg-secondary transition-all duration-500 flex items-center justify-center no-underline text-center">
         View My Orders
       </a>
       <a class="font-label text-[0.6rem] uppercase tracking-[0.3em] text-secondary hover:text-primary transition-colors border-b border-transparent hover:border-primary/20 pb-1" href="{% url 'gowns:homepage' %}">
@@ -49,4 +49,18 @@
       </a>
     </div>
   </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  (function () {
+    try {
+      localStorage.removeItem('arabela_cart');
+      localStorage.removeItem('arabela_book_now_context');
+    } catch (err) {}
+    try {
+      sessionStorage.removeItem('arabela_reservation_cart');
+    } catch (err2) {}
+  })();
+</script>
 {% endblock %}

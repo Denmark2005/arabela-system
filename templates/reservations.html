@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Epilogue:wght@400;600;700;800&amp;family=Inter:wght@300;400;500;600;700&amp;family=Poppins:wght@400;500;600&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-primary-container": "#8a8989",
+              "tertiary-fixed": "#e4e2e2",
+              "on-secondary-container": "#67645d",
+              "on-secondary-fixed-variant": "#494640",
+              "surface-bright": "#fcf9f8",
+              "secondary-container": "#e7e2d9",
+              "primary-fixed": "#e5e2e1",
+              "on-primary-fixed-variant": "#474746",
+              "surface-container-lowest": "#ffffff",
+              "on-surface-variant": "#444748",
+              "surface-dim": "#dcd9d9",
+              "surface": "#fcf9f8",
+              "inverse-primary": "#c8c6c5",
+              "on-tertiary": "#ffffff",
+              "inverse-on-surface": "#f3f0ef",
+              "on-secondary": "#ffffff",
+              "on-tertiary-fixed-variant": "#474747",
+              "primary-fixed-dim": "#c8c6c5",
+              "surface-tint": "#5f5e5e",
+              "on-tertiary-fixed": "#1b1c1c",
+              "surface-container-low": "#f6f3f2",
+              "on-background": "#1b1c1c",
+              "secondary-fixed-dim": "#cbc6bd",
+              "surface-container-high": "#eae7e7",
+              "error-container": "#ffdad6",
+              "surface-container-highest": "#e5e2e1",
+              "on-secondary-fixed": "#1d1b16",
+              "inverse-surface": "#303030",
+              "outline-variant": "#c4c7c7",
+              "on-primary": "#ffffff",
+              "on-error": "#ffffff",
+              "tertiary-fixed-dim": "#c8c6c6",
+              "surface-variant": "#e5e2e1",
+              "on-primary-fixed": "#1b1c1c",
+              "outline": "#747878",
+              "on-surface": "#1b1c1c",
+              "on-error-container": "#93000a",
+              "error": "#ba1a1a",
+              "tertiary": "#0b0c0c",
+              "on-tertiary-container": "#8a8989",
+              "tertiary-container": "#222222",
+              "primary-container": "#222222",
+              "background": "#fcf9f8",
+              "surface-container": "#f0eded",
+              "secondary-fixed": "#e7e2d9",
+              "primary": "#0b0c0c",
+              "secondary": "#615e57",
+            },
+            borderRadius: {
+              DEFAULT: "0.125rem",
+              lg: "0.25rem",
+              xl: "0.5rem",
+              full: "0.75rem",
+            },
+            fontFamily: {
+              headline: ["Epilogue"],
+              body: ["Inter"],
+              label: ["Inter"],
+              poppins: ["Poppins"],
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      body {
+        font-family: "Poppins", sans-serif;
+        color: #1b1c1c;
+        background-color: #ffffff;
+      }
+      .material-symbols-outlined {
+        font-variation-settings: "FILL" 0, "wght" 300, "GRAD" 0, "opsz" 24;
+        font-size: 1.25rem;
+      }
+      .entry-line {
+        border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+      }
+      .vibrant-green {
+        color: #10b981;
+      }
+      .bold-red {
+        color: #dc2626;
+      }
+      #account-sidebar {
+        transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      #sidebar-overlay {
+        transition: opacity 0.4s ease;
+      }
+      .sidebar-open #account-sidebar {
+        transform: translateX(0);
+      }
+      .sidebar-open #sidebar-overlay {
+        opacity: 1;
+        pointer-events: auto;
+      }
+    </style>
+    <title>Reservations | Arabela</title>
+  </head>
+  <body class="bg-white">
+    <div class="fixed inset-0 z-[55] bg-black/20 opacity-0 pointer-events-none transition-opacity duration-300" id="sidebar-overlay"></div>
+
+    <nav class="fixed top-0 z-50 mx-auto flex h-20 w-full max-w-full items-center justify-between border-b border-black/5 bg-white/80 px-8 backdrop-blur-md">
+      <a href="{% url 'gowns:homepage' %}" class="text-2xl font-bold tracking-tighter text-[#222222]">ARABELA</a>
+      <div class="flex items-center gap-8">
+        <div class="hidden items-center gap-6 md:flex">
+          <a class="border-b border-[#222222] text-[0.6875rem] uppercase tracking-[0.1rem] text-[#222222] transition-colors font-semibold" href="{% url 'gowns:orders' %}">Reservations</a>
+          <a class="text-[0.6875rem] uppercase tracking-[0.1rem] text-[#615E57] transition-colors hover:text-[#222222]" href="#" id="open-profile-link">Profile</a>
+        </div>
+        <button class="scale-95 active:scale-90 transition-all text-[#222222]" id="user-icon-btn">
+          <span class="material-symbols-outlined">person</span>
+        </button>
+      </div>
+    </nav>
+
+    <main class="flex min-h-screen flex-col items-center px-6 pb-24 pt-32 md:px-12">
+      <div class="w-full max-w-4xl rounded-xl bg-white p-8 shadow-[0_20px_40px_rgba(0,0,0,0.04)] md:p-16">
+        <header class="mb-12">
+          <h1 class="mb-2 text-3xl font-semibold tracking-tight text-[#1b1c1c] md:text-4xl">Reservations</h1>
+          <p class="text-sm uppercase tracking-[0.15rem] text-secondary/60">Archive History &amp; Status</p>
+        </header>
+
+        <div class="flex flex-col space-y-0">
+          <div class="group flex flex-col justify-between gap-4 py-8 md:flex-row md:items-center entry-line">
+            <div class="flex items-center gap-4">
+              <span class="material-symbols-outlined text-neutral-500">schedule</span>
+              <div class="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
+                <span class="text-xs font-semibold uppercase tracking-wider text-neutral-500">Reservation Pending</span>
+                <span class="hidden text-secondary/30 md:block">-</span>
+                <span class="text-lg font-medium"><a class="transition-opacity hover:opacity-70" href="#">Ivory Silk Slip Dress</a></span>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 md:gap-4">
+              <div class="flex flex-col md:items-end">
+                <p class="text-sm text-secondary/60"><span class="font-medium text-[#1b1c1c]">Pick-up Date:</span> Apr 15, 2026</p>
+                <p class="mt-1 text-sm font-semibold">PHP 1,600.00</p>
+              </div>
+              <button type="button" aria-label="Delete reservation" class="inline-flex h-9 w-9 items-center justify-center rounded-full text-secondary/60 transition-colors hover:text-[#dc2626]">
+                <span class="material-symbols-outlined">delete</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="group flex flex-col justify-between gap-4 py-8 md:flex-row md:items-center entry-line">
+            <div class="flex items-center gap-4">
+              <span class="material-symbols-outlined vibrant-green">check_circle</span>
+              <div class="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
+                <span class="text-xs font-semibold uppercase tracking-wider vibrant-green">Reservation Accepted</span>
+                <span class="hidden text-secondary/30 md:block">-</span>
+                <span class="text-lg font-medium"><a class="transition-opacity hover:opacity-70" href="#">Noir Silk Slip Gown</a></span>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 md:gap-4">
+              <div class="flex flex-col md:items-end">
+                <p class="text-sm text-secondary/60"><span class="font-medium text-[#1b1c1c]">Pick-up Date:</span> Apr 24, 2026</p>
+                <p class="mt-1 text-sm font-semibold">PHP 2,100.00</p>
+              </div>
+              <button type="button" aria-label="Delete reservation" class="inline-flex h-9 w-9 items-center justify-center rounded-full text-secondary/60 transition-colors hover:text-[#dc2626]">
+                <span class="material-symbols-outlined">delete</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="group flex flex-col justify-between gap-4 py-8 md:flex-row md:items-center entry-line">
+            <div class="flex items-center gap-4">
+              <span class="material-symbols-outlined bold-red">cancel</span>
+              <div class="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
+                <span class="text-xs font-semibold uppercase tracking-wider bold-red">Reservation Rejected</span>
+                <span class="hidden text-secondary/30 md:block">-</span>
+                <span class="text-lg font-medium"><a class="transition-opacity hover:opacity-70" href="#">Tulle Statement Ballgown</a></span>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 md:gap-4">
+              <div class="flex flex-col md:items-end">
+                <p class="text-sm text-secondary/60"><span class="font-medium text-[#1b1c1c]">Pick-up Date:</span> Apr 02, 2026</p>
+                <p class="mt-1 text-sm font-semibold">PHP 2,500.00</p>
+              </div>
+              <button type="button" aria-label="Delete reservation" class="inline-flex h-9 w-9 items-center justify-center rounded-full text-secondary/60 transition-colors hover:text-[#dc2626]">
+                <span class="material-symbols-outlined">delete</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="group flex flex-col justify-between gap-4 py-8 md:flex-row md:items-center entry-line">
+            <div class="flex items-center gap-4">
+              <span class="material-symbols-outlined text-[#1b1c1c]">inventory_2</span>
+              <div class="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
+                <span class="text-xs font-semibold uppercase tracking-wider text-[#1b1c1c]">Reservation Completed</span>
+                <span class="hidden text-secondary/30 md:block">-</span>
+                <span class="text-lg font-medium"><a class="transition-opacity hover:opacity-70" href="#">Pleated Organza Midi</a></span>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 md:gap-4">
+              <div class="flex flex-col md:items-end">
+                <p class="text-sm text-secondary/60"><span class="font-medium text-[#1b1c1c]">Pick-up Date:</span> Apr 12, 2026</p>
+                <p class="mt-1 text-sm font-semibold">PHP 2,800.00</p>
+              </div>
+              <button type="button" aria-label="Delete reservation" class="inline-flex h-9 w-9 items-center justify-center rounded-full text-secondary/60 transition-colors hover:text-[#dc2626]">
+                <span class="material-symbols-outlined">delete</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="group flex flex-col justify-between gap-4 py-8 md:flex-row md:items-center entry-line">
+            <div class="flex items-center gap-4">
+              <span class="material-symbols-outlined vibrant-green">check_circle</span>
+              <div class="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
+                <span class="text-xs font-semibold uppercase tracking-wider vibrant-green">Reservation Accepted</span>
+                <span class="hidden text-secondary/30 md:block">-</span>
+                <span class="text-lg font-medium"><a class="transition-opacity hover:opacity-70" href="#">Vintage Lace Column Dress</a></span>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 md:gap-4">
+              <div class="flex flex-col md:items-end">
+                <p class="text-sm text-secondary/60"><span class="font-medium text-[#1b1c1c]">Pick-up Date:</span> Apr 30, 2026</p>
+                <p class="mt-1 text-sm font-semibold">PHP 3,000.00</p>
+              </div>
+              <button type="button" aria-label="Delete reservation" class="inline-flex h-9 w-9 items-center justify-center rounded-full text-secondary/60 transition-colors hover:text-[#dc2626]">
+                <span class="material-symbols-outlined">delete</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-16 flex flex-col items-center justify-between gap-6 md:flex-row">
+          <p class="max-w-xs text-center text-xs text-secondary/40 md:text-left">
+            Manage your rental schedule or view specific details for each garment by selecting an entry above.
+          </p>
+          <button class="bg-primary px-10 py-4 text-sm font-medium uppercase tracking-[0.1em] text-white transition-all duration-300 hover:bg-secondary">
+            CONTACT ARABELA
+          </button>
+        </div>
+      </div>
+    </main>
+
+    <footer class="w-full bg-white px-8 py-12">
+      <div class="mx-auto w-full max-w-[1920px]">
+        <div class="flex flex-col flex-wrap items-start gap-x-8 gap-y-8 text-left sm:flex-row sm:gap-x-10 md:gap-x-12 lg:gap-x-16">
+          <div class="flex shrink-0 items-center gap-3">
+            <a href="{% url 'gowns:homepage' %}" class="font-body text-lg font-bold tracking-tighter text-[#222222]">ARABELA</a>
+            <a href="https://www.facebook.com/" target="_blank" rel="noopener noreferrer" class="inline-flex scale-95 text-[#222222] transition-all hover:opacity-70 active:scale-90" aria-label="Arabela on Facebook">
+              <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12S0 5.446 0 12.073c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+            </a>
+          </div>
+          <div class="shrink-0">
+            <p class="mb-2 font-body text-base font-medium text-[#222222]">Rent</p>
+            <a href="{% url 'gowns:homepage' %}" class="inline-block scale-95 font-body text-[0.6875rem] uppercase tracking-widest text-[#615E57] transition-opacity hover:text-[#222222] hover:underline decoration-1 underline-offset-4 active:scale-90">How it works</a>
+          </div>
+          <div class="shrink-0">
+            <p class="mb-2 font-body text-base font-medium text-[#222222]">Info</p>
+            <ul class="flex flex-col gap-1.5">
+              <li><a href="#" class="inline-block scale-95 font-body text-[0.6875rem] uppercase tracking-widest text-[#615E57] transition-opacity hover:text-[#222222] hover:underline decoration-1 underline-offset-4 active:scale-90 leading-snug">About us</a></li>
+              <li><a href="#" class="inline-block scale-95 font-body text-[0.6875rem] uppercase tracking-widest text-[#615E57] transition-opacity hover:text-[#222222] hover:underline decoration-1 underline-offset-4 active:scale-90 leading-snug">Contact us</a></li>
+              <li><a href="{% url 'gowns:homepage' %}" class="inline-block scale-95 font-body text-[0.6875rem] uppercase tracking-widest text-[#615E57] transition-opacity hover:text-[#222222] hover:underline decoration-1 underline-offset-4 active:scale-90 leading-snug">FAQs</a></li>
+              <li><a href="#" class="inline-block scale-95 font-body text-[0.6875rem] uppercase tracking-widest text-[#615E57] transition-opacity hover:text-[#222222] hover:underline decoration-1 underline-offset-4 active:scale-90 leading-snug">Terms and conditions</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <aside class="fixed right-0 top-0 z-[60] flex h-screen w-full translate-x-full flex-col border-l border-neutral-100 bg-white shadow-[-10px_0_40px_rgba(0,0,0,0.05)] sm:w-96" id="account-sidebar">
+      <button class="material-symbols-outlined absolute right-8 top-6 text-neutral-400 transition-colors hover:text-black" id="close-sidebar-btn">close</button>
+      <div class="p-10 pt-20">
+        <div class="mb-12">
+          <div class="mb-4 flex items-center gap-4">
+            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100">
+              <span class="material-symbols-outlined text-neutral-400">person</span>
+            </div>
+            <div class="overflow-hidden">
+              <p class="truncate text-sm font-medium text-black">{{ request.user.email }}</p>
+              <p class="mt-0.5 text-[0.625rem] font-semibold uppercase tracking-widest text-neutral-400">Member</p>
+            </div>
+          </div>
+          <div class="h-[1px] w-full bg-neutral-100"></div>
+        </div>
+        <nav class="flex flex-col space-y-1">
+          <a class="group flex items-center gap-4 rounded-lg px-2 py-4 transition-all hover:bg-neutral-50" href="#">
+            <span class="material-symbols-outlined text-neutral-400 transition-colors group-hover:text-black">person_outline</span>
+            <span class="text-sm font-medium text-neutral-600 transition-colors group-hover:text-black">Profile</span>
+          </a>
+          <a class="group flex items-center gap-4 rounded-lg px-2 py-4 transition-all hover:bg-neutral-50" href="#">
+            <span class="material-symbols-outlined text-neutral-400 transition-colors group-hover:text-black">settings</span>
+            <span class="text-sm font-medium text-neutral-600 transition-colors group-hover:text-black">Settings</span>
+          </a>
+          <div class="mt-4 border-t border-neutral-50 pt-4">
+            <a class="group flex items-center gap-4 rounded-lg px-2 py-4 transition-all hover:bg-neutral-50" href="{% url 'accounts:logout' %}">
+              <span class="material-symbols-outlined text-neutral-400 transition-colors group-hover:text-red-500">logout</span>
+              <span class="text-sm font-medium text-neutral-600 transition-colors group-hover:text-red-500">Sign out</span>
+            </a>
+          </div>
+        </nav>
+      </div>
+      <div class="mt-auto p-10">
+        <p class="text-center text-[0.625rem] uppercase tracking-widest text-neutral-300">ARABELA - 2026</p>
+      </div>
+    </aside>
+
+    <script>
+      const userBtn = document.getElementById("user-icon-btn");
+      const closeBtn = document.getElementById("close-sidebar-btn");
+      const overlay = document.getElementById("sidebar-overlay");
+      const profileLink = document.getElementById("open-profile-link");
+      const body = document.body;
+
+      function openSidebar() {
+        body.classList.add("sidebar-open");
+      }
+
+      function closeSidebar() {
+        body.classList.remove("sidebar-open");
+      }
+
+      userBtn.addEventListener("click", openSidebar);
+      closeBtn.addEventListener("click", closeSidebar);
+      overlay.addEventListener("click", closeSidebar);
+      if (profileLink) {
+        profileLink.addEventListener("click", function (event) {
+          event.preventDefault();
+          openSidebar();
+        });
+      }
+    </script>
+  </body>
+</html>

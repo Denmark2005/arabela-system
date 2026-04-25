@@ -208,7 +208,7 @@
 
     <!-- Rent Now Button -->
     <div class="pt-6 space-y-4">
-      <button type="button" class="w-full bg-primary hover:bg-secondary text-white py-5 font-headline font-bold uppercase tracking-[0.2rem] text-xs transition-colors duration-300">
+      <button id="product-book-now" type="button" class="w-full bg-primary hover:bg-secondary text-white py-5 font-headline font-bold uppercase tracking-[0.2rem] text-xs transition-colors duration-300">
         Book Now
       </button>
       <p class="text-center font-label text-[0.625rem] tracking-widest uppercase text-secondary">Return shipping included in rental fee</p>
@@ -222,46 +222,42 @@
     <h3 class="font-headline text-3xl font-bold tracking-[0.3em] uppercase">You May Also Like</h3>
   </div>
   <div class="grid grid-cols-2 md:grid-cols-4 gap-12">
-    <div class="group cursor-pointer">
-      <div class="aspect-[4/5] bg-surface-container overflow-hidden mb-6 relative border-none shadow-none">
-        <img alt="Accessory pairing" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAn_L2qYp46RscfR942n4U_Y9L6iJ5U8i_3q6I6-p4M_L0L4S5_7S8_9T0_U1V2W3X4Y5Z6a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2A3B4C5D6E7F8G9H0I1J2K3L4M5N6O7P8Q9R0S1T2U3V4W5X6Y7Z8" />
+    <a href="{% url 'gowns:product_detail' slug='valencia-lace' %}" class="group cursor-pointer block">
+      <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
+        <img alt="Wedding One" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
       </div>
       <div class="text-center">
-        <p class="font-label text-[0.625rem] tracking-[0.2em] uppercase text-secondary mb-2">wedding</p>
-        <h4 class="font-headline font-bold text-sm tracking-widest uppercase">ORBIT GOLD EARRINGS</h4>
-        <p class="text-[0.6875rem] mt-2 text-on-surface-variant font-light tracking-widest">₱45</p>
+        <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Wedding One</h3>
+        <p class="text-[0.9rem] font-body font-medium text-on-surface">₱1,600</p>
       </div>
-    </div>
-    <div class="group cursor-pointer">
-      <div class="aspect-[4/5] bg-surface-container overflow-hidden mb-6 relative border-none shadow-none">
-        <img alt="Shoes pairing" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCe6Ixx1F3eFVjQo3pnv1G_gD5rTPaFw9-i4xqUSQfJZ9-izuEU99iCkW5jxNZrfqkqJ66G2o75uDSXCxYmqSYFXuprDLWHhP8u_kYM63VugYXJsC35eoCbz8LUKVPbLNLD3c8an8h7nN_XRvSkWQRM0NLPhqsSjZfnzsagz2f5TdRhJXZ0IsySHXYMrkzXPoCFOC66Rl7kyUMD4GLJC4f7PJ3V40CakKauiMgw2S4kmlOwznl1TtlViwIIjacf2s8eOZjUkbsAFZo" />
-      </div>
-      <div class="text-center">
-        <p class="font-label text-[0.625rem] tracking-[0.2em] uppercase text-secondary mb-2">wedding</p>
-        <h4 class="font-headline font-bold text-sm tracking-widest uppercase">STILLETO SILHOUETTE</h4>
-        <p class="text-[0.6875rem] mt-2 text-on-surface-variant font-light tracking-widest">₱65</p>
-      </div>
-    </div>
-    <div class="group cursor-pointer">
-      <div class="aspect-[4/5] bg-surface-container overflow-hidden mb-6 relative border-none shadow-none">
-        <img alt="Bag pairing" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCzg2rqbbbY5wHEXqWY6FhrLIFCKKt6r4MhNB6DYtnaRD2wi4ps2cRJeZtQo7c9ykwzMDKCsqJfJMIze6F7P0VSD1fHB4SSQex16A6y7WYU9Qgp8dNVhs_ciN1GscHXkKmXQlBMnCNLW2F6oXIRGdOfR4NipdQJ0v15zEUkZrbR76jHL9ZIidYwIeGay-B2xE7BTgZsqgF-gG9PS9fimbNV-PGdTVIhhvkeZY6TcbnDqTPx4ITkvN17su4oAOn6A2xklfpu1jGoOKs" />
+    </a>
+    <a href="{% url 'gowns:product_detail' slug='archive-satin' %}" class="group cursor-pointer block">
+      <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
+        <img alt="Wedding Two" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
       </div>
       <div class="text-center">
-        <p class="font-label text-[0.625rem] tracking-[0.2em] uppercase text-secondary mb-2">wedding</p>
-        <h4 class="font-headline font-bold text-sm tracking-widest uppercase">ARCHITECTURAL CLUTCH</h4>
-        <p class="text-[0.6875rem] mt-2 text-on-surface-variant font-light tracking-widest">₱50</p>
+        <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Wedding Two</h3>
+        <p class="text-[0.9rem] font-body font-medium text-on-surface">₱1,800</p>
       </div>
-    </div>
-    <div class="group cursor-pointer">
-      <div class="aspect-[4/5] bg-surface-container overflow-hidden mb-6 relative border-none shadow-none">
-        <img alt="Alternate Gown" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCksqUveIKsKLyU9N0WFJ2F-hWP2s8i9zgIJTzRrL7RvlvcYxWTBFGIuxSJRaoEirdINiCcbNbk4PAkevLXnJDNyV2-WU93RgJFVT-BqLrjeo_eaZWc2zN18ZpGfF3Rn9MCYp_9H4gZry3I53Ve-IxrgmUTar-ZMmfVUpEoqAVgPKaQj7rq8rmSPX1jOtheWhM3bUE_sqzAN6jw_o77iGCO2J4ZiqhN_AQVy_c0dTv8dnPI-BfmTIIiml6aj_yG5IUDOyXGDN8w190" />
+    </a>
+    <a href="{% url 'gowns:product_detail' slug='florence-organza' %}" class="group cursor-pointer block">
+      <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
+        <img alt="Wedding Three" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
       </div>
       <div class="text-center">
-        <p class="font-label text-[0.625rem] tracking-[0.2em] uppercase text-secondary mb-2">wedding</p>
-        <h4 class="font-headline font-bold text-sm tracking-widest uppercase">FLORAL SILK SLIP</h4>
-        <p class="text-[0.6875rem] mt-2 text-on-surface-variant font-light tracking-widest">₱155</p>
+        <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Wedding Three</h3>
+        <p class="text-[0.9rem] font-body font-medium text-on-surface">₱2,000</p>
       </div>
-    </div>
+    </a>
+    <a href="{% url 'gowns:product_detail' slug='opulence-pearl' %}" class="group cursor-pointer block">
+      <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
+        <img alt="Wedding Five" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
+      </div>
+      <div class="text-center">
+        <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Wedding Five</h3>
+        <p class="text-[0.9rem] font-body font-medium text-on-surface">₱2,400</p>
+      </div>
+    </a>
   </div>
 </section>
 
@@ -356,6 +352,7 @@
     const returnDateEl = document.getElementById('product-cal-return-date');
     const prevBtn = document.getElementById('product-cal-prev');
     const nextBtn = document.getElementById('product-cal-next');
+    const bookNowBtn = document.getElementById('product-book-now');
 
     if (!titleEl || !gridEl || !rangeEl || !datesWrapEl || !startDateEl || !returnDateEl || !prevBtn || !nextBtn) return;
 
@@ -388,6 +385,10 @@
       const dd = String(d.getDate()).padStart(2, '0');
       const yyyy = d.getFullYear();
       return `${mm}/${dd}/${yyyy}`;
+    }
+
+    function parsePesoToNumber(priceText) {
+      return Number(String(priceText || '').replace(/[^0-9.]/g, '')) || 0;
     }
 
     function crossDissolve(containerEl, nextText) {
@@ -534,6 +535,41 @@
 
     setRangeText();
     render();
+
+    if (bookNowBtn) {
+      bookNowBtn.addEventListener('click', function () {
+        if (!center) {
+          window.alert('Please select a rental date first.');
+          return;
+        }
+
+        const startDate = new Date(center.getFullYear(), center.getMonth(), center.getDate() - 2);
+        const returnDate = new Date(center.getFullYear(), center.getMonth(), center.getDate() + 2);
+        const item = {
+          id: '{{ slug|escapejs }}',
+          name: '{{ product.title|escapejs }}',
+          price: parsePesoToNumber('{{ product.price|escapejs }}'),
+          qty: 1,
+          size: '-',
+          img: '{{ product.image|escapejs }}',
+          rental: fmtMDY(startDate) + ' - ' + fmtMDY(returnDate),
+          rentalStart: fmtMDY(startDate),
+          rentalReturn: fmtMDY(returnDate),
+          selectedDate: fmtMDY(center)
+        };
+
+        let cart = [];
+        try {
+          cart = JSON.parse(localStorage.getItem('arabela_cart') || '[]');
+        } catch (err) {
+          cart = [];
+        }
+        cart.push(item);
+        localStorage.setItem('arabela_cart', JSON.stringify(cart));
+        localStorage.setItem('arabela_book_now_context', JSON.stringify(item));
+        window.location.href = "{% url 'gowns:selection' %}?source=book-now";
+      });
+    }
   })();
 </script>
 {% endblock %}

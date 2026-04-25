@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block title %}ARABELA | Your Selection{% endblock %}
+
+{% block main_class %}pt-24 pb-20{% endblock %}
+
+{% block content %}
+<div class="max-w-[1440px] mx-auto px-8">
+<!-- Editorial Selection Header -->
+<div class="text-center pt-16 pb-12">
+<h2 class="font-headline text-4xl lg:text-5xl font-bold mb-4 uppercase tracking-[0.15em]">Your Selection</h2>
+<div class="w-12 h-[1px] bg-primary mx-auto mb-16"></div>
+</div>
+<!-- Detailed Summary Layout -->
+<div class="mb-20" id="selection-table">
+<!-- Table Headers -->
+<div class="grid grid-cols-12 border-b border-outline-variant/30 pb-4 mb-8">
+<div class="col-span-6">
+<span class="font-label text-[0.625rem] tracking-[0.2em] uppercase font-bold text-secondary">Product</span>
+</div>
+<div class="col-span-2 text-right">
+<span class="font-label text-[0.625rem] tracking-[0.2em] uppercase font-bold text-secondary">Price</span>
+</div>
+<div class="col-span-2 text-center">
+<span class="font-label text-[0.625rem] tracking-[0.2em] uppercase font-bold text-secondary">Quantity</span>
+</div>
+<div class="col-span-2 text-right">
+<span class="font-label text-[0.625rem] tracking-[0.2em] uppercase font-bold text-secondary">Total</span>
+</div>
+</div>
+<!-- Cart items will be injected here by JS -->
+<div id="cart-items"></div>
+<!-- Footer Summary -->
+<div class="grid grid-cols-12 pt-12 mt-8 border-t border-outline-variant/30">
+<div class="col-span-12 flex flex-col md:flex-row justify-between items-end gap-8 w-full">
+<!-- Left side: Continue Shopping -->
+<div class="order-2 md:order-1">
+<a class="font-label text-[0.625rem] tracking-[0.2em] uppercase underline underline-offset-8 decoration-outline-variant hover:decoration-primary transition-all" href="#">Continue Shopping</a>
+</div>
+<!-- Right side: Total and Button Grouped -->
+<div class="flex flex-col items-end gap-8 order-1 md:order-2">
+<div class="text-right space-y-2">
+<div class="space-y-1">
+<div class="flex items-center justify-end gap-10">
+<span class="font-label text-[0.625rem] tracking-[0.2em] uppercase text-secondary">Subtotal</span>
+<span class="font-label text-[0.875rem] tabular-nums" id="selection-cart-subtotal">₱ 0</span>
+</div>
+<div class="flex items-center justify-end gap-10">
+<span class="font-label text-[0.625rem] tracking-[0.2em] uppercase text-secondary">Security Deposit</span>
+<span class="font-label text-[0.875rem] tabular-nums" id="selection-cart-deposit">₱ 0</span>
+</div>
+</div>
+<div class="flex flex-col">
+<span class="font-label text-[0.625rem] tracking-[0.2em] uppercase text-secondary">Total</span>
+<span class="font-headline text-3xl font-bold" id="selection-cart-total">₱ 0 PHP</span>
+</div>
+</div>
+<button id="selection-proceed-btn" class="bg-primary hover:bg-secondary text-on-primary px-12 py-5 font-headline font-bold uppercase tracking-[0.2rem] text-xs transition-colors duration-300 w-full md:w-auto">PROCEED TO RESERVATION</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// --- Cart logic for selection.html ---
+const RESERVATION_STORAGE_KEY = 'arabela_reservation_cart';
+const DEPOSIT_PER_ITEM = 2000;
+
+function formatPeso(amount) {
+  return '₱ ' + amount.toLocaleString();
+}
+function renderCart() {
+  const cart = JSON.parse(localStorage.getItem('arabela_cart') || '[]');
+  const cartItemsDiv = document.getElementById('cart-items');
+  const cartTotalSpan = document.getElementById('selection-cart-total');
+  const cartSubtotalSpan = document.getElementById('selection-cart-subtotal');
+  const cartDepositSpan = document.getElementById('selection-cart-deposit');
+  cartItemsDiv.innerHTML = '';
+  let subtotal = 0;
+  let itemCount = 0;
+  if (cart.length === 0) {
+    cartItemsDiv.innerHTML = '<div class="text-center col-span-12 py-12 text-secondary">No items in your selection.</div>';
+    cartSubtotalSpan.textContent = '₱ 0';
+    cartDepositSpan.textContent = '₱ 0';
+    cartTotalSpan.textContent = '₱ 0 PHP';
+    return;
+  }
+  cart.forEach((item, idx) => {
+    const unitPrice = Number(item.price) || 0;
+    const qty = Math.max(1, Number(item.qty) || 1);
+    const itemTotal = unitPrice * qty;
+    subtotal += itemTotal;
+    itemCount += qty;
+    cartItemsDiv.innerHTML += `
+    <div class="grid grid-cols-12 items-center gap-4 mb-6">
+      <div class="col-span-6 flex gap-8 items-center">
+        <div class="w-32 aspect-[3/4] bg-surface-container-low overflow-hidden">
+          <img alt="${item.name}" class="w-full h-full object-cover" src="${item.img}"/>
+        </div>
+        <div class="flex flex-col justify-center gap-2">
+          <h3 class="font-headline font-bold text-lg tracking-tight uppercase">${item.name}</h3>
+          <div class="flex flex-col gap-1">
+            <p class="text-[0.75rem] text-secondary tracking-widest uppercase">Size: ${item.size || '-'}</p>
+            <p class="text-[0.75rem] text-secondary tracking-widest uppercase">Rental: ${item.rental || '-'}</p>
+          </div>
+          <button class="text-[0.625rem] tracking-widest uppercase underline underline-offset-4 text-on-surface-variant mt-2 hover:text-primary transition-colors text-left" onclick="removeCartItem(${idx})">Remove</button>
+        </div>
+      </div>
+      <div class="col-span-2 text-right">
+        <span class="font-label text-[0.875rem] font-medium tracking-tight align-middle">${formatPeso(unitPrice)}</span>
+      </div>
+      <div class="col-span-2 flex justify-center">
+        <div class="flex items-center border border-outline-variant/30 px-3 py-2 gap-4 h-12 self-center">
+          <span class="material-symbols-outlined text-[1rem] cursor-pointer" onclick="updateQty(${idx},-1)">remove</span>
+          <span class="font-body text-sm px-2">${qty}</span>
+          <span class="material-symbols-outlined text-[1rem] cursor-pointer" onclick="updateQty(${idx},1)">add</span>
+        </div>
+      </div>
+      <div class="col-span-2 text-right">
+        <span class="font-label text-[0.875rem] font-bold tracking-tight align-middle">${formatPeso(itemTotal)}</span>
+      </div>
+    </div>
+    `;
+  });
+  const deposit = itemCount * DEPOSIT_PER_ITEM;
+  cartSubtotalSpan.textContent = formatPeso(subtotal);
+  cartDepositSpan.textContent = formatPeso(deposit);
+  cartTotalSpan.textContent = formatPeso(subtotal + deposit) + ' PHP';
+}
+function removeCartItem(idx) {
+  let cart = JSON.parse(localStorage.getItem('arabela_cart') || '[]');
+  cart.splice(idx, 1);
+  localStorage.setItem('arabela_cart', JSON.stringify(cart));
+  renderCart();
+}
+function updateQty(idx, delta) {
+  let cart = JSON.parse(localStorage.getItem('arabela_cart') || '[]');
+  cart[idx].qty += delta;
+  if (cart[idx].qty < 1) cart[idx].qty = 1;
+  localStorage.setItem('arabela_cart', JSON.stringify(cart));
+  renderCart();
+}
+function proceedReservationFromSelection() {
+  const cart = JSON.parse(localStorage.getItem('arabela_cart') || '[]');
+  if (!cart.length) {
+    window.alert('Add at least one item to your selection before continuing.');
+    return;
+  }
+
+  let subtotal = 0;
+  let itemCount = 0;
+  const items = cart.map((item) => {
+    const qty = Math.max(1, Number(item.qty) || 1);
+    const unitPrice = Number(item.price) || 0;
+    const lineTotal = unitPrice * qty;
+    subtotal += lineTotal;
+    itemCount += qty;
+    return {
+      name: item.name || '',
+      size: 'Size: ' + (item.size || '-'),
+      image: item.img || '',
+      imageAlt: item.name || '',
+      unitPrice: unitPrice,
+      qty: qty,
+      lineTotal: lineTotal,
+      rental: item.rental || ''
+    };
+  });
+
+  const deposit = itemCount * DEPOSIT_PER_ITEM;
+  const payload = {
+    items: items,
+    subtotal: subtotal,
+    itemCount: itemCount,
+    deposit: deposit,
+    total: subtotal + deposit
+  };
+  sessionStorage.setItem(RESERVATION_STORAGE_KEY, JSON.stringify(payload));
+  window.location.href = "{% url 'gowns:reservation' %}";
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  renderCart();
+  const proceedBtn = document.getElementById('selection-proceed-btn');
+  if (proceedBtn) {
+    proceedBtn.addEventListener('click', proceedReservationFromSelection);
+  }
+});
+</script>
+{% endblock %}

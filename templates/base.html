@@ -149,24 +149,37 @@
           <button type="button" class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]" onclick="toggleCart()" aria-label="Open selection">
             <span class="material-symbols-outlined">shopping_bag</span>
           </button>
-          <a href="{% url 'accounts:login' %}">
-            <button type="button" class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]">
+          {% if request.user.is_authenticated %}
+            <button type="button" class="user-orders-redirect-btn scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]" aria-label="Open account menu">
               <span class="material-symbols-outlined">person</span>
             </button>
-          </a>
+          {% else %}
+            <a href="{% url 'accounts:login' %}">
+              <button type="button" class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]">
+                <span class="material-symbols-outlined">person</span>
+              </button>
+            </a>
+          {% endif %}
         {% elif url_name != "confirmation" %}
           <button type="button" class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]" onclick="toggleCart()" aria-label="Open selection">
             <span class="material-symbols-outlined">shopping_bag</span>
           </button>
-          <a href="{% url 'accounts:login' %}">
-            <button type="button" class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]">
+          {% if request.user.is_authenticated %}
+            <button type="button" class="user-orders-redirect-btn scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]" aria-label="Open account menu">
               <span class="material-symbols-outlined">person</span>
             </button>
-          </a>
+          {% else %}
+            <a href="{% url 'accounts:login' %}">
+              <button type="button" class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]">
+                <span class="material-symbols-outlined">person</span>
+              </button>
+            </a>
+          {% endif %}
         {% endif %}
       </div>
     </nav>
   </header>
+
 
   {% if url_name != "reservation" and url_name != "confirmation" %}
   <!-- SEARCH OVERLAY -->
@@ -266,7 +279,7 @@
 
   {% if url_name != "confirmation" %}
   <!-- Cart click-away -->
-  <div id="cart-click-away" class="fixed inset-0 z-[84] bg-transparent pointer-events-none" onclick="toggleCart()" aria-hidden="true"></div>
+  <div id="cart-click-away" class="fixed inset-0 z-[84] bg-black/30 opacity-0 pointer-events-none transition-opacity duration-300" onclick="toggleCart()" aria-hidden="true"></div>
 
   <!-- Cart / selection drawer -->
   <aside id="cart-drawer" class="fixed top-0 right-0 h-full w-full md:w-[480px] bg-white z-[85] translate-x-full transform transition-transform duration-500 ease-in-out shadow-none flex flex-col" aria-hidden="true">
@@ -279,65 +292,7 @@
         <span class="material-symbols-outlined text-2xl">close</span>
       </button>
     </header>
-    <div class="flex-1 overflow-y-auto ai-scroll px-8 py-4 space-y-10 min-h-0">
-      <div class="cart-line flex gap-4 group" data-unit-price="4500">
-        <div class="w-24 h-32 bg-white border border-black/10 overflow-hidden shrink-0">
-          <img alt="Structured Wool Blazer" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA" />
-        </div>
-        <div class="flex-1 flex flex-col justify-between py-1 min-w-0">
-          <div class="flex justify-between items-start gap-2">
-            <div>
-              <h3 class="text-sm font-medium text-on-surface leading-tight">Structured Wool Blazer</h3>
-              <p class="text-[0.6875rem] text-on-secondary-container mt-1">Size: Large</p>
-            </div>
-            <button type="button" class="text-on-surface hover:text-error transition-colors shrink-0" onclick="cartRemoveLine(this)" aria-label="Remove item">
-              <span class="material-symbols-outlined text-lg">close</span>
-            </button>
-          </div>
-          <div class="flex justify-between items-end gap-2">
-            <div class="flex items-center space-x-3">
-              <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, -1)" aria-label="Decrease quantity">
-                <span class="material-symbols-outlined text-xs">remove</span>
-              </button>
-              <span class="cart-qty text-xs font-medium tabular-nums">1</span>
-              <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, 1)" aria-label="Increase quantity">
-                <span class="material-symbols-outlined text-xs">add</span>
-              </button>
-            </div>
-            <p class="cart-line-total font-['Inter',sans-serif] text-sm font-semibold text-on-surface tracking-wide tabular-nums shrink-0">₱ 4,500.00</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="cart-line flex gap-4 group" data-unit-price="6200">
-        <div class="w-24 h-32 bg-white border border-black/10 overflow-hidden shrink-0">
-          <img alt="Emerald Silk Midi Dress" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA" />
-        </div>
-        <div class="flex-1 flex flex-col justify-between py-1 min-w-0">
-          <div class="flex justify-between items-start gap-2">
-            <div>
-              <h3 class="text-sm font-medium text-on-surface leading-tight">Emerald Silk Midi Dress</h3>
-              <p class="text-[0.6875rem] text-on-secondary-container mt-1">Size: Small</p>
-            </div>
-            <button type="button" class="text-on-surface hover:text-error transition-colors shrink-0" onclick="cartRemoveLine(this)" aria-label="Remove item">
-              <span class="material-symbols-outlined text-lg">close</span>
-            </button>
-          </div>
-          <div class="flex justify-between items-end gap-2">
-            <div class="flex items-center space-x-3">
-              <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, -1)" aria-label="Decrease quantity">
-                <span class="material-symbols-outlined text-xs">remove</span>
-              </button>
-              <span class="cart-qty text-xs font-medium tabular-nums">1</span>
-              <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, 1)" aria-label="Increase quantity">
-                <span class="material-symbols-outlined text-xs">add</span>
-              </button>
-            </div>
-            <p class="cart-line-total font-['Inter',sans-serif] text-sm font-semibold text-on-surface tracking-wide tabular-nums shrink-0">₱ 6,200.00</p>
-          </div>
-        </div>
-      </div>
-    </div>
+    <div id="cart-lines" class="flex-1 overflow-y-auto ai-scroll px-8 py-4 space-y-10 min-h-0"></div>
     <footer class="p-8 space-y-6 bg-white border-t border-black/5 shrink-0">
       <div class="space-y-2">
         <div class="flex justify-between items-center">
@@ -465,9 +420,68 @@
     };
 
     const SECURITY_DEPOSIT_PESOS = 2000;
+    const DRAWER_STORAGE_KEY = 'arabela_cart';
 
     function formatPeso(amount) {
       return '₱ ' + Number(amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function getDrawerCart() {
+      try {
+        return JSON.parse(localStorage.getItem(DRAWER_STORAGE_KEY) || '[]');
+      } catch (err) {
+        return [];
+      }
+    }
+
+    function setDrawerCart(cart) {
+      localStorage.setItem(DRAWER_STORAGE_KEY, JSON.stringify(cart));
+    }
+
+    function renderCartDrawer() {
+      const lines = document.getElementById('cart-lines');
+      if (!lines) return;
+      const cart = getDrawerCart();
+      if (!cart.length) {
+        lines.innerHTML = '<p class="text-[0.6875rem] uppercase tracking-widest text-secondary py-4">No items in your selection.</p>';
+        return;
+      }
+
+      lines.innerHTML = cart.map((item, index) => {
+        const qty = Math.max(1, Number(item.qty) || 1);
+        const unitPrice = Number(item.price) || 0;
+        const lineTotal = unitPrice * qty;
+        return `
+          <div class="cart-line flex gap-4 group" data-index="${index}" data-unit-price="${unitPrice}" data-rental="${item.rental || ''}">
+            <div class="w-24 h-32 bg-white border border-black/10 overflow-hidden shrink-0">
+              <img alt="${item.name || 'Selection item'}" class="w-full h-full object-cover" src="${item.img || ''}" />
+            </div>
+            <div class="flex-1 flex flex-col justify-between py-1 min-w-0">
+              <div class="flex justify-between items-start gap-2">
+                <div>
+                  <h3 class="text-sm font-medium text-on-surface leading-tight">${item.name || 'Untitled'}</h3>
+                  <p class="text-[0.6875rem] text-on-secondary-container mt-1">Size: ${item.size || '-'}</p>
+                </div>
+                <button type="button" class="text-on-surface hover:text-error transition-colors shrink-0" onclick="cartRemoveLine(this)" aria-label="Remove item">
+                  <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+              </div>
+              <div class="flex justify-between items-end gap-2">
+                <div class="flex items-center space-x-3">
+                  <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, -1)" aria-label="Decrease quantity">
+                    <span class="material-symbols-outlined text-xs">remove</span>
+                  </button>
+                  <span class="cart-qty text-xs font-medium tabular-nums">${qty}</span>
+                  <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, 1)" aria-label="Increase quantity">
+                    <span class="material-symbols-outlined text-xs">add</span>
+                  </button>
+                </div>
+                <p class="cart-line-total font-['Inter',sans-serif] text-sm font-semibold text-on-surface tracking-wide tabular-nums shrink-0">${formatPeso(lineTotal)}</p>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
     }
 
     function updateCartTotals() {
@@ -496,19 +510,50 @@
     function cartAdjustQty(btn, delta) {
       const row = btn.closest('.cart-line');
       if (!row || row.classList.contains('hidden')) return;
-      const qtyEl = row.querySelector('.cart-qty');
-      let q = parseInt(qtyEl.textContent, 10) || 1;
+      const cart = getDrawerCart();
+      const idx = Number(row.dataset.index);
+      if (!Number.isInteger(idx) || !cart[idx]) return;
+      let q = parseInt(cart[idx].qty, 10) || 1;
       q = Math.max(1, q + delta);
-      qtyEl.textContent = String(q);
+      cart[idx].qty = q;
+      setDrawerCart(cart);
+      renderCartDrawer();
       updateCartTotals();
     }
 
     function cartRemoveLine(btn) {
       const row = btn.closest('.cart-line');
       if (!row) return;
-      row.classList.add('hidden');
+      const cart = getDrawerCart();
+      const idx = Number(row.dataset.index);
+      if (!Number.isInteger(idx) || !cart[idx]) return;
+      cart.splice(idx, 1);
+      setDrawerCart(cart);
+      renderCartDrawer();
       updateCartTotals();
     }
+
+    window.addCollectionItem = function (item) {
+      if (!item || !item.id) return;
+      const cart = getDrawerCart();
+      const existing = cart.find(function (cartItem) { return cartItem.id === item.id; });
+      if (existing) {
+        existing.qty = (Number(existing.qty) || 1) + 1;
+      } else {
+        cart.push({
+          id: item.id,
+          name: item.name || 'Untitled',
+          price: Number(item.price) || 0,
+          qty: 1,
+          size: item.size || '-',
+          img: item.img || ''
+        });
+      }
+      setDrawerCart(cart);
+      renderCartDrawer();
+      updateCartTotals();
+      if (typeof toggleCart === 'function') toggleCart();
+    };
 
     function closeCartDrawer() {
       const drawer = document.getElementById('cart-drawer');
@@ -517,7 +562,11 @@
         drawer.classList.add('translate-x-full');
         drawer.setAttribute('aria-hidden', 'true');
       }
-      if (scrim) scrim.classList.add('pointer-events-none');
+      if (scrim) {
+        scrim.classList.add('pointer-events-none');
+        scrim.classList.remove('opacity-100');
+        scrim.classList.add('opacity-0');
+      }
     }
 
     function toggleCart() {
@@ -536,10 +585,20 @@
       const closed = drawer.classList.contains('translate-x-full');
       drawer.setAttribute('aria-hidden', closed ? 'true' : 'false');
       if (scrim) {
-        if (closed) scrim.classList.add('pointer-events-none');
-        else scrim.classList.remove('pointer-events-none');
+        if (closed) {
+          scrim.classList.add('pointer-events-none');
+          scrim.classList.remove('opacity-100');
+          scrim.classList.add('opacity-0');
+        } else {
+          scrim.classList.remove('pointer-events-none');
+          scrim.classList.remove('opacity-0');
+          scrim.classList.add('opacity-100');
+        }
       }
-      if (!closed) updateCartTotals();
+      if (!closed) {
+        renderCartDrawer();
+        updateCartTotals();
+      }
     }
 
     function toggleAI() {
@@ -612,7 +671,34 @@
       if (!message) return;
       input.value = '';
     }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () {
+        renderCartDrawer();
+        updateCartTotals();
+      });
+    } else {
+      renderCartDrawer();
+      updateCartTotals();
+    }
   </script>
+
+  {% if request.user.is_authenticated %}
+  <script>
+    (function () {
+      const userButtons = document.querySelectorAll('.user-orders-redirect-btn');
+      if (!userButtons.length) return;
+
+      function goToOrders() {
+        window.location.href = "{% url 'gowns:orders' %}";
+      }
+
+      userButtons.forEach(function (btn) {
+        btn.addEventListener('click', goToOrders);
+      });
+    })();
+  </script>
+  {% endif %}
 
   {% block extra_scripts %}{% endblock %}
 </body>

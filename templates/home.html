@@ -1,100 +1,481 @@
-{% extends "base.html" %}
 {% load static %}
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ARABELA | Editorial Archive</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Epilogue:wght@300;400;700;800&family=Inter:wght@300;400;500;600&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link rel="preload" as="image" type="image/png" href="{% static 'images/hero-silk.png' %}">
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-surface-variant": "#444748",
+              "on-primary-container": "#8a8989",
+              "surface-tint": "#5f5e5e",
+              "surface-dim": "#dcd9d9",
+              "error-container": "#ffdad6",
+              "tertiary-fixed": "#e4e2e2",
+              "surface-container-lowest": "#ffffff",
+              "outline": "#747878",
+              "error": "#ba1a1a",
+              "on-primary-fixed-variant": "#474746",
+              "primary-container": "#222222",
+              "secondary": "#615e57",
+              "primary": "#0b0c0c",
+              "on-primary-fixed": "#1b1c1c",
+              "on-secondary": "#ffffff",
+              "on-secondary-container": "#67645d",
+              "outline-variant": "#c4c7c7",
+              "secondary-fixed-dim": "#cbc6bd",
+              "tertiary-fixed-dim": "#c8c6c6",
+              "on-tertiary-fixed-variant": "#474747",
+              "surface-container-low": "#f6f3f2",
+              "secondary-fixed": "#e7e2d9",
+              "primary-fixed": "#e5e2e1",
+              "on-error": "#ffffff",
+              "on-secondary-fixed": "#1d1b16",
+              "secondary-container": "#e7e2d9",
+              "on-tertiary-fixed": "#1b1c1c",
+              "primary-fixed-dim": "#c8c6c5",
+              "tertiary-container": "#222222",
+              "inverse-primary": "#c8c6c5",
+              "on-surface": "#1b1c1c",
+              "surface-container": "#f0eded",
+              "surface": "#fcf9f8",
+              "surface-container-highest": "#e5e2e1",
+              "on-primary": "#ffffff",
+              "on-tertiary": "#ffffff",
+              "on-error-container": "#93000a",
+              "surface-container-high": "#eae7e7",
+              "tertiary": "#0b0c0c",
+              "surface-bright": "#fcf9f8",
+              "background": "#fcf9f8",
+              "surface-variant": "#e5e2e1",
+              "inverse-on-surface": "#f3f0ef",
+              "on-secondary-fixed-variant": "#494640",
+              "on-tertiary-container": "#8a8989",
+              "inverse-surface": "#303030",
+              "on-background": "#1b1c1c"
+            },
+            fontFamily: {
+              "headline": ["Poppins", "Epilogue"],
+              "body": ["Poppins", "Inter"],
+              "label": ["Poppins", "Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+</script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+            font-size: 1.25rem;
+        }
+        .editorial-shadow { box-shadow: 0 20px 40px rgba(27, 28, 28, 0.06); }
+        header.homepage-header { background: rgba(255,255,255,0.8); backdrop-filter: blur(18px); }
+        header.homepage-header nav a,
+        header.homepage-header nav button,
+        header.homepage-header nav button span.material-symbols-outlined {
+            color: #111827 !important;
+        }
+        header.homepage-header .dropdown-menu {
+            background: rgba(255,255,255,0.96);
+            border-color: rgba(148,163,184,0.24);
+        }
+        header.homepage-header .dropdown-menu a {
+            color: #111827 !important;
+        }
+        main .homepage-hero {
+            position: relative;
+            overflow: hidden;
+            background-color: #E1DFDA;
+            background-image: url("{% static 'images/hero-silk.png' %}");
+            background-repeat: no-repeat;
+            background-size: cover;
+            background-position: center center;
+        }
+        body .text-primary { color: #111827 !important; }
+        body .bg-primary { background-color: #111827 !important; }
+        body .border-primary { border-color: #E1DFDA !important; }
+        body .hover\:text-primary:hover { color: #111827 !important; }
+        body .hover\:bg-primary:hover { background-color: #111827 !important; }
+        body .hover\:border-primary:hover { border-color: #E1DFDA !important; }
+        body .focus\:border-primary:focus { border-color: #111827 !important; }
+        body .focus\:ring-primary:focus { --tw-ring-color: rgba(17,24,39,0.28) !important; }
+        main .homepage-hero::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: rgba(255,255,255,0.02);
+            pointer-events: none;
+        }
+        main .homepage-hero-content {
+            position: relative;
+            z-index: 10;
+        }
+        main .homepage-hero-label,
+        main .homepage-trending-label,
+        main .homepage-category-label {
+            font-family: "Poppins", sans-serif !important;
+            font-weight: 300 !important;
+            font-size: 0.75rem !important;
+            letter-spacing: 0.35em !important;
+            text-transform: uppercase !important;
+            color: #111827 !important;
+        }
+        main .homepage-hero-title,
+        main .homepage-trending-heading,
+        main .homepage-about-heading {
+            font-family: "Playfair Display", serif !important;
+            font-weight: 700 !important;
+            color: #111827 !important;
+            line-height: 0.92 !important;
+        }
+        main .homepage-hero-title {
+            font-size: clamp(4rem, 6vw, 7rem) !important;
+        }
+        main .homepage-trending-heading {
+            font-size: clamp(4rem, 6vw, 7rem) !important;
+        }
+        main .homepage-about-heading {
+            font-size: clamp(3rem, 4.5vw, 4.5rem) !important;
+        }
+        main .homepage-hero-description,
+        main .homepage-about-paragraph,
+        main .homepage-trending-copy {
+            font-family: "Poppins", sans-serif !important;
+            font-weight: 400 !important;
+            color: rgba(17, 24, 39, 0.88) !important;
+            line-height: 1.8 !important;
+        }
+        main .homepage-hero-description {
+            font-size: 1rem !important;
+        }
+        main .homepage-about-paragraph {
+            font-size: 1rem !important;
+        }
+        main .homepage-trending-copy {
+            font-size: 0.78rem !important;
+            letter-spacing: 0.35em !important;
+            text-transform: uppercase !important;
+            color: rgba(17, 24, 39, 0.72) !important;
+        }
+        main .homepage-hero-button,
+        main .homepage-stat-value,
+        main .homepage-stat-label {
+            font-family: "Poppins", sans-serif !important;
+            letter-spacing: 0.2em !important;
+            text-transform: uppercase !important;
+        }
+        main .homepage-hero-button {
+            font-weight: 500 !important;
+            color: #ffffff !important;
+            background-color: #111827 !important;
+            box-shadow: 0 24px 45px rgba(17, 24, 39, 0.18);
+        }
+        main .homepage-stat-value {
+            font-weight: 500 !important;
+            color: #111827 !important;
+            font-size: clamp(2.5rem, 4vw, 3.5rem) !important;
+            line-height: 1 !important;
+        }
+        main .homepage-stat-label {
+            font-weight: 300 !important;
+            color: #111827 !important;
+            font-size: 0.75rem !important;
+        }
+        .ai-panel-shadow { box-shadow: -10px 0 30px rgba(0,0,0,0.1); }
+        .ai-scroll::-webkit-scrollbar { width: 2px; }
+        .ai-scroll::-webkit-scrollbar-track { background: transparent; }
+        .ai-scroll::-webkit-scrollbar-thumb { background: #e5e2e1; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in { animation: fadeIn 0.4s ease forwards; }
+        #search-overlay {
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: translateY(-100%);
+            opacity: 0;
+            pointer-events: none;
+        }
+        #search-overlay.open {
+            transform: translateY(0);
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .group:hover .dropdown-menu {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            pointer-events: auto;
+        }
+        .dropdown-menu {
+            transition: all 0.4s cubic-bezier(0.23, 1, 0.320, 1);
+            transform: translateY(-15px) scale(0.92);
+            opacity: 0;
+            pointer-events: none;
+        }
+        body { font-family: 'Poppins', sans-serif; }
+</style>
+</head>
+<body class="bg-white text-on-surface selection:bg-primary-fixed-dim overflow-x-hidden">
 
-{% block title %}ARABELA | Editorial Archive{% endblock %}
+<!-- TOP NAVBAR -->
+<header class="fixed top-0 w-full z-[70] homepage-header bg-white/80 dark:bg-[#222222]/80 backdrop-blur-md border-b border-black/5">
+<nav class="flex justify-between items-center w-full px-8 h-20">
+    <div class="flex items-center gap-12">
+        <div class="flex-shrink-0">
+            <h1 class="text-2xl font-bold tracking-tighter text-[#222222] dark:text-[#FAF4EB]">ARABELA</h1>
+        </div>
+        <div class="hidden md:flex gap-8 items-center self-stretch">
+            <div class="relative group h-full flex items-center">
+                <a class="uppercase tracking-[0.1rem] text-[0.6875rem] text-[#615E57] dark:text-[#A09E99] hover:text-[#222222] dark:hover:text-white transition-colors duration-300" href="#">Rent</a>
+                <div class="dropdown-menu absolute top-full left-0 w-52 bg-white dark:bg-[#222222] shadow-[0_10px_30px_rgba(0,0,0,0.08)] border-t-2 border-[#222222] dark:border-[#FAF4EB] py-6 z-[80]" style="background-color: #ffffff;">
+                    <ul class="flex flex-col gap-4">
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">All</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Dresses</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Filipiniana</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Kids suit</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:collection_wedding' %}">Wedding</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Suit</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Ball gown</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="relative group h-full flex items-center">
+                <a class="uppercase tracking-[0.1rem] text-[0.6875rem] text-[#615E57] dark:text-[#A09E99] hover:text-[#222222] dark:hover:text-white transition-colors duration-300" href="#">How it Works</a>
+                <div class="dropdown-menu absolute top-full left-0 w-48 bg-white dark:bg-[#222222] shadow-[0_10px_30px_rgba(0,0,0,0.08)] border-t-2 border-[#222222] dark:border-[#FAF4EB] py-6 z-[80]" style="background-color: #ffffff;">
+                    <ul class="flex flex-col gap-4">
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">FAQs</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="flex gap-6 items-center">
+        <button class="scale-95 active:scale-90 transition-all text-slate-900 flex items-center gap-2 group" onclick="toggleAI()">
+            <span class="font-label text-[0.6rem] uppercase tracking-widest hidden lg:block opacity-0 group-hover:opacity-100 transition-opacity">Arabela Reccomends</span>
+            <span class="material-symbols-outlined" style='font-variation-settings: "FILL" 1;'>auto_fix_high</span>
+        </button>
+        <button class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]" onclick="toggleSearch()">
+            <span class="material-symbols-outlined" id="search-icon">search</span>
+        </button>
+        <button type="button" class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]" onclick="toggleCart()" aria-label="Open selection">
+            <span class="material-symbols-outlined">shopping_bag</span>
+        </button>
+        {% if request.user.is_authenticated %}
+        <button id="user-icon-btn" class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]">
+            <span class="material-symbols-outlined">person</span>
+        </button>
+        {% else %}
+        <a href="{% url 'accounts:login' %}">
+            <button class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]">
+                <span class="material-symbols-outlined">person</span>
+            </button>
+        </a>
+        {% endif %}
+    </div>
+</nav>
+</header>
 
-{% block extra_head %}
-  <link rel="preload" as="image" type="image/png" href="{% static 'images/hero-silk.png' %}">
-  <style>
-    header.homepage-header { background: rgba(255,255,255,0.8); backdrop-filter: blur(18px); }
-    main .homepage-hero {
-      position: relative;
-      overflow: hidden;
-      background-color: #E1DFDA;
-      background-image: url("{% static 'images/hero-silk.png' %}");
-      background-repeat: no-repeat;
-      background-size: cover;
-      background-position: center center;
-    }
-    body .text-primary { color: #111827 !important; }
-    body .bg-primary { background-color: #111827 !important; }
-    body .border-primary { border-color: #E1DFDA !important; }
-    body .hover\:text-primary:hover { color: #111827 !important; }
-    body .hover\:bg-primary:hover { background-color: #111827 !important; }
-    body .hover\:border-primary:hover { border-color: #E1DFDA !important; }
-    body .focus\:border-primary:focus { border-color: #111827 !important; }
-    body .focus\:ring-primary:focus { --tw-ring-color: rgba(17,24,39,0.28) !important; }
-    main .homepage-hero::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: rgba(255,255,255,0.02);
-      pointer-events: none;
-    }
-    main .homepage-hero-content { position: relative; z-index: 10; }
-    main .homepage-hero-label,
-    main .homepage-trending-label,
-    main .homepage-category-label {
-      font-family: "Poppins", sans-serif !important;
-      font-weight: 300 !important;
-      font-size: 0.75rem !important;
-      letter-spacing: 0.35em !important;
-      text-transform: uppercase !important;
-      color: #111827 !important;
-    }
-    main .homepage-hero-title,
-    main .homepage-trending-heading,
-    main .homepage-about-heading {
-      font-family: "Playfair Display", serif !important;
-      font-weight: 700 !important;
-      color: #111827 !important;
-      line-height: 0.92 !important;
-    }
-    main .homepage-hero-title { font-size: clamp(4rem, 6vw, 7rem) !important; }
-    main .homepage-trending-heading { font-size: clamp(4rem, 6vw, 7rem) !important; }
-    main .homepage-about-heading { font-size: clamp(3rem, 4.5vw, 4.5rem) !important; }
-    main .homepage-hero-description,
-    main .homepage-about-paragraph,
-    main .homepage-trending-copy {
-      font-family: "Poppins", sans-serif !important;
-      font-weight: 400 !important;
-      color: rgba(17, 24, 39, 0.88) !important;
-      line-height: 1.8 !important;
-    }
-    main .homepage-trending-copy {
-      font-size: 0.78rem !important;
-      letter-spacing: 0.35em !important;
-      text-transform: uppercase !important;
-      color: rgba(17, 24, 39, 0.72) !important;
-    }
-    main .homepage-hero-button,
-    main .homepage-stat-value,
-    main .homepage-stat-label {
-      font-family: "Poppins", sans-serif !important;
-      letter-spacing: 0.2em !important;
-      text-transform: uppercase !important;
-    }
-    main .homepage-hero-button {
-      font-weight: 500 !important;
-      color: #ffffff !important;
-      background-color: #111827 !important;
-      box-shadow: 0 24px 45px rgba(17, 24, 39, 0.18);
-    }
-    main .homepage-stat-value {
-      font-weight: 500 !important;
-      color: #111827 !important;
-      font-size: clamp(2.5rem, 4vw, 3.5rem) !important;
-      line-height: 1 !important;
-    }
-    main .homepage-stat-label {
-      font-weight: 300 !important;
-      color: #111827 !important;
-      font-size: 0.75rem !important;
-    }
-  </style>
-{% endblock %}
 
-{% block content %}
+<!-- SEARCH OVERLAY: dimmed backdrop below panel closes same as X -->
+<div class="fixed top-20 left-0 right-0 bottom-0 z-[65] flex flex-col" id="search-overlay">
+    <div class="shrink-0 bg-white border-b border-black/5 shadow-lg" onclick="event.stopPropagation()">
+        <div class="container mx-auto px-8 py-12">
+            <div class="max-w-4xl mx-auto">
+                <div class="relative flex items-center mb-10">
+                    <span class="material-symbols-outlined absolute left-0 text-black/40 text-2xl">search</span>
+                    <input class="w-full bg-white border border-black/20 border-0 border-b pl-10 pr-10 py-4 focus:ring-0 focus:border-black text-2xl font-light placeholder:text-black/20 rounded-none" id="main-search-input" placeholder="Search here.." type="text"/>
+                    <button type="button" class="absolute right-0 text-black/40 hover:text-slate-900 transition-colors" onclick="toggleSearch()">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+                    <div>
+                        <p class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-6">Collections</p>
+                        <ul class="space-y-4">
+                            <li><a class="text-sm hover:text-primary transition-colors" href="#">Dresses</a></li>
+                            <li><a class="text-sm hover:text-primary transition-colors" href="#">Filipiniana</a></li>
+                            <li><a class="text-sm hover:text-primary transition-colors" href="#">Kids suit</a></li>
+                            <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collection_wedding' %}">Wedding</a></li>
+                            <li><a class="text-sm hover:text-primary transition-colors" href="#">Suit</a></li>
+                            <li><a class="text-sm hover:text-primary transition-colors" href="#">Ball gown</a></li>
+                        </ul>
+                    </div>
+                    <div>
+                        <p class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-6">Trending Search</p>
+                        <div class="flex flex-wrap gap-2">
+                            <span class="px-3 py-1 bg-white border border-black/20 rounded-full text-[0.65rem] uppercase tracking-wider cursor-pointer hover:bg-gray-50">Silk Dress</span>
+                            <span class="px-3 py-1 bg-white border border-black/20 rounded-full text-[0.65rem] uppercase tracking-wider cursor-pointer hover:bg-gray-50">Tailored Blazer</span>
+                            <span class="px-3 py-1 bg-white border border-black/20 rounded-full text-[0.65rem] uppercase tracking-wider cursor-pointer hover:bg-gray-50">Velvet Gown</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="flex-1 min-h-0 w-full bg-transparent cursor-pointer" onclick="toggleSearch()" role="presentation" aria-hidden="true"></div>
+</div>
+
+<!-- AI: invisible click-away (no dim/blur on page; same close as X) -->
+<div id="ai-click-away" class="fixed inset-0 z-[69] bg-transparent pointer-events-none" onclick="toggleAI()" aria-hidden="true"></div>
+
+<!-- AI CONCIERGE PANEL -->
+<aside class="fixed top-0 right-0 h-full w-full md:w-[480px] bg-white z-[80] translate-x-full transform transition-transform duration-500 ease-in-out shadow-none flex flex-col" id="ai-concierge">
+    <div class="p-8 flex justify-between items-center border-b border-black/5">
+        <h2 class="text-sm font-bold tracking-[0.2em] uppercase flex items-center gap-3">
+            <span class="material-symbols-outlined text-primary" style='font-variation-settings: "FILL" 1;'>auto_fix_high</span>
+            Arabela Reccomends
+        </h2>
+        <button class="hover:rotate-90 transition-transform p-2" onclick="toggleAI()">
+            <span class="material-symbols-outlined">close</span>
+        </button>
+    </div>
+    <div class="flex-1 overflow-y-auto ai-scroll p-8 space-y-10" id="ai-content">
+        <div class="space-y-4 pt-4">
+            <p class="text-2xl font-light italic leading-tight text-primary">Find the definitive piece for your silhouette.</p>
+        </div>
+        <div class="space-y-6" id="occasion-picker">
+            <p class="text-[0.6875rem] uppercase tracking-[0.15em] text-on-surface-variant font-semibold">What is the occasion?</p>
+            <div class="flex flex-wrap gap-3">
+                <button class="px-6 py-3 bg-white border border-black rounded-full text-[0.6rem] uppercase tracking-widest text-black hover:bg-gray-50 transition-all active:scale-95" onclick="selectOccasion('Birthday')">Birthday</button>
+                <button class="px-6 py-3 bg-white border border-black rounded-full text-[0.6rem] uppercase tracking-widest text-black hover:bg-gray-50 transition-all active:scale-95" onclick="selectOccasion('Wedding')">Wedding</button>
+                <button class="px-6 py-3 bg-white border border-black rounded-full text-[0.6rem] uppercase tracking-widest text-black hover:bg-gray-50 transition-all active:scale-95" onclick="selectOccasion('Editorial')">Editorial Shoot</button>
+                <button class="px-6 py-3 bg-white border border-black rounded-full text-[0.6rem] uppercase tracking-widest text-black hover:bg-gray-50 transition-all active:scale-95" onclick="selectOccasion('Red Carpet')">Red Carpet</button>
+                <button class="px-6 py-3 bg-white border border-black rounded-full text-[0.6rem] uppercase tracking-widest text-black hover:bg-gray-50 transition-all active:scale-95" onclick="selectOccasion('Private View')">Private View</button>
+            </div>
+        </div>
+        <div class="hidden space-y-10 pt-4 animate-fade-in" id="ai-results">
+            <div class="space-y-4">
+                <div class="flex items-center gap-2">
+                    <span class="w-1.5 h-1.5 bg-primary rounded-full"></span>
+                    <p class="text-lg font-light leading-snug text-primary" id="recommendation-text"></p>
+                </div>
+                <p class="text-[0.6875rem] uppercase tracking-[0.15em] text-on-surface-variant font-semibold">Curated Suggestions</p>
+            </div>
+            <div class="grid grid-cols-2 gap-6" id="suggestion-cards"></div>
+            <button class="text-[0.6rem] uppercase tracking-[0.2em] border-b border-primary/20 pb-1 hover:border-primary transition-all" onclick="resetAI()">Start Over</button>
+        </div>
+    </div>
+    <div class="p-8 border-t border-black/5 bg-white">
+        <div class="relative">
+            <input class="w-full bg-white border border-black/10 py-4 px-4 focus:ring-0 focus:border-black text-sm placeholder:text-black/20 rounded" placeholder="Describe the perfect gown for your occasion..." type="text" id="ai-chat-input"/>
+            <button class="absolute right-0 bottom-4 mr-4" onclick="sendAIMessage()">
+                <span class="material-symbols-outlined">arrow_forward</span>
+            </button>
+        </div>
+        <p class="text-[0.6rem] text-on-surface-variant leading-relaxed mt-6 opacity-60">
+            AI recommendations tailored to your unique style and fitting requirements.
+        </p>
+    </div>
+</aside>
+
+<!-- Cart: invisible click-away (no dim/blur on page; same pattern as Arabela Recommends) -->
+<div id="cart-click-away" class="fixed inset-0 z-[84] bg-transparent pointer-events-none" onclick="toggleCart()" aria-hidden="true"></div>
+
+<!-- Cart / selection drawer -->
+<aside id="cart-drawer" class="fixed top-0 right-0 h-full w-full md:w-[480px] bg-white z-[85] translate-x-full transform transition-transform duration-500 ease-in-out shadow-none flex flex-col" aria-hidden="true">
+    <header class="p-8 flex justify-between items-center border-b border-black/5 shrink-0">
+        <h2 class="text-sm font-bold tracking-[0.2em] uppercase text-on-surface flex items-center gap-3">
+            <span class="material-symbols-outlined text-primary" style='font-variation-settings: "FILL" 0;'>shopping_bag</span>
+            Your Selection
+        </h2>
+        <button type="button" class="hover:opacity-50 transition-opacity text-[#222222] dark:text-[#FAF4EB]" onclick="toggleCart()" aria-label="Close selection">
+            <span class="material-symbols-outlined text-2xl">close</span>
+        </button>
+    </header>
+    <div class="flex-1 overflow-y-auto ai-scroll px-8 py-4 space-y-10 min-h-0">
+        <div class="cart-line flex gap-4 group" data-unit-price="4500">
+            <div class="w-24 h-32 bg-white border border-black/10 overflow-hidden shrink-0">
+                <img alt="Structured Wool Blazer" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
+            </div>
+            <div class="flex-1 flex flex-col justify-between py-1 min-w-0">
+                <div class="flex justify-between items-start gap-2">
+                    <div>
+                        <h3 class="text-sm font-medium text-on-surface leading-tight">Structured Wool Blazer</h3>
+                        <p class="text-[0.6875rem] text-on-secondary-container mt-1">Size: Large</p>
+                    </div>
+                    <button type="button" class="text-on-surface hover:text-error transition-colors shrink-0" onclick="cartRemoveLine(this)" aria-label="Remove item">
+                        <span class="material-symbols-outlined text-lg">close</span>
+                    </button>
+                </div>
+                <div class="flex justify-between items-end gap-2">
+                    <div class="flex items-center space-x-3">
+                        <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, -1)" aria-label="Decrease quantity">
+                            <span class="material-symbols-outlined text-xs">remove</span>
+                        </button>
+                        <span class="cart-qty text-xs font-medium tabular-nums">1</span>
+                        <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, 1)" aria-label="Increase quantity">
+                            <span class="material-symbols-outlined text-xs">add</span>
+                        </button>
+                    </div>
+                    <p class="cart-line-total font-['Inter',sans-serif] text-sm font-semibold text-on-surface tracking-wide tabular-nums shrink-0">₱ 4,500.00</p>
+                </div>
+            </div>
+        </div>
+        <div class="cart-line flex gap-4 group" data-unit-price="6200">
+            <div class="w-24 h-32 bg-white border border-black/10 overflow-hidden shrink-0">
+                <img alt="Emerald Silk Midi Dress" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
+            </div>
+            <div class="flex-1 flex flex-col justify-between py-1 min-w-0">
+                <div class="flex justify-between items-start gap-2">
+                    <div>
+                        <h3 class="text-sm font-medium text-on-surface leading-tight">Emerald Silk Midi Dress</h3>
+                        <p class="text-[0.6875rem] text-on-secondary-container mt-1">Size: Small</p>
+                    </div>
+                    <button type="button" class="text-on-surface hover:text-error transition-colors shrink-0" onclick="cartRemoveLine(this)" aria-label="Remove item">
+                        <span class="material-symbols-outlined text-lg">close</span>
+                    </button>
+                </div>
+                <div class="flex justify-between items-end gap-2">
+                    <div class="flex items-center space-x-3">
+                        <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, -1)" aria-label="Decrease quantity">
+                            <span class="material-symbols-outlined text-xs">remove</span>
+                        </button>
+                        <span class="cart-qty text-xs font-medium tabular-nums">1</span>
+                        <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, 1)" aria-label="Increase quantity">
+                            <span class="material-symbols-outlined text-xs">add</span>
+                        </button>
+                    </div>
+                    <p class="cart-line-total font-['Inter',sans-serif] text-sm font-semibold text-on-surface tracking-wide tabular-nums shrink-0">₱ 6,200.00</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <footer class="p-8 space-y-6 bg-white border-t border-black/5 shrink-0">
+        <div class="space-y-2">
+            <div class="flex justify-between items-center">
+                <span class="text-xs uppercase tracking-widest text-secondary">subtotal</span>
+                <span id="cart-subtotal" class="font-['Inter',sans-serif] text-sm text-on-surface tabular-nums">₱ 10,700.00</span>
+            </div>
+            <div class="flex justify-between items-center">
+                <span class="text-xs uppercase tracking-widest text-secondary">Security Deposit</span>
+                <span id="cart-deposit" class="font-['Inter',sans-serif] text-sm text-on-surface tabular-nums">₱ 4,000.00</span>
+            </div>
+            <div class="pt-4 flex justify-between items-center border-t border-black/5">
+                <span class="text-sm font-bold uppercase tracking-[0.2rem] text-on-surface">Total Amount</span>
+                <span id="cart-total" class="font-['Epilogue',sans-serif] text-lg font-bold text-on-surface tabular-nums tracking-tight">₱ 14,700.00</span>
+            </div>
+        </div>
+        <a href="{% url 'gowns:reservation' %}" onclick="return saveCartAndProceedToReservation(event)" class="w-full bg-white border border-black text-black uppercase text-xs font-bold tracking-[0.2rem] py-5 hover:bg-gray-50 transition-colors duration-300 inline-flex items-center justify-center no-underline">Proceed to Reservation</a>
+    </footer>
+</aside>
+
+<!-- AI FLOATING BUTTON -->
+<button class="fixed bottom-10 right-10 z-[81] w-14 h-14 bg-white text-black border border-black rounded-full flex items-center justify-center shadow-none hover:bg-gray-50 active:scale-95 transition-all group overflow-hidden" onclick="toggleAI()">
+    <div class="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+    <span class="material-symbols-outlined relative z-10" style='font-variation-settings: "FILL" 1;'>auto_fix_high</span>
+</button>
+
+<main class="pt-20">
 
     <!-- HERO SECTION -->
     <section class="relative h-[90vh] w-full flex items-center overflow-hidden homepage-hero">
@@ -265,4 +646,327 @@
             </div>
         </div>
     </section>
-{% endblock %}
+
+</main>
+
+<!-- FOOTER -->
+<footer class="bg-white dark:bg-[#1B1C1C] w-full py-12 px-8">
+    <div class="w-full max-w-[1920px] mx-auto">
+        <div class="flex flex-col sm:flex-row sm:flex-wrap items-start gap-x-8 sm:gap-x-10 md:gap-x-12 lg:gap-x-16 gap-y-8 text-left">
+            <div class="flex items-center gap-3 shrink-0">
+                <a href="{% url 'gowns:homepage' %}" class="text-lg font-bold text-[#222222] dark:text-[#FAF4EB] tracking-tighter font-body">ARABELA</a>
+                <a href="https://www.facebook.com/" target="_blank" rel="noopener noreferrer" class="inline-flex text-[#222222] dark:text-[#FAF4EB] scale-95 active:scale-90 transition-all hover:opacity-70" aria-label="Arabela on Facebook">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                </a>
+            </div>
+            <div class="shrink-0">
+                <p class="text-base font-medium text-[#222222] dark:text-[#FAF4EB] font-body mb-2">Rent</p>
+                <a href="{% url 'gowns:homepage' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body">How it works</a>
+            </div>
+            <div class="shrink-0">
+                <p class="text-base font-medium text-[#222222] dark:text-[#FAF4EB] font-body mb-2">Info</p>
+                <ul class="flex flex-col gap-1.5">
+                    <li>
+                        <button type="button" onclick="toggleSearch()" class="text-left text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white bg-transparent border-0 p-0 cursor-pointer font-body leading-snug">Search</button>
+                    </li>
+                    <li>
+                        <a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">About us</a>
+                    </li>
+                    <li>
+                        <a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">Contact us</a>
+                    </li>
+                    <li>
+                        <a href="{% url 'gowns:homepage' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">FAQs</a>
+                    </li>
+                    <li>
+                        <a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">Terms and conditions</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</footer>
+
+<script src="{% static 'js/reservation-flow.js' %}"></script>
+<script>
+    const recommendations = {
+        'Birthday': {
+            text: 'For a Birthday celebration, we suggest a vibrant evening gown or cocktail dress.',
+            items: [
+                { name: 'Column Gown', brand: 'Old Celine', price: '₱10,360', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA' },
+                { name: 'Silk Tuxedo', brand: 'Saint Laurent', price: '₱6,720', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDvrOUto9vy9py6fxR-YxuiQ7pL4WzddWzTNeVPBgk4qOrjLVsLT4uDAoXaKs7u1i7RXCaNnzcYFP-p16uIuULPo9aHvnWqqA_8NjhDlYa18k4FVHck1C2Gz80q-qvohzTgGYhT6Joc0gU5AiqDMxwGulS-59idA4ehLkllD_ADzTgoq8jmuolfvGYkSJfCy3KM20GMCLiQ4Lfj9E1rAkuQUPYF2_YX-5lUAOQKHU6OqqLU5ym1Kz-EDW6FLRhJrERNMDEhuiHEs-c' }
+            ]
+        },
+        'Wedding': {
+            text: 'Elegant and timeless. Consider an Asymmetric Silk silhouette or Minimalist Tailoring.',
+            items: [
+                { name: 'Asymmetric Dress', brand: 'Old Celine', price: '₱10,360', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA' },
+                { name: 'Ivory Blazer', brand: 'The Row', price: '₱8,900', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDvrOUto9vy9py6fxR-YxuiQ7pL4WzddWzTNeVPBgk4qOrjLVsLT4uDAoXaKs7u1i7RXCaNnzcYFP-p16uIuULPo9aHvnWqqA_8NjhDlYa18k4FVHck1C2Gz80q-qvohzTgGYhT6Joc0gU5AiqDMxwGulS-59idA4ehLkllD_ADzTgoq8jmuolfvGYkSJfCy3KM20GMCLiQ4Lfj9E1rAkuQUPYF2_YX-5lUAOQKHU6OqqLU5ym1Kz-EDW6FLRhJrERNMDEhuiHEs-c' }
+            ]
+        },
+        'Editorial': {
+            text: 'For an Editorial Shoot, prioritize avant-garde shapes and high-texture fabrics.',
+            items: [
+                { name: 'Deconstructed Knit', brand: 'Jacquemus', price: '₱6,160', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuA5RjcB-St3FYLokqdJWtfToKyHnDeR3Tu6EhVM79YSkA6bBTSU4tl7rZAAEgY_JP756fTwDY10jkUOp1hrXwu2GNrO9jjw43klIlAw4G0MiBDBkW6SRJ8z8IYOKAihezN7LM2aobs5oqzxnbVSGNnFoWUxGB9xeuCoFORYRDNLVSicCvy29b_6lyITgLYnLIxk8Ska5gk4Lub4OCWEXEEIFe4jkTHRRVfPAfF8h8FzMIzltXoG8hdtsMI0bnBcFWzWBxpeheTd4kI' },
+                { name: 'Avant Garment', brand: 'Loewe', price: '₱12,400', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDoXBFqStMnToVb80lpNcOu2L2sM791MrJmBW76ONWSN9NNxjYwIKr62lrtgKTsJUJ3EdwdmrXdEDzIHlQCq5cpBFNLIqmKKBHScdoIF8ax4ontDI3vyH_7UJJMwghVtSjqVoDofM_FIQR_XMOaK-QLh9v1H1Ub672NUBIJdFsaDRq5ICqksBDjNV55RZmXuFb6qC1v_poZpZMvRt7A5Qzegj5Go1Ot_xpj0qIyESs5_TLYUYBwEiG9fQi1e4y5MFTCzYsCtPcwQ-o' }
+            ]
+        },
+        'Red Carpet': {
+            text: 'For a Red Carpet event, go bold with a floor-length gown or dramatic silhouette.',
+            items: [
+                { name: 'Column Gown', brand: 'Old Celine', price: '₱10,360', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA' },
+                { name: 'Silk Tuxedo', brand: 'Saint Laurent', price: '₱6,720', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDvrOUto9vy9py6fxR-YxuiQ7pL4WzddWzTNeVPBgk4qOrjLVsLT4uDAoXaKs7u1i7RXCaNnzcYFP-p16uIuULPo9aHvnWqqA_8NjhDlYa18k4FVHck1C2Gz80q-qvohzTgGYhT6Joc0gU5AiqDMxwGulS-59idA4ehLkllD_ADzTgoq8jmuolfvGYkSJfCy3KM20GMCLiQ4Lfj9E1rAkuQUPYF2_YX-5lUAOQKHU6OqqLU5ym1Kz-EDW6FLRhJrERNMDEhuiHEs-c' }
+            ]
+        },
+        'Private View': {
+            text: 'For a Private View, opt for understated elegance with a tailored silhouette.',
+            items: [
+                { name: 'Asymmetric Dress', brand: 'Old Celine', price: '₱10,360', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA' },
+                { name: 'Ivory Blazer', brand: 'The Row', price: '₱8,900', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDvrOUto9vy9py6fxR-YxuiQ7pL4WzddWzTNeVPBgk4qOrjLVsLT4uDAoXaKs7u1i7RXCaNnzcYFP-p16uIuULPo9aHvnWqqA_8NjhDlYa18k4FVHck1C2Gz80q-qvohzTgGYhT6Joc0gU5AiqDMxwGulS-59idA4ehLkllD_ADzTgoq8jmuolfvGYkSJfCy3KM20GMCLiQ4Lfj9E1rAkuQUPYF2_YX-5lUAOQKHU6OqqLU5ym1Kz-EDW6FLRhJrERNMDEhuiHEs-c' }
+            ]
+        }
+    };
+
+    const SECURITY_DEPOSIT_PESOS = 2000;
+    const DRAWER_STORAGE_KEY = 'arabela_cart';
+
+    function formatPeso(amount) {
+        return '₱ ' + Number(amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function getDrawerCart() {
+        try {
+            return JSON.parse(localStorage.getItem(DRAWER_STORAGE_KEY) || '[]');
+        } catch (err) {
+            return [];
+        }
+    }
+
+    function setDrawerCart(cart) {
+        localStorage.setItem(DRAWER_STORAGE_KEY, JSON.stringify(cart));
+    }
+
+    function getCartLinesContainer() {
+        return document.querySelector('#cart-drawer .flex-1.overflow-y-auto');
+    }
+
+    function renderCartDrawer() {
+        const lines = getCartLinesContainer();
+        if (!lines) return;
+
+        const cart = getDrawerCart();
+        if (!cart.length) {
+            lines.innerHTML = '<p class="text-[0.6875rem] uppercase tracking-widest text-secondary py-4">No items in your selection.</p>';
+            return;
+        }
+
+        lines.innerHTML = cart.map((item, index) => {
+            const qty = Math.max(1, Number(item.qty) || 1);
+            const unitPrice = Number(item.price) || 0;
+            const lineTotal = unitPrice * qty;
+            return `
+                <div class="cart-line flex gap-4 group" data-index="${index}" data-unit-price="${unitPrice}" data-rental="${item.rental || ''}">
+                    <div class="w-24 h-32 bg-white border border-black/10 overflow-hidden shrink-0">
+                        <img alt="${item.name || 'Selection item'}" class="w-full h-full object-cover" src="${item.img || ''}"/>
+                    </div>
+                    <div class="flex-1 flex flex-col justify-between py-1 min-w-0">
+                        <div class="flex justify-between items-start gap-2">
+                            <div>
+                                <h3 class="text-sm font-medium text-on-surface leading-tight">${item.name || 'Untitled'}</h3>
+                                <p class="text-[0.6875rem] text-on-secondary-container mt-1">Size: ${item.size || '-'}</p>
+                            </div>
+                            <button type="button" class="text-on-surface hover:text-error transition-colors shrink-0" onclick="cartRemoveLine(this)" aria-label="Remove item">
+                                <span class="material-symbols-outlined text-lg">close</span>
+                            </button>
+                        </div>
+                        <div class="flex justify-between items-end gap-2">
+                            <div class="flex items-center space-x-3">
+                                <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, -1)" aria-label="Decrease quantity">
+                                    <span class="material-symbols-outlined text-xs">remove</span>
+                                </button>
+                                <span class="cart-qty text-xs font-medium tabular-nums">${qty}</span>
+                                <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, 1)" aria-label="Increase quantity">
+                                    <span class="material-symbols-outlined text-xs">add</span>
+                                </button>
+                            </div>
+                            <p class="cart-line-total font-['Inter',sans-serif] text-sm font-semibold text-on-surface tracking-wide tabular-nums shrink-0">${formatPeso(lineTotal)}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function updateCartTotals() {
+        let sub = 0;
+        let itemCount = 0;
+        document.querySelectorAll('#cart-drawer .cart-line').forEach(function (row) {
+            if (row.classList.contains('hidden')) return;
+            const unit = parseFloat(row.dataset.unitPrice || '0');
+            const qtyEl = row.querySelector('.cart-qty');
+            const qty = Math.max(1, parseInt(qtyEl.textContent, 10) || 1);
+            itemCount += qty;
+            const lineTotal = unit * qty;
+            sub += lineTotal;
+            const lt = row.querySelector('.cart-line-total');
+            if (lt) lt.textContent = formatPeso(lineTotal);
+        });
+        const deposit = itemCount * SECURITY_DEPOSIT_PESOS;
+        const subEl = document.getElementById('cart-subtotal');
+        const totEl = document.getElementById('cart-total');
+        const depEl = document.getElementById('cart-deposit');
+        if (subEl) subEl.textContent = formatPeso(sub);
+        if (depEl) depEl.textContent = formatPeso(deposit);
+        if (totEl) totEl.textContent = formatPeso(sub + deposit);
+    }
+
+    function cartAdjustQty(btn, delta) {
+        const row = btn.closest('.cart-line');
+        if (!row || row.classList.contains('hidden')) return;
+        const cart = getDrawerCart();
+        const idx = Number(row.dataset.index);
+        if (!Number.isInteger(idx) || !cart[idx]) return;
+        let q = parseInt(cart[idx].qty, 10) || 1;
+        q = Math.max(1, q + delta);
+        cart[idx].qty = q;
+        setDrawerCart(cart);
+        renderCartDrawer();
+        updateCartTotals();
+    }
+
+    function cartRemoveLine(btn) {
+        const row = btn.closest('.cart-line');
+        if (!row) return;
+        const cart = getDrawerCart();
+        const idx = Number(row.dataset.index);
+        if (!Number.isInteger(idx) || !cart[idx]) return;
+        cart.splice(idx, 1);
+        setDrawerCart(cart);
+        renderCartDrawer();
+        updateCartTotals();
+    }
+
+    function closeCartDrawer() {
+        const drawer = document.getElementById('cart-drawer');
+        const scrim = document.getElementById('cart-click-away');
+        if (drawer) {
+            drawer.classList.add('translate-x-full');
+            drawer.setAttribute('aria-hidden', 'true');
+        }
+        if (scrim) scrim.classList.add('pointer-events-none');
+    }
+
+    function toggleCart() {
+        const drawer = document.getElementById('cart-drawer');
+        const scrim = document.getElementById('cart-click-away');
+        const search = document.getElementById('search-overlay');
+        const ai = document.getElementById('ai-concierge');
+        const aiScrim = document.getElementById('ai-click-away');
+
+        if (search) search.classList.remove('open');
+        if (ai) ai.classList.add('translate-x-full');
+        if (aiScrim) aiScrim.classList.add('pointer-events-none');
+
+        if (!drawer) return;
+        drawer.classList.toggle('translate-x-full');
+        const closed = drawer.classList.contains('translate-x-full');
+        drawer.setAttribute('aria-hidden', closed ? 'true' : 'false');
+        if (scrim) {
+            if (closed) scrim.classList.add('pointer-events-none');
+            else scrim.classList.remove('pointer-events-none');
+        }
+        if (!closed) {
+            renderCartDrawer();
+            updateCartTotals();
+        }
+    }
+
+    function toggleAI() {
+        const panel = document.getElementById('ai-concierge');
+        const scrim = document.getElementById('ai-click-away');
+        closeCartDrawer();
+        panel.classList.toggle('translate-x-full');
+        const closed = panel.classList.contains('translate-x-full');
+        if (scrim) {
+            if (closed) {
+                scrim.classList.add('pointer-events-none');
+            } else {
+                scrim.classList.remove('pointer-events-none');
+            }
+        }
+        const search = document.getElementById('search-overlay');
+        search.classList.remove('open');
+        if (!closed) panel.setAttribute('aria-hidden', 'false');
+        else panel.setAttribute('aria-hidden', 'true');
+    }
+
+    function toggleSearch() {
+        const search = document.getElementById('search-overlay');
+        const isOpening = !search.classList.contains('open');
+        closeCartDrawer();
+        search.classList.toggle('open');
+        if (isOpening) {
+            setTimeout(() => document.getElementById('main-search-input').focus(), 400);
+            document.getElementById('ai-concierge').classList.add('translate-x-full');
+            const scrim = document.getElementById('ai-click-away');
+            if (scrim) scrim.classList.add('pointer-events-none');
+        }
+    }
+
+    function selectOccasion(occ) {
+        const data = recommendations[occ] || recommendations['Wedding'];
+        const resultsDiv = document.getElementById('ai-results');
+        const textEl = document.getElementById('recommendation-text');
+        const cardsDiv = document.getElementById('suggestion-cards');
+        const picker = document.getElementById('occasion-picker');
+        picker.classList.add('opacity-40', 'pointer-events-none');
+        textEl.textContent = data.text;
+        cardsDiv.innerHTML = data.items.map(item => `
+            <div class="group cursor-pointer">
+                <div class="aspect-[4/5] overflow-hidden rounded mb-3 bg-surface-container-high">
+                    <img src="${item.img}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                </div>
+                <h5 class="text-[0.7rem] font-bold uppercase tracking-wider truncate">${item.brand}</h5>
+                <p class="text-[0.6rem] text-on-surface-variant uppercase tracking-widest mt-0.5">${item.name}</p>
+                <p class="text-[0.6rem] font-bold mt-1 text-primary">${item.price}</p>
+            </div>
+        `).join('');
+        resultsDiv.classList.remove('hidden');
+    }
+
+    function resetAI() {
+        document.getElementById('ai-results').classList.add('hidden');
+        document.getElementById('occasion-picker').classList.remove('opacity-40', 'pointer-events-none');
+    }
+
+    function sendAIMessage() {
+        const input = document.getElementById('ai-chat-input');
+        const message = input.value.trim();
+        if (!message) return;
+        // TODO: Connect to Django AI view at /ai-recommendation/
+        input.value = '';
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () {
+            renderCartDrawer();
+            updateCartTotals();
+        });
+    } else {
+        renderCartDrawer();
+        updateCartTotals();
+    }
+
+{% if request.user.is_authenticated %}
+(function () {
+    const userBtn = document.getElementById('user-icon-btn');
+    if (!userBtn) return;
+
+    userBtn.addEventListener('click', function () {
+        window.location.href = "{% url 'gowns:orders' %}";
+    });
+})();
+{% endif %}
+</script>
+</body>
+</html>

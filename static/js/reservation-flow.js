@@ -39,6 +39,7 @@
             var img = row.querySelector('img');
             var h3 = row.querySelector('h3');
             var sizeEl = row.querySelector('.text-on-secondary-container');
+            var rental = row.getAttribute('data-rental') || '';
             var lineTotal = unit * qty;
             sub += lineTotal;
             itemCount += qty;
@@ -49,7 +50,8 @@
                 imageAlt: img ? (img.getAttribute('alt') || '') : '',
                 unitPrice: unit,
                 qty: qty,
-                lineTotal: lineTotal
+                lineTotal: lineTotal,
+                rental: rental
             });
         }
         if (!items.length) {
@@ -148,7 +150,9 @@
                 '</div>' +
                 '<div class="mt-4 flex items-center gap-2">' +
                 '<span class="material-symbols-outlined text-sm text-secondary">calendar_today</span>' +
-                '<span class="text-[0.6875rem] uppercase tracking-widest font-medium">Oct 12 \u2014 Oct 16</span>' +
+                '<span class="text-[0.6875rem] uppercase tracking-widest font-medium">' +
+                escapeHtml(it.rental || 'TBD') +
+                '</span>' +
                 '</div>' +
                 '</div></div>';
         }
