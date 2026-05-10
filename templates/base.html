@@ -186,9 +186,9 @@
   {% if url_name != "reservation" and url_name != "confirmation" %}
   <!-- SEARCH OVERLAY -->
   <div class="fixed top-20 left-0 right-0 bottom-0 z-[65] flex flex-col" id="search-overlay">
-    <div class="shrink-0 bg-white border-b border-black/5 shadow-lg" onclick="event.stopPropagation()">
-      <div class="container mx-auto px-8 py-12">
-        <div class="max-w-4xl mx-auto">
+    <div class="shrink-0 bg-white border-b border-black/5 shadow-lg max-h-[60vh]" onclick="event.stopPropagation()">
+      <div class="container mx-auto px-8 py-10">
+        <div class="max-w-6xl mx-auto">
           <div class="relative flex items-center mb-10">
             <span class="material-symbols-outlined absolute left-0 text-black/40 text-2xl">search</span>
             <input class="w-full bg-white border border-black/20 border-0 border-b pl-10 pr-10 py-4 focus:ring-0 focus:border-black text-2xl font-light placeholder:text-black/20 rounded-none" id="main-search-input" placeholder="Search here.." type="text" />
@@ -196,24 +196,48 @@
               <span class="material-symbols-outlined">close</span>
             </button>
           </div>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
-            <div>
+          <div class="grid grid-cols-1 md:grid-cols-12 gap-12">
+            <div class="md:col-span-3">
               <p class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-6">Collections</p>
               <ul class="space-y-4">
-                <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collections' %}?category=Dresses">Dresses</a></li>
-                <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collections' %}?category=Filipiniana">Filipiniana</a></li>
-                <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collections' %}?category=Kids%20suit">Kids suit</a></li>
+                <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collection_dresses' %}">Dresses</a></li>
+                <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collection_filipiniana' %}">Filipiniana</a></li>
+                <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collection_kid_suit' %}">Kids suit</a></li>
                 <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collection_wedding' %}">Wedding</a></li>
-                <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collections' %}?category=Suit">Suit</a></li>
-                <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collections' %}?category=Ball%20gown">Ball gown</a></li>
+                <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collection_suit' %}">Suit</a></li>
+                <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collection_ball_gown' %}">Ball gown</a></li>
               </ul>
             </div>
-            <div>
-              <p class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-6">Trending Search</p>
-              <div class="flex flex-wrap gap-2">
-                <span class="px-3 py-1 bg-white border border-black/20 rounded-full text-[0.65rem] uppercase tracking-wider cursor-pointer hover:bg-gray-50">Silk Dress</span>
-                <span class="px-3 py-1 bg-white border border-black/20 rounded-full text-[0.65rem] uppercase tracking-wider cursor-pointer hover:bg-gray-50">Tailored Blazer</span>
-                <span class="px-3 py-1 bg-white border border-black/20 rounded-full text-[0.65rem] uppercase tracking-wider cursor-pointer hover:bg-gray-50">Velvet Gown</span>
+            <div class="md:col-span-9">
+              <p class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-6">Top Picks</p>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-10">
+                {% for item in featured_search_items|slice:":4" %}
+                  <div class="group">
+                    <a href="{% url 'gowns:product_detail' collection=item.collection_key slug=item.slug %}" class="block">
+                      <div class="relative bg-transparent aspect-[2/3] mb-4 overflow-hidden flex items-center justify-center shadow-none">
+                        <img alt="{{ item.title }}" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="{{ item.image }}" />
+                        <button
+                          type="button"
+                          class="absolute bottom-4 right-4 w-10 h-10 bg-white border border-black/30 rounded-full flex items-center justify-center hover:bg-gray-50 active:scale-95 transition-all"
+                          aria-label="Add to selection"
+                          data-product-slug="{{ item.slug }}"
+                          data-product-name="{{ item.title }}"
+                          data-product-price="{{ item.price }}"
+                          data-product-image="{{ item.image }}"
+                          data-product-collection="{{ item.collection_key }}"
+                          onclick="event.preventDefault(); event.stopPropagation(); addFeaturedToSelection(this);"
+                        >
+                          <span class="material-symbols-outlined text-base">add</span>
+                        </button>
+                      </div>
+                      <div class="min-w-0">
+                        <p class="text-[0.7rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold">Arabela</p>
+                        <p class="text-[0.95rem] font-body font-medium tracking-tight text-on-surface truncate mt-1">{{ item.title }}</p>
+                        <p class="text-[0.9rem] font-body font-medium text-on-surface/70 tabular-nums mt-1">{{ item.price_label }}</p>
+                      </div>
+                    </a>
+                  </div>
+                {% endfor %}
               </div>
             </div>
           </div>
@@ -697,6 +721,25 @@
       if (!message) return;
       input.value = '';
     }
+
+    function addFeaturedToSelection(btn) {
+      if (!btn) return;
+      const payload = {
+        id: btn.dataset.productSlug || '',
+        name: btn.dataset.productName || 'Untitled',
+        price: Number(btn.dataset.productPrice) || 0,
+        img: btn.dataset.productImage || '',
+        collection: btn.dataset.productCollection || 'wedding',
+        size: '-',
+        rental: '',
+      };
+      if (typeof window.addCollectionItem === 'function') {
+        window.addCollectionItem(payload);
+      } else if (typeof toggleCart === 'function') {
+        toggleCart();
+      }
+    }
+    window.addFeaturedToSelection = addFeaturedToSelection;
 
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', function () {
