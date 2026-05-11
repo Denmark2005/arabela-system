@@ -1,5 +1,7 @@
 (function () {
-    var STORAGE_KEY = 'arabela_reservation_cart';
+    var body = document && document.body;
+    var userKey = (body && body.dataset && body.dataset.userKey) ? body.dataset.userKey : 'guest';
+    var STORAGE_KEY = 'arabela_reservation_cart_' + userKey;
     var DEPOSIT_PER_ITEM = 2000;
 
     function formatPesoInt(n) {

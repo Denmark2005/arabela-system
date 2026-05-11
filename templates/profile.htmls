@@ -145,7 +145,7 @@
       }
     </style>
   </head>
-  <body class="bg-white min-h-screen">
+  <body class="bg-white min-h-screen" data-user-key="{% if request.user.is_authenticated %}{{ request.user.id }}{% else %}guest{% endif %}">
     <div class="fixed inset-0 z-[100] bg-white opacity-0 pointer-events-none" id="page-transition">
       <div class="mx-auto max-w-4xl px-6 pt-28">
         <p class="mb-6 text-3xl font-semibold tracking-tight text-[#1b1c1c]">Orders</p>
@@ -356,7 +356,8 @@
       const emptyAddressNotice = document.getElementById("empty-address-notice");
       const editAddressTitle = document.getElementById("edit-address-title");
       const addressEntries = [];
-      const ADDRESS_STORAGE_KEY = "arabela_profile_addresses_v1";
+      const USER_STORAGE_KEY = document.body?.dataset?.userKey || "guest";
+      const ADDRESS_STORAGE_KEY = `arabela_profile_addresses_v1_${USER_STORAGE_KEY}`;
       let editingAddressIndex = null;
       let saveAnimationTimeoutId = null;
 

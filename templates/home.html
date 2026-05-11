@@ -226,7 +226,7 @@
         body { font-family: 'Poppins', sans-serif; }
 </style>
 </head>
-<body class="bg-white text-on-surface selection:bg-primary-fixed-dim overflow-x-hidden" data-authenticated="{{ request.user.is_authenticated|yesno:'true,false' }}" data-login-url="{% url 'accounts:login' %}" data-orders-url="{% url 'gowns:orders' %}">
+<body class="bg-white text-on-surface selection:bg-primary-fixed-dim overflow-x-hidden" data-authenticated="{{ request.user.is_authenticated|yesno:'true,false' }}" data-user-key="{% if request.user.is_authenticated %}{{ request.user.id }}{% else %}guest{% endif %}" data-login-url="{% url 'accounts:login' %}" data-orders-url="{% url 'gowns:orders' %}">
 
 <!-- TOP NAVBAR -->
 <header class="fixed top-0 w-full z-[70] homepage-header bg-white/80 dark:bg-[#222222]/80 backdrop-blur-md border-b border-black/5">
@@ -753,7 +753,8 @@
     };
 
     const SECURITY_DEPOSIT_PESOS = 2000;
-    const DRAWER_STORAGE_KEY = 'arabela_cart';
+    const USER_STORAGE_KEY = document.body?.dataset?.userKey || 'guest';
+    const DRAWER_STORAGE_KEY = `arabela_cart_${USER_STORAGE_KEY}`;
 
     function formatPeso(amount) {
         return '₱ ' + Number(amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

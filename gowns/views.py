@@ -175,7 +175,26 @@ def product_detail(request, collection: str, slug: str):
 
 
 def reservation(request):
-    return render(request, 'reservation.html', {})
+    profile_display_name = ""
+    profile_first_name = ""
+    profile_last_name = ""
+
+    if request.user.is_authenticated:
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        profile_display_name = profile.display_name or ""
+        name_parts = profile_display_name.split(maxsplit=1) if profile_display_name else []
+        profile_first_name = name_parts[0] if len(name_parts) > 0 else ""
+        profile_last_name = name_parts[1] if len(name_parts) > 1 else ""
+
+    return render(
+        request,
+        'reservation.html',
+        {
+            "profile_display_name": profile_display_name,
+            "profile_first_name": profile_first_name,
+            "profile_last_name": profile_last_name,
+        },
+    )
 
 
 def selection(request):

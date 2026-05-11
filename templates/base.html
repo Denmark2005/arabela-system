@@ -98,6 +98,7 @@
 {% with url_name=request.resolver_match.url_name %}
 <body class="bg-white text-on-surface selection:bg-primary-fixed-dim overflow-x-hidden {% block body_class %}{% endblock %}"
       data-authenticated="{{ request.user.is_authenticated|yesno:'true,false' }}"
+      data-user-key="{% if request.user.is_authenticated %}{{ request.user.id }}{% else %}guest{% endif %}"
       data-login-url="{% url 'accounts:login' %}">
 
   <!-- TOP NAVBAR (pure white) -->
@@ -446,7 +447,8 @@
     };
 
     const SECURITY_DEPOSIT_PESOS = 2000;
-    const DRAWER_STORAGE_KEY = 'arabela_cart';
+    const USER_STORAGE_KEY = document.body?.dataset?.userKey || 'guest';
+    const DRAWER_STORAGE_KEY = `arabela_cart_${USER_STORAGE_KEY}`;
 
     function formatPeso(amount) {
       return '₱ ' + Number(amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

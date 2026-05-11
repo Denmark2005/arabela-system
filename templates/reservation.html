@@ -218,9 +218,80 @@
 <script>
     (function () {
         var RESERVATION_FIELD_IDS = ['first_name', 'last_name', 'address', 'city', 'postal', 'phone'];
-        var CART_STORAGE_KEY = 'arabela_cart';
-        var RESERVATION_STORAGE_KEY = 'arabela_reservation_cart';
+        var USER_STORAGE_KEY = (document.body && document.body.dataset && document.body.dataset.userKey) ? document.body.dataset.userKey : 'guest';
+        var CART_STORAGE_KEY = 'arabela_cart_' + USER_STORAGE_KEY;
+        var RESERVATION_STORAGE_KEY = 'arabela_reservation_cart_' + USER_STORAGE_KEY;
         var BOOK_NOW_CONTEXT_KEY = 'arabela_book_now_context';
+        var PROFILE_ADDRESS_STORAGE_KEY = 'arabela_profile_addresses_v1_' + USER_STORAGE_KEY;
+        var PROFILE_FIRST_NAME = "{{ profile_first_name|default:''|escapejs }}";
+        var PROFILE_LAST_NAME = "{{ profile_last_name|default:''|escapejs }}";
+        var PROFILE_DISPLAY_NAME = "{{ profile_display_name|default:''|escapejs }}";
+
+        function splitDisplayName(displayName) {
+            var normalized = String(displayName || '').trim();
+            if (!normalized) return { firstName: '', lastName: '' };
+            var parts = normalized.split(/\s+/);
+            if (parts.length === 1) return { firstName: parts[0], lastName: '' };
+            return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
+        }
+
+        function getStoredProfileAddresses() {
+            try {
+                var raw = localStorage.getItem(PROFILE_ADDRESS_STORAGE_KEY);
+                if (!raw) return [];
+                var parsed = JSON.parse(raw);
+                if (!Array.isArray(parsed)) return [];
+                return parsed.filter(function (item) {
+                    return item && typeof item === 'object';
+                });
+            } catch (err) {
+                return [];
+            }
+        }
+
+        function pickPreferredAddress(addresses) {
+            if (!Array.isArray(addresses) || addresses.length === 0) return null;
+            if (addresses.length === 1) return addresses[0];
+            var defaultAddress = addresses.find(function (item) { return !!item.isDefault; });
+            if (defaultAddress) return defaultAddress;
+            return addresses[0];
+        }
+
+        function prefillReservationFromProfile() {
+            var firstNameInput = document.getElementById('first_name');
+            var lastNameInput = document.getElementById('last_name');
+            var addressInput = document.getElementById('address');
+            var cityInput = document.getElementById('city');
+            var postalInput = document.getElementById('postal');
+            var phoneInput = document.getElementById('phone');
+
+            var fallbackName = splitDisplayName(PROFILE_DISPLAY_NAME);
+            var prefillFirstName = PROFILE_FIRST_NAME || fallbackName.firstName || '';
+            var prefillLastName = PROFILE_LAST_NAME || fallbackName.lastName || '';
+
+            if (firstNameInput && !firstNameInput.value.trim() && prefillFirstName) {
+                firstNameInput.value = prefillFirstName;
+            }
+            if (lastNameInput && !lastNameInput.value.trim() && prefillLastName) {
+                lastNameInput.value = prefillLastName;
+            }
+
+            var preferredAddress = pickPreferredAddress(getStoredProfileAddresses());
+            if (!preferredAddress) return;
+
+            if (addressInput && !addressInput.value.trim()) {
+                addressInput.value = String(preferredAddress.addressLine || '').trim();
+            }
+            if (cityInput && !cityInput.value.trim()) {
+                cityInput.value = String(preferredAddress.city || '').trim();
+            }
+            if (postalInput && !postalInput.value.trim()) {
+                postalInput.value = String(preferredAddress.postalCode || '').trim();
+            }
+            if (phoneInput && !phoneInput.value.trim()) {
+                phoneInput.value = String(preferredAddress.phone || '').trim();
+            }
+        }
 
         function clearReservationValidationVisuals() {
             document.querySelectorAll('.reservation-field-invalid').forEach(function (el) {
@@ -339,6 +410,8 @@
         }
 
         document.addEventListener('DOMContentLoaded', function () {
+            prefillReservationFromProfile();
+
             var btn = document.getElementById('confirm-rental-btn');
             if (btn) {
                 btn.addEventListener('click', function () {

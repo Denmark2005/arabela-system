@@ -76,7 +76,7 @@ def login_view(request):
             return render(request, 'login.html', context)
 
         if not user.has_usable_password():
-            context.update({'error': 'This account uses Google sign in. Please continue with Google.', 'email': email})
+            context.update({'error': "This account uses Google Sign In. Please click 'Sign in with Google' instead.", 'email': email})
             return render(request, 'login.html', context)
 
         is_verified = EmailAddress.objects.filter(user=user, email__iexact=email, verified=True).exists()
