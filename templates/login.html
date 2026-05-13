@@ -263,9 +263,13 @@
                       </button>
                     </div>
                     <!-- Error Message -->
-                    <div id="error_container" class="items-start gap-2 mt-4 text-theme-sm text-error-500 animate-fade-in {% if error %}flex{% else %}hidden{% endif %}">
+                    <div id="error_container" class="items-start gap-2 mt-4 text-theme-sm {% if error == 'Your email has been verified. Please sign in.' %}text-success-500{% else %}text-error-500{% endif %} animate-fade-in {% if error %}flex{% else %}hidden{% endif %}">
                       <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        {% if error == 'Your email has been verified. Please sign in.' %}
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.707a1 1 0 00-1.414-1.414L9 11.586 7.707 10.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l5-5z" clip-rule="evenodd" />
+                        {% else %}
                         <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                        {% endif %}
                       </svg>
                       <span id="error_text" class="tracking-tight">{{ error|default:'' }}</span>
                     </div>
@@ -277,7 +281,7 @@
                   >
                     Don't have an account?
                     <a
-                      href="{% url 'accounts:signup' %}"
+                      href="{% url 'accounts:signup' %}{% if next %}?next={{ next|urlencode }}{% endif %}"
                       class="hero-action-link text-sm hover:text-slate-700"
                       style="color:#000;font-weight:700;"
                       >Sign Up</a

@@ -7,6 +7,7 @@ from .views import (
     security_deposits_view,
     admin_login_view,
     page_view,
+    save_profile_view,
 )
 
 app_name = "arabela_admin"
@@ -18,5 +19,6 @@ urlpatterns = [
     path("calendar/", rental_schedule_view, name="calendar"),
     path("payment-verification/", payment_verification_view, name="payment_verification"),
     path("security-deposits/", security_deposits_view, name="security_deposits"),
+    path("save-profile/", save_profile_view, name="save_profile"),
     path("<str:page>.html", page_view, name="page"),
 ]

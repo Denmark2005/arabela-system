@@ -12,7 +12,109 @@
     <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
   <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet"></head>
   <body
-    x-data="{ page: 'profile', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, 'isProfileInfoModal': false, 'isProfileAddressModal': false }"
+    x-data="{
+      page: 'profile',
+      loaded: true,
+      darkMode: false,
+      stickyMenu: false,
+      sidebarToggle: false,
+      scrollTop: false,
+      isProfileInfoModal: false,
+      isProfileAddressModal: false,
+      firstName: 'Alucard',
+      lastName: 'Balmond',
+      email: 'alucardbalmond@gmail.com',
+      phone: '+09 363 398 46',
+      bio: 'Team Manager',
+      jobTitle: 'Team Manager',
+      location: 'Antipolo, Philippines',
+      facebook: 'https://facebook.com/PimjoHQ',
+      xcom: 'https://x.com/PimjoHQ',
+      linkedin: 'https://linkedin.com/PimjoHQ',
+      instagram: 'https://instagram.com/PimjoHQ',
+      country: 'Philippines',
+      cityState: 'Antipolo, Philippines',
+      postalCode: '1870',
+      taxId: 'AS4568384',
+      saveProfileInfo() { 
+        this.jobTitle = this.bio; 
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || this.getCsrfToken();
+        fetch('/admin/save-profile/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+          },
+          body: JSON.stringify({
+            firstName: this.firstName,
+            lastName: this.lastName,
+            email: this.email,
+            phone: this.phone,
+            bio: this.bio,
+            facebook: this.facebook,
+            xcom: this.xcom,
+            linkedin: this.linkedin,
+            instagram: this.instagram
+          })
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            this.isProfileInfoModal = false;
+          } else {
+            alert('Error: ' + (data.error || 'Failed to save'));
+          }
+        })
+        .catch(error => {
+          console.error('Error:', error);
+          alert('Error saving profile');
+        });
+      },
+      getCsrfToken() {
+        const name = 'csrftoken';
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+          const cookies = document.cookie.split(';');
+          for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+              cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+              break;
+            }
+          }
+        }
+        return cookieValue;
+      },
+      saveProfileAddress() { 
+        this.location = this.cityState;
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || this.getCsrfToken();
+        fetch('/admin/save-profile/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+          },
+          body: JSON.stringify({
+            country: this.country,
+            cityState: this.cityState,
+            postalCode: this.postalCode,
+            taxId: this.taxId
+          })
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            this.isProfileAddressModal = false;
+          } else {
+            alert('Error: ' + (data.error || 'Failed to save'));
+          }
+        })
+        .catch(error => {
+          console.error('Error:', error);
+          alert('Error saving address');
+        });
+      }
+    }"
     x-init="
          darkMode = JSON.parse(localStorage.getItem('darkMode'));
          $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)))"
@@ -543,7 +645,7 @@
           <!-- Menu Item Profile -->
 
           <!-- Menu Item Forms -->
-          <li>
+          <li class="hidden" data-admin-template-nav="forms">
             <a
               href="#"
               @click.prevent="selected = (selected === 'Forms' ? '':'Forms')"
@@ -617,7 +719,7 @@
           <!-- Menu Item Forms -->
 
           <!-- Menu Item Tables -->
-          <li>
+          <li class="hidden" data-admin-template-nav="tables">
             <a
               href="#"
               @click.prevent="selected = (selected === 'Tables' ? '':'Tables')"
@@ -691,7 +793,7 @@
           <!-- Menu Item Tables -->
 
           <!-- Menu Item Pages -->
-          <li>
+          <li class="hidden" data-admin-template-nav="pages">
             <a
               href="#"
               @click.prevent="selected = (selected === 'Pages' ? '':'Pages')"
@@ -767,7 +869,7 @@
       </div>
 
       <!-- Others Group -->
-      <div>
+      <div class="hidden" data-admin-template-nav="others-ui">
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
           <span
             class="menu-group-title"
@@ -1525,11 +1627,13 @@
           href="#"
           @click.prevent="dropdownOpen = ! dropdownOpen"
         >
-          <span class="mr-3 h-11 w-11 overflow-hidden rounded-full">
-            <img src="{% static 'arabela_admin/images/user/user-24.jpg' %}" alt="User" />
+          <span class="mr-3 flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-gray-200 bg-gray-100 text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400" aria-hidden="true">
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+            </svg>
           </span>
 
-          <span class="text-theme-sm mr-1 block font-medium"> Alucard </span>
+          <span class="text-theme-sm mr-1 block font-medium" x-text="firstName"></span>
 
           <svg
             :class="dropdownOpen && 'rotate-180'"
@@ -1558,14 +1662,12 @@
           <div>
             <span
               class="text-theme-sm block font-medium text-gray-700 dark:text-gray-400"
-            >
-              Alucard Balmond
-            </span>
+              x-text="firstName + ' ' + lastName"
+            ></span>
             <span
               class="text-theme-xs mt-0.5 block text-gray-500 dark:text-gray-400"
-            >
-              alucardbalmond@gmail.com
-            </span>
+              x-text="email"
+            ></span>
           </div>
 
           <ul
@@ -1738,28 +1840,26 @@
                     class="flex flex-col items-center w-full gap-6 xl:flex-row"
                   >
                     <div
-                      class="w-20 h-20 overflow-hidden border border-gray-200 rounded-full dark:border-gray-800"
+                      class="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border border-gray-200 bg-gray-100 text-gray-500 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-400"
+                      aria-hidden="true"
                     >
-                      <img src="{% static 'arabela_admin/images/user/user-24.jpg' %}" alt="user" />
+                      <svg class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.25" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                      </svg>
                     </div>
                     <div class="order-3 xl:order-2">
                       <h4
                         class="mb-2 text-lg font-semibold text-center text-gray-800 dark:text-white/90 xl:text-left"
-                      >
-                        Alucard Balmond
-                      </h4>
+                        x-text="firstName + ' ' + lastName"
+                      ></h4>
                       <div
                         class="flex flex-col items-center gap-1 text-center xl:flex-row xl:gap-3 xl:text-left"
                       >
-                        <p class="text-sm text-gray-500 dark:text-gray-400">
-                          Team Manager
-                        </p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400" x-text="jobTitle"></p>
                         <div
                           class="hidden h-3.5 w-px bg-gray-300 dark:bg-gray-700 xl:block"
                         ></div>
-                        <p class="text-sm text-gray-500 dark:text-gray-400">
-                          Antipolo, Philippines
-                        </p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400" x-text="location"></p>
                       </div>
                     </div>
                     <div
@@ -1887,9 +1987,8 @@
                         </p>
                         <p
                           class="text-sm font-medium text-gray-800 dark:text-white/90"
-                        >
-                          Alucard
-                        </p>
+                          x-text="firstName"
+                        ></p>
                       </div>
 
                       <div>
@@ -1900,9 +1999,8 @@
                         </p>
                         <p
                           class="text-sm font-medium text-gray-800 dark:text-white/90"
-                        >
-                          Balmond
-                        </p>
+                          x-text="lastName"
+                        ></p>
                       </div>
 
                       <div>
@@ -1913,9 +2011,8 @@
                         </p>
                         <p
                           class="text-sm font-medium text-gray-800 dark:text-white/90"
-                        >
-                          alucardbalmond@gmail.com
-                        </p>
+                          x-text="email"
+                        ></p>
                       </div>
 
                       <div>
@@ -1926,9 +2023,8 @@
                         </p>
                         <p
                           class="text-sm font-medium text-gray-800 dark:text-white/90"
-                        >
-                          +09 363 398 46
-                        </p>
+                          x-text="phone"
+                        ></p>
                       </div>
 
                       <div>
@@ -1939,9 +2035,8 @@
                         </p>
                         <p
                           class="text-sm font-medium text-gray-800 dark:text-white/90"
-                        >
-                          Team Manager
-                        </p>
+                          x-text="bio"
+                        ></p>
                       </div>
                     </div>
                   </div>
@@ -1993,9 +2088,8 @@
                         </p>
                         <p
                           class="text-sm font-medium text-gray-800 dark:text-white/90"
-                        >
-                          Philippines
-                        </p>
+                          x-text="country"
+                        ></p>
                       </div>
 
                       <div>
@@ -2006,9 +2100,8 @@
                         </p>
                         <p
                           class="text-sm font-medium text-gray-800 dark:text-white/90"
-                        >
-                          Antipolo, Philippines
-                        </p>
+                          x-text="cityState"
+                        ></p>
                       </div>
 
                       <div>
@@ -2019,9 +2112,8 @@
                         </p>
                         <p
                           class="text-sm font-medium text-gray-800 dark:text-white/90"
-                        >
-                          1870
-                        </p>
+                          x-text="postalCode"
+                        ></p>
                       </div>
 
                       <div>
@@ -2032,9 +2124,8 @@
                         </p>
                         <p
                           class="text-sm font-medium text-gray-800 dark:text-white/90"
-                        >
-                          AS4568384
-                        </p>
+                          x-text="taxId"
+                        ></p>
                       </div>
                     </div>
                   </div>
@@ -2130,7 +2221,7 @@
               </label>
               <input
                 type="text"
-                value="https://facebook.com/PimjoHQ"
+                x-model="facebook"
                 class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
               />
             </div>
@@ -2143,7 +2234,7 @@
               </label>
               <input
                 type="text"
-                value="https://x.com/PimjoHQ"
+                x-model="xcom"
                 class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
               />
             </div>
@@ -2156,7 +2247,7 @@
               </label>
               <input
                 type="text"
-                value="https://linkedin.com/PimjoHQ"
+                x-model="linkedin"
                 class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
               />
             </div>
@@ -2169,7 +2260,7 @@
               </label>
               <input
                 type="text"
-                value="https://instagram.com/PimjoHQ"
+                x-model="instagram"
                 class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
               />
             </div>
@@ -2191,7 +2282,7 @@
               </label>
               <input
                 type="text"
-                value="Alucard"
+                x-model="firstName"
                 class="dark:bg-dark-900 h-11 w-full rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
               />
             </div>
@@ -2204,7 +2295,7 @@
               </label>
               <input
                 type="text"
-                value="Balmond"
+                x-model="lastName"
                 class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
               />
             </div>
@@ -2217,7 +2308,7 @@
               </label>
               <input
                 type="text"
-                value="alucardbalmond@gmail.com"
+                x-model="email"
                 class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
               />
             </div>
@@ -2230,7 +2321,7 @@
               </label>
               <input
                 type="text"
-                value="+09 363 398 46"
+                x-model="phone"
                 class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
               />
             </div>
@@ -2243,7 +2334,7 @@
               </label>
               <input
                 type="text"
-                value="Team Manager"
+                x-model="bio"
                 class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
               />
             </div>
@@ -2260,7 +2351,8 @@
         </button>
         <button
           type="button"
-          class="flex w-full justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 sm:w-auto"
+          @click="saveProfileInfo()"
+          class="flex w-full justify-center rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs hover:bg-black sm:w-auto dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
         >
           Save Changes
         </button>
@@ -2320,7 +2412,7 @@
             </label>
             <input
               type="text"
-              value="Philippines"
+              x-model="country"
               class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
             />
           </div>
@@ -2333,7 +2425,7 @@
             </label>
             <input
               type="text"
-              value="Antipolo, Philippines"
+              x-model="cityState"
               class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
             />
           </div>
@@ -2346,7 +2438,7 @@
             </label>
             <input
               type="text"
-              value="1870"
+              x-model="postalCode"
               class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
             />
           </div>
@@ -2359,7 +2451,7 @@
             </label>
             <input
               type="text"
-              value="AS4568384"
+              x-model="taxId"
               class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
             />
           </div>
@@ -2375,7 +2467,8 @@
         </button>
         <button
           type="button"
-          class="flex w-full justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 sm:w-auto"
+          @click="saveProfileAddress()"
+          class="flex w-full justify-center rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs hover:bg-black sm:w-auto dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
         >
           Save Changes
         </button>

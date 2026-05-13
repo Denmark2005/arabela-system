@@ -528,7 +528,7 @@
           <!-- Menu Item Profile -->
 
           <!-- Menu Item Forms -->
-          <li>
+          <li class="hidden" data-admin-template-nav="forms">
             <a
               href="#"
               @click.prevent="selected = (selected === 'Forms' ? '':'Forms')"
@@ -602,7 +602,7 @@
           <!-- Menu Item Forms -->
 
           <!-- Menu Item Tables -->
-          <li>
+          <li class="hidden" data-admin-template-nav="tables">
             <a
               href="#"
               @click.prevent="selected = (selected === 'Tables' ? '':'Tables')"
@@ -676,7 +676,7 @@
           <!-- Menu Item Tables -->
 
           <!-- Menu Item Pages -->
-          <li>
+          <li class="hidden" data-admin-template-nav="pages">
             <a
               href="#"
               @click.prevent="selected = (selected === 'Pages' ? '':'Pages')"
@@ -752,7 +752,7 @@
       </div>
 
       <!-- Others Group -->
-      <div>
+      <div class="hidden" data-admin-template-nav="others-ui">
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
           <span
             class="menu-group-title"

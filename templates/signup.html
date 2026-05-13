@@ -132,6 +132,7 @@
                 </div>
                 <form id="signup_form" method="POST" action="{% url 'accounts:signup' %}" novalidate>
                   {% csrf_token %}
+                  <input type="hidden" name="next" value="{{ next|default:'' }}" />
                   <div class="space-y-5">
                     <!-- First Name -->
                     <div>
@@ -306,7 +307,7 @@
                   >
                     Already have an account?
                     <a
-                      href="{% url 'accounts:login' %}"
+                      href="{% url 'accounts:login' %}{% if next %}?next={{ next|urlencode }}{% endif %}"
                       class="hero-action-link text-sm hover:text-slate-700"
                       style="color:#000;font-weight:700;"
                       >Sign In</a

@@ -17,6 +17,20 @@ from .models import UserProfile
 User = get_user_model()
 PASSWORD_PATTERN = re.compile(r'^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,16}$')
 
+# Keeps ?next= (e.g. reservation) across signup + email verify when login page loses the query string.
+SESSION_LOGIN_NEXT = 'login_next_after_auth'
+
+
+def _allowed_next_url(request, candidate) -> str:
+    url = (candidate or '').strip()
+    if not url:
+        return ''
+    if url_has_allowed_host_and_scheme(
+        url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        return url
+    return ''
+
 
 def _build_unique_username(email: str) -> str:
     base = email.split('@')[0][:120] or 'user'
@@ -51,12 +65,22 @@ def login_view(request):
         context['error'] = notice
     next_from_get = (request.GET.get('next') or '').strip()
     if next_from_get:
-        context['next'] = next_from_get
+        ok = _allowed_next_url(request, next_from_get)
+        if ok:
+            request.session[SESSION_LOGIN_NEXT] = ok
+
+    effective_next = _allowed_next_url(request, next_from_get) or _allowed_next_url(
+        request, request.session.get(SESSION_LOGIN_NEXT, '')
+    )
+    if effective_next:
+        context['next'] = effective_next
 
     if request.method == 'POST':
         email = request.POST.get('email', '').strip().lower()
         password = request.POST.get('password', '')
-        next_url = (request.POST.get('next') or request.GET.get('next') or '').strip()
+        next_url = _allowed_next_url(request, request.POST.get('next') or request.GET.get('next'))
+        if not next_url:
+            next_url = _allowed_next_url(request, request.session.get(SESSION_LOGIN_NEXT, ''))
         if next_url:
             context['next'] = next_url
 
@@ -92,7 +116,8 @@ def login_view(request):
         login(request, authenticated_user)
         remember_me = request.POST.get('remember_me') == 'on'
         request.session.set_expiry(settings.REMEMBER_ME_AGE if remember_me else 0)
-        if next_url and url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        request.session.pop(SESSION_LOGIN_NEXT, None)
+        if next_url:
             return redirect(next_url)
         return redirect('gowns:homepage')
 
@@ -100,7 +125,16 @@ def login_view(request):
 
 
 def signup_view(request):
+    if request.method == 'GET':
+        next_val = _allowed_next_url(request, request.GET.get('next')) or _allowed_next_url(
+            request, request.session.get(SESSION_LOGIN_NEXT, '')
+        )
+        return render(request, 'signup.html', {'next': next_val})
+
     if request.method == 'POST':
+        preserved_next = _allowed_next_url(request, request.POST.get('next')) or _allowed_next_url(
+            request, request.session.get(SESSION_LOGIN_NEXT, '')
+        )
         first_name = request.POST.get('first_name', '').strip()
         last_name = request.POST.get('last_name', '').strip()
         email = request.POST.get('email', '').strip().lower()
@@ -116,6 +150,7 @@ def signup_view(request):
                     'first_name': first_name,
                     'last_name': last_name,
                     'email': email,
+                    'next': preserved_next,
                 },
             )
 
@@ -130,6 +165,7 @@ def signup_view(request):
                     'first_name': first_name,
                     'last_name': last_name,
                     'email': email,
+                    'next': preserved_next,
                 },
             )
 
@@ -142,6 +178,7 @@ def signup_view(request):
                     'first_name': first_name,
                     'last_name': last_name,
                     'email': email,
+                    'next': preserved_next,
                 },
             )
 
@@ -154,6 +191,7 @@ def signup_view(request):
                     'first_name': first_name,
                     'last_name': last_name,
                     'email': email,
+                    'next': preserved_next,
                 },
             )
 
@@ -166,6 +204,7 @@ def signup_view(request):
                     'first_name': first_name,
                     'last_name': last_name,
                     'email': email,
+                    'next': preserved_next,
                 },
             )
 
@@ -194,8 +233,11 @@ def signup_view(request):
                             'first_name': first_name,
                             'last_name': last_name,
                             'email': email,
+                            'next': preserved_next,
                         },
                     )
+                if preserved_next:
+                    request.session[SESSION_LOGIN_NEXT] = preserved_next
                 return redirect(f"{reverse('accounts:verify_email_pending')}?email={email}&resent=1")
 
             return render(
@@ -206,6 +248,7 @@ def signup_view(request):
                     'first_name': first_name,
                     'last_name': last_name,
                     'email': email,
+                    'next': preserved_next,
                 },
             )
 
@@ -236,12 +279,16 @@ def signup_view(request):
                     'first_name': first_name,
                     'last_name': last_name,
                     'email': email,
+                    'next': preserved_next,
                 },
             )
 
+        if preserved_next:
+            request.session[SESSION_LOGIN_NEXT] = preserved_next
         return redirect('accounts:verify_email_pending')
 
-    return render(request, 'signup.html', {})
+    next_val = _allowed_next_url(request, request.session.get(SESSION_LOGIN_NEXT, ''))
+    return render(request, 'signup.html', {'next': next_val})
 
 
 def verify_email_pending_view(request):

@@ -118,7 +118,7 @@ def featured_search_items(request):
         },
         {
             "collection_key": "dresses",
-            "slug": "archive-satin",
+            "slug": "valencia-lace",
             "title": "Dresses One",
             "price_label": "₱1,800",
             "price": _peso_to_number("₱1,800"),
@@ -126,7 +126,7 @@ def featured_search_items(request):
         },
         {
             "collection_key": "filipiniana",
-            "slug": "florence-organza",
+            "slug": "valencia-lace",
             "title": "Filipiniana One",
             "price_label": "₱2,000",
             "price": _peso_to_number("₱2,000"),
@@ -134,7 +134,7 @@ def featured_search_items(request):
         },
         {
             "collection_key": "wedding",
-            "slug": "modernist-crepe",
+            "slug": "valencia-lace",
             "title": "Wedding One",
             "price_label": "₱2,200",
             "price": _peso_to_number("₱2,200"),
