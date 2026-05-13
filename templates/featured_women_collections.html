@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}ARABELA | Rent{% endblock %}
+
+{% block main_class %}pt-24 pb-28 md:pb-20 px-6 sm:px-10 md:px-16 max-w-[1200px] mx-auto{% endblock %}
+
+{% block content %}
+    <!-- Title (compact, vestido-style label) -->
+    <div class="text-center mb-12 md:mb-14">
+        <p class="text-[0.6875rem] uppercase tracking-[0.28em] text-on-surface-variant font-body">Rentals</p>
+    </div>
+
+    <!-- Category Grid: only Women collections -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-10 sm:gap-x-6 sm:gap-y-12 md:gap-x-8">
+
+        <!-- Category: Dresses -->
+        <a href="{% url 'gowns:collection_dresses' %}" class="group cursor-pointer flex flex-col items-center">
+            <div class="relative mx-auto w-full max-w-[200px] sm:max-w-[220px] md:max-w-[240px] aspect-[3/5] overflow-hidden bg-surface-container-high rounded-sm">
+                <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuAjReG6BS4gyWCW4RlLjZjjW9aam7GCNjd80JyHGd_rZy_i_GVGoZYq8_ySiM9IHg4vm1IuZaX_kTU1WlExZjrLibM0am-Wwr31pNVZb0Ytv53LWV-oCQgwiPGQwbQcKE1A8JTzeiciKl9Lwklj2cp9trtrThsMqPb7OecedsuQ3DJ1PfBAeaYmQ4zhydY7_Ht3Zh42f1ucG82HCYmabAG_uaruSZeeeJiZuacGRxOT1L-y-iuZNNR0YY1x7-urgpmZurKgQlU-N0g" alt="Dresses" class="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
+                <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">Dresses</span>
+                    <span class="mt-2 block w-10 sm:w-12 border-t border-white" aria-hidden="true"></span>
+                </div>
+            </div>
+        </a>
+
+        <!-- Category: Filipiniana -->
+        <a href="{% url 'gowns:collection_filipiniana' %}" class="group cursor-pointer flex flex-col items-center">
+            <div class="relative mx-auto w-full max-w-[200px] sm:max-w-[220px] md:max-w-[240px] aspect-[3/5] overflow-hidden bg-surface-container-high rounded-sm">
+                <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuAjReG6BS4gyWCW4RlLjZjjW9aam7GCNjd80JyHGd_rZy_i_GVGoZYq8_ySiM9IHg4vm1IuZaX_kTU1WlExZjrLibM0am-Wwr31pNVZb0Ytv53LWV-oCQgwiPGQwbQcKE1A8JTzeiciKl9Lwklj2cp9trtrThsMqPb7OecedsuQ3DJ1PfBAeaYmQ4zhydY7_Ht3Zh42f1ucG82HCYmabAG_uaruSZeeeJiZuacGRxOT1L-y-iuZNNR0YY1x7-urgpmZurKgQlU-N0g" alt="Filipiniana" class="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
+                <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">Filipiniana</span>
+                    <span class="mt-2 block w-10 sm:w-12 border-t border-white" aria-hidden="true"></span>
+                </div>
+            </div>
+        </a>
+
+        <!-- Category: Wedding -->
+        <a href="{% url 'gowns:collection_wedding' %}" class="group cursor-pointer flex flex-col items-center">
+            <div class="relative mx-auto w-full max-w-[200px] sm:max-w-[220px] md:max-w-[240px] aspect-[3/5] overflow-hidden bg-surface-container-high rounded-sm">
+                <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuAjReG6BS4gyWCW4RlLjZjjW9aam7GCNjd80JyHGd_rZy_i_GVGoZYq8_ySiM9IHg4vm1IuZaX_kTU1WlExZjrLibM0am-Wwr31pNVZb0Ytv53LWV-oCQgwiPGQwbQcKE1A8JTzeiciKl9Lwklj2cp9trtrThsMqPb7OecedsuQ3DJ1PfBAeaYmQ4zhydY7_Ht3Zh42f1ucG82HCYmabAG_uaruSZeeeJiZuacGRxOT1L-y-iuZNNR0YY1x7-urgpmZurKgQlU-N0g" alt="Wedding" class="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
+                <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">Wedding</span>
+                    <span class="mt-2 block w-10 sm:w-12 border-t border-white" aria-hidden="true"></span>
+                </div>
+            </div>
+        </a>
+
+        <!-- Category: Ball gown -->
+        <a href="{% url 'gowns:collection_ball_gown' %}" class="group cursor-pointer flex flex-col items-center">
+            <div class="relative mx-auto w-full max-w-[200px] sm:max-w-[220px] md:max-w-[240px] aspect-[3/5] overflow-hidden bg-surface-container-high rounded-sm">
+                <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuAjReG6BS4gyWCW4RlLjZjjW9aam7GCNjd80JyHGd_rZy_i_GVGoZYq8_ySiM9IHg4vm1IuZaX_kTU1WlExZjrLibM0am-Wwr31pNVZb0Ytv53LWV-oCQgwiPGQwbQcKE1A8JTzeiciKl9Lwklj2cp9trtrThsMqPb7OecedsuQ3DJ1PfBAeaYmQ4zhydY7_Ht3Zh42f1ucG82HCYmabAG_uaruSZeeeJiZuacGRxOT1L-y-iuZNNR0YY1x7-urgpmZurKgQlU-N0g" alt="Ball gown" class="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
+                <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">Ball gown</span>
+                    <span class="mt-2 block w-10 sm:w-12 border-t border-white" aria-hidden="true"></span>
+                </div>
+            </div>
+        </a>
+
+    </div>
+
+    <!-- Bottom Navigation (Mobile Only) -->
+    <nav class="md:hidden fixed bottom-0 left-0 w-full flex justify-around items-center px-6 pb-10 pt-4 bg-surface/95 backdrop-blur-md border-t border-black/5 z-50">
+      <a href="{% url 'gowns:homepage' %}" class="flex flex-col items-center justify-center text-on-surface">
+        <span class="material-symbols-outlined scale-90" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+        <span class="text-[9px] uppercase tracking-[0.15rem] font-semibold font-body mt-2">Discover</span>
+      </a>
+      <a href="{% url 'gowns:collections' %}" class="flex flex-col items-center justify-center text-primary">
+        <span class="material-symbols-outlined scale-90" style="font-variation-settings: 'FILL' 1;">checkroom</span>
+        <span class="text-[9px] uppercase tracking-[0.15rem] font-semibold font-body mt-2">Rentals</span>
+      </a>
+      <div class="flex flex-col items-center justify-center text-on-surface-variant/60">
+        <span class="material-symbols-outlined scale-90">favorite</span>
+        <span class="text-[9px] uppercase tracking-[0.15rem] font-semibold font-body mt-2">Wishlist</span>
+      </div>
+      <div class="flex flex-col items-center justify-center text-on-surface-variant/60">
+        <span class="material-symbols-outlined scale-90">chat_bubble</span>
+        <span class="text-[9px] uppercase tracking-[0.15rem] font-semibold font-body mt-2">Inbox</span>
+      </div>
+    </nav>
+{% endblock %}
+

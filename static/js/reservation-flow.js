@@ -2,6 +2,8 @@
     var body = document && document.body;
     var userKey = (body && body.dataset && body.dataset.userKey) ? body.dataset.userKey : 'guest';
     var STORAGE_KEY = 'arabela_reservation_cart_' + userKey;
+    var GUEST_RESERVATION_KEY = 'arabela_reservation_cart_guest';
+    var GUEST_CART_KEY = 'arabela_cart_guest';
     var DEPOSIT_PER_ITEM = 2000;
 
     function formatPesoInt(n) {
@@ -24,6 +26,119 @@
             .replace(/&/g, '&amp;')
             .replace(/"/g, '&quot;')
             .replace(/</g, '&lt;');
+    }
+
+    function maybeMigrateGuestReservationPayload() {
+        if (userKey === 'guest') return;
+        var guestRaw = null;
+        try {
+            guestRaw = sessionStorage.getItem(GUEST_RESERVATION_KEY);
+        } catch (e) {}
+        if (!guestRaw) return;
+        var guestData;
+        try {
+            guestData = JSON.parse(guestRaw);
+        } catch (e2) {
+            return;
+        }
+        if (!guestData || !Array.isArray(guestData.items) || guestData.items.length === 0) {
+            try {
+                sessionStorage.removeItem(GUEST_RESERVATION_KEY);
+            } catch (eClear) {}
+            return;
+        }
+        var guestTs = Number(guestData.savedAt) || 0;
+        var userRaw = null;
+        try {
+            userRaw = sessionStorage.getItem(STORAGE_KEY);
+        } catch (e3) {}
+        var userTs = 0;
+        if (userRaw) {
+            try {
+                var userData = JSON.parse(userRaw);
+                if (userData && Array.isArray(userData.items) && userData.items.length > 0) {
+                    userTs = Number(userData.savedAt) || 0;
+                }
+            } catch (e4) {}
+        }
+        try {
+            if (userTs > guestTs) {
+                sessionStorage.removeItem(GUEST_RESERVATION_KEY);
+                return;
+            }
+            sessionStorage.setItem(STORAGE_KEY, guestRaw);
+            sessionStorage.removeItem(GUEST_RESERVATION_KEY);
+        } catch (e5) {}
+    }
+
+    function normCartSize(s) {
+        var t = String(s == null ? '' : s).trim();
+        if (!t || t === '-') return '';
+        return t;
+    }
+
+    function normCartRental(r) {
+        var t = String(r == null ? '' : r).trim();
+        if (!t || t === '-') return '';
+        return t;
+    }
+
+    function sameCartLine(a, b) {
+        if (!a || !b) return false;
+        var aCol = a.collection ? String(a.collection).trim() : 'wedding';
+        var bCol = b.collection ? String(b.collection).trim() : 'wedding';
+        return (
+            a.id === b.id &&
+            (a.name || 'Untitled') === (b.name || 'Untitled') &&
+            aCol === bCol &&
+            normCartSize(a.size) === normCartSize(b.size) &&
+            normCartRental(a.rental) === normCartRental(b.rental)
+        );
+    }
+
+    function maybeMergeGuestDrawerCart() {
+        if (userKey === 'guest') return;
+        var guestRaw = null;
+        try {
+            guestRaw = localStorage.getItem(GUEST_CART_KEY);
+        } catch (e) {}
+        if (!guestRaw) return;
+        var guestCart;
+        try {
+            guestCart = JSON.parse(guestRaw);
+        } catch (e2) {
+            return;
+        }
+        if (!Array.isArray(guestCart) || guestCart.length === 0) return;
+        var userCartKey = 'arabela_cart_' + userKey;
+        var userCart = [];
+        try {
+            userCart = JSON.parse(localStorage.getItem(userCartKey) || '[]');
+        } catch (e3) {
+            userCart = [];
+        }
+        if (!Array.isArray(userCart)) userCart = [];
+        for (var i = 0; i < guestCart.length; i++) {
+            var gitem = guestCart[i];
+            if (!gitem) continue;
+            var existing = null;
+            for (var u = 0; u < userCart.length; u++) {
+                var ci = userCart[u];
+                if (ci && sameCartLine(ci, gitem)) {
+                    existing = ci;
+                    break;
+                }
+            }
+            if (existing) {
+                existing.qty = (Number(existing.qty) || 1) + (Number(gitem.qty) || 1);
+            } else {
+                userCart.push(gitem);
+            }
+        }
+        try {
+            localStorage.setItem(userCartKey, JSON.stringify(userCart));
+            localStorage.removeItem(GUEST_CART_KEY);
+        } catch (e4) {}
     }
 
     window.saveCartAndProceedToReservation = function (e) {
@@ -66,7 +181,8 @@
             subtotal: sub,
             itemCount: itemCount,
             deposit: deposit,
-            total: sub + deposit
+            total: sub + deposit,
+            savedAt: Date.now()
         };
         try {
             sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -88,6 +204,9 @@
     window.initReservationOrderSummary = function () {
         var root = document.getElementById('reservation-items-root');
         if (!root) return;
+
+        maybeMigrateGuestReservationPayload();
+        maybeMergeGuestDrawerCart();
 
         var subEl = document.getElementById('reservation-rental-subtotal');
         var depEl = document.getElementById('reservation-security-deposit');

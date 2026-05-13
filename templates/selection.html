@@ -66,7 +66,9 @@
 {% block extra_scripts %}
 <script>
 // --- Cart logic for selection.html ---
-const RESERVATION_STORAGE_KEY = 'arabela_reservation_cart';
+// USER_STORAGE_KEY is defined in base.html; do not redeclare (would throw and break this page).
+const CART_STORAGE_KEY = 'arabela_cart_' + USER_STORAGE_KEY;
+const RESERVATION_STORAGE_KEY = 'arabela_reservation_cart_' + USER_STORAGE_KEY;
 const DEPOSIT_PER_ITEM = 2000;
 const IS_AUTHENTICATED = {% if request.user.is_authenticated %}true{% else %}false{% endif %};
 const LOGIN_URL = "{% url 'accounts:login' %}";
@@ -82,7 +84,7 @@ function getProductDetailUrl(item, idx) {
   return `/collections/${encodeURIComponent(col)}/products/${encodeURIComponent(slug)}/?cart_item_index=${idx}`;
 }
 function renderCart() {
-  const cart = JSON.parse(localStorage.getItem('arabela_cart') || '[]');
+  const cart = JSON.parse(localStorage.getItem(CART_STORAGE_KEY) || '[]');
   const cartItemsDiv = document.getElementById('cart-items');
   const cartTotalSpan = document.getElementById('selection-cart-total');
   const cartSubtotalSpan = document.getElementById('selection-cart-subtotal');
@@ -140,28 +142,22 @@ function renderCart() {
   cartTotalSpan.textContent = formatPeso(subtotal + deposit) + ' PHP';
 }
 function removeCartItem(idx) {
-  let cart = JSON.parse(localStorage.getItem('arabela_cart') || '[]');
+  let cart = JSON.parse(localStorage.getItem(CART_STORAGE_KEY) || '[]');
   cart.splice(idx, 1);
-  localStorage.setItem('arabela_cart', JSON.stringify(cart));
+  localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
   renderCart();
 }
 function updateQty(idx, delta) {
-  let cart = JSON.parse(localStorage.getItem('arabela_cart') || '[]');
+  let cart = JSON.parse(localStorage.getItem(CART_STORAGE_KEY) || '[]');
   cart[idx].qty += delta;
   if (cart[idx].qty < 1) cart[idx].qty = 1;
-  localStorage.setItem('arabela_cart', JSON.stringify(cart));
+  localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
   renderCart();
 }
 function proceedReservationFromSelection() {
-  const cart = JSON.parse(localStorage.getItem('arabela_cart') || '[]');
+  const cart = JSON.parse(localStorage.getItem(CART_STORAGE_KEY) || '[]');
   if (!cart.length) {
     window.alert('Add at least one item to your selection before continuing.');
-    return;
-  }
-
-  if (!IS_AUTHENTICATED) {
-    const nextParam = encodeURIComponent(RESERVATION_URL);
-    window.location.href = `${LOGIN_URL}?next=${nextParam}`;
     return;
   }
 
@@ -193,7 +189,17 @@ function proceedReservationFromSelection() {
     deposit: deposit,
     total: subtotal + deposit
   };
-  sessionStorage.setItem(RESERVATION_STORAGE_KEY, JSON.stringify(payload));
+
+  try {
+    sessionStorage.setItem(RESERVATION_STORAGE_KEY, JSON.stringify(payload));
+  } catch (e) {}
+
+  if (!IS_AUTHENTICATED) {
+    const nextParam = encodeURIComponent(RESERVATION_URL);
+    window.location.href = `${LOGIN_URL}?next=${nextParam}`;
+    return;
+  }
+
   window.location.href = RESERVATION_URL;
 }
 

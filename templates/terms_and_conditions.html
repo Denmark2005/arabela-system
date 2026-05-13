@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}ARABELA | Terms of service{% endblock %}
+
+{% block main_class %}pt-28 pb-24 px-8{% endblock %}
+
+{% block extra_head %}
+<style>
+  .terms-reveal {
+    opacity: 0;
+    transform: translateY(60px);
+    transition: opacity 1.4s cubic-bezier(0.16, 1, 0.3, 1), transform 1.4s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: transform, opacity;
+  }
+  .terms-reveal.active {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .terms-delay-100 { transition-delay: 100ms; }
+  .terms-delay-200 { transition-delay: 200ms; }
+  .terms-delay-300 { transition-delay: 300ms; }
+</style>
+{% endblock %}
+
+{% block content %}
+<section id="terms-page" class="max-w-[760px] mx-auto">
+  <header class="text-center mb-14 terms-reveal">
+    <h1 class="font-headline text-4xl md:text-5xl font-bold tracking-tight text-on-surface">Terms of service</h1>
+  </header>
+
+  <div class="space-y-14 text-on-surface-variant leading-8 text-[0.95rem] font-body">
+    <article class="terms-reveal terms-delay-100">
+      <h2 class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-on-surface mb-5">Rental Agreement</h2>
+      <p class="mb-5">The rental period begins when you pick up the gown from the shop two (2) days before your event date. The rental period ends when the gown has been returned to the shop within two (2) days after your event date and inspected by our staff to be in acceptable condition.</p>
+      <p class="mb-5">You are responsible for the gown while it is in your possession. You are expected to take good care of it as if it were your own. Do not attempt to wash, iron, or alter the gown in any way.</p>
+      <p class="mb-5">In the event that the gown is damaged, we will assess the item and inform you of the additional charges needed to repair it. Should the gown be lost or damaged beyond repair, you will be required to pay the full retail price of the item. Always return the gown regardless of its condition so we can determine whether it can be repaired at a lower cost versus the full retail price. You are liable for all repair and replacement costs and the charges will be deducted from your security deposit or billed to your account.</p>
+      <p>Arabela Gown Rental shall not be liable for failure to perform any of its obligations due to reasons beyond its reasonable control, including fire, earthquake, natural disasters, and other force majeure events.</p>
+    </article>
+
+    <article class="terms-reveal terms-delay-200">
+      <h2 class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-on-surface mb-5">Laundry and Gown Condition</h2>
+      <p class="mb-5">All gowns are professionally cleaned and pressed before every rental. Each gown is inspected and prepared in ready-to-wear condition upon pickup. You will receive the gown clean, pressed, and in good condition.</p>
+      <p class="mb-5">Upon return, do not wash, dry clean, or attempt to clean the gown yourself. Arabela Gown Rental handles all cleaning and laundering after every rental. Simply return the gown as is after your event and our team will take care of the rest.</p>
+      <p>If the gown is returned with stains, tears, or any form of damage beyond normal wear, additional charges will apply and will be assessed by our staff upon inspection.</p>
+    </article>
+
+    <article class="terms-reveal terms-delay-300">
+      <h2 class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-on-surface mb-5">Security Deposit</h2>
+      <p class="mb-5">A security deposit of Php 2,000.00 is required for every reservation. This must be paid through the website via GCash only. You must upload your proof of payment on the platform for the admin to verify. The admin cannot confirm your reservation without a verified deposit payment.</p>
+      <p>The full security deposit will be refunded to you upon return of the gown on time and in good condition. Any applicable penalties or charges will be deducted from your deposit before it is returned.</p>
+    </article>
+
+    <article class="terms-reveal">
+      <h2 class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-on-surface mb-5">Rental Fee, Late Fee, and Cancellation</h2>
+      <p class="mb-5">Upon confirming a reservation, the full rental fee is to be paid separately on the day of pickup either at the shop in person or via GCash.</p>
+      <p class="mb-5">If the gown is returned beyond the allowed two (2) days after your event date, a late return penalty of Php 200.00 per day will be charged. This will be deducted from your security deposit.</p>
+      <p class="mb-3 font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-on-surface">Cancellations</p>
+      <p class="mb-4">You may cancel your reservation through the website at any time before the admin confirms it. However, repeated cancellations will result in a temporary account restriction as follows:</p>
+      <ul class="list-disc pl-6 mb-5 space-y-1">
+        <li>3 cancellations — account restricted for 10 minutes</li>
+        <li>4 cancellations — account restricted for 20 minutes</li>
+        <li>5 cancellations — account restricted for 30 minutes</li>
+        <li>6 cancellations — account restricted for 1 hour</li>
+        <li>7 or more cancellations — account restricted for 1 day</li>
+      </ul>
+      <p class="mb-5">The restriction duration increases depending on how many times you have cancelled. After the restriction period ends, you may make a new reservation. If you cancel again, the restriction will be applied again based on your total cancellation count.</p>
+      <p class="mb-5"><span class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-on-surface">Expired Reservations</span><br/>If you submit a reservation but fail to pay the Php 2,000.00 security deposit within 20 minutes, your reservation will automatically expire and be cancelled by the system. Expired reservations due to non-payment are counted the same as cancellations and will contribute to your restriction count.</p>
+      <p><span class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-on-surface">Unpaid Security Deposits</span><br/>If you accumulate three (3) or more unpaid or expired security deposits, your account will be automatically restricted by the system and you will not be able to make new reservations until the restriction is resolved with the admin.</p>
+    </article>
+
+    <article class="terms-reveal">
+      <h2 class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-on-surface mb-5">Pickup and Return Policy</h2>
+      <p class="mb-5">All pickups and returns must be done in person at the Arabela Gown Rental shop only. Arabela Gown Rental does not offer delivery or courier services.</p>
+      <p class="mb-5"><span class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-on-surface">Shop Hours: 1:00 PM – 5:00 PM</span></p>
+      <p class="mb-5">Pickup: Two (2) days before your event date within shop hours.<br/>Return: Two (2) days after your event date within shop hours.</p>
+      <p>Please make sure to arrive within shop hours. Pickups or returns outside of 1:00 PM – 5:00 PM will not be accommodated. Failure to return within the allowed period will result in a daily penalty of Php 200.00 deducted from your security deposit.</p>
+    </article>
+
+    <article class="terms-reveal">
+      <h2 class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-on-surface mb-5">Size and Fitting</h2>
+      <p>You may select your size when submitting your reservation online. If you are unsure of your size, you may leave it as TBD (To Be Determined). Upon pickup, inform our staff of your size and they will assist you with the fitting at the shop. Arabela Gown Rental is not liable for size issues if the correct size was not communicated prior to or during pickup.</p>
+    </article>
+
+    <article class="terms-reveal">
+      <h2 class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-on-surface mb-5">Account Responsibility</h2>
+      <p class="mb-5">You are responsible for all activity under your account. Make sure your reservation details, event date, and contact information are accurate when submitting a reservation.</p>
+      <p>If you accumulate three (3) or more unpaid security deposits, your account will be automatically restricted and no new reservations can be made until the matter is resolved with the admin.</p>
+    </article>
+
+    <article class="terms-reveal">
+      <h2 class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-on-surface mb-5">Reservation Status</h2>
+      <p>After submitting a reservation, it will remain in Pending status until you complete the GCash security deposit payment and the admin verifies it. Only after admin verification will your reservation be marked as confirmed and the gown officially reserved under your account.</p>
+    </article>
+
+    <article class="terms-reveal">
+      <h2 class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-on-surface mb-5">Digital Receipt and Rental Agreement</h2>
+      <p>Upon confirmation of your reservation and verified payment, the system will automatically generate a digital receipt and a digital rental agreement for your records. These documents serve as your official proof of transaction with Arabela Gown Rental.</p>
+    </article>
+
+    <article class="terms-reveal">
+      <h2 class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-on-surface mb-5">Payment Methods</h2>
+      <p>Security Deposit — GCash via website only.<br/>Full Rental Fee — GCash or cash in person at the shop on pickup day.</p>
+      <p class="mt-5">No other payment methods are accepted.</p>
+    </article>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  (function () {
+    var root = document.getElementById('terms-page');
+    if (!root) return;
+    var els = root.querySelectorAll('.terms-reveal');
+    if (!els.length) return;
+
+    var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion) {
+      els.forEach(function (el) { el.classList.add('active'); });
+      return;
+    }
+
+    function revealCallback(entries, observer) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('active');
+          observer.unobserve(entry.target);
+        }
+      });
+    }
+
+    var observer = new IntersectionObserver(revealCallback, {
+      threshold: 0.1,
+      rootMargin: '0px 0px -10% 0px'
+    });
+
+    els.forEach(function (el) { observer.observe(el); });
+  })();
+</script>
+{% endblock %}
+

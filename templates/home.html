@@ -79,6 +79,21 @@
             font-size: 1.25rem;
         }
         .editorial-shadow { box-shadow: 0 20px 40px rgba(27, 28, 28, 0.06); }
+        .search-bar-spinner {
+            display: inline-block;
+            width: 1.125rem;
+            height: 1.125rem;
+            border: 2px solid #e5e2e1;
+            border-top-color: #0b0c0c;
+            border-radius: 50%;
+            animation: search-bar-spin 0.7s linear infinite;
+        }
+        @keyframes search-bar-spin {
+            to { transform: rotate(360deg); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .search-bar-spinner { animation: none; border-color: #c4c7c7; border-top-color: #747878; }
+        }
         header.homepage-header { background: rgba(255,255,255,0.8); backdrop-filter: blur(18px); }
         header.homepage-header nav a,
         header.homepage-header nav button,
@@ -233,28 +248,30 @@
 <nav class="flex justify-between items-center w-full px-8 h-20">
     <div class="flex items-center gap-12">
         <div class="flex-shrink-0">
+            <a href="{% url 'gowns:homepage' %}" class="block" onclick="event.preventDefault(); location.reload(); return false;" aria-label="Refresh homepage">
             <h1 class="text-2xl font-bold tracking-tighter text-[#222222] dark:text-[#FAF4EB]">ARABELA</h1>
+            </a>
         </div>
         <div class="hidden md:flex gap-8 items-center self-stretch">
             <div class="relative group h-full flex items-center">
-                <a class="uppercase tracking-[0.1rem] text-[0.6875rem] text-[#615E57] dark:text-[#A09E99] hover:text-[#222222] dark:hover:text-white transition-colors duration-300" href="#">Rent</a>
+                <a class="uppercase tracking-[0.1rem] text-[0.6875rem] text-[#615E57] dark:text-[#A09E99] hover:text-[#222222] dark:hover:text-white transition-colors duration-300 font-body" href="#">Rent</a>
                 <div class="dropdown-menu absolute top-full left-0 w-52 bg-white dark:bg-[#222222] shadow-[0_10px_30px_rgba(0,0,0,0.08)] border-t-2 border-[#222222] dark:border-[#FAF4EB] py-6 z-[80]" style="background-color: #ffffff;">
                     <ul class="flex flex-col gap-4">
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">All</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Dresses</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Filipiniana</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Kids suit</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="{% url 'gowns:collection_wedding' %}">Wedding</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Suit</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">Ball gown</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{% url 'gowns:collection_all' %}">All</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{% url 'gowns:collection_dresses' %}">Dresses</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{% url 'gowns:collection_filipiniana' %}">Filipiniana</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{% url 'gowns:collection_kid_suit' %}">Kids suit</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{% url 'gowns:collection_wedding' %}">Wedding</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{% url 'gowns:collection_suit' %}">Suit</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{% url 'gowns:collection_ball_gown' %}">Ball gown</a></li>
                     </ul>
                 </div>
             </div>
             <div class="relative group h-full flex items-center">
-                <a class="uppercase tracking-[0.1rem] text-[0.6875rem] text-[#615E57] dark:text-[#A09E99] hover:text-[#222222] dark:hover:text-white transition-colors duration-300" href="#">How it Works</a>
+                <a class="uppercase tracking-[0.1rem] text-[0.6875rem] text-[#615E57] dark:text-[#A09E99] hover:text-[#222222] dark:hover:text-white transition-colors duration-300 font-body" href="{% url 'gowns:how_it_works' %}">How it Works</a>
                 <div class="dropdown-menu absolute top-full left-0 w-48 bg-white dark:bg-[#222222] shadow-[0_10px_30px_rgba(0,0,0,0.08)] border-t-2 border-[#222222] dark:border-[#FAF4EB] py-6 z-[80]" style="background-color: #ffffff;">
                     <ul class="flex flex-col gap-4">
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors" href="#">FAQs</a></li>
+                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{% url 'gowns:faqs' %}">FAQs</a></li>
                     </ul>
                 </div>
             </div>
@@ -287,66 +304,9 @@
 </header>
 
 
-<!-- SEARCH OVERLAY: dimmed backdrop below panel closes same as X -->
+<!-- SEARCH OVERLAY -->
 <div class="fixed top-20 left-0 right-0 bottom-0 z-[65] flex flex-col" id="search-overlay">
-    <div class="shrink-0 bg-white border-b border-black/5 shadow-lg max-h-[60vh]" onclick="event.stopPropagation()">
-        <div class="container mx-auto px-8 py-10">
-            <div class="max-w-6xl mx-auto">
-                <div class="relative flex items-center mb-10">
-                    <span class="material-symbols-outlined absolute left-0 text-black/40 text-2xl">search</span>
-                    <input class="w-full bg-white border border-black/20 border-0 border-b pl-10 pr-10 py-4 focus:ring-0 focus:border-black text-2xl font-light placeholder:text-black/20 rounded-none" id="main-search-input" placeholder="Search here.." type="text"/>
-                    <button type="button" class="absolute right-0 text-black/40 hover:text-slate-900 transition-colors" onclick="toggleSearch()">
-                        <span class="material-symbols-outlined">close</span>
-                    </button>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-12 gap-12">
-                    <div class="md:col-span-3">
-                        <p class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-6">Collections</p>
-                        <ul class="space-y-4">
-                            <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collection_dresses' %}">Dresses</a></li>
-                            <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collection_filipiniana' %}">Filipiniana</a></li>
-                            <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collection_kid_suit' %}">Kids suit</a></li>
-                            <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collection_wedding' %}">Wedding</a></li>
-                            <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collection_suit' %}">Suit</a></li>
-                            <li><a class="text-sm hover:text-primary transition-colors" href="{% url 'gowns:collection_ball_gown' %}">Ball gown</a></li>
-                        </ul>
-                    </div>
-                    <div class="md:col-span-9">
-                        <p class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-6">Top Picks</p>
-                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-10">
-                            {% for item in featured_search_items|slice:":4" %}
-                                <div class="group">
-                                    <a href="{% url 'gowns:product_detail' collection=item.collection_key slug=item.slug %}" class="block">
-                                        <div class="relative bg-transparent aspect-[2/3] mb-4 overflow-hidden flex items-center justify-center shadow-none">
-                                            <img alt="{{ item.title }}" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="{{ item.image }}"/>
-                                            <button
-                                                type="button"
-                                                class="absolute bottom-4 right-4 w-10 h-10 bg-white border border-black/30 rounded-full flex items-center justify-center hover:bg-gray-50 active:scale-95 transition-all"
-                                                aria-label="Add to selection"
-                                                data-product-slug="{{ item.slug }}"
-                                                data-product-name="{{ item.title }}"
-                                                data-product-price="{{ item.price }}"
-                                                data-product-image="{{ item.image }}"
-                                                data-product-collection="{{ item.collection_key }}"
-                                                onclick="event.preventDefault(); event.stopPropagation(); addFeaturedToSelection(this);"
-                                            >
-                                                <span class="material-symbols-outlined text-base">add</span>
-                                            </button>
-                                        </div>
-                                        <div class="min-w-0">
-                                            <p class="text-[0.7rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold">Arabela</p>
-                                            <p class="text-[0.95rem] font-body font-medium tracking-tight text-on-surface truncate mt-1">{{ item.title }}</p>
-                                            <p class="text-[0.9rem] font-body font-medium text-on-surface/70 tabular-nums mt-1">{{ item.price_label }}</p>
-                                        </div>
-                                    </a>
-                                </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    {% include "partials/search_overlay.html" %}
     <div class="flex-1 min-h-0 w-full bg-transparent cursor-pointer" onclick="toggleSearch()" role="presentation" aria-hidden="true"></div>
 </div>
 
@@ -508,16 +468,12 @@
             <div class="max-w-2xl">
                 <span class="font-label homepage-hero-label mb-4 block">ARABELA | COLLECTION 2026</span>
                 <h2 class="font-headline homepage-hero-title leading-[0.9] font-extrabold tracking-tight mb-8">Rent The Dream</h2>
-                <p class="homepage-hero-description max-w-sm mb-10">High-fashion gowns delivered with personalized care. Visit us for a personalized fitting and find your perfect look.</p>
+                <p class="homepage-hero-description max-w-sm mb-10">Browse our full collection online. Check real-time availability, reserve your outfit, and pick it up at the shop.</p>
                 <!-- Links to Collections page -->
                 <a href="{% url 'gowns:collections' %}" class="inline-flex rounded-full overflow-hidden">
                     <span class="homepage-hero-button inline-flex items-center justify-center px-12 py-5">Explore Collections</span>
                 </a>
             </div>
-        </div>
-        <div class="absolute bottom-10 right-8 flex items-center gap-4">
-            <span class="font-label text-[0.6875rem] uppercase tracking-widest text-slate-900">Scroll</span>
-            <div class="w-px h-12 bg-slate-900/20"></div>
         </div>
     </section>
 
@@ -530,8 +486,7 @@
                     <img alt="Arabela Women Gown Collection" class="w-full h-full object-cover transition-transform duration-700 hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDoXBFqStMnToVb80lpNcOu2L2sM791MrJmBW76ONWSN9NNxjYwIKr62lrtgKTsJUJ3EdwdmrXdEDzIHlQCq5cpBFNLIqmKKBHScdoIF8ax4ontDI3vyH_7UJJMwghVtSjqVoDofM_FIQR_XMOaK-QLh9v1H1Ub672NUBIJdFsaDRq5ICqksBDjNV55RZmXuFb6qC1v_poZpZMvRt7A5Qzegj5Go1Ot_xpj0qIyESs5_TLYUYBwEiG9fQi1e4y5MFTCzYsCtPcwQ-o"/>
                 </div>
                 <div class="absolute -bottom-8 -right-8 p-12 bg-surface-container-lowest editorial-shadow">
-                    <h3 class="font-headline homepage-category-label mb-2">Women</h3>
-                    <a class="font-label text-[0.6875rem] uppercase tracking-widest border-b border-primary pb-1" href="{% url 'gowns:collections' %}">Shop Collection</a>
+                    <a class="font-label text-[0.6875rem] uppercase tracking-widest border-b border-primary pb-1" href="{% url 'gowns:featured_women_collections' %}">Women Collection</a>
                 </div>
             </div>
             <div class="md:col-span-2"></div>
@@ -541,8 +496,7 @@
                     <img alt="Arabela Men Collection" class="w-full h-full object-cover transition-transform duration-700 hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDvYD3Wun7AWJcPA4TmiIaIRFvTUXZ5TR4wigNkmxhOQLCFwpe1f_w-ahiG8-Zrzk7ITEqSLF1yUbyjxMjhdd0jc-YkxtfbSHXQ4KkCntSAigKZf-w_v3uAsvLEU32hL4GvtrokdVjzQ4W6agvmGeYODkHRsEBfNtPWWhBm5VB2NhY8piBhBRMTMeYjxxexO15JQFbyF6Ifx-y5Jb5ICNE6k2x1DVgKnaOKMWa2pNOE3XtKTIejAjLRu37UXWPoBM-xl8SiX9Vl4CA"/>
                 </div>
                 <div class="absolute -top-8 -left-8 p-12 bg-surface-container-lowest editorial-shadow">
-                    <h3 class="font-headline homepage-category-label mb-2">Men</h3>
-                    <a class="font-label text-[0.6875rem] uppercase tracking-widest border-b border-primary pb-1" href="{% url 'gowns:collections' %}">Explore Tailoring</a>
+                    <a class="font-label text-[0.6875rem] uppercase tracking-widest border-b border-primary pb-1" href="{% url 'gowns:featured_men_collections' %}">Men Collection</a>
                 </div>
             </div>
         </div>
@@ -552,7 +506,7 @@
     <section class="py-32 bg-white px-8">
         <div class="container mx-auto">
             <div class="flex flex-col md:flex-row justify-between items-baseline mb-20 gap-8">
-                <h2 class="font-headline homepage-trending-heading tracking-tighter">Trending Now</h2>
+                <button type="button" onclick="toggleSearch()" class="font-headline homepage-trending-heading tracking-tighter text-left bg-transparent border-0 p-0 cursor-pointer hover:opacity-80 transition-opacity" aria-label="Open search and top picks">Top picks</button>
                 <p class="homepage-trending-copy max-w-xs leading-loose">
                     Hand-picked collections for every occasion. Redefining style through sharing.
                 </p>
@@ -581,65 +535,31 @@
                     </div>
                 </div>
                 {% empty %}
-                <!-- PLACEHOLDER CARDS shown when no gowns in database yet -->
-                <div class="group cursor-pointer">
-                    <div class="relative overflow-hidden bg-surface-container-lowest mb-6">
-                        <div class="absolute left-0 top-1/4 z-10 bg-secondary-container text-on-secondary-container px-2 py-6 rounded-full">
-                            <span class="[writing-mode:vertical-rl] font-label text-[0.6rem] uppercase tracking-widest font-bold">Available Now</span>
-                        </div>
-                        <!-- ARABELA PRODUCT IMAGE: Replace with actual Arabela gown photo 1 -->
-                        <img alt="Arabela Featured Gown 1" class="w-full aspect-[4/5] object-cover rounded-lg group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-                        <div class="flex justify-between items-start p-2">
-                            <div>
-                                <h4 class="font-headline text-lg font-bold">Sample Gown 1</h4>
-                                <p class="text-[0.6875rem] text-on-surface-variant uppercase tracking-widest mt-1">Wedding</p>
+                {% for item in featured_search_items %}
+                <div class="group cursor-pointer {% if forloop.counter == 2 or forloop.counter == 4 %}md:mt-16{% endif %}">
+                    <a href="{% url 'gowns:product_detail' collection=item.collection_key slug=item.slug %}" class="block no-underline text-inherit">
+                        <div class="relative overflow-hidden bg-surface-container-lowest mb-6">
+                            {% if forloop.counter == 1 %}
+                            <div class="absolute left-0 top-1/4 z-10 bg-secondary-container text-on-secondary-container px-2 py-6 rounded-full">
+                                <span class="[writing-mode:vertical-rl] font-label text-[0.6rem] uppercase tracking-widest font-bold">Available Now</span>
                             </div>
-                            <span class="text-[0.6875rem] font-bold">₱2,500</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="group cursor-pointer md:mt-16">
-                    <div class="relative overflow-hidden bg-surface-container-lowest mb-6">
-                        <!-- ARABELA PRODUCT IMAGE: Replace with actual Arabela gown photo 2 -->
-                        <img alt="Arabela Featured Gown 2" class="w-full aspect-[4/5] object-cover rounded-lg group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-                        <div class="flex justify-between items-start p-2">
-                            <div>
-                                <h4 class="font-headline text-lg font-bold">Sample Gown 2</h4>
-                                <p class="text-[0.6875rem] text-on-surface-variant uppercase tracking-widest mt-1">Dresses</p>
+                            {% elif forloop.counter == 4 %}
+                            <div class="absolute left-0 top-1/4 z-10 bg-secondary-container text-on-secondary-container px-2 py-6 rounded-full">
+                                <span class="[writing-mode:vertical-rl] font-label text-[0.6rem] uppercase tracking-widest font-bold">New Arrival</span>
                             </div>
-                            <span class="text-[0.6875rem] font-bold">₱3,000</span>
+                            {% endif %}
+                            <img alt="{{ item.title }}" class="w-full aspect-[4/5] object-cover rounded-lg group-hover:scale-105 transition-transform duration-500" src="{{ item.image }}"/>
                         </div>
-                    </div>
-                </div>
-                <div class="group cursor-pointer">
-                    <div class="relative overflow-hidden bg-surface-container-lowest mb-6">
-                        <!-- ARABELA PRODUCT IMAGE: Replace with actual Arabela gown photo 3 -->
-                        <img alt="Arabela Featured Gown 3" class="w-full aspect-[4/5] object-cover rounded-lg group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-                        <div class="flex justify-between items-start p-2">
+                        <div class="flex justify-between items-start">
                             <div>
-                                <h4 class="font-headline text-lg font-bold">Sample Gown 3</h4>
-                                <p class="text-[0.6875rem] text-on-surface-variant uppercase tracking-widest mt-1">Suit</p>
+                                <h4 class="font-headline text-lg font-bold">{{ item.title }}</h4>
+                                <p class="text-[0.6875rem] text-on-surface-variant uppercase tracking-widest mt-1">{% if item.collection_key == 'kid-suit' %}Kids suit{% elif item.collection_key == 'dresses' %}Dresses{% elif item.collection_key == 'filipiniana' %}Filipiniana{% elif item.collection_key == 'wedding' %}Wedding{% elif item.collection_key == 'suit' %}Suit{% elif item.collection_key == 'ball-gown' %}Ball gown{% else %}{{ item.collection_key }}{% endif %}</p>
                             </div>
-                            <span class="text-[0.6875rem] font-bold">₱2,000</span>
+                            <span class="text-[0.6875rem] font-bold">{{ item.price_label }}</span>
                         </div>
-                    </div>
+                    </a>
                 </div>
-                <div class="group cursor-pointer md:mt-16">
-                    <div class="relative overflow-hidden bg-surface-container-lowest mb-6">
-                        <div class="absolute left-0 top-1/4 z-10 bg-secondary-container text-on-secondary-container px-2 py-6 rounded-full">
-                            <span class="[writing-mode:vertical-rl] font-label text-[0.6rem] uppercase tracking-widest font-bold">New Arrival</span>
-                        </div>
-                        <!-- ARABELA PRODUCT IMAGE: Replace with actual Arabela gown photo 4 -->
-                        <img alt="Arabela Featured Gown 4" class="w-full aspect-[4/5] object-cover rounded-lg group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-                        <div class="flex justify-between items-start p-2">
-                            <div>
-                                <h4 class="font-headline text-lg font-bold">Sample Gown 4</h4>
-                                <p class="text-[0.6875rem] text-on-surface-variant uppercase tracking-widest mt-1">Ball gown</p>
-                            </div>
-                            <span class="text-[0.6875rem] font-bold">₱2,800</span>
-                        </div>
-                    </div>
-                </div>
+                {% endfor %}
                 {% endfor %}
 
             </div>
@@ -680,13 +600,13 @@
         <div class="flex flex-col sm:flex-row sm:flex-wrap items-start gap-x-8 sm:gap-x-10 md:gap-x-12 lg:gap-x-16 gap-y-8 text-left">
             <div class="flex items-center gap-3 shrink-0">
                 <a href="{% url 'gowns:homepage' %}" class="text-lg font-bold text-[#222222] dark:text-[#FAF4EB] tracking-tighter font-body">ARABELA</a>
-                <a href="https://www.facebook.com/" target="_blank" rel="noopener noreferrer" class="inline-flex text-[#222222] dark:text-[#FAF4EB] scale-95 active:scale-90 transition-all hover:opacity-70" aria-label="Arabela on Facebook">
+                <a href="https://www.facebook.com/share/1EHAS1iemQ/" target="_blank" rel="noopener noreferrer" class="inline-flex text-[#222222] dark:text-[#FAF4EB] scale-95 active:scale-90 transition-all hover:opacity-70" aria-label="Arabela on Facebook">
                     <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
                 </a>
             </div>
             <div class="shrink-0">
                 <p class="text-base font-medium text-[#222222] dark:text-[#FAF4EB] font-body mb-2">Rent</p>
-                <a href="{% url 'gowns:homepage' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body">How it works</a>
+                <a href="{% url 'gowns:how_it_works' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body">How it works</a>
             </div>
             <div class="shrink-0">
                 <p class="text-base font-medium text-[#222222] dark:text-[#FAF4EB] font-body mb-2">Info</p>
@@ -695,16 +615,16 @@
                         <button type="button" onclick="toggleSearch()" class="text-left text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white bg-transparent border-0 p-0 cursor-pointer font-body leading-snug">Search</button>
                     </li>
                     <li>
-                        <a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">About us</a>
+                        <a href="{% url 'gowns:about' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">About us</a>
                     </li>
                     <li>
                         <a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">Contact us</a>
                     </li>
                     <li>
-                        <a href="{% url 'gowns:homepage' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">FAQs</a>
+                        <a href="{% url 'gowns:faqs' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">FAQs</a>
                     </li>
                     <li>
-                        <a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">Terms and conditions</a>
+                        <a href="{% url 'gowns:terms_and_conditions' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">Terms and conditions</a>
                     </li>
                 </ul>
             </div>
@@ -787,16 +707,27 @@
         };
         if (!next.id) return;
 
-        const existing = cart.find(function (ci) {
+        function lineComplete(ci) {
+            const hasRent = ci.rental && String(ci.rental).trim() && ci.rental !== '-';
+            const hasSize = ci.size && String(ci.size).trim() && ci.size !== '-';
+            return !!(hasRent && hasSize);
+        }
+
+        const incomplete = cart.find(function (ci) {
             return (
                 ci &&
                 ci.id === next.id &&
                 (ci.name || 'Untitled') === next.name &&
-                (ci.collection ? String(ci.collection).trim() : 'wedding') === next.collection
+                (ci.collection ? String(ci.collection).trim() : 'wedding') === next.collection &&
+                !lineComplete(ci)
             );
         });
-        if (existing) existing.qty = (Number(existing.qty) || 1) + 1;
-        else cart.push(next);
+
+        if (incomplete) {
+            incomplete.qty = (Number(incomplete.qty) || 1) + 1;
+        } else {
+            cart.push(next);
+        }
 
         setDrawerCart(cart);
         if (typeof toggleCart === 'function') toggleCart();
@@ -970,6 +901,9 @@
         const isOpening = !search.classList.contains('open');
         closeCartDrawer();
         search.classList.toggle('open');
+        if (!search.classList.contains('open') && typeof window.resetMainSearchOverlay === 'function') {
+            window.resetMainSearchOverlay();
+        }
         if (isOpening) {
             setTimeout(() => document.getElementById('main-search-input').focus(), 400);
             document.getElementById('ai-concierge').classList.add('translate-x-full');

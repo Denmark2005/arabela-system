@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}ARABELA | About{% endblock %}
+
+{% block main_class %}pt-0{% endblock %}
+
+{% block extra_head %}
+<style>
+  .about-reveal {
+    opacity: 0;
+    transform: translateY(60px);
+    transition: opacity 1.4s cubic-bezier(0.16, 1, 0.3, 1), transform 1.4s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: transform, opacity;
+  }
+  .about-reveal.active {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .about-delay-100 { transition-delay: 100ms; }
+  .about-delay-200 { transition-delay: 200ms; }
+  .about-delay-300 { transition-delay: 300ms; }
+  .about-delay-400 { transition-delay: 400ms; }
+  .about-delay-500 { transition-delay: 500ms; }
+  .about-delay-600 { transition-delay: 600ms; }
+  .about-delay-700 { transition-delay: 700ms; }
+  #about-page .about-collections-cta {
+    font-family: "Poppins", sans-serif;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-weight: 500;
+    color: #ffffff;
+    background-color: #111827;
+    box-shadow: 0 24px 45px rgba(17, 24, 39, 0.18);
+  }
+
+  /* Match the homepage heading typography */
+  #about-page .font-headline,
+  #about-page .font-display {
+    font-family: "Playfair Display", serif !important;
+  }
+
+  /* Keep labels/body consistent with the homepage */
+  #about-page .font-body,
+  #about-page .font-label {
+    font-family: "Poppins", sans-serif !important;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="about-page" class="bg-white text-on-surface font-body">
+  <section class="relative min-h-[calc(100vh-5rem)] flex items-center justify-center overflow-hidden mb-32 bg-white pt-20">
+    <div class="absolute inset-0 z-0 about-reveal">
+      <img alt="High-fashion editorial imagery" class="w-full h-full object-cover grayscale opacity-90" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDvCXkKaYnZXXVhfSnDvjPKljnDO-GdaZFLti-2QH4L-ElwQwjt2haUrutOPUuNzJ5gR2Y7tB7_5IVEq_1O4NDsSRYUWs7TopFsHDDc2549YSXFMwe-UHN4UJldT9kKBo6Z2UbMdcKGs1ItsSuPkzTvQnQUj8lsHmPVwlUaw4lNBzyl6ifBqaW-KWmaRxZZNNdx3OUEO_jszHCeHikgXh_aSQga1uR3aeDPX5m4MVq4G0qJK-wr6GrnxNPMLrpf5dtUBf32qc_Xggg" width="1920" height="1080" />
+    </div>
+    <div class="relative z-10 w-full max-w-7xl px-8 md:px-10">
+      <div class="max-w-4xl space-y-8 about-reveal about-delay-300">
+        <h1 class="font-headline text-5xl sm:text-7xl md:text-[9rem] font-bold leading-[0.85] tracking-tighter text-white drop-shadow-lg">
+          Elegance <br /> Made Easy.
+        </h1>
+      </div>
+    </div>
+  </section>
+
+  <section class="px-8 md:px-10 mb-48 bg-white">
+    <div class="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-12 gap-16 items-start">
+      <div class="md:col-span-7">
+        <p class="font-label text-[0.6875rem] uppercase tracking-[0.2rem] text-secondary mb-12 about-reveal">The Manifesto</p>
+        <h2 class="font-headline text-3xl sm:text-4xl md:text-6xl font-normal leading-tight text-on-surface mb-16 about-reveal about-delay-100">
+          We believe everyone deserves to look their best — without the hassle.
+        </h2>
+      </div>
+      <div class="md:col-span-5 md:pt-32">
+        <div class="space-y-8 border-l border-outline-variant/30 pl-8">
+          <p class="font-body text-lg leading-relaxed text-on-surface-variant about-reveal about-delay-300">
+            Arabela Gown Rental has been dressing people for their most special moments — weddings, debuts, graduations, and celebrations big and small.
+          </p>
+          <p class="font-body text-lg leading-relaxed text-on-surface-variant about-reveal about-delay-400">
+            We saw how exhausting the old process was: calling, messaging, walking in just to check if a gown or suit was available. So we built a smarter way — a system where you can browse our full collection, check real-time availability, and reserve your outfit online.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="bg-white py-32 mb-48">
+    <div class="max-w-7xl mx-auto px-8 md:px-10 grid grid-cols-1 lg:grid-cols-2 gap-24 items-center">
+      <div class="relative group about-reveal">
+        <div class="absolute -top-12 -left-12 w-64 h-64 bg-surface-bright/50 -z-10"></div>
+        <div class="bg-surface-container-lowest p-1 rounded-sm shadow-sm transition-transform duration-700 hover:scale-[1.01]">
+          <img alt="Curated archive display" class="w-full aspect-[4/5] object-cover rounded-sm grayscale" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB4gP6xngNBHvEpOIemYCr1vTkufl33dlsoWydYZcBpodbH29tesazUNFsfpsGT5LcE676-dXOqpGGUPF2N2TfS925wAPBocYCQue7iKP9qmmnz6QzxyUwFRXgKz34cTIp4bDJtdo1lYZ-13c9J07vnZ1e9e5oy6bCIPYq7i-B2edap6g2CR4NKgKdtZvW2qPNdGbv9ZyEGK723m-fFm29YtlDAtAoJMGDSScDLRoJntcG_GBTK1QV1Izr0kt2xpWva1u04MDLWnpM" width="800" height="1000" />
+        </div>
+      </div>
+      <div class="space-y-12">
+        <div class="space-y-6">
+          <h3 class="font-headline text-4xl md:text-5xl font-bold tracking-tight text-on-surface about-reveal about-delay-100">Permanent Style.</h3>
+          <p class="font-body text-xl leading-relaxed text-on-surface-variant max-w-xl about-reveal about-delay-200">
+            Arabela is more than a rental platform; it is a movement towards sustainable luxury. We believe in the power of beautiful objects and the importance of extending their lifecycle.
+          </p>
+        </div>
+        <div class="grid grid-cols-2 gap-12 pt-8 border-t border-outline-variant/30">
+          <div class="space-y-2 about-reveal about-delay-300">
+            <span class="font-headline text-4xl md:text-5xl font-bold text-primary">50+</span>
+            <p class="font-label text-[0.6875rem] uppercase tracking-widest text-on-surface-variant">Curated categories designed for your most memorable moments.</p>
+          </div>
+          <div class="space-y-2 about-reveal about-delay-400">
+            <span class="font-headline text-4xl md:text-5xl font-bold text-primary">100%</span>
+            <p class="font-label text-[0.6875rem] uppercase tracking-widest text-on-surface-variant">Quality guaranteed through our meticulous care process.</p>
+          </div>
+        </div>
+        <div class="about-reveal about-delay-500">
+          <a href="{% url 'gowns:collections' %}" class="inline-flex rounded-full overflow-hidden no-underline">
+            <span class="about-collections-cta inline-flex items-center justify-center px-12 py-5">Explore Collections</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="px-8 md:px-10 max-w-7xl mx-auto mb-48 bg-white">
+    <h4 class="font-label text-[0.6875rem] uppercase tracking-[0.3rem] text-center mb-24 text-secondary about-reveal">Our Core Values</h4>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div class="bg-surface-container p-12 space-y-6 flex flex-col justify-end min-h-[400px] hover:bg-surface-container-high transition-colors about-reveal about-delay-100">
+        <span class="material-symbols-outlined text-4xl mb-auto">event_available</span>
+        <h5 class="font-headline text-2xl font-bold">Effortless Reservations</h5>
+        <p class="font-body text-on-surface-variant leading-relaxed">We make renting a gown simple — browse, reserve, and confirm your booking online without walk-ins or follow-up calls.</p>
+      </div>
+      <div class="bg-primary text-on-primary p-12 space-y-6 flex flex-col justify-end min-h-[400px] about-reveal about-delay-300">
+        <span class="material-symbols-outlined text-4xl mb-auto" style="font-variation-settings: 'FILL' 1;">visibility</span>
+        <h5 class="font-headline text-2xl font-bold">Full Transparency</h5>
+        <p class="text-on-primary-container leading-relaxed">Every gown shows its real-time status — Available, Reserved, or On Rent — so customers always know what they're getting before they book.</p>
+      </div>
+      <div class="bg-surface-container p-12 space-y-6 flex flex-col justify-end min-h-[400px] hover:bg-surface-container-high transition-colors about-reveal about-delay-500">
+        <span class="material-symbols-outlined text-4xl mb-auto">groups</span>
+        <h5 class="font-headline text-2xl font-bold">Accessible Elegance</h5>
+        <p class="font-body text-on-surface-variant leading-relaxed">We believe every woman deserves to feel beautiful on her special day. Our rental system gives everyone access to quality gowns at an affordable cost.</p>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  (function () {
+    var root = document.getElementById('about-page');
+    if (!root) return;
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) {
+      root.querySelectorAll('.about-reveal').forEach(function (el) {
+        el.classList.add('active');
+      });
+      return;
+    }
+    function revealCallback(entries, observer) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('active');
+          observer.unobserve(entry.target);
+        }
+      });
+    }
+    var observer = new IntersectionObserver(revealCallback, {
+      threshold: 0.1,
+      rootMargin: '0px 0px -10% 0px'
+    });
+    root.querySelectorAll('.about-reveal').forEach(function (el) {
+      observer.observe(el);
+    });
+  })();
+</script>
+{% endblock %}

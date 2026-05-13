@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}ARABELA | How it works{% endblock %}
+
+{% block main_class %}pt-0{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* Match the entrance animation style used on the About page */
+  .editorial-reveal {
+    opacity: 0;
+    transform: translateY(60px);
+    transition: opacity 1.4s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 1.4s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: transform, opacity;
+  }
+  .editorial-reveal.active {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .editorial-reveal {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Match the homepage typography */
+  #how-it-works-page .font-headline,
+  #how-it-works-page .font-display {
+    font-family: "Playfair Display", serif !important;
+  }
+
+  #how-it-works-page .font-body,
+  #how-it-works-page .font-label {
+    font-family: "Poppins", sans-serif !important;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+  <div id="how-it-works-page" class="relative">
+    <!-- Hero Header -->
+    <header class="pt-32 pb-24 px-8 md:px-16 lg:px-32 text-center border-b border-surface-container-low">
+      <p class="font-label text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant mb-4 editorial-reveal">
+        ARABELA GOWN RENTAL
+      </p>
+      <h1 class="font-headline text-5xl md:text-7xl lg:text-8xl font-black tracking-tighter text-on-surface editorial-reveal">
+        How it works
+      </h1>
+    </header>
+
+    <!-- Vertical Process Journey -->
+    <div class="max-w-[1440px] mx-auto py-24 px-8 md:px-16 lg:px-32">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-y-32">
+        <!-- STEP 1: FIND YOUR PIECE -->
+        <section class="lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center editorial-reveal">
+          <div class="lg:col-span-5 order-2 lg:order-1">
+            <span class="font-label text-[0.6875rem] uppercase tracking-[0.15em] text-on-secondary-container mb-6 block">STEP ONE</span>
+            <h2 class="font-headline text-3xl md:text-4xl font-bold uppercase tracking-tight mb-8">FIND YOUR PIECE</h2>
+            <p class="font-body text-on-surface-variant leading-[1.6] text-sm md:text-base max-w-md">
+              Browse our full collection of gowns and suits online. Use the <span class="font-semibold text-primary">AI Recommends</span> feature to find the perfect outfit for your event — just tell it your occasion and preferences and it will suggest the best options for you.
+            </p>
+          </div>
+          <div class="lg:col-span-7 order-1 lg:order-2 relative h-[400px] md:h-[600px] overflow-hidden bg-surface-container-low group">
+            <div class="w-full h-full bg-stone-100 flex items-center justify-center transition-all duration-1000 scale-105 group-hover:scale-100">
+              <span class="material-symbols-outlined text-stone-300 text-6xl">image</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- STEP 2: RESERVE IT -->
+        <section class="lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center editorial-reveal">
+          <div class="lg:col-span-7 relative h-[400px] md:h-[600px] overflow-hidden bg-surface-container-low">
+            <div class="w-full h-full bg-stone-100 flex items-center justify-center">
+              <span class="material-symbols-outlined text-stone-300 text-6xl">image</span>
+            </div>
+          </div>
+          <div class="lg:col-span-5 pl-0 lg:pl-12">
+            <span class="font-label text-[0.6875rem] uppercase tracking-[0.15em] text-on-secondary-container mb-6 block">STEP TWO</span>
+            <h2 class="font-headline text-3xl md:text-4xl font-bold uppercase tracking-tight mb-8">RESERVE IT</h2>
+            <p class="font-body text-on-surface-variant leading-[1.6] text-sm md:text-base max-w-md">
+              Once you found your piece, submit your reservation directly on the website. You can select your event date during reservation. For size, you may choose your size if you already know it — but if you are unsure, you can leave it as <span class="font-semibold text-primary">TBD (To Be Determined)</span> and inform the staff at the shop when you pick up. Your reservation will be on <span class="italic">Pending</span> status until you complete the security deposit payment.
+            </p>
+          </div>
+        </section>
+
+        <!-- STEP 3: PAY THE SECURITY DEPOSIT -->
+        <section class="lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center editorial-reveal">
+          <div class="lg:col-span-5 order-2 lg:order-1">
+            <span class="font-label text-[0.6875rem] uppercase tracking-[0.15em] text-on-secondary-container mb-6 block">STEP THREE</span>
+            <h2 class="font-headline text-3xl md:text-4xl font-bold uppercase tracking-tight mb-8">PAY THE SECURITY DEPOSIT</h2>
+            <p class="font-body text-on-surface-variant leading-[1.6] text-sm md:text-base max-w-md">
+              Pay the <span class="font-headline font-semibold">Php 2,000.00</span> security deposit through the website via GCash only. Upload your proof of payment so the admin can see and verify it. This is required — the admin cannot process and confirm your reservation without it.
+            </p>
+          </div>
+          <div class="lg:col-span-7 order-1 lg:order-2 h-[400px] md:h-[600px] overflow-hidden bg-surface-container-low">
+            <div class="w-full h-full bg-stone-100 flex items-center justify-center">
+              <span class="material-symbols-outlined text-stone-300 text-6xl">image</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- STEP 4: WAIT FOR CONFIRMATION -->
+        <section class="lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center editorial-reveal">
+          <div class="lg:col-span-7 flex items-center justify-center bg-surface-container-low h-[300px]">
+            <div class="text-center p-12">
+              <span class="material-symbols-outlined text-6xl text-primary mb-6" data-icon="task_alt">task_alt</span>
+              <p class="font-label text-[0.6875rem] uppercase tracking-[0.3em] text-on-surface-variant">Admin Verification</p>
+            </div>
+          </div>
+          <div class="lg:col-span-5 pl-0 lg:pl-12">
+            <span class="font-label text-[0.6875rem] uppercase tracking-[0.15em] text-on-secondary-container mb-6 block">STEP FOUR</span>
+            <h2 class="font-headline text-3xl md:text-4xl font-bold uppercase tracking-tight mb-8">WAIT FOR CONFIRMATION</h2>
+            <p class="font-body text-on-surface-variant leading-[1.6] text-sm md:text-base max-w-md">
+              Once the admin verifies your GCash payment, your reservation status will be updated and the gown will be officially <span class="font-semibold text-primary">Reserved</span> under your account. You will also receive a digital receipt and rental agreement automatically.
+            </p>
+          </div>
+        </section>
+
+        <!-- STEP 5: PAY THE FULL RENTAL AMOUNT -->
+        <section class="lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center editorial-reveal">
+          <div class="lg:col-span-5 order-2 lg:order-1">
+            <span class="font-label text-[0.6875rem] uppercase tracking-[0.15em] text-on-secondary-container mb-6 block">STEP FIVE</span>
+            <h2 class="font-headline text-3xl md:text-4xl font-bold uppercase tracking-tight mb-8">PAY THE FULL RENTAL AMOUNT</h2>
+            <p class="font-body text-on-surface-variant leading-[1.6] text-sm md:text-base max-w-md">
+              The remaining full rental amount is paid separately when you visit the shop or via GCash on the day of pickup.
+            </p>
+          </div>
+          <div class="lg:col-span-7 order-1 lg:order-2 h-[300px] flex items-center justify-center border border-outline-variant/20">
+            <div class="text-center">
+              <span class="material-symbols-outlined text-6xl text-primary/20 mb-4" data-icon="payments">payments</span>
+              <p class="font-label text-[0.6rem] uppercase tracking-[0.2em] text-on-surface-variant">Final Payment Process</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- STEP 6: PICK IT UP -->
+        <section class="lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center editorial-reveal">
+          <div class="lg:col-span-8 h-[500px] overflow-hidden">
+            <div class="w-full h-full bg-stone-100 flex items-center justify-center">
+              <span class="material-symbols-outlined text-stone-300 text-6xl">image</span>
+            </div>
+          </div>
+          <div class="lg:col-span-4 pl-0 lg:pl-12">
+            <div class="border-l-2 border-primary pl-8 py-4">
+              <span class="font-label text-[0.6875rem] uppercase tracking-[0.15em] text-on-secondary-container mb-6 block">STEP SIX</span>
+              <h2 class="font-headline text-3xl md:text-4xl font-bold uppercase tracking-tight mb-8">PICK IT UP</h2>
+              <p class="font-body text-on-surface-variant leading-[1.6] text-sm md:text-base">
+                Visit the shop two (2) days before your event date to pick up your gown.
+                <span class="block mt-4 text-primary font-semibold font-label text-xs tracking-wider uppercase">Business hours are 1:00 PM – 5:00 PM.</span>
+                <span class="block mt-4 text-on-surface-variant text-sm">If your size was set to TBD, let the staff know your size upon arrival so they can assist you with the fitting.</span>
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <!-- STEP 7: WEAR IT -->
+        <section class="lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center editorial-reveal">
+          <div class="lg:col-span-6">
+            <span class="font-label text-[0.6875rem] uppercase tracking-[0.15em] text-on-secondary-container mb-6 block">STEP SEVEN</span>
+            <h2 class="font-headline text-5xl md:text-7xl font-black uppercase tracking-tighter mb-8 leading-none">WEAR IT.</h2>
+            <p class="font-body text-on-surface-variant leading-[1.8] text-lg max-w-xl">
+              Look and feel your best on your special day — whether it's a wedding, debut, graduation, or any formal occasion.
+            </p>
+          </div>
+          <div class="lg:col-span-6 relative">
+            <div class="w-full aspect-[3/4] bg-stone-100 flex items-center justify-center">
+              <span class="material-symbols-outlined text-stone-300 text-6xl">image</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- STEP 8: RETURN -->
+        <section class="lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center editorial-reveal">
+          <div class="lg:col-span-5 lg:order-2">
+            <span class="font-label text-[0.6875rem] uppercase tracking-[0.15em] text-on-secondary-container mb-6 block">STEP EIGHT</span>
+            <h2 class="font-headline text-3xl md:text-4xl font-bold uppercase tracking-tight mb-8">RETURN</h2>
+            <p class="font-body text-on-surface-variant leading-[1.6] text-sm md:text-base max-w-md">
+              Return the gown to the shop within two (2) days after your event. Make sure it is in good condition to get your full security deposit back.
+              <span class="block mt-6 p-4 bg-surface-container-low border-l-4 border-error text-error text-[0.7rem] uppercase tracking-widest font-bold">
+                Late returns: Php 200.00 / day
+              </span>
+            </p>
+          </div>
+          <div class="lg:col-span-7 lg:order-1 h-[400px] bg-surface-container-low flex items-center justify-center relative overflow-hidden">
+            <span class="font-headline text-[15rem] font-black text-surface opacity-10 absolute pointer-events-none select-none">EIGHT</span>
+            <div class="z-10 flex flex-col items-center">
+              <span class="material-symbols-outlined text-7xl text-primary/30 mb-4" data-icon="keyboard_return">keyboard_return</span>
+              <p class="font-label text-[0.6875rem] uppercase tracking-[0.3em] text-on-surface">THE JOURNEY ENDS</p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- Call to Action Footer Section -->
+    <section class="bg-primary py-32 px-8 text-center text-on-primary">
+      <h3 class="font-headline text-3xl md:text-4xl font-bold mb-12 tracking-tight">FIND YOUR PERFECT OUTFIT TODAY.</h3>
+      <div class="flex flex-col md:flex-row gap-6 justify-center items-center">
+        <a
+          class="bg-surface text-primary px-12 py-5 font-label text-[0.7rem] uppercase tracking-widest font-bold hover:bg-secondary transition-colors duration-500 no-underline"
+          href="{% url 'gowns:collections' %}"
+        >
+          EXPLORE COLLECTIONS
+        </a>
+      </div>
+    </section>
+  </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  (function () {
+    var root = document.getElementById('how-it-works-page');
+    if (!root) return;
+    var els = root.querySelectorAll('.editorial-reveal');
+    if (!els.length) return;
+
+    var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion) {
+      els.forEach(function (el) { el.classList.add('active'); });
+      return;
+    }
+
+    var headerOffset = 96;
+    function revealCallback(entries, observer) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('active');
+          observer.unobserve(entry.target);
+        }
+      });
+    }
+
+    var observer = new IntersectionObserver(revealCallback, {
+      threshold: 0.1,
+      rootMargin: '0px 0px -10% 0px'
+    });
+
+    els.forEach(function (el) { observer.observe(el); });
+  })();
+</script>
+{% endblock %}
+

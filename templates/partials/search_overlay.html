@@ -1,0 +1,330 @@
+<div class="shrink-0 bg-white border-b border-black/5 shadow-lg max-h-[80vh] overflow-y-auto" onclick="event.stopPropagation()">
+  <div class="container mx-auto px-8 py-10">
+    <div class="max-w-6xl mx-auto">
+      <div class="flex justify-end mb-4">
+        <button type="button" class="font-body text-[0.65rem] uppercase tracking-[0.25em] text-on-surface-variant hover:text-on-surface transition-colors bg-transparent border-0 p-0 cursor-pointer" onclick="toggleSearch()">Cancel</button>
+      </div>
+      <div class="relative flex items-center mb-10">
+        <span class="material-symbols-outlined absolute left-0 text-black/40 text-2xl pointer-events-none">search</span>
+        <input
+          class="w-full bg-white border border-black/20 border-0 border-b pl-10 pr-28 py-4 focus:ring-0 focus:border-black text-2xl font-light placeholder:text-black/20 rounded-none"
+          id="main-search-input"
+          placeholder="Search here.."
+          type="text"
+          autocomplete="off"
+        />
+        <div id="search-input-loading" class="absolute right-12 top-1/2 -translate-y-1/2 hidden items-center justify-center pointer-events-none" aria-hidden="true">
+          <span class="search-bar-spinner" aria-hidden="true"></span>
+        </div>
+        <button type="button" class="absolute right-0 text-black/40 hover:text-slate-900 transition-colors" onclick="toggleSearch()" aria-label="Close search">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-12">
+        <div id="search-overlay-sidebar" class="md:col-span-3">
+          <p class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-4">Suggestions</p>
+          <ul id="search-suggestions-list" class="space-y-3 mb-10">
+            <li class="text-sm text-on-surface-variant/70 font-body">Type to search gowns by name.</li>
+          </ul>
+          <p class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-6">Collections</p>
+          <ul id="search-collections-list" class="space-y-4">
+            <li><a class="text-sm hover:text-primary transition-colors underline decoration-1 underline-offset-4" href="{% url 'gowns:collection_all' %}">All</a></li>
+            <li><a class="text-sm hover:text-primary transition-colors underline decoration-1 underline-offset-4" href="{% url 'gowns:collection_dresses' %}">Dresses</a></li>
+            <li><a class="text-sm hover:text-primary transition-colors underline decoration-1 underline-offset-4" href="{% url 'gowns:collection_filipiniana' %}">Filipiniana</a></li>
+            <li><a class="text-sm hover:text-primary transition-colors underline decoration-1 underline-offset-4" href="{% url 'gowns:collection_kid_suit' %}">Kids suit</a></li>
+            <li><a class="text-sm hover:text-primary transition-colors underline decoration-1 underline-offset-4" href="{% url 'gowns:collection_wedding' %}">Wedding</a></li>
+            <li><a class="text-sm hover:text-primary transition-colors underline decoration-1 underline-offset-4" href="{% url 'gowns:collection_suit' %}">Suit</a></li>
+            <li><a class="text-sm hover:text-primary transition-colors underline decoration-1 underline-offset-4" href="{% url 'gowns:collection_ball_gown' %}">Ball gown</a></li>
+          </ul>
+        </div>
+        <div id="search-products-column" class="md:col-span-9">
+          <p id="search-products-heading" class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-6">Top Picks</p>
+          <div id="search-products-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-10">
+            {% for item in featured_search_items|slice:":4" %}
+              <div class="group">
+                <a href="{% url 'gowns:product_detail' collection=item.collection_key slug=item.slug %}" class="block">
+                  <div class="relative bg-transparent aspect-[2/3] mb-4 overflow-hidden flex items-center justify-center shadow-none">
+                    <img alt="{{ item.title }}" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="{{ item.image }}" />
+                    <button
+                      type="button"
+                      class="absolute bottom-4 right-4 w-10 h-10 bg-white border border-black/30 rounded-full flex items-center justify-center hover:bg-gray-50 active:scale-95 transition-all"
+                      aria-label="Add to selection"
+                      data-product-slug="{{ item.slug }}"
+                      data-product-name="{{ item.title }}"
+                      data-product-price="{{ item.price }}"
+                      data-product-image="{{ item.image }}"
+                      data-product-collection="{{ item.collection_key }}"
+                      onclick="event.preventDefault(); event.stopPropagation(); addFeaturedToSelection(this);"
+                    >
+                      <span class="material-symbols-outlined text-base">add</span>
+                    </button>
+                  </div>
+                  <div class="min-w-0">
+                    <p class="text-[0.7rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold">Arabela</p>
+                    <p class="text-[0.95rem] font-body font-medium tracking-tight text-on-surface truncate mt-1">{{ item.title }}</p>
+                    <p class="text-[0.9rem] font-body font-medium text-on-surface/70 tabular-nums mt-1">{{ item.price_label }}</p>
+                  </div>
+                </a>
+              </div>
+            {% endfor %}
+          </div>
+          <div class="flex justify-end mt-8">
+            <button type="button" id="search-view-all-btn" class="hidden px-8 py-3 bg-primary text-on-primary text-[0.65rem] font-bold uppercase tracking-[0.2em] hover:opacity-90 transition-opacity cursor-default" disabled aria-disabled="true">
+              View all →
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{{ search_overlay_catalog|json_script:"search-catalog-data" }}
+{{ search_overlay_collections_meta|json_script:"search-collections-data" }}
+<script>
+  (function () {
+    function parseJsonEl(id) {
+      var el = document.getElementById(id);
+      if (!el || !el.textContent) return [];
+      try {
+        return JSON.parse(el.textContent);
+      } catch (e) {
+        return [];
+      }
+    }
+
+    var SEARCH_CATALOG = parseJsonEl("search-catalog-data");
+    var SEARCH_COLLECTIONS = parseJsonEl("search-collections-data");
+    var DEBOUNCE_MS = 240;
+    var debounceTimer = null;
+    var gridEl = null;
+    var headingEl = null;
+    var suggEl = null;
+    var collEl = null;
+    var sidebarEl = null;
+    var productsColEl = null;
+    var loadingEl = null;
+    var viewAllBtn = null;
+    var defaultGridHTML = "";
+    var defaultCollHTML = "";
+    var defaultHeadingText = "Top Picks";
+
+    function escAttr(s) {
+      return String(s == null ? "" : s)
+        .replace(/&/g, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;");
+    }
+
+    function escHtml(s) {
+      var d = document.createElement("div");
+      d.textContent = s == null ? "" : String(s);
+      return d.innerHTML;
+    }
+
+    function filterProducts(query) {
+      var q = (query || "").trim().toLowerCase();
+      if (!q) return [];
+      return SEARCH_CATALOG.filter(function (p) {
+        return String(p.title || "")
+          .toLowerCase()
+          .indexOf(q) !== -1;
+      });
+    }
+
+    function uniqueCollectionsFromProducts(products) {
+      var seen = {};
+      var out = [];
+      for (var i = 0; i < products.length; i++) {
+        var k = products[i].collection_key;
+        if (seen[k]) continue;
+        seen[k] = true;
+        var meta = null;
+        for (var j = 0; j < SEARCH_COLLECTIONS.length; j++) {
+          if (SEARCH_COLLECTIONS[j].key === k) {
+            meta = SEARCH_COLLECTIONS[j];
+            break;
+          }
+        }
+        if (meta) out.push(meta);
+      }
+      return out;
+    }
+
+    function allCollectionMeta() {
+      for (var i = 0; i < SEARCH_COLLECTIONS.length; i++) {
+        if (SEARCH_COLLECTIONS[i].key === "all") return SEARCH_COLLECTIONS[i];
+      }
+      return null;
+    }
+
+    function renderProductCard(p) {
+      var url = escAttr(p.url);
+      var img = escAttr(p.image);
+      var title = escAttr(p.title);
+      var titleHtml = escHtml(p.title);
+      var slug = escAttr(p.slug);
+      var coll = escAttr(p.collection_key);
+      var price = Number(p.price) || 0;
+      var priceLabel = escHtml(p.price_label || "");
+      return (
+        '<div class="group">' +
+        '<a href="' +
+        url +
+        '" class="block">' +
+        '<div class="relative bg-transparent aspect-[2/3] mb-4 overflow-hidden flex items-center justify-center shadow-none">' +
+        '<img alt="' +
+        title +
+        '" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="' +
+        img +
+        '" />' +
+        '<button type="button" class="absolute bottom-4 right-4 w-10 h-10 bg-white border border-black/30 rounded-full flex items-center justify-center hover:bg-gray-50 active:scale-95 transition-all" aria-label="Add to selection" data-product-slug="' +
+        slug +
+        '" data-product-name="' +
+        title +
+        '" data-product-price="' +
+        price +
+        '" data-product-image="' +
+        img +
+        '" data-product-collection="' +
+        coll +
+        '" onclick="event.preventDefault(); event.stopPropagation(); addFeaturedToSelection(this);">' +
+        '<span class="material-symbols-outlined text-base">add</span></button></div>' +
+        '<div class="min-w-0"><p class="text-[0.7rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold">Arabela</p>' +
+        '<p class="text-[0.95rem] font-body font-medium tracking-tight text-on-surface truncate mt-1">' +
+        titleHtml +
+        "</p>" +
+        '<p class="text-[0.9rem] font-body font-medium text-on-surface/70 tabular-nums mt-1">' +
+        priceLabel +
+        "</p></div></a></div>"
+      );
+    }
+
+    function setSearchSidebarVisible(show) {
+      if (!sidebarEl || !productsColEl) return;
+      if (show) {
+        sidebarEl.style.display = "";
+        productsColEl.style.gridColumn = "";
+      } else {
+        sidebarEl.style.display = "none";
+        productsColEl.style.gridColumn = "1 / -1";
+      }
+    }
+
+    function applySearch(query) {
+      if (!gridEl || !headingEl || !suggEl || !collEl) return;
+      var q = (query || "").trim();
+      if (!q) {
+        setSearchSidebarVisible(true);
+        headingEl.textContent = defaultHeadingText;
+        headingEl.classList.remove("hidden");
+        gridEl.innerHTML = defaultGridHTML;
+        collEl.innerHTML = defaultCollHTML;
+        suggEl.innerHTML =
+          '<li class="text-sm text-on-surface-variant/70 font-body">Type to search gowns by name.</li>';
+        if (viewAllBtn) viewAllBtn.classList.add("hidden");
+        return;
+      }
+
+      var matches = filterProducts(q);
+      var top4 = matches.slice(0, 4);
+
+      if (matches.length) {
+        setSearchSidebarVisible(true);
+        headingEl.textContent = "Products";
+        headingEl.classList.remove("hidden");
+        gridEl.innerHTML = top4.map(renderProductCard).join("");
+        var sugg = matches.slice(0, 8);
+        suggEl.innerHTML = sugg
+          .map(function (p) {
+            return (
+              '<li><a class="text-sm hover:text-primary transition-colors underline decoration-1 underline-offset-4 font-body" href="' +
+              escAttr(p.url) +
+              '">' +
+              escHtml(p.title) +
+              "</a></li>"
+            );
+          })
+          .join("");
+        var colls = uniqueCollectionsFromProducts(matches);
+        var allMeta = allCollectionMeta();
+        if (allMeta) {
+          colls.unshift(allMeta);
+        }
+        collEl.innerHTML = colls
+          .map(function (c) {
+            return (
+              '<li><a class="text-sm hover:text-primary transition-colors underline decoration-1 underline-offset-4 font-body" href="' +
+              escAttr(c.url) +
+              '">' +
+              escHtml(c.label) +
+              "</a></li>"
+            );
+          })
+          .join("");
+      } else {
+        setSearchSidebarVisible(false);
+        headingEl.textContent = "";
+        headingEl.classList.add("hidden");
+        gridEl.innerHTML =
+          '<p class="col-span-full text-sm text-on-surface-variant/80 font-body py-8">No products match that search.</p>';
+      }
+
+      if (viewAllBtn) {
+        if (matches.length) viewAllBtn.classList.remove("hidden");
+        else viewAllBtn.classList.add("hidden");
+      }
+    }
+
+    function setLoading(on) {
+      if (!loadingEl) return;
+      if (on) loadingEl.classList.remove("hidden"), loadingEl.classList.add("flex");
+      else loadingEl.classList.add("hidden"), loadingEl.classList.remove("flex");
+    }
+
+    function scheduleSearch(raw) {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      var v = raw || "";
+      if (v.trim()) setLoading(true);
+      else setLoading(false);
+      debounceTimer = setTimeout(function () {
+        debounceTimer = null;
+        setLoading(false);
+        applySearch(v);
+      }, DEBOUNCE_MS);
+    }
+
+    window.resetMainSearchOverlay = function () {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = null;
+      setLoading(false);
+      var input = document.getElementById("main-search-input");
+      if (input) input.value = "";
+      applySearch("");
+    };
+
+    function bind() {
+      gridEl = document.getElementById("search-products-grid");
+      headingEl = document.getElementById("search-products-heading");
+      suggEl = document.getElementById("search-suggestions-list");
+      collEl = document.getElementById("search-collections-list");
+      sidebarEl = document.getElementById("search-overlay-sidebar");
+      productsColEl = document.getElementById("search-products-column");
+      loadingEl = document.getElementById("search-input-loading");
+      viewAllBtn = document.getElementById("search-view-all-btn");
+      if (!gridEl || !headingEl || !suggEl || !collEl) return;
+      defaultGridHTML = gridEl.innerHTML;
+      defaultCollHTML = collEl.innerHTML;
+      var input = document.getElementById("main-search-input");
+      if (!input) return;
+      input.addEventListener("input", function () {
+        scheduleSearch(input.value);
+      });
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", bind);
+    } else {
+      bind();
+    }
+  })();
+</script>

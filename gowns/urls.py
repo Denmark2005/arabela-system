@@ -5,7 +5,14 @@ app_name = 'gowns'
 
 urlpatterns = [
     path("", views.homepage, name="homepage"),
+    path("about/", views.about, name="about"),
+    path("how-it-works/", views.how_it_works, name="how_it_works"),
+    path("terms-and-conditions/", views.terms_and_conditions, name="terms_and_conditions"),
+    path("faqs/", views.faqs, name="faqs"),
+    path("featured/men/", views.featured_men_collections, name="featured_men_collections"),
+    path("featured/women/", views.featured_women_collections, name="featured_women_collections"),
     path("collections/", views.collections, name="collections"),
+    path("all/", views.collection_all, name="collection_all"),
     path("wedding/", views.collection_wedding, name="collection_wedding"),
     path("dresses/", views.collection_dresses, name="collection_dresses"),
     path("filipiniana/", views.collection_filipiniana, name="collection_filipiniana"),

@@ -42,6 +42,22 @@ def homepage(request):
     return render(request, 'home.html', {})
 
 
+def faqs(request):
+    return render(request, 'faqs.html', {})
+
+
+def about(request):
+    return render(request, 'about.html', {})
+
+
+def how_it_works(request):
+    return render(request, 'how_it_works.html', {})
+
+
+def terms_and_conditions(request):
+    return render(request, 'terms_and_conditions.html', {})
+
+
 def collections(request):
     return render(request, 'collections.html', {})
 
@@ -68,6 +84,54 @@ def collection_ball_gown(request):
 
 def collection_suit(request):
     return render(request, 'suit.html', {})
+
+
+def featured_men_collections(request):
+    return render(request, 'featured_men_collections.html', {})
+
+
+def featured_women_collections(request):
+    return render(request, 'featured_women_collections.html', {})
+
+
+_ALL_PAGE_SEQUENCE = (
+    ("dresses", "Dresses"),
+    ("filipiniana", "Filipiniana"),
+    ("kid-suit", "Kid Suit"),
+    ("wedding", "Wedding"),
+    ("suit", "Suit"),
+    ("ball-gown", "Ball Gown"),
+)
+_ALL_PAGE_PRICES = (1600, 1800, 2000, 2200, 2400, 2600, 2800, 3000)
+
+
+def collection_all(request):
+    """Rent → All: cycle through collection product grids (same slugs/prices as each collection page)."""
+    img = _FALLBACK_IMG
+    panels = []
+    for collection_key, label in _ALL_PAGE_SEQUENCE:
+        products = []
+        for i, slug in enumerate(_SLUG_ORDER):
+            num = _NUMERIC[i]
+            price = _ALL_PAGE_PRICES[i]
+            products.append(
+                {
+                    "slug": slug,
+                    "title": f"{label} {num}",
+                    "price_display": f"₱{price:,}",
+                    "price": price,
+                    "image": img,
+                    "collection_key": collection_key,
+                }
+            )
+        panels.append(
+            {
+                "collection_key": collection_key,
+                "label": label,
+                "products": products,
+            }
+        )
+    return render(request, "all.html", {"all_panels": panels})
 
 
 def legacy_wedding_product_url(request, slug: str):
