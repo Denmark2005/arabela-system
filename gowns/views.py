@@ -54,6 +54,10 @@ def how_it_works(request):
     return render(request, 'how_it_works.html', {})
 
 
+def contact(request):
+    return render(request, "contact.html", {})
+
+
 def terms_and_conditions(request):
     return render(request, 'terms_and_conditions.html', {})
 

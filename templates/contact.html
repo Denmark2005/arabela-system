@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block title %}ARABELA | Contact us{% endblock %}
+
+{% block main_class %}pt-0{% endblock %}
+
+{% block extra_head %}
+<style>
+  .editorial-reveal {
+    opacity: 0;
+    transform: translateY(60px);
+    transition: opacity 1.4s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 1.4s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: transform, opacity;
+  }
+  .editorial-reveal.active {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .editorial-reveal {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  #contact-page .font-headline,
+  #contact-page .font-display {
+    font-family: "Playfair Display", serif !important;
+  }
+
+  #contact-page .font-body,
+  #contact-page .font-label {
+    font-family: "Poppins", sans-serif !important;
+  }
+
+  .editorial-underline {
+    position: relative;
+  }
+  .editorial-underline::after {
+    content: "";
+    position: absolute;
+    bottom: -4px;
+    left: 50%;
+    width: 0;
+    height: 1px;
+    background-color: currentColor;
+    transition: all 0.3s ease;
+    transform: translateX(-50%);
+  }
+  .editorial-underline:hover::after {
+    width: 100%;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="contact-page" class="relative bg-white text-on-surface font-body">
+  <section class="mx-auto pt-0 pb-32">
+    <div class="max-w-[1440px] mx-auto px-4 sm:px-8 md:px-16 mt-24">
+      <div class="flex flex-col items-center text-center mb-24">
+        <h1 class="font-headline text-5xl sm:text-6xl md:text-[5.5rem] leading-none tracking-tighter text-on-surface mb-4 editorial-reveal">
+          Contact Us
+        </h1>
+        <p class="text-on-surface-variant text-lg md:text-xl max-w-2xl font-body mt-2 editorial-reveal">
+          Got questions? We are just a message away. Visit us at the shop or reach out through the details below.
+        </p>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-16 md:gap-8 items-start">
+        <div class="md:col-span-4 space-y-12">
+          <div class="editorial-reveal">
+            <h3 class="font-label uppercase tracking-widest text-xs text-secondary mb-6">Our shop</h3>
+            <p class="font-body text-lg leading-relaxed max-w-xs text-on-surface">
+              3rd Flr Park Place Bldg Centre , Antipolo, Philippines, 1830
+            </p>
+            <a
+              class="inline-block mt-4 font-label uppercase tracking-widest text-[0.6875rem] border-b border-primary/20 pb-1 hover:border-primary transition-colors text-on-surface"
+              href="https://www.google.com/maps/search/?api=1&amp;query=3rd+Flr+Park+Place+Bldg+Centre+Antipolo+Philippines+1830"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open in Maps
+            </a>
+          </div>
+          <div class="editorial-reveal">
+            <h3 class="font-label uppercase tracking-widest text-xs text-secondary mb-6">Hours</h3>
+            <p class="font-body text-sm leading-loose text-on-surface-variant">
+              Monday — Sunday<br />10:00 am — 7:00 pm
+            </p>
+          </div>
+        </div>
+        <div class="md:col-span-8 p-8 md:p-12 lg:p-20">
+          <div class="grid grid-cols-1 gap-16">
+            <div class="group cursor-default editorial-reveal">
+              <h3 class="font-label uppercase tracking-widest text-xs text-secondary mb-4 group-hover:text-primary transition-colors">Phone</h3>
+              <p class="font-body text-4xl md:text-5xl font-light tracking-tighter text-on-surface">
+                <a href="tel:+639635215485" class="hover:opacity-80 transition-opacity">09635215485</a>
+              </p>
+            </div>
+            <div class="group cursor-default editorial-reveal">
+              <h3 class="font-label uppercase tracking-widest text-xs text-secondary mb-4 group-hover:text-primary transition-colors">Facebook</h3>
+              <a
+                class="flex items-center gap-4 group/link"
+                href="https://www.facebook.com/share/1EHAS1iemQ/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <div class="w-12 h-12 rounded-full border border-outline-variant flex items-center justify-center text-primary group-hover/link:bg-primary group-hover/link:text-white transition-all duration-300 shrink-0">
+                  <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M22 12c0-5.523-4.477-10-10-10S2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.878v-6.988h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.988C18.343 21.128 22 16.991 22 12z" />
+                  </svg>
+                </div>
+                <span class="font-body text-2xl md:text-3xl font-light tracking-tighter text-on-surface editorial-underline text-left">
+                  Arabela Gown Rental - Antipolo
+                </span>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  (function () {
+    var root = document.getElementById("contact-page");
+    if (!root) return;
+    var els = root.querySelectorAll(".editorial-reveal");
+    if (!els.length) return;
+
+    var reduceMotion =
+      window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduceMotion) {
+      els.forEach(function (el) {
+        el.classList.add("active");
+      });
+      return;
+    }
+
+    function revealCallback(entries, observer) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("active");
+          observer.unobserve(entry.target);
+        }
+      });
+    }
+
+    var observer = new IntersectionObserver(revealCallback, {
+      threshold: 0.1,
+      rootMargin: "0px 0px -10% 0px",
+    });
+
+    els.forEach(function (el) {
+      observer.observe(el);
+    });
+  })();
+</script>
+{% endblock %}

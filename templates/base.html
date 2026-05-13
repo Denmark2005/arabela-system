@@ -102,8 +102,30 @@
     @keyframes search-bar-spin {
       to { transform: rotate(360deg); }
     }
+    #explore-collections-drawer .explore-reveal {
+      opacity: 0;
+      transform: translateY(48px);
+      transition: opacity 1.4s cubic-bezier(0.16, 1, 0.3, 1), transform 1.4s cubic-bezier(0.16, 1, 0.3, 1);
+      will-change: transform, opacity;
+    }
+    #explore-collections-drawer .explore-reveal.active {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    #explore-collections-drawer .explore-delay-100 { transition-delay: 100ms; }
+    #explore-collections-drawer .explore-delay-200 { transition-delay: 200ms; }
+    #explore-collections-drawer .explore-delay-300 { transition-delay: 300ms; }
+    #explore-collections-drawer .explore-delay-400 { transition-delay: 400ms; }
+    #explore-collections-drawer .explore-delay-500 { transition-delay: 500ms; }
+    #explore-collections-drawer .explore-delay-600 { transition-delay: 600ms; }
+    #explore-collections-drawer .explore-delay-700 { transition-delay: 700ms; }
     @media (prefers-reduced-motion: reduce) {
       .search-bar-spinner { animation: none; border-color: #c4c7c7; border-top-color: #747878; }
+      #explore-collections-drawer .explore-reveal {
+        opacity: 1;
+        transform: none;
+        transition: none;
+      }
     }
   </style>
 
@@ -298,6 +320,10 @@
   </aside>
   {% endif %}
 
+  {% if url_name == "collection_all" or url_name == "collection_wedding" or url_name == "collection_dresses" or url_name == "collection_filipiniana" or url_name == "collection_kid_suit" or url_name == "collection_ball_gown" or url_name == "collection_suit" %}
+  {% include "partials/explore_collections_drawer.html" %}
+  {% endif %}
+
   {% if url_name != "reservation" and url_name != "confirmation" %}
   <!-- AI FLOATING BUTTON -->
   <button type="button" class="fixed bottom-10 right-10 z-[81] w-14 h-14 bg-white text-black border border-black rounded-full flex items-center justify-center shadow-none hover:bg-gray-50 active:scale-95 transition-all group overflow-hidden" onclick="toggleAI()" aria-label="Open Arabela Recommends">
@@ -323,7 +349,7 @@
             </div>
             <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
               <a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity hover:text-[#222222] font-body">Sustainability</a>
-              <a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity hover:text-[#222222] font-body">Contact</a>
+              <a href="{% url 'gowns:contact' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity hover:text-[#222222] font-body">Contact</a>
               <a href="{% url 'gowns:terms_and_conditions' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity hover:text-[#222222] font-body">Terms and conditions</a>
             </div>
           </div>
@@ -353,7 +379,7 @@
                   </li>
                 {% endif %}
                 <li><a href="{% url 'gowns:about' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] font-body leading-snug">About us</a></li>
-                <li><a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] font-body leading-snug">Contact us</a></li>
+                <li><a href="{% url 'gowns:contact' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] font-body leading-snug">Contact us</a></li>
                 <li><a href="{% url 'gowns:faqs' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] font-body leading-snug">FAQs</a></li>
                 <li><a href="{% url 'gowns:terms_and_conditions' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] font-body leading-snug">Terms and conditions</a></li>
               </ul>
@@ -365,6 +391,9 @@
   {% endblock %}
 
   <script src="{% static 'js/reservation-flow.js' %}"></script>
+  {% if url_name == "collection_all" or url_name == "collection_wedding" or url_name == "collection_dresses" or url_name == "collection_filipiniana" or url_name == "collection_kid_suit" or url_name == "collection_ball_gown" or url_name == "collection_suit" %}
+  <script src="{% static 'js/collection-sort.js' %}"></script>
+  {% endif %}
   <script>
     const recommendations = {
       'Birthday': {
@@ -579,6 +608,134 @@
       }
     }
 
+    function resetExploreEntrance() {
+      const exDrawer = document.getElementById('explore-collections-drawer');
+      if (!exDrawer) return;
+      exDrawer.querySelectorAll('.explore-reveal').forEach(function (el) {
+        el.classList.remove('active');
+      });
+    }
+
+    function triggerExploreEntrance() {
+      const exDrawer = document.getElementById('explore-collections-drawer');
+      if (!exDrawer) return;
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        exDrawer.querySelectorAll('.explore-reveal').forEach(function (el) {
+          el.classList.add('active');
+        });
+        return;
+      }
+      resetExploreEntrance();
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          const items = exDrawer.querySelectorAll('.explore-reveal');
+          items.forEach(function (el, i) {
+            setTimeout(function () {
+              el.classList.add('active');
+            }, 40 + i * 70);
+          });
+        });
+      });
+    }
+
+    function closeExploreDrawer() {
+      const exDrawer = document.getElementById('explore-collections-drawer');
+      const exScrim = document.getElementById('explore-click-away');
+      if (exDrawer) {
+        exDrawer.classList.add('translate-x-full');
+        exDrawer.setAttribute('aria-hidden', 'true');
+      }
+      if (exScrim) {
+        exScrim.classList.add('pointer-events-none');
+        exScrim.classList.remove('opacity-100');
+        exScrim.classList.add('opacity-0');
+      }
+      resetExploreEntrance();
+    }
+
+    function closeOverlaysForCollectionsDrawer() {
+      closeCartDrawer();
+      const search = document.getElementById('search-overlay');
+      const ai = document.getElementById('ai-concierge');
+      const aiScrim = document.getElementById('ai-click-away');
+      if (search) search.classList.remove('open');
+      if (ai) ai.classList.add('translate-x-full');
+      if (aiScrim) aiScrim.classList.add('pointer-events-none');
+    }
+
+    function openExploreDrawerWithMode(mode) {
+      const exDrawer = document.getElementById('explore-collections-drawer');
+      const exScrim = document.getElementById('explore-click-away');
+      if (!exDrawer || !exScrim) return;
+
+      closeOverlaysForCollectionsDrawer();
+
+      exDrawer.classList.remove('translate-x-full');
+      exDrawer.setAttribute('aria-hidden', 'false');
+      exScrim.classList.remove('pointer-events-none', 'opacity-0');
+      exScrim.classList.add('opacity-100');
+
+      if (typeof window.setCollectionsDrawerAccordion === 'function') {
+        window.setCollectionsDrawerAccordion(mode);
+      }
+      if (typeof window.triggerExploreEntrance === 'function') {
+        window.triggerExploreEntrance();
+      }
+      requestAnimationFrame(function () {
+        if (mode === 'sort') {
+          var so = document.getElementById('collection-sort-options');
+          if (so) so.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } else {
+          var ep = document.getElementById('explore-collections-panel');
+          if (ep) ep.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      });
+    }
+
+    function toggleSort() {
+      const exDrawer = document.getElementById('explore-collections-drawer');
+      const exScrim = document.getElementById('explore-click-away');
+      if (!exDrawer || !exScrim) return;
+
+      closeOverlaysForCollectionsDrawer();
+
+      if (exDrawer.classList.contains('translate-x-full')) {
+        openExploreDrawerWithMode('sort');
+        return;
+      }
+      if (typeof window.getCollectionsDrawerMode === 'function' &&
+          window.getCollectionsDrawerMode() === 'explore') {
+        openExploreDrawerWithMode('sort');
+        return;
+      }
+      closeExploreDrawer();
+    }
+
+    window.toggleSort = toggleSort;
+
+    function toggleExplore() {
+      const exDrawer = document.getElementById('explore-collections-drawer');
+      const exScrim = document.getElementById('explore-click-away');
+      if (!exDrawer || !exScrim) return;
+
+      closeOverlaysForCollectionsDrawer();
+
+      if (exDrawer.classList.contains('translate-x-full')) {
+        openExploreDrawerWithMode('explore');
+        return;
+      }
+      if (typeof window.getCollectionsDrawerMode === 'function' &&
+          window.getCollectionsDrawerMode() === 'sort') {
+        openExploreDrawerWithMode('explore');
+        return;
+      }
+      closeExploreDrawer();
+    }
+
+    window.toggleExplore = toggleExplore;
+    window.closeExploreDrawer = closeExploreDrawer;
+    window.triggerExploreEntrance = triggerExploreEntrance;
+
     function toggleCart() {
       const drawer = document.getElementById('cart-drawer');
       const scrim = document.getElementById('cart-click-away');
@@ -586,6 +743,7 @@
       const ai = document.getElementById('ai-concierge');
       const aiScrim = document.getElementById('ai-click-away');
 
+      closeExploreDrawer();
       if (search) search.classList.remove('open');
       if (ai) ai.classList.add('translate-x-full');
       if (aiScrim) aiScrim.classList.add('pointer-events-none');
@@ -615,6 +773,7 @@
       const panel = document.getElementById('ai-concierge');
       const scrim = document.getElementById('ai-click-away');
       closeCartDrawer();
+      closeExploreDrawer();
       if (!panel) return;
       panel.classList.toggle('translate-x-full');
       const closed = panel.classList.contains('translate-x-full');
@@ -632,6 +791,7 @@
       if (!search) return;
       const isOpening = !search.classList.contains('open');
       closeCartDrawer();
+      closeExploreDrawer();
       search.classList.toggle('open');
       if (!search.classList.contains('open') && typeof window.resetMainSearchOverlay === 'function') {
         window.resetMainSearchOverlay();

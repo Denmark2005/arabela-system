@@ -8,13 +8,13 @@
 <section class="mb-16 max-w-[1400px] mx-auto">
   <h1 class="font-headline text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight text-on-surface leading-[0.9] mb-12 text-center">ALL</h1>
   <div class="flex gap-4 flex-wrap">
-    <button type="button" class="px-6 py-2.5 rounded-full border border-black bg-white text-black text-[0.65rem] font-bold tracking-[0.15em] hover:bg-gray-50 transition-colors uppercase">BROWSE</button>
-    <button type="button" class="px-6 py-2.5 rounded-full border border-black bg-white text-black text-[0.65rem] font-bold tracking-[0.15em] hover:bg-gray-50 transition-colors uppercase">SORT BY</button>
-    <button type="button" class="px-6 py-2.5 rounded-full border border-black bg-white text-black text-[0.65rem] font-bold tracking-[0.15em] hover:bg-gray-50 transition-colors uppercase">REFINE</button>
+    <button type="button" class="px-6 py-2.5 rounded-full border border-black bg-white text-black text-[0.65rem] font-bold tracking-[0.15em] hover:bg-gray-50 transition-colors uppercase" onclick="toggleExplore()">EXPLORE</button>
+    <button type="button" class="px-6 py-2.5 rounded-full border border-black bg-white text-black text-[0.65rem] font-bold tracking-[0.15em] hover:bg-gray-50 transition-colors uppercase" onclick="toggleSort()">SORT BY</button>
   </div>
+  {% include "partials/collection_sort_active_row.html" %}
 </section>
 
-<section class="max-w-[1400px] mx-auto" id="all-collections-root">
+<section class="max-w-[1400px] mx-auto" id="all-collections-root" data-collection-sort-root>
   {% for panel in all_panels %}
   <div class="all-collection-panel" data-all-panel="{{ forloop.counter0 }}"{% if not forloop.first %} style="display: none;"{% endif %}>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
@@ -73,6 +73,9 @@
       prevBtn.classList.toggle('hidden', idx === 0);
       nextBtn.classList.toggle('hidden', idx === max);
       window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (typeof window.applyStoredCollectionSortIfAny === 'function') {
+        window.applyStoredCollectionSortIfAny();
+      }
     }
     prevBtn.addEventListener('click', function () {
       show(idx - 1);
