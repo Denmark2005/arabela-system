@@ -3,6 +3,20 @@
   <head>
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <style>html { visibility: hidden; }</style>
+    <script>
+      (function () {
+        function reveal() { document.documentElement.style.visibility = 'visible'; }
+        var safety = setTimeout(reveal, 2000);
+        function ready() { clearTimeout(safety); reveal(); }
+        if (document.fonts && document.fonts.ready) {
+          document.fonts.ready.then(ready, ready);
+        } else {
+          window.addEventListener('load', ready);
+        }
+      })();
+    </script>
+    <noscript><style>html { visibility: visible; }</style></noscript>
     <link href="https://fonts.googleapis.com" rel="preconnect" />
     <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
     <link
@@ -97,6 +111,127 @@
       .entry-line {
         border-bottom: 1px solid rgba(0, 0, 0, 0.06);
       }
+
+      /* ---- Reservation cards ----------------------------------------------
+         Status is carried by a coloured accent bar + a chip, so the state of a
+         booking reads before any text does. Ongoing stays full contrast; past
+         and cancelled entries are muted so active ones stand out. */
+      .res-card {
+        position: relative;
+        /* The list is a flex column with a max-height; without this the cards
+           would shrink to fit instead of overflowing, and `overflow: hidden`
+           below would clip the gown name away. Keep them at natural height and
+           let the container scroll. */
+        flex-shrink: 0;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        border-radius: 12px;
+        background: #ffffff;
+        overflow: hidden;
+        transition: border-color 0.2s ease, box-shadow 0.25s ease, transform 0.25s ease;
+      }
+      .res-card::before {
+        content: "";
+        position: absolute;
+        left: 0; top: 0; bottom: 0;
+        width: 3px;
+        background: #d4d4d4;
+      }
+      .res-card:hover {
+        border-color: rgba(0, 0, 0, 0.16);
+        box-shadow: 0 10px 28px -12px rgba(27, 28, 28, 0.18);
+        transform: translateY(-1px);
+      }
+      /* Accent keys off data-status-key, which the template renders directly, so
+         the colour is right on first paint and never waits for JS. */
+      .res-card[data-status-key="rented"]::before   { background: #10b981; }
+      .res-card[data-status-key="pickup"]::before   { background: #f59e0b; }
+      .res-card[data-status-key="pending"]::before  { background: #f59e0b; }
+      .res-card[data-status-key="overdue"]::before  { background: #dc2626; }
+      .res-card[data-status-key="rejected"]::before { background: #dc2626; }
+      .res-card[data-status-key="returned"]::before { background: #c4c7c7; }
+      .res-card[data-status-key="cancelled"]::before { background: #e5e2e1; }
+      /* Past entries recede -- the whole point is that active ones pop. */
+      .res-card[data-status-key="returned"],
+      .res-card[data-status-key="cancelled"],
+      .res-card[data-status-key="rejected"] { background: #fcfcfc; }
+      .res-card[data-status-key="returned"] .res-title,
+      .res-card[data-status-key="cancelled"] .res-title,
+      .res-card[data-status-key="rejected"] .res-title { color: #615e57; font-weight: 500; }
+      .res-card[data-status-key="cancelled"] .res-title,
+      .res-card[data-status-key="rejected"] .res-title { text-decoration: line-through; text-decoration-color: rgba(97, 94, 87, 0.35); }
+
+      .res-chip {
+        display: inline-flex; align-items: center; gap: 0.3rem;
+        padding: 0.25rem 0.6rem;
+        border-radius: 9999px;   /* this config makes rounded-full only 0.75rem */
+        font-size: 0.625rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.06em;
+        white-space: nowrap;
+      }
+      .res-chip .material-symbols-outlined { font-size: 14px; }
+
+      /* ---- Filter tabs ---- */
+      .res-tab {
+        position: relative;
+        padding: 0.6rem 0.15rem;
+        font-size: 0.8125rem; font-weight: 500;
+        color: #615e57; white-space: nowrap;
+        border-bottom: 2px solid transparent;
+        transition: color 0.2s ease, border-color 0.2s ease;
+      }
+      .res-tab:hover { color: #1b1c1c; }
+      .res-tab.is-active { color: #1b1c1c; font-weight: 600; border-bottom-color: #0b0c0c; }
+      .res-tab-count { color: #9a958c; font-weight: 500; }
+      .res-tab.is-active .res-tab-count { color: #615e57; }
+      .res-card.is-filtered-out { display: none; }
+
+      /* ---- Scrollable list ------------------------------------------------
+         The list scrolls inside its own box instead of stretching the page down
+         to the footer, so the header and tabs stay put while you browse.
+         Viewport-relative cap so it adapts on short screens; overscroll-behavior
+         stops the page scrolling once you reach the end of the list. */
+      .res-scroll {
+        max-height: min(560px, calc(100vh - 22rem));
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        padding-right: 0.5rem;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(0, 0, 0, 0.18) transparent;
+      }
+      .res-scroll::-webkit-scrollbar { width: 6px; }
+      .res-scroll::-webkit-scrollbar-track { background: transparent; }
+      .res-scroll::-webkit-scrollbar-thumb {
+        background: rgba(0, 0, 0, 0.15);
+        border-radius: 9999px;
+      }
+      .res-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.3); }
+
+      /* ---- Empty states ---------------------------------------------------
+         Fades up on arrival, with the icon settling a beat later so the card
+         doesn't land all at once. Same easing as the rest of the site. */
+      .res-empty {
+        flex-shrink: 0;
+        animation: res-empty-in 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+      @keyframes res-empty-in {
+        from { opacity: 0; transform: translateY(14px); }
+        to   { opacity: 1; transform: none; }
+      }
+      .res-empty-icon {
+        animation: res-empty-icon-in 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) 0.12s both;
+      }
+      @keyframes res-empty-icon-in {
+        from { opacity: 0; transform: scale(0.6); }
+        to   { opacity: 1; transform: scale(1); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .res-empty, .res-empty-icon { animation: none; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .res-card { transition: none; }
+        .res-card:hover { transform: none; }
+      }
       .vibrant-green {
         color: #10b981;
       }
@@ -136,10 +271,43 @@
         background-size: 200% 100%;
         animation: shimmer 1.2s infinite linear;
       }
+
+      /* Notification count badge on the account icon */
+      .icon-badge-btn {
+        position: relative;
+      }
+      .icon-count-badge {
+        position: absolute;
+        top: -6px;
+        right: -6px;
+        min-width: 16px;
+        height: 16px;
+        padding: 0 4px;
+        border-radius: 9999px;
+        background: #dc2626;
+        color: #ffffff;
+        font-family: "Inter", sans-serif;
+        font-size: 0.625rem;
+        font-weight: 700;
+        line-height: 16px;
+        text-align: center;
+        box-shadow: 0 0 0 2px #ffffff;
+        pointer-events: none;
+        animation: icon-badge-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+      @keyframes icon-badge-pop {
+        0% { transform: scale(0); opacity: 0; }
+        60% { transform: scale(1.2); opacity: 1; }
+        100% { transform: scale(1); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .icon-count-badge { animation: none; }
+      }
     </style>
     <title>Reservations | Arabela</title>
   </head>
   <body class="bg-white">
+    {% csrf_token %}
     <div class="fixed inset-0 z-[55] bg-black/20 opacity-0 pointer-events-none transition-opacity duration-300" id="sidebar-overlay"></div>
     <div class="fixed inset-0 z-[100] bg-white opacity-0 pointer-events-none" id="page-transition">
       <div class="mx-auto max-w-4xl px-6 pt-28">
@@ -166,132 +334,187 @@
         </a>
       </div>
       <div class="flex items-center gap-8">
+        <button type="button" class="md:hidden scale-95 active:scale-90 transition-all text-secondary" onclick="toggleMobileNav()" aria-label="Open menu">
+          <svg width="22" height="16" viewBox="0 0 22 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M0 1H22" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M0 8H22" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M0 15H22" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+        </button>
         <div class="hidden items-center gap-6 md:flex">
-          <a class="border-b border-[#222222] text-[0.6875rem] uppercase tracking-[0.1rem] text-[#222222] transition-colors font-semibold" href="{% url 'gowns:orders' %}">Reservations</a>
-          <a class="js-page-link text-[0.6875rem] uppercase tracking-[0.1rem] text-[#615E57] transition-colors hover:text-[#222222]" href="{% url 'gowns:profile' %}" id="open-profile-link">Profile</a>
+          <a class="border-b border-[#222222] text-[0.6875rem] uppercase tracking-[0.1rem] text-secondary transition-colors font-semibold" href="{% url 'gowns:orders' %}">Reservations</a>
+          <a class="js-page-link icon-badge-btn text-[0.6875rem] uppercase tracking-[0.1rem] text-[#615E57] transition-colors hover:text-secondary" href="{% url 'gowns:messages' %}">
+            Messages
+            {% if unread_messages_count > 0 %}
+              <span class="icon-count-badge" style="top: -8px; right: -14px;">{{ unread_messages_count }}</span>
+            {% endif %}
+          </a>
+          <a class="js-page-link text-[0.6875rem] uppercase tracking-[0.1rem] text-[#615E57] transition-colors hover:text-secondary" href="{% url 'gowns:profile' %}" id="open-profile-link">Profile</a>
         </div>
-        <button class="scale-95 active:scale-90 transition-all text-[#222222]" id="user-icon-btn">
+        <button class="icon-badge-btn scale-95 active:scale-90 transition-all text-secondary" id="user-icon-btn">
           <span class="material-symbols-outlined">person</span>
+          {% if active_reservations_count > 0 %}
+            <span class="icon-count-badge">{{ active_reservations_count }}</span>
+          {% endif %}
         </button>
       </div>
     </nav>
 
+    <!-- Mobile nav click-away -->
+    <div id="mobile-nav-click-away" class="fixed inset-0 z-[74] bg-black/30 opacity-0 pointer-events-none transition-opacity duration-300 md:hidden" onclick="toggleMobileNav()" aria-hidden="true"></div>
+
+    <!-- MOBILE NAV DRAWER -->
+    <aside id="mobile-nav-drawer" class="fixed top-0 left-0 h-full w-full max-w-[340px] bg-white z-[75] -translate-x-full transform transition-transform duration-500 ease-in-out shadow-none flex flex-col md:hidden" aria-hidden="true">
+      <div class="p-8 flex justify-between items-center border-b border-black/5">
+        <h2 class="text-sm font-bold tracking-[0.2em] uppercase text-secondary">Menu</h2>
+        <button type="button" class="hover:opacity-50 transition-opacity text-secondary" onclick="toggleMobileNav()" aria-label="Close menu">
+          <svg class="fill-current" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M6.04289 16.5418C5.65237 16.9323 5.65237 17.5655 6.04289 17.956C6.43342 18.3465 7.06658 18.3465 7.45711 17.956L11.9987 13.4144L16.5408 17.9565C16.9313 18.347 17.5645 18.347 17.955 17.9565C18.3455 17.566 18.3455 16.9328 17.955 16.5423L13.4129 12.0002L17.955 7.45808C18.3455 7.06756 18.3455 6.43439 17.955 6.04387C17.5645 5.65335 16.9313 5.65335 16.5408 6.04387L11.9987 10.586L7.45711 6.04439C7.06658 5.65386 6.43342 5.65386 6.04289 6.04439C5.65237 6.43491 5.65237 7.06808 6.04289 7.4586L10.5845 12.0002L6.04289 16.5418Z" fill=""/>
+          </svg>
+        </button>
+      </div>
+      <nav class="flex-1 overflow-y-auto p-8 space-y-2">
+        <a class="block py-4 border-b border-black/5 uppercase tracking-[0.1rem] text-[0.6875rem] text-secondary" href="{% url 'gowns:orders' %}">Reservations</a>
+        <a class="block py-4 border-b border-black/5 uppercase tracking-[0.1rem] text-[0.6875rem] text-secondary" href="{% url 'gowns:messages' %}">Messages</a>
+        <a class="block py-4 border-b border-black/5 uppercase tracking-[0.1rem] text-[0.6875rem] text-secondary" href="{% url 'gowns:profile' %}">Profile</a>
+      </nav>
+    </aside>
+
     <main class="flex min-h-screen flex-col items-center px-6 pb-24 pt-32 md:px-12">
       <div class="w-full max-w-4xl rounded-xl bg-white p-8 shadow-[0_20px_40px_rgba(0,0,0,0.04)] md:p-16">
-        <header class="mb-12">
+        <header class="mb-6">
           <h2 class="mb-2 text-3xl font-semibold tracking-tight text-[#1b1c1c] md:text-4xl">Reservations</h2>
           <p class="text-sm uppercase tracking-[0.15rem] text-secondary/60">Archive History &amp; Status</p>
         </header>
 
-        <div class="flex flex-col space-y-0">
-          <div class="group flex flex-col justify-between gap-4 py-8 md:flex-row md:items-center entry-line">
-            <div class="flex items-center gap-4">
-              <span class="material-symbols-outlined text-neutral-500">schedule</span>
-              <div class="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
-                <span class="text-xs font-semibold uppercase tracking-wider text-neutral-500">Reservation Pending</span>
-                <span class="hidden text-secondary/30 md:block">-</span>
-                <span class="text-lg font-medium"><a class="transition-opacity hover:opacity-70" href="#">Ivory Silk Slip Dress</a></span>
-              </div>
-            </div>
-            <div class="flex items-center gap-3 md:gap-4">
-              <div class="flex flex-col md:items-end">
-                <p class="text-sm text-secondary/60"><span class="font-medium text-[#1b1c1c]">Pick-up Date:</span> Apr 15, 2026</p>
-                <p class="mt-1 text-sm font-semibold">PHP 1,600.00</p>
-              </div>
-              <button type="button" aria-label="Delete reservation" class="inline-flex h-9 w-9 items-center justify-center rounded-full text-secondary/60 transition-colors hover:text-[#dc2626]">
-                <span class="material-symbols-outlined">delete</span>
-              </button>
-            </div>
-          </div>
+        <!-- Status filter tabs. Counts are filled in by JS from the rendered
+             cards, so nothing has to be counted server-side. -->
+        <div id="res-tabs" class="mb-8 flex items-center gap-6 overflow-x-auto border-b border-black/5">
+          <button type="button" class="res-tab is-active" data-filter="all">All <span class="res-tab-count" data-count-for="all"></span></button>
+          <button type="button" class="res-tab" data-filter="ongoing">Ongoing <span class="res-tab-count" data-count-for="ongoing"></span></button>
+          <button type="button" class="res-tab" data-filter="completed">Completed <span class="res-tab-count" data-count-for="completed"></span></button>
+          <button type="button" class="res-tab" data-filter="cancelled">Cancelled <span class="res-tab-count" data-count-for="cancelled"></span></button>
+        </div>
 
-          <div class="group flex flex-col justify-between gap-4 py-8 md:flex-row md:items-center entry-line">
-            <div class="flex items-center gap-4">
-              <span class="material-symbols-outlined vibrant-green">check_circle</span>
-              <div class="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
-                <span class="text-xs font-semibold uppercase tracking-wider vibrant-green">Reservation Accepted</span>
-                <span class="hidden text-secondary/30 md:block">-</span>
-                <span class="text-lg font-medium"><a class="transition-opacity hover:opacity-70" href="#">Noir Silk Slip Gown</a></span>
-              </div>
-            </div>
-            <div class="flex items-center gap-3 md:gap-4">
-              <div class="flex flex-col md:items-end">
-                <p class="text-sm text-secondary/60"><span class="font-medium text-[#1b1c1c]">Pick-up Date:</span> Apr 24, 2026</p>
-                <p class="mt-1 text-sm font-semibold">PHP 2,100.00</p>
-              </div>
-              <button type="button" aria-label="Delete reservation" class="inline-flex h-9 w-9 items-center justify-center rounded-full text-secondary/60 transition-colors hover:text-[#dc2626]">
-                <span class="material-symbols-outlined">delete</span>
-              </button>
-            </div>
-          </div>
+        <div id="res-list" class="res-scroll flex flex-col gap-3">
+          {% for reservation in reservations %}
+            {% for item in reservation.items.all %}
+              <div class="res-card group cursor-pointer p-5 sm:p-6"
+                   data-status-key="{% if reservation.status == 'Pending' %}pending{% elif reservation.status == 'Rejected' %}rejected{% elif reservation.status == 'Cancelled' %}cancelled{% elif item.stage == 'Returned' %}returned{% elif item.stage == 'Overdue' %}overdue{% elif item.stage == 'Pick-up' %}pickup{% else %}rented{% endif %}"
+                   onclick="transitionTo('{% url 'gowns:reservation_item_detail' item.id %}')">
 
-          <div class="group flex flex-col justify-between gap-4 py-8 md:flex-row md:items-center entry-line">
-            <div class="flex items-center gap-4">
-              <span class="material-symbols-outlined bold-red">cancel</span>
-              <div class="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
-                <span class="text-xs font-semibold uppercase tracking-wider bold-red">Reservation Rejected</span>
-                <span class="hidden text-secondary/30 md:block">-</span>
-                <span class="text-lg font-medium"><a class="transition-opacity hover:opacity-70" href="#">Tulle Statement Ballgown</a></span>
-              </div>
-            </div>
-            <div class="flex items-center gap-3 md:gap-4">
-              <div class="flex flex-col md:items-end">
-                <p class="text-sm text-secondary/60"><span class="font-medium text-[#1b1c1c]">Pick-up Date:</span> Apr 02, 2026</p>
-                <p class="mt-1 text-sm font-semibold">PHP 2,500.00</p>
-              </div>
-              <button type="button" aria-label="Delete reservation" class="inline-flex h-9 w-9 items-center justify-center rounded-full text-secondary/60 transition-colors hover:text-[#dc2626]">
-                <span class="material-symbols-outlined">delete</span>
-              </button>
-            </div>
-          </div>
+                <!-- Line 1: status chip + reference code -->
+                <div class="flex items-center justify-between gap-3">
+                  {% if reservation.status == "Pending" %}
+                    <span class="res-chip bg-amber-50 text-amber-700"><span class="material-symbols-outlined">schedule</span>Reservation Pending</span>
+                  {% elif reservation.status == "Rejected" %}
+                    <span class="res-chip bg-red-50 text-red-600"><span class="material-symbols-outlined">cancel</span>Reservation Rejected</span>
+                  {% elif reservation.status == "Cancelled" %}
+                    <span class="res-chip bg-neutral-100 text-neutral-600"><span class="material-symbols-outlined">cancel</span>Reservation Cancelled</span>
+                  {% elif item.stage == "Returned" %}
+                    <span class="res-chip bg-neutral-100 text-neutral-600"><span class="material-symbols-outlined">inventory_2</span>Reservation Completed</span>
+                  {% elif item.stage == "Overdue" %}
+                    <span class="res-chip bg-red-50 text-red-600"><span class="material-symbols-outlined">warning</span>Return Overdue</span>
+                  {% elif item.stage == "Pick-up" %}
+                    <span class="res-chip bg-amber-50 text-amber-700"><span class="material-symbols-outlined">local_shipping</span>Ready for Pick-up</span>
+                  {% else %}
+                    <span class="res-chip bg-emerald-50 text-emerald-600"><span class="material-symbols-outlined">check_circle</span>Currently Rented</span>
+                  {% endif %}
+                  <span class="shrink-0 text-[0.75rem] text-secondary/60">Booked {{ reservation.created_at|date:"M d, Y" }}</span>
+                </div>
 
-          <div class="group flex flex-col justify-between gap-4 py-8 md:flex-row md:items-center entry-line">
-            <div class="flex items-center gap-4">
-              <span class="material-symbols-outlined text-[#1b1c1c]">inventory_2</span>
-              <div class="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
-                <span class="text-xs font-semibold uppercase tracking-wider text-[#1b1c1c]">Reservation Completed</span>
-                <span class="hidden text-secondary/30 md:block">-</span>
-                <span class="text-lg font-medium"><a class="transition-opacity hover:opacity-70" href="#">Pleated Organza Midi</a></span>
-              </div>
-            </div>
-            <div class="flex items-center gap-3 md:gap-4">
-              <div class="flex flex-col md:items-end">
-                <p class="text-sm text-secondary/60"><span class="font-medium text-[#1b1c1c]">Pick-up Date:</span> Apr 12, 2026</p>
-                <p class="mt-1 text-sm font-semibold">PHP 2,800.00</p>
-              </div>
-              <button type="button" aria-label="Delete reservation" class="inline-flex h-9 w-9 items-center justify-center rounded-full text-secondary/60 transition-colors hover:text-[#dc2626]">
-                <span class="material-symbols-outlined">delete</span>
-              </button>
-            </div>
-          </div>
+                <!-- Line 2: gown name + dates/price -->
+                <div class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <div class="min-w-0">
+                    <p class="res-title truncate text-lg font-semibold text-[#1b1c1c]">{{ item.gown_name }}</p>
+                    <p class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-secondary/70">
+                      {% if item.size and item.size != "-" %}<span>Size {{ item.size }}</span><span class="text-secondary/25">&middot;</span>{% endif %}
+                      {% if reservation.status == "Cancelled" or reservation.status == "Rejected" %}
+                        <span><span class="font-medium text-secondary">Was scheduled:</span> {{ item.rental_date|date:"M d, Y" }}</span>
+                      {% elif item.stage == "Returned" %}
+                        <span><span class="font-medium text-secondary">Returned on:</span> {{ item.returned_on|date:"M d, Y" }}</span>
+                      {% elif item.stage == "Overdue" %}
+                        <span><span class="font-medium text-secondary">Overdue since:</span> {{ item.overdue_date|date:"M d, Y" }}</span>
+                      {% elif item.stage == "Reserved" or item.stage == "Return" %}
+                        <span><span class="font-medium text-secondary">Return by:</span> {{ item.return_date|date:"M d, Y" }}</span>
+                      {% else %}
+                        <span><span class="font-medium text-secondary">Pick-up Date:</span> {{ item.rental_date|date:"M d, Y" }}</span>
+                      {% endif %}
+                    </p>
+                  </div>
+                  <div class="flex shrink-0 items-center gap-2 sm:flex-col sm:items-end sm:gap-1">
+                    <p class="text-base font-semibold text-[#1b1c1c] tabular-nums">PHP {{ item.rental_price|floatformat:2 }}</p>
+                    <span class="hidden items-center gap-0.5 text-[0.6875rem] font-medium text-secondary/60 transition-colors group-hover:text-[#1b1c1c] sm:inline-flex">
+                      View details<span class="material-symbols-outlined" style="font-size: 1rem;">chevron_right</span>
+                    </span>
+                  </div>
+                </div>
 
-          <div class="group flex flex-col justify-between gap-4 py-8 md:flex-row md:items-center entry-line">
-            <div class="flex items-center gap-4">
-              <span class="material-symbols-outlined vibrant-green">check_circle</span>
-              <div class="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
-                <span class="text-xs font-semibold uppercase tracking-wider vibrant-green">Reservation Accepted</span>
-                <span class="hidden text-secondary/30 md:block">-</span>
-                <span class="text-lg font-medium"><a class="transition-opacity hover:opacity-70" href="#">Vintage Lace Column Dress</a></span>
+                <!-- Line 3: secondary badges + actions -->
+                {% with can_cancel=item.can_customer_cancel %}
+                {% if item.return_condition or reservation.payment_state or reservation.can_upload_proof or can_cancel %}
+                <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-black/5 pt-3">
+                  {% if item.return_condition %}
+                    <span class="res-chip {% if item.return_condition == 'Good' %}bg-emerald-50 text-emerald-600{% elif item.return_condition == 'Fair' %}bg-amber-50 text-amber-600{% else %}bg-red-50 text-red-600{% endif %}">
+                      Returned &middot; {{ item.return_condition }}
+                    </span>
+                  {% endif %}
+                  {% if reservation.payment_state %}
+                    <span class="res-chip {% if reservation.payment_state == 'Payment Verified' %}bg-emerald-50 text-emerald-600{% elif reservation.payment_state == 'Payment Under Review' %}bg-amber-50 text-amber-600{% else %}bg-red-50 text-red-600{% endif %}">
+                      {{ reservation.payment_state }}
+                    </span>
+                  {% endif %}
+                  <span class="flex-1"></span>
+                  {% if reservation.can_upload_proof %}
+                  <!-- The trigger is a plain button (not wrapped in the label): a button
+                       inside a label ahead of the input steals the label's click target. -->
+                  <input type="file" id="proof-input-{{ item.id }}" accept="image/jpeg,image/png,image/webp" class="hidden"
+                    onclick="event.stopPropagation();"
+                    onchange="uploadPaymentProof('{% url 'gowns:reservation_upload_proof' item.id %}', this)">
+                  <button type="button" class="inline-flex w-fit shrink-0 items-center gap-1.5 rounded-[9999px] border border-[#dc2626]/30 px-3 py-1.5 text-[0.625rem] font-semibold uppercase tracking-wider text-[#dc2626] transition-colors hover:bg-red-50"
+                    onclick="event.stopPropagation(); document.getElementById('proof-input-{{ item.id }}').click()">
+                    <span class="material-symbols-outlined" style="font-size: 1rem;">upload</span>
+                    Upload Proof
+                  </button>
+                  {% endif %}
+                  {% if can_cancel %}
+                  <button type="button" aria-label="Cancel reservation" class="inline-flex h-8 w-8 items-center justify-center rounded-[9999px] text-secondary/50 transition-colors hover:bg-red-50 hover:text-[#dc2626]"
+                    onclick="event.stopPropagation(); cancelReservationItem('{% url 'gowns:reservation_item_cancel' item.id %}', this)">
+                    <span class="material-symbols-outlined" style="font-size: 1.15rem;">delete</span>
+                  </button>
+                  {% endif %}
+                </div>
+                {% endif %}
+                {% endwith %}
               </div>
+            {% endfor %}
+          {% empty %}
+            <div class="res-empty flex flex-col items-center rounded-[12px] border border-black/10 bg-[#fcfcfc] px-6 py-14 text-center">
+              <span class="res-empty-icon mb-5 flex h-14 w-14 items-center justify-center rounded-[9999px] bg-white shadow-[0_4px_14px_-6px_rgba(27,28,28,0.18)]">
+                <span class="material-symbols-outlined text-secondary/70" style="font-size: 1.6rem;">checkroom</span>
+              </span>
+              <h3 class="text-lg font-semibold text-[#1b1c1c]">
+                {% if display_name %}No booking yet, {{ display_name }}{% else %}No booking yet{% endif %}
+              </h3>
+              <p class="mt-2 text-sm text-secondary/70">
+                Ready to book your gown?
+              </p>
+              <a href="{% url 'gowns:collection_all' %}"
+                 class="mt-6 inline-flex items-center gap-2 rounded-[6px] bg-primary px-6 py-3 text-sm font-semibold text-white no-underline transition-opacity hover:opacity-90">
+                Browse Collections
+                <span class="material-symbols-outlined" style="font-size: 1.05rem;">arrow_forward</span>
+              </a>
             </div>
-            <div class="flex items-center gap-3 md:gap-4">
-              <div class="flex flex-col md:items-end">
-                <p class="text-sm text-secondary/60"><span class="font-medium text-[#1b1c1c]">Pick-up Date:</span> Apr 30, 2026</p>
-                <p class="mt-1 text-sm font-semibold">PHP 3,000.00</p>
-              </div>
-              <button type="button" aria-label="Delete reservation" class="inline-flex h-9 w-9 items-center justify-center rounded-full text-secondary/60 transition-colors hover:text-[#dc2626]">
-                <span class="material-symbols-outlined">delete</span>
-              </button>
-            </div>
-          </div>
+          {% endfor %}
         </div>
 
         <div class="mt-16 flex flex-col items-center justify-between gap-6 md:flex-row">
           <p class="max-w-xs text-center text-xs text-secondary/40 md:text-left">
             Manage your rental schedule or view specific details for each garment by selecting an entry above.
           </p>
-          <button class="bg-primary px-10 py-4 text-sm font-medium uppercase tracking-[0.1em] text-white transition-all duration-300 hover:bg-secondary">
+          <a href="{% url 'gowns:contact' %}" class="bg-primary px-10 py-4 text-sm font-medium uppercase tracking-[0.1em] text-white transition-all duration-300 hover:bg-secondary rounded-[6px] no-underline inline-block">
             CONTACT ARABELA
-          </button>
+          </a>
         </div>
       </div>
     </main>
@@ -301,21 +524,21 @@
         <div class="flex flex-col flex-wrap items-start gap-x-8 gap-y-8 text-left sm:flex-row sm:gap-x-10 md:gap-x-12 lg:gap-x-16">
           <div class="flex shrink-0 items-center gap-3">
             <a href="{% url 'gowns:homepage' %}" class="font-body text-lg font-bold tracking-tighter text-[#222222]">ARABELA</a>
-            <a href="https://www.facebook.com/share/1EHAS1iemQ/" target="_blank" rel="noopener noreferrer" class="inline-flex scale-95 text-[#222222] transition-all hover:opacity-70 active:scale-90" aria-label="Arabela on Facebook">
+            <a href="{{ site_facebook_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex scale-95 text-secondary transition-all hover:opacity-70 active:scale-90" aria-label="Arabela on Facebook">
               <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12S0 5.446 0 12.073c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
             </a>
           </div>
           <div class="shrink-0">
-            <p class="mb-2 font-body text-base font-medium text-[#222222]">Rent</p>
-            <a href="{% url 'gowns:how_it_works' %}" class="inline-block scale-95 font-body text-[0.6875rem] uppercase tracking-widest text-[#615E57] transition-opacity hover:text-[#222222] hover:underline decoration-1 underline-offset-4 active:scale-90">How it works</a>
+            <p class="mb-2 font-body text-base font-medium text-secondary">Rent</p>
+            <a href="{% url 'gowns:how_it_works' %}" class="inline-block scale-95 font-body text-[0.6875rem] uppercase tracking-widest text-[#615E57] transition-opacity hover:text-secondary hover:underline decoration-1 underline-offset-4 active:scale-90">How it works</a>
           </div>
           <div class="shrink-0">
-            <p class="mb-2 font-body text-base font-medium text-[#222222]">Info</p>
+            <p class="mb-2 font-body text-base font-medium text-secondary">Info</p>
             <ul class="flex flex-col gap-1.5">
-              <li><a href="{% url 'gowns:about' %}" class="inline-block scale-95 font-body text-[0.6875rem] uppercase tracking-widest text-[#615E57] transition-opacity hover:text-[#222222] hover:underline decoration-1 underline-offset-4 active:scale-90 leading-snug">About us</a></li>
-              <li><a href="{% url 'gowns:contact' %}" class="inline-block scale-95 font-body text-[0.6875rem] uppercase tracking-widest text-[#615E57] transition-opacity hover:text-[#222222] hover:underline decoration-1 underline-offset-4 active:scale-90 leading-snug">Contact us</a></li>
-              <li><a href="{% url 'gowns:faqs' %}" class="inline-block scale-95 font-body text-[0.6875rem] uppercase tracking-widest text-[#615E57] transition-opacity hover:text-[#222222] hover:underline decoration-1 underline-offset-4 active:scale-90 leading-snug">FAQs</a></li>
-              <li><a href="{% url 'gowns:terms_and_conditions' %}" class="inline-block scale-95 font-body text-[0.6875rem] uppercase tracking-widest text-[#615E57] transition-opacity hover:text-[#222222] hover:underline decoration-1 underline-offset-4 active:scale-90 leading-snug">Terms and conditions</a></li>
+              <li><a href="{% url 'gowns:about' %}" class="inline-block scale-95 font-body text-[0.6875rem] uppercase tracking-widest text-[#615E57] transition-opacity hover:text-secondary hover:underline decoration-1 underline-offset-4 active:scale-90 leading-snug">About us</a></li>
+              <li><a href="{% url 'gowns:contact' %}" class="inline-block scale-95 font-body text-[0.6875rem] uppercase tracking-widest text-[#615E57] transition-opacity hover:text-secondary hover:underline decoration-1 underline-offset-4 active:scale-90 leading-snug">Contact us</a></li>
+              <li><a href="{% url 'gowns:faqs' %}" class="inline-block scale-95 font-body text-[0.6875rem] uppercase tracking-widest text-[#615E57] transition-opacity hover:text-secondary hover:underline decoration-1 underline-offset-4 active:scale-90 leading-snug">FAQs</a></li>
+              <li><a href="{% url 'gowns:terms_and_conditions' %}" class="inline-block scale-95 font-body text-[0.6875rem] uppercase tracking-widest text-[#615E57] transition-opacity hover:text-secondary hover:underline decoration-1 underline-offset-4 active:scale-90 leading-snug">Terms and conditions</a></li>
             </ul>
           </div>
         </div>
@@ -323,7 +546,7 @@
     </footer>
 
     <aside class="fixed right-0 top-0 z-[60] flex h-screen w-full translate-x-full flex-col border-l border-neutral-100 bg-white shadow-[-10px_0_40px_rgba(0,0,0,0.05)] sm:w-96" id="account-sidebar">
-      <button class="material-symbols-outlined absolute right-8 top-6 text-neutral-400 transition-colors hover:text-black" id="close-sidebar-btn">close</button>
+      <button class="material-symbols-outlined absolute right-8 top-6 text-neutral-400 transition-colors hover:text-secondary" id="close-sidebar-btn">close</button>
       <div class="p-10 pt-20">
         <div class="mb-12">
           <div class="mb-4 flex items-center gap-4">
@@ -331,7 +554,7 @@
               <span class="material-symbols-outlined text-neutral-400">person</span>
             </div>
             <div class="overflow-hidden">
-              <p class="truncate text-sm font-medium text-black">{{ display_name }}</p>
+              <p class="truncate text-sm font-medium text-secondary">{{ display_name }}</p>
               <p class="mt-0.5 text-[0.625rem] font-semibold uppercase tracking-widest text-neutral-400">Member</p>
             </div>
           </div>
@@ -339,12 +562,26 @@
         </div>
         <nav class="flex flex-col space-y-1">
           <a class="js-page-link group flex items-center gap-4 rounded-lg px-2 py-4 transition-all hover:bg-neutral-50" href="{% url 'gowns:profile' %}">
-            <span class="material-symbols-outlined text-neutral-400 transition-colors group-hover:text-black">person_outline</span>
-            <span class="text-sm font-medium text-neutral-600 transition-colors group-hover:text-black">Profile</span>
+            <span class="material-symbols-outlined text-neutral-400 transition-colors group-hover:text-secondary">person_outline</span>
+            <span class="text-sm font-medium text-neutral-600 transition-colors group-hover:text-secondary">Profile</span>
+          </a>
+          <a class="js-page-link icon-badge-btn group flex items-center gap-4 rounded-lg px-2 py-4 transition-all hover:bg-neutral-50" href="{% url 'gowns:orders' %}">
+            <span class="material-symbols-outlined text-neutral-400 transition-colors group-hover:text-secondary">calendar_month</span>
+            <span class="text-sm font-medium text-neutral-600 transition-colors group-hover:text-secondary">Reservations</span>
+            {% if active_reservations_count > 0 %}
+              <span class="icon-count-badge" style="top: 8px; right: auto; left: 34px;">{{ active_reservations_count }}</span>
+            {% endif %}
+          </a>
+          <a class="js-page-link icon-badge-btn group flex items-center gap-4 rounded-lg px-2 py-4 transition-all hover:bg-neutral-50" href="{% url 'gowns:messages' %}">
+            <span class="material-symbols-outlined text-neutral-400 transition-colors group-hover:text-secondary">notifications</span>
+            <span class="text-sm font-medium text-neutral-600 transition-colors group-hover:text-secondary">Messages</span>
+            {% if unread_messages_count > 0 %}
+              <span class="icon-count-badge" style="top: 8px; right: auto; left: 34px;">{{ unread_messages_count }}</span>
+            {% endif %}
           </a>
           <a class="group flex items-center gap-4 rounded-lg px-2 py-4 transition-all hover:bg-neutral-50" href="#">
-            <span class="material-symbols-outlined text-neutral-400 transition-colors group-hover:text-black">settings</span>
-            <span class="text-sm font-medium text-neutral-600 transition-colors group-hover:text-black">Settings</span>
+            <span class="material-symbols-outlined text-neutral-400 transition-colors group-hover:text-secondary">settings</span>
+            <span class="text-sm font-medium text-neutral-600 transition-colors group-hover:text-secondary">Settings</span>
           </a>
           <div class="mt-4 border-t border-neutral-50 pt-4">
             <a class="group flex items-center gap-4 rounded-lg px-2 py-4 transition-all hover:bg-neutral-50" href="{% url 'accounts:logout' %}">
@@ -373,6 +610,29 @@
 
       function closeSidebar() {
         body.classList.remove("sidebar-open");
+      }
+
+      function toggleMobileNav() {
+        const drawer = document.getElementById("mobile-nav-drawer");
+        const scrim = document.getElementById("mobile-nav-click-away");
+        if (!drawer) return;
+        const opening = drawer.classList.contains("-translate-x-full");
+        if (opening) {
+          drawer.classList.remove("-translate-x-full");
+          drawer.setAttribute("aria-hidden", "false");
+          if (scrim) {
+            scrim.classList.remove("pointer-events-none", "opacity-0");
+            scrim.classList.add("opacity-100");
+          }
+        } else {
+          drawer.classList.add("-translate-x-full");
+          drawer.setAttribute("aria-hidden", "true");
+          if (scrim) {
+            scrim.classList.add("pointer-events-none");
+            scrim.classList.remove("opacity-100");
+            scrim.classList.add("opacity-0");
+          }
+        }
       }
 
       function transitionTo(url) {
@@ -409,6 +669,146 @@
           transitionTo(href);
         });
       });
+
+      // Status filter tabs. The group is derived from each card's own
+      // data-status-key, so the template renders one status chain and this stays
+      // in step with it automatically. Counts come from the rendered cards --
+      // nothing is counted server-side.
+      (function initReservationFilters() {
+        var list = document.getElementById('res-list');
+        var tabBar = document.getElementById('res-tabs');
+        if (!list || !tabBar) return;
+
+        var cards = Array.prototype.slice.call(list.querySelectorAll('.res-card'));
+        var tabs = Array.prototype.slice.call(tabBar.querySelectorAll('.res-tab'));
+
+        function groupFor(key) {
+          if (key === 'cancelled' || key === 'rejected') return 'cancelled';
+          if (key === 'returned') return 'completed';
+          return 'ongoing';
+        }
+
+        var counts = { all: cards.length, ongoing: 0, completed: 0, cancelled: 0 };
+        cards.forEach(function (card) {
+          var group = groupFor(card.getAttribute('data-status-key'));
+          card.setAttribute('data-status-group', group);
+          counts[group] += 1;
+        });
+
+        tabBar.querySelectorAll('[data-count-for]').forEach(function (el) {
+          el.textContent = '(' + (counts[el.getAttribute('data-count-for')] || 0) + ')';
+        });
+
+        // Shown when a tab matches nothing. Same card language as the
+        // no-reservations-at-all state so the page stays consistent.
+        var emptyMsg = document.createElement('div');
+        emptyMsg.id = 'res-filter-empty';
+        emptyMsg.className = 'hidden';
+        list.appendChild(emptyMsg);
+
+        var FILTER_EMPTY_COPY = {
+          ongoing: ['event_available', 'No ongoing reservations', 'Nothing is booked or out on rent right now.'],
+          completed: ['inventory_2', 'No completed reservations', 'Gowns you have returned will be listed here.'],
+          cancelled: ['cancel', 'No cancelled reservations', 'Nothing here — that is a good sign.'],
+          all: ['checkroom', 'No reservations to show', 'Reserve a gown and it will appear here.']
+        };
+
+        function renderFilterEmpty(filter) {
+          var copy = FILTER_EMPTY_COPY[filter] || FILTER_EMPTY_COPY.all;
+          emptyMsg.innerHTML =
+            '<div class="res-empty flex flex-col items-center rounded-[12px] border border-black/10 bg-[#fcfcfc] px-6 py-12 text-center">' +
+              '<span class="res-empty-icon mb-4 flex h-12 w-12 items-center justify-center rounded-[9999px] bg-white shadow-[0_4px_14px_-6px_rgba(27,28,28,0.18)]">' +
+                '<span class="material-symbols-outlined text-secondary/70" style="font-size: 1.4rem;">' + copy[0] + '</span>' +
+              '</span>' +
+              '<h3 class="text-base font-semibold text-[#1b1c1c]">' + copy[1] + '</h3>' +
+              '<p class="mt-1.5 max-w-xs text-sm leading-relaxed text-secondary/70">' + copy[2] + '</p>' +
+            '</div>';
+        }
+
+        function applyFilter(filter) {
+          var shown = 0;
+          cards.forEach(function (card) {
+            var match = filter === 'all' || card.getAttribute('data-status-group') === filter;
+            card.classList.toggle('is-filtered-out', !match);
+            if (match) shown += 1;
+          });
+          tabs.forEach(function (t) {
+            t.classList.toggle('is-active', t.getAttribute('data-filter') === filter);
+          });
+          if (shown === 0 && cards.length) {
+            renderFilterEmpty(filter);
+            emptyMsg.classList.remove('hidden');
+          } else {
+            emptyMsg.classList.add('hidden');
+          }
+        }
+
+        tabs.forEach(function (tab) {
+          tab.addEventListener('click', function () {
+            applyFilter(tab.getAttribute('data-filter'));
+          });
+        });
+
+        applyFilter('all');
+      })();
+
+      function getCsrfToken() {
+        var match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+        return match ? decodeURIComponent(match[1]) : '';
+      }
+
+      function cancelReservationItem(url, btn) {
+        arabelaConfirm({
+          title: 'Cancel reservation',
+          message: 'This cannot be undone, and repeated cancellations are recorded on your account.',
+          confirmText: 'Cancel reservation',
+          cancelText: 'Keep it',
+          danger: true,
+        }).then(function (ok) {
+          if (!ok) return;
+          btn.disabled = true;
+          fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+            body: '{}',
+          })
+            .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+            .then(function (result) {
+              if (!result.ok || !result.data.success) throw new Error(result.data.error || 'Could not cancel this reservation.');
+              window.location.reload();
+            })
+            .catch(function (err) {
+              btn.disabled = false;
+              arabelaAlert({ title: 'Something went wrong', message: err.message || 'Could not cancel this reservation.', danger: true });
+            });
+        });
+      }
+
+      function uploadPaymentProof(url, input) {
+        if (!input.files || !input.files[0]) return;
+        var formData = new FormData();
+        formData.append('proof_of_payment', input.files[0]);
+        input.disabled = true;
+        // No 'Content-Type' header: the browser must set it so the multipart
+        // boundary is included. Setting it by hand breaks the upload.
+        fetch(url, {
+          method: 'POST',
+          headers: { 'X-CSRFToken': getCsrfToken() },
+          body: formData,
+        })
+          .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+          .then(function (result) {
+            if (!result.ok || !result.data.success) throw new Error(result.data.error || 'Could not upload your proof of payment.');
+            window.location.reload();
+          })
+          .catch(function (err) {
+            input.disabled = false;
+            input.value = '';
+            arabelaAlert({ title: 'Upload failed', message: err.message || 'Could not upload your proof of payment.', danger: true });
+          });
+      }
     </script>
-  </body>
+  {% include "partials/reservation_hold_banner.html" %}
+{% include "partials/dialog.html" %}
+</body>
 </html>

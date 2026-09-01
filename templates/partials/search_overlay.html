@@ -1,8 +1,28 @@
+<style>
+  /* Crossfade wrapper for the results/suggestions/collections lists whenever
+     applySearch() rebuilds them, so content swaps never feel like an instant pop. */
+  .search-fade { transition: opacity 0.18s ease; }
+  .search-fade.is-hidden { opacity: 0; }
+  /* Per-card fade+rise entrance, staggered via inline animation-delay in JS --
+     same shape as profile.htmls's .address-card-enter. */
+  @keyframes search-card-enter {
+    0% { opacity: 0; transform: translateY(8px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+  .search-card-enter { animation: search-card-enter 300ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+  #search-input-loading { transition: opacity 0.2s ease; opacity: 0; }
+  #search-input-loading.is-visible { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) {
+    .search-fade { transition: none; }
+    .search-card-enter { animation: none; }
+    #search-input-loading { transition: none; }
+  }
+</style>
 <div class="shrink-0 bg-white border-b border-black/5 shadow-lg max-h-[80vh] overflow-y-auto" onclick="event.stopPropagation()">
   <div class="container mx-auto px-8 py-10">
     <div class="max-w-6xl mx-auto">
       <div class="flex justify-end mb-4">
-        <button type="button" class="font-body text-[0.65rem] uppercase tracking-[0.25em] text-on-surface-variant hover:text-on-surface transition-colors bg-transparent border-0 p-0 cursor-pointer" onclick="toggleSearch()">Cancel</button>
+        <button type="button" class="font-body text-[0.65rem] uppercase tracking-[0.25em] text-on-surface-variant hover:text-secondary transition-colors bg-transparent border-0 p-0 cursor-pointer" onclick="toggleSearch()">Cancel</button>
       </div>
       <div class="relative flex items-center mb-10">
         <span class="material-symbols-outlined absolute left-0 text-black/40 text-2xl pointer-events-none">search</span>
@@ -13,33 +33,29 @@
           type="text"
           autocomplete="off"
         />
-        <div id="search-input-loading" class="absolute right-12 top-1/2 -translate-y-1/2 hidden items-center justify-center pointer-events-none" aria-hidden="true">
+        <div id="search-input-loading" class="absolute right-12 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none" aria-hidden="true">
           <span class="search-bar-spinner" aria-hidden="true"></span>
         </div>
-        <button type="button" class="absolute right-0 text-black/40 hover:text-slate-900 transition-colors" onclick="toggleSearch()" aria-label="Close search">
+        <button type="button" class="absolute right-0 text-secondary/40 hover:text-slate-900 transition-colors" onclick="toggleSearch()" aria-label="Close search">
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-12 gap-12">
         <div id="search-overlay-sidebar" class="md:col-span-3">
           <p class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-4">Suggestions</p>
-          <ul id="search-suggestions-list" class="space-y-3 mb-10">
+          <ul id="search-suggestions-list" class="search-fade space-y-3 mb-10">
             <li class="text-sm text-on-surface-variant/70 font-body">Type to search gowns by name.</li>
           </ul>
           <p class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-6">Collections</p>
-          <ul id="search-collections-list" class="space-y-4">
-            <li><a class="text-sm hover:text-primary transition-colors underline decoration-1 underline-offset-4" href="{% url 'gowns:collection_all' %}">All</a></li>
-            <li><a class="text-sm hover:text-primary transition-colors underline decoration-1 underline-offset-4" href="{% url 'gowns:collection_dresses' %}">Dresses</a></li>
-            <li><a class="text-sm hover:text-primary transition-colors underline decoration-1 underline-offset-4" href="{% url 'gowns:collection_filipiniana' %}">Filipiniana</a></li>
-            <li><a class="text-sm hover:text-primary transition-colors underline decoration-1 underline-offset-4" href="{% url 'gowns:collection_kid_suit' %}">Kids suit</a></li>
-            <li><a class="text-sm hover:text-primary transition-colors underline decoration-1 underline-offset-4" href="{% url 'gowns:collection_wedding' %}">Wedding</a></li>
-            <li><a class="text-sm hover:text-primary transition-colors underline decoration-1 underline-offset-4" href="{% url 'gowns:collection_suit' %}">Suit</a></li>
-            <li><a class="text-sm hover:text-primary transition-colors underline decoration-1 underline-offset-4" href="{% url 'gowns:collection_ball_gown' %}">Ball gown</a></li>
+          <ul id="search-collections-list" class="search-fade space-y-4">
+            {% for c in search_overlay_collections_meta %}
+            <li><a class="text-sm hover:text-primary transition-colors underline decoration-1 underline-offset-4" href="{{ c.url }}">{{ c.label }}</a></li>
+            {% endfor %}
           </ul>
         </div>
         <div id="search-products-column" class="md:col-span-9">
           <p id="search-products-heading" class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-6">Top Picks</p>
-          <div id="search-products-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-10">
+          <div id="search-products-grid" class="search-fade grid grid-cols-2 sm:grid-cols-4 gap-10">
             {% for item in featured_search_items|slice:":4" %}
               <div class="group">
                 <a href="{% url 'gowns:product_detail' collection=item.collection_key slug=item.slug %}" class="block">
@@ -47,7 +63,7 @@
                     <img alt="{{ item.title }}" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="{{ item.image }}" />
                     <button
                       type="button"
-                      class="absolute bottom-4 right-4 w-10 h-10 bg-white border border-black/30 rounded-full flex items-center justify-center hover:bg-gray-50 active:scale-95 transition-all"
+                      class="absolute bottom-3 right-3 w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 text-secondary flex items-center justify-center text-base border-none shadow-none transition-all active:scale-95"
                       aria-label="Add to selection"
                       data-product-slug="{{ item.slug }}"
                       data-product-name="{{ item.title }}"
@@ -61,15 +77,15 @@
                   </div>
                   <div class="min-w-0">
                     <p class="text-[0.7rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold">Arabela</p>
-                    <p class="text-[0.95rem] font-body font-medium tracking-tight text-on-surface truncate mt-1">{{ item.title }}</p>
-                    <p class="text-[0.9rem] font-body font-medium text-on-surface/70 tabular-nums mt-1">{{ item.price_label }}</p>
+                    <p class="text-[0.95rem] font-body font-medium tracking-tight text-secondary truncate mt-1">{{ item.title }}</p>
+                    <p class="text-[0.9rem] font-body font-medium text-secondary/70 tabular-nums mt-1">{{ item.price_label }}</p>
                   </div>
                 </a>
               </div>
             {% endfor %}
           </div>
           <div class="flex justify-end mt-8">
-            <button type="button" id="search-view-all-btn" class="hidden px-8 py-3 bg-primary text-on-primary text-[0.65rem] font-bold uppercase tracking-[0.2em] hover:opacity-90 transition-opacity cursor-default" disabled aria-disabled="true">
+            <button type="button" id="search-view-all-btn" class="hidden px-8 py-3 bg-primary text-on-primary text-[0.65rem] font-bold uppercase tracking-[0.2em] hover:opacity-90 transition-opacity cursor-default rounded-[6px]" disabled aria-disabled="true">
               View all →
             </button>
           </div>
@@ -177,7 +193,7 @@
         '" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="' +
         img +
         '" />' +
-        '<button type="button" class="absolute bottom-4 right-4 w-10 h-10 bg-white border border-black/30 rounded-full flex items-center justify-center hover:bg-gray-50 active:scale-95 transition-all" aria-label="Add to selection" data-product-slug="' +
+        '<button type="button" class="absolute bottom-3 right-3 w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 text-secondary flex items-center justify-center text-base border-none shadow-none transition-all active:scale-95" aria-label="Add to selection" data-product-slug="' +
         slug +
         '" data-product-name="' +
         title +
@@ -190,10 +206,10 @@
         '" onclick="event.preventDefault(); event.stopPropagation(); addFeaturedToSelection(this);">' +
         '<span class="material-symbols-outlined text-base">add</span></button></div>' +
         '<div class="min-w-0"><p class="text-[0.7rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold">Arabela</p>' +
-        '<p class="text-[0.95rem] font-body font-medium tracking-tight text-on-surface truncate mt-1">' +
+        '<p class="text-[0.95rem] font-body font-medium tracking-tight text-secondary truncate mt-1">' +
         titleHtml +
         "</p>" +
-        '<p class="text-[0.9rem] font-body font-medium text-on-surface/70 tabular-nums mt-1">' +
+        '<p class="text-[0.9rem] font-body font-medium text-secondary/70 tabular-nums mt-1">' +
         priceLabel +
         "</p></div></a></div>"
       );
@@ -210,8 +226,29 @@
       }
     }
 
-    function applySearch(query) {
-      if (!gridEl || !headingEl || !suggEl || !collEl) return;
+    var searchGeneration = 0;
+    var FADE_OUT_MS = 160;
+    var CARD_STAGGER_MS = 50;
+    var MAX_STAGGERED_CARDS = 4;
+
+    // Staggers each freshly-inserted product card's entrance so the grid cascades
+    // in rather than appearing all at once -- same "remove, reflow, re-add" replay
+    // technique already used for .badge-pop elsewhere on this site.
+    function staggerCardsIn(container) {
+      var cards = container.querySelectorAll(":scope > .group");
+      cards.forEach(function (card, i) {
+        card.classList.remove("search-card-enter");
+        card.style.animationDelay = "";
+        void card.offsetWidth;
+        card.style.animationDelay = (Math.min(i, MAX_STAGGERED_CARDS - 1) * CARD_STAGGER_MS) + "ms";
+        card.classList.add("search-card-enter");
+      });
+    }
+
+    // The actual synchronous DOM rebuild -- identical logic to before, just
+    // factored out of applySearch() so it can be deferred until after the
+    // old content has faded out.
+    function renderResults(query) {
       var q = (query || "").trim();
       if (!q) {
         setSearchSidebarVisible(true);
@@ -222,6 +259,7 @@
         suggEl.innerHTML =
           '<li class="text-sm text-on-surface-variant/70 font-body">Type to search gowns by name.</li>';
         if (viewAllBtn) viewAllBtn.classList.add("hidden");
+        staggerCardsIn(gridEl);
         return;
       }
 
@@ -261,6 +299,7 @@
             );
           })
           .join("");
+        staggerCardsIn(gridEl);
       } else {
         setSearchSidebarVisible(false);
         headingEl.textContent = "";
@@ -275,10 +314,32 @@
       }
     }
 
+    // Orchestrates the visible transition: fade the current grid/suggestions/
+    // collections out, swap in the new content once they're invisible, then fade
+    // back in (the grid's cards additionally cascade in via staggerCardsIn).
+    // A generation token guards against a slower-in-flight call finishing after a
+    // newer one, which would otherwise flash stale results if the user keeps
+    // typing while a fade is still settling.
+    function applySearch(query) {
+      if (!gridEl || !headingEl || !suggEl || !collEl) return;
+      var myGeneration = ++searchGeneration;
+
+      gridEl.classList.add("is-hidden");
+      suggEl.classList.add("is-hidden");
+      collEl.classList.add("is-hidden");
+
+      setTimeout(function () {
+        if (myGeneration !== searchGeneration) return;
+        renderResults(query);
+        gridEl.classList.remove("is-hidden");
+        suggEl.classList.remove("is-hidden");
+        collEl.classList.remove("is-hidden");
+      }, FADE_OUT_MS);
+    }
+
     function setLoading(on) {
       if (!loadingEl) return;
-      if (on) loadingEl.classList.remove("hidden"), loadingEl.classList.add("flex");
-      else loadingEl.classList.add("hidden"), loadingEl.classList.remove("flex");
+      loadingEl.classList.toggle("is-visible", !!on);
     }
 
     function scheduleSearch(raw) {

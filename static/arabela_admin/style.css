@@ -4864,3 +4864,92 @@ span.flatpickr-weekday,
   inherits: false;
 }
 
+
+/* Global admin header search results dropdown (static/arabela_admin/global-search.js) */
+#admin-global-search-results {
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.18s cubic-bezier(0.4, 0, 0.2, 1), transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+#admin-global-search-results.is-open {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+/* --- Admin profile photo UI support ---
+   This precompiled Tailwind build only contains the classes the original
+   template pack happened to use, so several utilities the avatar widget needs
+   simply don't exist in it. The three generic utilities below are safe to
+   define globally because nothing in the pack used them before (verified);
+   everything else is namespaced to .admin-avatar-* rather than added as a
+   generic utility, so defining it can't retroactively change any existing
+   page (notably `shrink-0`, which IS already used elsewhere and is therefore
+   deliberately NOT defined here). --- */
+[x-cloak] {
+  display: none !important;
+}
+.object-cover {
+  object-fit: cover;
+}
+.opacity-60 {
+  opacity: 0.6;
+}
+
+.admin-avatar-wrap {
+  flex-shrink: 0;
+}
+.admin-avatar-badge {
+  position: absolute;
+  bottom: -0.125rem;
+  right: -0.125rem;
+  background-color: #101828;
+  color: #ffffff;
+  border: 2px solid #ffffff;
+  transition: background-color 0.15s ease;
+}
+.admin-avatar-badge:hover {
+  background-color: #000000;
+}
+.admin-avatar-badge:is(.dark *) {
+  background-color: #ffffff;
+  color: #101828;
+  border-color: #101828;
+}
+.admin-avatar-badge:is(.dark *):hover {
+  background-color: #e4e7ec;
+}
+.admin-avatar-badge svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+.admin-avatar-busy {
+  background-color: rgb(0 0 0 / 0.45);
+}
+.admin-avatar-error {
+  max-width: 10rem;
+}
+.admin-avatar-remove {
+  text-underline-offset: 2px;
+}
+.admin-avatar-remove:hover {
+  text-decoration-line: underline;
+}
+.admin-avatar-clickable {
+  cursor: pointer;
+}
+
+/* Drag-to-position frame used by the "choose where the photo is cropped" modal --
+   also reused (read-only) as the click-to-view lightbox's frame. */
+.admin-avatar-drag-frame {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.admin-avatar-drag-frame:active {
+  cursor: grabbing;
+}
+.admin-avatar-drag-frame img {
+  pointer-events: none;
+}

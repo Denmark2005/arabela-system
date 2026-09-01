@@ -1,126 +1,47 @@
 {% extends "base.html" %}
 
-{% block title %}ARABELA | Dresses Collection{% endblock %}
+{% block title %}ARABELA | {{ label }} Collection{% endblock %}
 
-{% block main_class %}pt-32 pb-20 px-8{% endblock %}
+{% block main_class %}pt-32 pb-20{% endblock %}
+
 
 {% block content %}
     <!-- Collection Header -->
-    <section class="mb-16 max-w-[1400px] mx-auto">
-        <h1 class="font-headline text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight text-on-surface leading-[0.9] mb-12 text-center">Dresses</h1>
+    <section class="mb-16 w-full px-6 md:px-12 lg:px-16 xl:px-24">
+        <h1 class="font-headline text-4xl sm:text-5xl md:text-6xl font-medium tracking-tight text-on-surface leading-[0.9] mb-12 text-center">{{ label }}</h1>
         <div class="flex gap-4 flex-wrap">
-            <button type="button" class="px-6 py-2.5 rounded-full border border-black bg-white text-black text-[0.65rem] font-bold tracking-[0.15em] hover:bg-gray-50 transition-colors uppercase" onclick="toggleExplore()">EXPLORE</button>
-            <button type="button" class="px-6 py-2.5 rounded-full border border-black bg-white text-black text-[0.65rem] font-bold tracking-[0.15em] hover:bg-gray-50 transition-colors uppercase" onclick="toggleSort()">SORT BY</button>
+            <button type="button" class="px-6 py-2.5 rounded-full border border-gray-300 bg-white text-secondary text-[0.65rem] font-medium tracking-[0.15em] hover:bg-gray-50 transition-colors uppercase" onclick="toggleExplore()">EXPLORE</button>
+            <button type="button" class="px-6 py-2.5 rounded-full border border-gray-300 bg-white text-secondary text-[0.65rem] font-medium tracking-[0.15em] hover:bg-gray-50 transition-colors uppercase" onclick="toggleSort()">SORT BY</button>
         </div>
         {% include "partials/collection_sort_active_row.html" %}
     </section>
 
     <!-- Product Grid -->
-    <section class="max-w-[1400px] mx-auto" data-collection-sort-root>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            <a href="{% url 'gowns:product_detail' collection='dresses' slug='valencia-lace' %}" class="group cursor-pointer block">
+    <section class="w-full px-6 md:px-12 lg:px-16 xl:px-24" data-collection-sort-root>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-12">
+            {% for item in products %}
+            <a href="{% url 'gowns:product_detail' collection=item.collection_key slug=item.slug %}" class="group cursor-pointer block">
                 <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
-                    <img alt="Dresses One" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-                    <button type="button" class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90" onclick="event.preventDefault(); event.stopPropagation(); addCollectionItem({ collection: 'dresses', id: 'valencia-lace', name: 'Dresses One', price: 1600, img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA' });">
-                        <span class="material-symbols-outlined text-[1rem]">add</span>
+                    <img alt="{{ item.title }}" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="{{ item.image }}" />
+                    {% if item.reserved %}
+                    <div class="absolute top-3 left-0 py-2 px-4 bg-secondary-container text-on-secondary-container rounded-r-full font-label text-[0.625rem] tracking-widest uppercase font-bold pointer-events-none">
+                        Limited Availability
+                    </div>
+                    <button type="button" class="absolute bottom-3 right-3 w-10 h-10 rounded-full bg-gray-100 text-secondary flex items-center justify-center text-base border-none shadow-none cursor-not-allowed opacity-50" onclick="event.preventDefault(); event.stopPropagation();" disabled>
+                        <span class="material-symbols-outlined text-base">add</span>
                     </button>
+                    {% else %}
+                    <button type="button" class="absolute bottom-3 right-3 w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 text-secondary flex items-center justify-center text-base border-none shadow-none transition-all active:scale-95" onclick="event.preventDefault(); event.stopPropagation(); addCollectionItem({ collection: '{{ item.collection_key|escapejs }}', id: '{{ item.slug|escapejs }}', name: '{{ item.title|escapejs }}', price: {{ item.price }}, img: '{{ item.image|escapejs }}' });">
+                        <span class="material-symbols-outlined text-base">add</span>
+                    </button>
+                    {% endif %}
                 </div>
                 <div class="space-y-2">
-                    <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Dresses One</h3>
-                    <p class="text-[0.9rem] font-body font-medium text-on-surface">₱1,600</p>
+                    <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-secondary">{{ item.title }}</h3>
+                    <p class="text-[0.9rem] font-body font-medium text-secondary">{{ item.price_display }}</p>
                 </div>
             </a>
-
-            <a href="{% url 'gowns:product_detail' collection='dresses' slug='archive-satin' %}" class="group cursor-pointer block">
-                <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
-                    <img alt="Dresses Two" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-                    <button type="button" class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90" onclick="event.preventDefault(); event.stopPropagation(); addCollectionItem({ collection: 'dresses', id: 'archive-satin', name: 'Dresses Two', price: 1800, img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA' });">
-                        <span class="material-symbols-outlined text-[1rem]">add</span>
-                    </button>
-                </div>
-                <div class="space-y-2">
-                    <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Dresses Two</h3>
-                    <p class="text-[0.9rem] font-body font-medium text-on-surface">₱1,800</p>
-                </div>
-            </a>
-
-            <a href="{% url 'gowns:product_detail' collection='dresses' slug='florence-organza' %}" class="group cursor-pointer block">
-                <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
-                    <img alt="Dresses Three" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-                    <button type="button" class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90" onclick="event.preventDefault(); event.stopPropagation(); addCollectionItem({ collection: 'dresses', id: 'florence-organza', name: 'Dresses Three', price: 2000, img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA' });">
-                        <span class="material-symbols-outlined text-[1rem]">add</span>
-                    </button>
-                </div>
-                <div class="space-y-2">
-                    <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Dresses Three</h3>
-                    <p class="text-[0.9rem] font-body font-medium text-on-surface">₱2,000</p>
-                </div>
-            </a>
-
-            <a href="{% url 'gowns:product_detail' collection='dresses' slug='modernist-crepe' %}" class="group cursor-pointer block">
-                <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
-                    <img alt="Dresses Four" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-                    <button type="button" class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90" onclick="event.preventDefault(); event.stopPropagation(); addCollectionItem({ collection: 'dresses', id: 'modernist-crepe', name: 'Dresses Four', price: 2200, img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA' });">
-                        <span class="material-symbols-outlined text-[1rem]">add</span>
-                    </button>
-                </div>
-                <div class="space-y-2">
-                    <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Dresses Four</h3>
-                    <p class="text-[0.9rem] font-body font-medium text-on-surface">₱2,200</p>
-                </div>
-            </a>
-
-            <a href="{% url 'gowns:product_detail' collection='dresses' slug='opulence-pearl' %}" class="group cursor-pointer block">
-                <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
-                    <img alt="Dresses Five" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-                    <button type="button" class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90" onclick="event.preventDefault(); event.stopPropagation(); addCollectionItem({ collection: 'dresses', id: 'opulence-pearl', name: 'Dresses Five', price: 2400, img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA' });">
-                        <span class="material-symbols-outlined text-[1rem]">add</span>
-                    </button>
-                </div>
-                <div class="space-y-2">
-                    <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Dresses Five</h3>
-                    <p class="text-[0.9rem] font-body font-medium text-on-surface">₱2,400</p>
-                </div>
-            </a>
-
-            <a href="{% url 'gowns:product_detail' collection='dresses' slug='heritage-lace' %}" class="group cursor-pointer block">
-                <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
-                    <img alt="Dresses Six" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-                    <button type="button" class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90" onclick="event.preventDefault(); event.stopPropagation(); addCollectionItem({ collection: 'dresses', id: 'heritage-lace', name: 'Dresses Six', price: 2600, img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA' });">
-                        <span class="material-symbols-outlined text-[1rem]">add</span>
-                    </button>
-                </div>
-                <div class="space-y-2">
-                    <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Dresses Six</h3>
-                    <p class="text-[0.9rem] font-body font-medium text-on-surface">₱2,600</p>
-                </div>
-            </a>
-
-            <a href="{% url 'gowns:product_detail' collection='dresses' slug='city-reception' %}" class="group cursor-pointer block">
-                <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
-                    <img alt="Dresses Seven" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-                    <button type="button" class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90" onclick="event.preventDefault(); event.stopPropagation(); addCollectionItem({ collection: 'dresses', id: 'city-reception', name: 'Dresses Seven', price: 2800, img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA' });">
-                        <span class="material-symbols-outlined text-[1rem]">add</span>
-                    </button>
-                </div>
-                <div class="space-y-2">
-                    <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Dresses Seven</h3>
-                    <p class="text-[0.9rem] font-body font-medium text-on-surface">₱2,800</p>
-                </div>
-            </a>
-
-            <a href="{% url 'gowns:product_detail' collection='dresses' slug='lumiere-silk' %}" class="group cursor-pointer block">
-                <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
-                    <img alt="Dresses Eight" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-                    <button type="button" class="absolute bottom-4 right-4 w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center bg-white/50 backdrop-blur hover:bg-white transition-all active:scale-90" onclick="event.preventDefault(); event.stopPropagation(); addCollectionItem({ collection: 'dresses', id: 'lumiere-silk', name: 'Dresses Eight', price: 3000, img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA' });">
-                        <span class="material-symbols-outlined text-[1rem]">add</span>
-                    </button>
-                </div>
-                <div class="space-y-2">
-                    <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Dresses Eight</h3>
-                    <p class="text-[0.9rem] font-body font-medium text-on-surface">₱3,000</p>
-                </div>
-            </a>
+            {% endfor %}
         </div>
     </section>
 
@@ -128,12 +49,12 @@
     <div class="mt-16 flex justify-center">
         <div class="flex flex-col items-center gap-12">
             <button class="group flex items-center gap-4 hover:opacity-50 transition-all duration-500">
-                <span class="font-body text-[0.65rem] uppercase tracking-[0.4em] font-light text-on-surface">Next</span>
+                <span class="font-body text-[0.65rem] uppercase tracking-[0.4em] font-light text-secondary">Next</span>
                 <span class="material-symbols-outlined text-[1rem] font-extralight transition-transform duration-500 group-hover:translate-x-2">arrow_forward</span>
             </button>
             <div class="h-[1px] w-24 bg-on-surface/10"></div>
-            <button class="font-label text-[0.6rem] uppercase tracking-[0.3em] text-on-surface/40 hover:text-on-surface transition-all duration-300 bg-transparent border-0 p-0 cursor-pointer">
-                Explore More Dresses Pieces
+            <button class="font-label text-[0.6rem] uppercase tracking-[0.3em] text-secondary/40 hover:text-secondary transition-all duration-300 bg-transparent border-0 p-0 cursor-pointer">
+                Explore More {{ label }} Pieces
             </button>
         </div>
     </div>

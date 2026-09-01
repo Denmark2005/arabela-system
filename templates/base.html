@@ -5,6 +5,22 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+  <!-- Prevent flash of unloaded icon-font ligature text (e.g. "search", "auto_fix_high") on refresh -->
+  <style>html { visibility: hidden; }</style>
+  <script>
+    (function () {
+      function reveal() { document.documentElement.style.visibility = 'visible'; }
+      var safety = setTimeout(reveal, 2000);
+      function ready() { clearTimeout(safety); reveal(); }
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(ready, ready);
+      } else {
+        window.addEventListener('load', ready);
+      }
+    })();
+  </script>
+  <noscript><style>html { visibility: visible; }</style></noscript>
+
   <title>{% block title %}ARABELA{% endblock %}</title>
 
   <!-- Global assets (load only once) -->
@@ -86,10 +102,82 @@
     .ai-scroll::-webkit-scrollbar { width: 2px; }
     .ai-scroll::-webkit-scrollbar-track { background: transparent; }
     .ai-scroll::-webkit-scrollbar-thumb { background: #e5e2e1; }
-    #search-overlay { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); transform: translateY(-100%); opacity: 0; pointer-events: none; }
+    /* The hold countdown is the only site-wide bottom-fixed element, so the
+       bottom-anchored AI widget has to be lifted clear of it. The banner's own
+       styles live in partials/reservation_hold_banner.html. */
+    body.has-hold-banner #ai-fab { bottom: calc(2.5rem + var(--hold-banner-h, 52px)); }
+    body.has-hold-banner #ai-concierge {
+      bottom: calc(7rem + var(--hold-banner-h, 52px));
+      max-height: calc(100vh - 11rem - var(--hold-banner-h, 52px));
+    }
+    /* Arabela Recommends -- floating AI chat widget (pop-in, not a slide) */
+    #ai-concierge {
+      opacity: 0;
+      transform: translateY(16px) scale(0.96);
+      transform-origin: bottom right;
+      transition: opacity 0.25s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: none;
+      box-shadow: 0 24px 60px -12px rgba(27, 28, 28, 0.28), 0 8px 24px -8px rgba(27, 28, 28, 0.14);
+    }
+    #ai-concierge.ai-open { opacity: 1; transform: none; pointer-events: auto; }
+    .ai-msg-in { animation: aiMsgIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) both; }
+    @keyframes aiMsgIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    .ai-typing-dot { width: 5px; height: 5px; border-radius: 9999px; background: #9a958c; display: inline-block; animation: aiTyping 1.2s infinite ease-in-out; }
+    .ai-typing-dot:nth-child(2) { animation-delay: 0.18s; }
+    .ai-typing-dot:nth-child(3) { animation-delay: 0.36s; }
+    @keyframes aiTyping { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-4px); opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) {
+      #ai-concierge { transition: opacity 0.2s ease; transform: none; }
+      .ai-msg-in { animation: none; }
+      .ai-typing-dot { animation: none; }
+    }
+    #search-overlay {
+      transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      transform: translateY(-16px);
+      opacity: 0;
+      pointer-events: none;
+    }
     #search-overlay.open { transform: translateY(0); opacity: 1; pointer-events: auto; }
-    .group:hover .dropdown-menu { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
-    .dropdown-menu { transition: all 0.4s cubic-bezier(0.23, 1, 0.320, 1); transform: translateY(-15px) scale(0.92); opacity: 0; pointer-events: none; }
+    #search-overlay .search-backdrop { background-color: rgba(0, 0, 0, 0); transition: background-color 0.35s ease; }
+    #search-overlay.open .search-backdrop { background-color: rgba(0, 0, 0, 0.15); }
+    #site-header {
+      transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    #site-header.nav-hidden { transform: translateY(-100%); }
+    @media (prefers-reduced-motion: reduce) {
+      #site-header { transition: none; }
+      #search-overlay { transition: opacity 0.2s ease; transform: none; }
+      #search-overlay .search-backdrop { transition: none; }
+    }
+    .group:hover .dropdown-menu { opacity: 1; transform: scaleY(1); pointer-events: auto; }
+    .dropdown-menu {
+      transition: opacity 0.25s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      transform: scaleY(0);
+      transform-origin: top;
+      opacity: 0;
+      pointer-events: none;
+    }
+    /* Active indicator: a dark line flush with the header's bottom border,
+       directly under whichever nav item is hovered -- scoped to its own class
+       (not the generic .group utility, which is reused elsewhere for unrelated
+       hover effects like product cards). */
+    .nav-dropdown-item { position: relative; }
+    .nav-dropdown-item::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 2px;
+      background-color: #111827;
+      transform: scaleX(0);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .nav-dropdown-item:hover::after { transform: scaleX(1); }
+    @media (prefers-reduced-motion: reduce) {
+      .dropdown-menu { transition: opacity 0.15s ease; }
+      .nav-dropdown-item::after { transition: none; }
+    }
     .search-bar-spinner {
       display: inline-block;
       width: 1.125rem;
@@ -127,21 +215,83 @@
         transition: none;
       }
     }
+
+    /* Cart / notification count badges on the nav icons */
+    .icon-badge-btn { position: relative; }
+    .icon-count-badge {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      min-width: 16px;
+      height: 16px;
+      padding: 0 4px;
+      border-radius: 9999px;
+      background: #DC2626;
+      color: #ffffff;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.625rem;
+      font-weight: 700;
+      line-height: 16px;
+      text-align: center;
+      box-shadow: 0 0 0 2px #ffffff;
+      pointer-events: none;
+    }
+    .dark .icon-count-badge { box-shadow: 0 0 0 2px #222222; }
+    .icon-count-badge.badge-pop {
+      animation: icon-badge-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    @keyframes icon-badge-pop {
+      0% { transform: scale(0); opacity: 0; }
+      60% { transform: scale(1.2); opacity: 1; }
+      100% { transform: scale(1); }
+    }
+    /* Pulses the cart icon itself, not just the numeric badge -- editing an
+       existing bag row's size/date on the product page changes the cart without
+       changing the item COUNT, so badge-pop (which only fires when the count
+       text changes) would stay silent. This is what makes that update visible at
+       the one icon a customer already knows to check. */
+    #cart-toggle-btn.cart-icon-pulse .material-symbols-outlined {
+      animation: cart-icon-pulse-kf 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    @keyframes cart-icon-pulse-kf {
+      0% { transform: scale(1); }
+      45% { transform: scale(1.22); }
+      100% { transform: scale(1); }
+    }
+    /* Soft highlight on a drawer row right after a live sync, so the update is
+       traceable to a specific gown on the rare occasion the drawer is open for
+       it (most of the time it's closed, and the icon pulse above is the cue). */
+    .cart-line-synced { animation: cart-line-sync-flash 900ms ease-out; border-radius: 8px; }
+    @keyframes cart-line-sync-flash {
+      0% { background-color: rgba(16, 185, 129, 0.16); }
+      100% { background-color: transparent; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .icon-count-badge.badge-pop { animation: none; }
+      #cart-toggle-btn.cart-icon-pulse .material-symbols-outlined { animation: none; }
+      .cart-line-synced { animation: none; }
+    }
   </style>
 
   {% block extra_head %}{% endblock %}
 </head>
 
 {% with url_name=request.resolver_match.url_name %}
-<body class="bg-white text-on-surface selection:bg-primary-fixed-dim overflow-x-hidden {% block body_class %}{% endblock %}"
+<body class="bg-white text-secondary selection:bg-primary-fixed-dim overflow-x-hidden{% if reservation_hold_until %} has-hold-banner{% endif %} {% block body_class %}{% endblock %}"
       data-authenticated="{{ request.user.is_authenticated|yesno:'true,false' }}"
       data-user-key="{% if request.user.is_authenticated %}{{ request.user.id }}{% else %}guest{% endif %}"
-      data-login-url="{% url 'accounts:login' %}">
+      data-login-url="{% url 'accounts:login' %}"
+      data-hold-start-url="{% url 'gowns:reservation_hold_start' %}">
+
+{% csrf_token %}
+<!-- Rendering the tag above (even outside a <form>) makes Django set the csrftoken
+     cookie on every page load, so the Arabela Recommends chat can send it as the
+     X-CSRFToken header without needing its own form. -->
 
   <!-- TOP NAVBAR (pure white) -->
-  <header class="fixed top-0 w-full z-[70] bg-white/80 dark:bg-[#222222]/80 backdrop-blur-md border-b border-black/5">
+  <header id="site-header" class="fixed top-0 w-full z-[70] bg-white/80 dark:bg-[#222222]/80 backdrop-blur-md border-b border-black/5{% if url_name == "homepage" %} homepage-header{% endif %}">
     <nav class="flex justify-between items-center w-full px-8 h-20">
-      <div class="flex items-center gap-12">
+      <div class="flex items-center gap-12 h-full">
         <div class="flex-shrink-0">
           <a href="{% url 'gowns:homepage' %}" class="block">
             <h1 class="text-2xl font-bold tracking-tighter text-[#222222] dark:text-[#FAF4EB]">ARABELA</h1>
@@ -149,27 +299,30 @@
         </div>
 
         {% if url_name != "reservation" and url_name != "confirmation" %}
+        <button type="button" class="md:hidden scale-95 active:scale-90 transition-all text-secondary dark:text-[#FAF4EB]" onclick="toggleMobileNav()" aria-label="Open menu">
+          <svg width="22" height="16" viewBox="0 0 22 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M0 1H22" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M0 8H22" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M0 15H22" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+        </button>
         <div class="hidden md:flex gap-8 items-center self-stretch">
-          <div class="relative group h-full flex items-center">
-            <a class="uppercase tracking-[0.1rem] text-[0.6875rem] text-[#615E57] dark:text-[#A09E99] hover:text-[#222222] dark:hover:text-white transition-colors duration-300 font-body" href="#">Rent</a>
-            <div class="dropdown-menu absolute top-full left-0 w-52 bg-white dark:bg-[#222222] shadow-none border-t-2 border-[#222222] dark:border-[#FAF4EB] py-6 z-[80]" style="background-color: #ffffff;">
+          <div class="relative group nav-dropdown-item h-full flex items-center">
+            <a class="uppercase tracking-[0.1rem] text-[0.6875rem] text-[#615E57] dark:text-[#A09E99] hover:text-secondary dark:hover:text-white transition-colors duration-300 font-body" href="#">Rent</a>
+            <div class="dropdown-menu absolute top-full left-0 w-52 bg-white dark:bg-[#222222] editorial-shadow py-6 z-[80]" style="background-color: #ffffff;">
               <ul class="flex flex-col gap-4">
-                <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{% url 'gowns:collection_all' %}">All</a></li>
-                <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{% url 'gowns:collection_dresses' %}">Dresses</a></li>
-                <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{% url 'gowns:collection_filipiniana' %}">Filipiniana</a></li>
-                <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{% url 'gowns:collection_kid_suit' %}">Kids suit</a></li>
-                <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{% url 'gowns:collection_wedding' %}">Wedding</a></li>
-                <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{% url 'gowns:collection_suit' %}">Suit</a></li>
-                <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{% url 'gowns:collection_ball_gown' %}">Ball gown</a></li>
+                {% for c in search_overlay_collections_meta %}
+                <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-secondary dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{{ c.url }}">{{ c.label }}</a></li>
+                {% endfor %}
               </ul>
             </div>
           </div>
 
-          <div class="relative group h-full flex items-center">
-            <a class="uppercase tracking-[0.1rem] text-[0.6875rem] text-[#615E57] dark:text-[#A09E99] hover:text-[#222222] dark:hover:text-white transition-colors duration-300 font-body" href="{% url 'gowns:how_it_works' %}">How it Works</a>
-            <div class="dropdown-menu absolute top-full left-0 w-48 bg-white dark:bg-[#222222] shadow-none border-t-2 border-[#222222] dark:border-[#FAF4EB] py-6 z-[80]" style="background-color: #ffffff;">
+          <div class="relative group nav-dropdown-item h-full flex items-center">
+            <a class="uppercase tracking-[0.1rem] text-[0.6875rem] text-[#615E57] dark:text-[#A09E99] hover:text-secondary dark:hover:text-white transition-colors duration-300 font-body" href="{% url 'gowns:how_it_works' %}">How it Works</a>
+            <div class="dropdown-menu absolute top-full left-0 w-48 bg-white dark:bg-[#222222] editorial-shadow py-6 z-[80]" style="background-color: #ffffff;">
               <ul class="flex flex-col gap-4">
-                <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{% url 'gowns:faqs' %}">FAQs</a></li>
+                <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-secondary dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{% url 'gowns:faqs' %}">FAQs</a></li>
               </ul>
             </div>
           </div>
@@ -179,38 +332,54 @@
 
       <div class="flex gap-6 items-center">
         {% if url_name != "reservation" and url_name != "confirmation" %}
-          <button type="button" class="scale-95 active:scale-90 transition-all text-primary flex items-center gap-2 group" onclick="toggleAI()" aria-label="Arabela Recommends">
-            <span class="font-label text-[0.6rem] uppercase tracking-widest hidden lg:block opacity-0 group-hover:opacity-100 transition-opacity">Arabela Recommends</span>
-            <span class="material-symbols-outlined" style='font-variation-settings: "FILL" 1;'>auto_fix_high</span>
-          </button>
-          <button type="button" class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]" onclick="toggleSearch()" aria-label="Search">
+          <button type="button" class="scale-95 active:scale-90 transition-all text-secondary dark:text-[#FAF4EB]" onclick="toggleSearch()" aria-label="Search">
             <span class="material-symbols-outlined" id="search-icon">search</span>
           </button>
-          <button type="button" class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]" onclick="toggleCart()" aria-label="Open selection">
+          <button type="button" id="cart-toggle-btn" class="icon-badge-btn scale-95 active:scale-90 transition-all text-secondary dark:text-[#FAF4EB]" onclick="toggleCart()" aria-label="Open selection">
             <span class="material-symbols-outlined">shopping_bag</span>
+            <span class="icon-count-badge" id="cart-count-badge" style="display: none;">0</span>
           </button>
           {% if request.user.is_authenticated %}
-            <button type="button" class="user-orders-redirect-btn scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]" aria-label="Open account menu">
+            <a href="{% url 'gowns:messages' %}" class="icon-badge-btn scale-95 active:scale-90 transition-all text-secondary dark:text-[#FAF4EB]" aria-label="Open messages">
+              <span class="material-symbols-outlined">notifications</span>
+              {% if unread_messages_count > 0 %}
+                <span class="icon-count-badge badge-pop">{{ unread_messages_count }}</span>
+              {% endif %}
+            </a>
+            <button type="button" class="user-orders-redirect-btn icon-badge-btn scale-95 active:scale-90 transition-all text-secondary dark:text-[#FAF4EB]" aria-label="Open account menu">
               <span class="material-symbols-outlined">person</span>
+              {% if active_reservations_count > 0 %}
+                <span class="icon-count-badge badge-pop">{{ active_reservations_count }}</span>
+              {% endif %}
             </button>
           {% else %}
             <a href="{% url 'accounts:login' %}">
-              <button type="button" class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]">
+              <button type="button" class="scale-95 active:scale-90 transition-all text-secondary dark:text-[#FAF4EB]">
                 <span class="material-symbols-outlined">person</span>
               </button>
             </a>
           {% endif %}
         {% elif url_name != "confirmation" %}
-          <button type="button" class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]" onclick="toggleCart()" aria-label="Open selection">
+          <button type="button" id="cart-toggle-btn" class="icon-badge-btn scale-95 active:scale-90 transition-all text-secondary dark:text-[#FAF4EB]" onclick="toggleCart()" aria-label="Open selection">
             <span class="material-symbols-outlined">shopping_bag</span>
+            <span class="icon-count-badge" id="cart-count-badge" style="display: none;">0</span>
           </button>
           {% if request.user.is_authenticated %}
-            <button type="button" class="user-orders-redirect-btn scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]" aria-label="Open account menu">
+            <a href="{% url 'gowns:messages' %}" class="icon-badge-btn scale-95 active:scale-90 transition-all text-secondary dark:text-[#FAF4EB]" aria-label="Open messages">
+              <span class="material-symbols-outlined">notifications</span>
+              {% if unread_messages_count > 0 %}
+                <span class="icon-count-badge badge-pop">{{ unread_messages_count }}</span>
+              {% endif %}
+            </a>
+            <button type="button" class="user-orders-redirect-btn icon-badge-btn scale-95 active:scale-90 transition-all text-secondary dark:text-[#FAF4EB]" aria-label="Open account menu">
               <span class="material-symbols-outlined">person</span>
+              {% if active_reservations_count > 0 %}
+                <span class="icon-count-badge badge-pop">{{ active_reservations_count }}</span>
+              {% endif %}
             </button>
           {% else %}
             <a href="{% url 'accounts:login' %}">
-              <button type="button" class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]">
+              <button type="button" class="scale-95 active:scale-90 transition-all text-secondary dark:text-[#FAF4EB]">
                 <span class="material-symbols-outlined">person</span>
               </button>
             </a>
@@ -220,66 +389,83 @@
     </nav>
   </header>
 
-
   {% if url_name != "reservation" and url_name != "confirmation" %}
+  <!-- Mobile nav click-away -->
+  <div id="mobile-nav-click-away" class="fixed inset-0 z-[74] bg-black/30 opacity-0 pointer-events-none transition-opacity duration-300 md:hidden" onclick="toggleMobileNav()" aria-hidden="true"></div>
+
+  <!-- MOBILE NAV DRAWER -->
+  <aside id="mobile-nav-drawer" class="fixed top-0 left-0 h-full w-full max-w-[340px] bg-white dark:bg-[#222222] z-[75] -translate-x-full transform transition-transform duration-500 ease-in-out shadow-none flex flex-col md:hidden" aria-hidden="true">
+    <div class="p-8 flex justify-between items-center border-b border-black/5">
+      <h2 class="text-sm font-bold tracking-[0.2em] uppercase text-secondary dark:text-[#FAF4EB]">Menu</h2>
+      <button type="button" class="hover:opacity-50 transition-opacity text-secondary dark:text-[#FAF4EB]" onclick="toggleMobileNav()" aria-label="Close menu">
+        <svg class="fill-current" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path fill-rule="evenodd" clip-rule="evenodd" d="M6.04289 16.5418C5.65237 16.9323 5.65237 17.5655 6.04289 17.956C6.43342 18.3465 7.06658 18.3465 7.45711 17.956L11.9987 13.4144L16.5408 17.9565C16.9313 18.347 17.5645 18.347 17.955 17.9565C18.3455 17.566 18.3455 16.9328 17.955 16.5423L13.4129 12.0002L17.955 7.45808C18.3455 7.06756 18.3455 6.43439 17.955 6.04387C17.5645 5.65335 16.9313 5.65335 16.5408 6.04387L11.9987 10.586L7.45711 6.04439C7.06658 5.65386 6.43342 5.65386 6.04289 6.04439C5.65237 6.43491 5.65237 7.06808 6.04289 7.4586L10.5845 12.0002L6.04289 16.5418Z" fill=""/>
+        </svg>
+      </button>
+    </div>
+    <nav class="flex-1 overflow-y-auto p-8 space-y-2">
+      <details class="border-b border-black/5 py-4">
+        <summary class="uppercase tracking-[0.1rem] text-[0.6875rem] text-secondary dark:text-[#FAF4EB] font-body cursor-pointer list-none flex items-center justify-between">
+          Rent
+          <span class="text-[0.6rem]">+</span>
+        </summary>
+        <ul class="flex flex-col gap-4 mt-4 pl-2">
+          {% for c in search_overlay_collections_meta %}
+          <li><a class="block text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] dark:text-[#A09E99] hover:text-secondary dark:hover:text-white transition-colors font-body" href="{{ c.url }}">{{ c.label }}</a></li>
+          {% endfor %}
+        </ul>
+      </details>
+      <a class="block py-4 border-b border-black/5 uppercase tracking-[0.1rem] text-[0.6875rem] text-secondary dark:text-[#FAF4EB] font-body" href="{% url 'gowns:how_it_works' %}">How it Works</a>
+    </nav>
+  </aside>
+
   <!-- SEARCH OVERLAY -->
   <div class="fixed top-20 left-0 right-0 bottom-0 z-[65] flex flex-col" id="search-overlay">
     {% include "partials/search_overlay.html" %}
-    <div class="flex-1 min-h-0 w-full bg-transparent cursor-pointer" onclick="toggleSearch()" role="presentation" aria-hidden="true"></div>
+    <div class="search-backdrop flex-1 min-h-0 w-full cursor-pointer" onclick="toggleSearch()" role="presentation" aria-hidden="true"></div>
   </div>
   {% endif %}
 
   {% if url_name != "reservation" and url_name != "confirmation" %}
-  <!-- AI: invisible click-away -->
-  <div id="ai-click-away" class="fixed inset-0 z-[69] bg-transparent pointer-events-none" onclick="toggleAI()" aria-hidden="true"></div>
-
-  <!-- AI CONCIERGE PANEL -->
-  <aside class="fixed top-0 right-0 h-full w-full md:w-[480px] bg-white z-[80] translate-x-full transform transition-transform duration-500 ease-in-out shadow-none flex flex-col" id="ai-concierge" aria-hidden="true">
-    <div class="p-8 flex justify-between items-center border-b border-black/5">
-      <h2 class="text-sm font-bold tracking-[0.2em] uppercase flex items-center gap-3">
-        <span class="material-symbols-outlined text-primary" style='font-variation-settings: "FILL" 1;'>auto_fix_high</span>
-        Arabela Recommends
-      </h2>
-      <button type="button" class="hover:rotate-90 transition-transform p-2" onclick="toggleAI()" aria-label="Close">
-        <span class="material-symbols-outlined">close</span>
-      </button>
-    </div>
-    <div class="flex-1 overflow-y-auto ai-scroll p-8 space-y-10" id="ai-content">
-      <div class="space-y-4 pt-4">
-        <p class="text-2xl font-light italic leading-tight text-primary">Find the definitive piece for your silhouette.</p>
-      </div>
-      <div class="space-y-6" id="occasion-picker">
-        <p class="text-[0.6875rem] uppercase tracking-[0.15em] text-on-surface-variant font-semibold">What is the occasion?</p>
-        <div class="flex flex-wrap gap-3">
-          <button type="button" class="px-6 py-3 bg-white border border-black rounded-full text-[0.6rem] uppercase tracking-widest text-black hover:bg-gray-50 transition-all active:scale-95" onclick="selectOccasion('Birthday')">Birthday</button>
-          <button type="button" class="px-6 py-3 bg-white border border-black rounded-full text-[0.6rem] uppercase tracking-widest text-black hover:bg-gray-50 transition-all active:scale-95" onclick="selectOccasion('Wedding')">Wedding</button>
-          <button type="button" class="px-6 py-3 bg-white border border-black rounded-full text-[0.6rem] uppercase tracking-widest text-black hover:bg-gray-50 transition-all active:scale-95" onclick="selectOccasion('Editorial')">Editorial Shoot</button>
-          <button type="button" class="px-6 py-3 bg-white border border-black rounded-full text-[0.6rem] uppercase tracking-widest text-black hover:bg-gray-50 transition-all active:scale-95" onclick="selectOccasion('Red Carpet')">Red Carpet</button>
-          <button type="button" class="px-6 py-3 bg-white border border-black rounded-full text-[0.6rem] uppercase tracking-widest text-black hover:bg-gray-50 transition-all active:scale-95" onclick="selectOccasion('Private View')">Private View</button>
+  <!-- ARABELA RECOMMENDS -- floating AI chat widget (frontend only; mock replies, no backend) -->
+  <aside id="ai-concierge" aria-hidden="true" aria-live="polite" aria-label="Arabela Recommends chat"
+         class="fixed bottom-28 right-4 sm:right-10 z-[82] w-[calc(100vw-2rem)] max-w-[380px] h-[600px] max-h-[calc(100vh-11rem)] bg-white rounded-2xl border border-black/5 flex flex-col overflow-hidden">
+    <!-- Header -->
+    <div class="shrink-0 px-5 py-4 flex items-center justify-between border-b border-black/5 bg-white">
+      <div class="flex items-center gap-3">
+        <span class="w-9 h-9 rounded-full bg-primary flex items-center justify-center shrink-0">
+          <span class="material-symbols-outlined text-white" style='font-variation-settings: "FILL" 1; font-size: 1.1rem;'>auto_fix_high</span>
+        </span>
+        <div class="leading-tight">
+          <p class="text-[0.8rem] font-semibold tracking-wide text-on-surface">Arabela Recommends</p>
+          <p class="text-[0.62rem] text-secondary flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-green-500 inline-block"></span>
+            Online · Personal stylist
+          </p>
         </div>
       </div>
-      <div class="hidden space-y-10 pt-4" id="ai-results">
-        <div class="space-y-4">
-          <div class="flex items-center gap-2">
-            <span class="w-1.5 h-1.5 bg-primary rounded-full"></span>
-            <p class="text-lg font-light leading-snug text-primary" id="recommendation-text"></p>
-          </div>
-          <p class="text-[0.6875rem] uppercase tracking-[0.15em] text-on-surface-variant font-semibold">Curated Suggestions</p>
-        </div>
-        <div class="grid grid-cols-2 gap-6" id="suggestion-cards"></div>
-        <button type="button" class="text-[0.6rem] uppercase tracking-[0.2em] border-b border-primary/20 pb-1 hover:border-primary transition-all" onclick="resetAI()">Start Over</button>
-      </div>
-    </div>
-    <div class="p-8 border-t border-black/5 bg-white">
-      <div class="relative">
-        <input class="w-full bg-white border border-black/10 py-4 px-4 focus:ring-0 focus:border-black text-sm placeholder:text-black/20 rounded" placeholder="Describe the perfect gown for your occasion..." type="text" id="ai-chat-input" />
-        <button type="button" class="absolute right-0 bottom-4 mr-4" onclick="sendAIMessage()" aria-label="Send">
-          <span class="material-symbols-outlined">arrow_forward</span>
+      <div class="flex items-center gap-0.5">
+        <button type="button" class="p-1.5 text-secondary hover:text-on-surface transition-colors" onclick="startNewAIChat()" aria-label="Start a new chat" title="New chat">
+          <span class="material-symbols-outlined" style="font-size: 1.2rem;">edit_square</span>
+        </button>
+        <button type="button" class="p-1.5 text-secondary hover:text-on-surface transition-colors" onclick="toggleAI()" aria-label="Close chat">
+          <span class="material-symbols-outlined" style="font-size: 1.2rem;">close</span>
         </button>
       </div>
-      <p class="text-[0.6rem] text-on-surface-variant leading-relaxed mt-6 opacity-60">
-        AI recommendations tailored to your unique style and fitting requirements.
-      </p>
+    </div>
+    <!-- Conversation -->
+    <div id="ai-messages" class="flex-1 overflow-y-auto ai-scroll px-4 py-5 space-y-4 bg-[#faf9f8]"></div>
+    <!-- Input bar -->
+    <div class="shrink-0 px-4 pt-3 pb-4 border-t border-black/5 bg-white">
+      <div class="flex items-center gap-2">
+        <input id="ai-chat-input" type="text" autocomplete="off"
+               class="flex-1 bg-[#f4f3f1] border border-transparent focus:border-black/15 focus:bg-white py-2.5 px-4 focus:ring-0 text-sm text-on-surface placeholder:text-secondary/50 rounded-full transition-colors"
+               placeholder="Describe your event…" />
+        <button type="button" class="shrink-0 w-10 h-10 rounded-full bg-primary flex items-center justify-center hover:opacity-90 active:scale-95 transition-all" onclick="sendAIMessage()" aria-label="Send message">
+          <span class="material-symbols-outlined text-white" style="font-size: 1.15rem;">arrow_upward</span>
+        </button>
+      </div>
+      <p class="text-[0.58rem] text-secondary/70 text-center mt-2.5">AI-generated answers · for exact details, please contact us directly</p>
     </div>
   </aside>
   {% endif %}
@@ -291,11 +477,11 @@
   <!-- Cart / selection drawer -->
   <aside id="cart-drawer" class="fixed top-0 right-0 h-full w-full md:w-[480px] bg-white z-[85] translate-x-full transform transition-transform duration-500 ease-in-out shadow-none flex flex-col" aria-hidden="true">
     <header class="p-8 flex justify-between items-center border-b border-black/5 shrink-0">
-      <h2 class="text-sm font-bold tracking-[0.2em] uppercase text-on-surface flex items-center gap-3">
+      <h2 class="text-sm font-bold tracking-[0.2em] uppercase text-secondary flex items-center gap-3">
         <span class="material-symbols-outlined text-primary" style='font-variation-settings: "FILL" 0;'>shopping_bag</span>
         Your Selection
       </h2>
-      <button type="button" class="hover:opacity-50 transition-opacity text-[#222222] dark:text-[#FAF4EB]" onclick="toggleCart()" aria-label="Close selection">
+      <button type="button" class="hover:opacity-50 transition-opacity text-secondary dark:text-[#FAF4EB]" onclick="toggleCart()" aria-label="Close selection">
         <span class="material-symbols-outlined text-2xl">close</span>
       </button>
     </header>
@@ -304,31 +490,36 @@
       <div class="space-y-2">
         <div class="flex justify-between items-center">
           <span class="text-xs uppercase tracking-widest text-secondary">subtotal</span>
-          <span id="cart-subtotal" class="font-['Inter',sans-serif] text-sm text-on-surface tabular-nums">₱ 10,700.00</span>
+          <span id="cart-subtotal" class="font-['Inter',sans-serif] text-sm text-secondary tabular-nums">₱ 10,700.00</span>
         </div>
         <div class="flex justify-between items-center">
           <span class="text-xs uppercase tracking-widest text-secondary">Security Deposit</span>
-          <span id="cart-deposit" class="font-['Inter',sans-serif] text-sm text-on-surface tabular-nums">₱ 4,000.00</span>
+          <span id="cart-deposit" class="font-['Inter',sans-serif] text-sm text-secondary tabular-nums">₱ 4,000.00</span>
         </div>
         <div class="pt-4 flex justify-between items-center border-t border-black/5">
-          <span class="text-sm font-bold uppercase tracking-[0.2rem] text-on-surface">Total Amount</span>
-          <span id="cart-total" class="font-['Epilogue',sans-serif] text-lg font-bold text-on-surface tabular-nums tracking-tight">₱ 14,700.00</span>
+          <span class="text-sm font-bold uppercase tracking-[0.2rem] text-secondary">Total Amount</span>
+          <span id="cart-total" class="font-['Epilogue',sans-serif] text-lg font-bold text-secondary tabular-nums tracking-tight">₱ 14,700.00</span>
         </div>
       </div>
-      <a href="{% url 'gowns:reservation' %}" onclick="return saveCartAndProceedToReservation(event)" class="w-full bg-white border border-black text-black uppercase text-xs font-bold tracking-[0.2rem] py-5 hover:bg-gray-50 transition-colors duration-300 inline-flex items-center justify-center no-underline">Proceed to Reservation</a>
+      <a href="{% url 'gowns:reservation' %}" onclick="return saveCartAndProceedToReservation(event)" class="w-full bg-white border border-gray-300 text-secondary uppercase text-xs font-bold tracking-[0.2rem] py-5 rounded-[6px] hover:bg-gray-50 transition-colors duration-300 inline-flex items-center justify-center no-underline">Proceed to Reservation</a>
     </footer>
   </aside>
   {% endif %}
 
-  {% if url_name == "collection_all" or url_name == "collection_wedding" or url_name == "collection_dresses" or url_name == "collection_filipiniana" or url_name == "collection_kid_suit" or url_name == "collection_ball_gown" or url_name == "collection_suit" %}
+  {% if url_name == "collection_all" or url_name == "collection_wedding" or url_name == "collection_ball_gown" or url_name == "collection_sexy_gown" or url_name == "collection_ninang_gown" or url_name == "collection_suit" or url_name == "collection_filipiniana" or url_name == "collection_guest_gown" or url_name == "collection_flower_girl" or url_name == "collection_belo" or url_name == "collection_thailand_gown" or url_name == "collection_dresses" %}
   {% include "partials/explore_collections_drawer.html" %}
   {% endif %}
 
+  <!-- RESERVATION HOLD COUNTDOWN -- sits below the AI widget (81/82) and cart
+       drawer (84/85) so those still layer over it. Shared with the standalone
+       customer pages, so the markup/CSS/JS live in the partial. -->
+  {% include "partials/reservation_hold_banner.html" %}
+
   {% if url_name != "reservation" and url_name != "confirmation" %}
   <!-- AI FLOATING BUTTON -->
-  <button type="button" class="fixed bottom-10 right-10 z-[81] w-14 h-14 bg-white text-black border border-black rounded-full flex items-center justify-center shadow-none hover:bg-gray-50 active:scale-95 transition-all group overflow-hidden" onclick="toggleAI()" aria-label="Open Arabela Recommends">
+  <button type="button" id="ai-fab" class="fixed bottom-10 right-10 z-[81] w-14 h-14 bg-white text-secondary border border-black rounded-full flex items-center justify-center shadow-none hover:bg-gray-50 active:scale-95 transition-all group overflow-hidden" onclick="toggleAI()" aria-label="Open Arabela Recommends">
     <div class="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-    <span class="material-symbols-outlined relative z-10" style='font-variation-settings: "FILL" 1;'>auto_fix_high</span>
+    <span id="ai-fab-icon" class="material-symbols-outlined relative z-10" style='font-variation-settings: "FILL" 1;'>auto_fix_high</span>
   </button>
   {% endif %}
 
@@ -343,14 +534,14 @@
           <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
             <div class="flex items-center gap-3 shrink-0">
               <a href="{% url 'gowns:homepage' %}" class="text-lg font-bold text-[#222222] tracking-tighter font-body">ARABELA</a>
-              <a href="https://www.facebook.com/share/1EHAS1iemQ/" target="_blank" rel="noopener noreferrer" class="inline-flex text-[#222222] scale-95 active:scale-90 transition-all hover:opacity-70" aria-label="Arabela on Facebook">
+              <a href="{{ site_facebook_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex text-secondary scale-95 active:scale-90 transition-all hover:opacity-70" aria-label="Arabela on Facebook">
                 <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
               </a>
             </div>
             <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
-              <a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity hover:text-[#222222] font-body">Sustainability</a>
-              <a href="{% url 'gowns:contact' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity hover:text-[#222222] font-body">Contact</a>
-              <a href="{% url 'gowns:terms_and_conditions' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity hover:text-[#222222] font-body">Terms and conditions</a>
+              <a href="#" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity hover:text-secondary font-body">Sustainability</a>
+              <a href="{% url 'gowns:contact' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity hover:text-secondary font-body">Contact</a>
+              <a href="{% url 'gowns:terms_and_conditions' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity hover:text-secondary font-body">Terms and conditions</a>
             </div>
           </div>
           <p class="text-[0.6875rem] tracking-widest uppercase text-[#615E57] font-body shrink-0 sm:text-right">© 2026 Arabela. All rights reserved.</p>
@@ -358,81 +549,46 @@
       </footer>
     {% else %}
       <footer class="bg-white w-full py-12 px-8 {% block footer_class %}{% endblock %}">
-        <div class="w-full max-w-[1920px] mx-auto">
-          <div class="flex flex-col sm:flex-row sm:flex-wrap items-start gap-x-8 sm:gap-x-10 md:gap-x-12 lg:gap-x-16 gap-y-8 text-left">
-            <div class="flex items-center gap-3 shrink-0">
-              <a href="{% url 'gowns:homepage' %}" class="text-lg font-bold text-[#222222] tracking-tighter font-body">ARABELA</a>
-              <a href="https://www.facebook.com/share/1EHAS1iemQ/" target="_blank" rel="noopener noreferrer" class="inline-flex text-[#222222] scale-95 active:scale-90 transition-all hover:opacity-70" aria-label="Arabela on Facebook">
-                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-              </a>
+        <div class="w-full">
+          <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-y-10 text-left">
+            <div class="flex flex-col sm:flex-row sm:flex-wrap items-start gap-x-8 sm:gap-x-10 md:gap-x-12 lg:gap-x-16 gap-y-8">
+              <div class="flex items-center gap-3 shrink-0">
+                <a href="{% url 'gowns:homepage' %}" class="text-lg font-bold text-[#222222] tracking-tighter font-body">ARABELA</a>
+                <a href="{{ site_facebook_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex text-secondary scale-95 active:scale-90 transition-all hover:opacity-70" aria-label="Arabela on Facebook">
+                  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                </a>
+              </div>
+              <div class="shrink-0">
+                <p class="text-base font-medium text-secondary font-body mb-2">Rent</p>
+                <a href="{% url 'gowns:how_it_works' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-secondary font-body">How it works</a>
+              </div>
+              <div class="shrink-0">
+                <p class="text-base font-medium text-secondary font-body mb-2">Info</p>
+                <ul class="flex flex-col gap-1.5">
+                  {% if url_name != "reservation" and url_name != "confirmation" %}
+                    <li>
+                      <button type="button" onclick="toggleSearch()" class="text-left text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-secondary bg-transparent border-0 p-0 cursor-pointer font-body leading-snug">Search</button>
+                    </li>
+                  {% endif %}
+                  <li><a href="{% url 'gowns:about' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-secondary font-body leading-snug">About us</a></li>
+                  <li><a href="{% url 'gowns:contact' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-secondary font-body leading-snug">Contact us</a></li>
+                  <li><a href="{% url 'gowns:faqs' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-secondary font-body leading-snug">FAQs</a></li>
+                  <li><a href="{% url 'gowns:terms_and_conditions' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-secondary font-body leading-snug">Terms and conditions</a></li>
+                </ul>
+              </div>
             </div>
-            <div class="shrink-0">
-              <p class="text-base font-medium text-[#222222] font-body mb-2">Rent</p>
-              <a href="{% url 'gowns:how_it_works' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] font-body">How it works</a>
-            </div>
-            <div class="shrink-0">
-              <p class="text-base font-medium text-[#222222] font-body mb-2">Info</p>
-              <ul class="flex flex-col gap-1.5">
-                {% if url_name != "reservation" and url_name != "confirmation" %}
-                  <li>
-                    <button type="button" onclick="toggleSearch()" class="text-left text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] bg-transparent border-0 p-0 cursor-pointer font-body leading-snug">Search</button>
-                  </li>
-                {% endif %}
-                <li><a href="{% url 'gowns:about' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] font-body leading-snug">About us</a></li>
-                <li><a href="{% url 'gowns:contact' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] font-body leading-snug">Contact us</a></li>
-                <li><a href="{% url 'gowns:faqs' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] font-body leading-snug">FAQs</a></li>
-                <li><a href="{% url 'gowns:terms_and_conditions' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] font-body leading-snug">Terms and conditions</a></li>
-              </ul>
-            </div>
+            <p class="text-[0.6875rem] tracking-widest uppercase text-[#615E57] font-body shrink-0 md:text-right">© 2026 Arabela. All rights reserved.</p>
           </div>
         </div>
       </footer>
     {% endif %}
   {% endblock %}
 
-  <script src="{% static 'js/reservation-flow.js' %}"></script>
-  {% if url_name == "collection_all" or url_name == "collection_wedding" or url_name == "collection_dresses" or url_name == "collection_filipiniana" or url_name == "collection_kid_suit" or url_name == "collection_ball_gown" or url_name == "collection_suit" %}
-  <script src="{% static 'js/collection-sort.js' %}"></script>
+  <script src="{% static 'js/reservation-flow.js' %}?v={{ site_asset_version }}"></script>
+  {% if url_name == "collection_all" or url_name == "collection_wedding" or url_name == "collection_ball_gown" or url_name == "collection_sexy_gown" or url_name == "collection_ninang_gown" or url_name == "collection_suit" or url_name == "collection_filipiniana" or url_name == "collection_guest_gown" or url_name == "collection_flower_girl" or url_name == "collection_belo" or url_name == "collection_thailand_gown" or url_name == "collection_dresses" %}
+  <script src="{% static 'js/collection-sort.js' %}?v={{ site_asset_version }}"></script>
   {% endif %}
   <script>
-    const recommendations = {
-      'Birthday': {
-        text: 'For a Birthday celebration, we suggest a vibrant evening gown or cocktail dress.',
-        items: [
-          { name: 'Column Gown', brand: 'Old Celine', price: '₱10,360', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA' },
-          { name: 'Silk Tuxedo', brand: 'Saint Laurent', price: '₱6,720', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDvrOUto9vy9py6fxR-YxuiQ7pL4WzddWzTNeVPBgk4qOrjLVsLT4uDAoXaKs7u1i7RXCaNnzcYFP-p16uIuULPo9aHvnWqqA_8NjhDlYa18k4FVHck1C2Gz80q-qvohzTgGYhT6Joc0gU5AiqDMxwGulS-59idA4ehLkllD_ADzTgoq8jmuolfvGYkSJfCy3KM20GMCLiQ4Lfj9E1rAkuQUPYF2_YX-5lUAOQKHU6OqqLU5ym1Kz-EDW6FLRhJrERNMDEhuiHEs-c' }
-        ]
-      },
-      'Wedding': {
-        text: 'Elegant and timeless. Consider an Asymmetric Silk silhouette or Minimalist Tailoring.',
-        items: [
-          { name: 'Asymmetric Dress', brand: 'Old Celine', price: '₱10,360', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA' },
-          { name: 'Ivory Blazer', brand: 'The Row', price: '₱8,900', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDvrOUto9vy9py6fxR-YxuiQ7pL4WzddWzTNeVPBgk4qOrjLVsLT4uDAoXaKs7u1i7RXCaNnzcYFP-p16uIuULPo9aHvnWqqA_8NjhDlYa18k4FVHck1C2Gz80q-qvohzTgGYhT6Joc0gU5AiqDMxwGulS-59idA4ehLkllD_ADzTgoq8jmuolfvGYkSJfCy3KM20GMCLiQ4Lfj9E1rAkuQUPYF2_YX-5lUAOQKHU6OqqLU5ym1Kz-EDW6FLRhJrERNMDEhuiHEs-c' }
-        ]
-      },
-      'Editorial': {
-        text: 'For an Editorial Shoot, prioritize avant-garde shapes and high-texture fabrics.',
-        items: [
-          { name: 'Deconstructed Knit', brand: 'Jacquemus', price: '₱6,160', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuA5RjcB-St3FYLokqdJWtfToKyHnDeR3Tu6EhVM79YSkA6bBTSU4tl7rZAAEgY_JP756fTwDY10jkUOp1hrXwu2GNrO9jjw43klIlAw4G0MiBDBkW6SRJ8z8IYOKAihezN7LM2aobs5oqzxnbVSGNnFoWUxGB9xeuCoFORYRDNLVSicCvy29b_6lyITgLYnLIxk8Ska5gk4Lub4OCWEXEEIFe4jkTHRRVfPAfF8h8FzMIzltXoG8hdtsMI0bnBcFWzWBxpeheTd4kI' },
-          { name: 'Avant Garment', brand: 'Loewe', price: '₱12,400', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDoXBFqStMnToVb80lpNcOu2L2sM791MrJmBW76ONWSN9NNxjYwIKr62lrtgKTsJUJ3EdwdmrXdEDzIHlQCq5cpBFNLIqmKKBHScdoIF8ax4ontDI3vyH_7UJJMwghVtSjqVoDofM_FIQR_XMOaK-QLh9v1H1Ub672NUBIJdFsaDRq5ICqksBDjNV55RZmXuFb6qC1v_poZpZMvRt7A5Qzegj5Go1Ot_xpj0qIyESs5_TLYUYBwEiG9fQi1e4y5MFTCzYsCtPcwQ-o' }
-        ]
-      },
-      'Red Carpet': {
-        text: 'For a Red Carpet event, go bold with a floor-length gown or dramatic silhouette.',
-        items: [
-          { name: 'Column Gown', brand: 'Old Celine', price: '₱10,360', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA' },
-          { name: 'Silk Tuxedo', brand: 'Saint Laurent', price: '₱6,720', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDvrOUto9vy9py6fxR-YxuiQ7pL4WzddWzTNeVPBgk4qOrjLVsLT4uDAoXaKs7u1i7RXCaNnzcYFP-p16uIuULPo9aHvnWqqA_8NjhDlYa18k4FVHck1C2Gz80q-qvohzTgGYhT6Joc0gU5AiqDMxwGulS-59idA4ehLkllD_ADzTgoq8jmuolfvGYkSJfCy3KM20GMCLiQ4Lfj9E1rAkuQUPYF2_YX-5lUAOQKHU6OqqLU5ym1Kz-EDW6FLRhJrERNMDEhuiHEs-c' }
-        ]
-      },
-      'Private View': {
-        text: 'For a Private View, opt for understated elegance with a tailored silhouette.',
-        items: [
-          { name: 'Asymmetric Dress', brand: 'Old Celine', price: '₱10,360', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA' },
-          { name: 'Ivory Blazer', brand: 'The Row', price: '₱8,900', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDvrOUto9vy9py6fxR-YxuiQ7pL4WzddWzTNeVPBgk4qOrjLVsLT4uDAoXaKs7u1i7RXCaNnzcYFP-p16uIuULPo9aHvnWqqA_8NjhDlYa18k4FVHck1C2Gz80q-qvohzTgGYhT6Joc0gU5AiqDMxwGulS-59idA4ehLkllD_ADzTgoq8jmuolfvGYkSJfCy3KM20GMCLiQ4Lfj9E1rAkuQUPYF2_YX-5lUAOQKHU6OqqLU5ym1Kz-EDW6FLRhJrERNMDEhuiHEs-c' }
-        ]
-      }
-    };
-
     const SECURITY_DEPOSIT_PESOS = 2000;
     const USER_STORAGE_KEY = document.body?.dataset?.userKey || 'guest';
     const DRAWER_STORAGE_KEY = `arabela_cart_${USER_STORAGE_KEY}`;
@@ -460,6 +616,12 @@
       return `/collections/${encodeURIComponent(col)}/products/${encodeURIComponent(slug)}/?cart_item_index=${index}`;
     }
 
+    // Cart values land inside double-quoted data-* attributes below, so a stray
+    // quote would break out of the attribute. Same guard reservation-flow.js uses.
+    function attrEscapeCart(s) {
+      return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    }
+
     function renderCartDrawer() {
       const lines = document.getElementById('cart-lines');
       if (!lines) return;
@@ -473,19 +635,29 @@
         const qty = Math.max(1, Number(item.qty) || 1);
         const unitPrice = Number(item.price) || 0;
         const lineTotal = unitPrice * qty;
+        // A row with no dates can't be booked. Say so here, where the customer can
+        // still act on it, rather than letting it sail through to checkout and fail
+        // at Confirm Rental. The link is the same product URL the thumbnail uses.
+        const dated = window.arabelaHasRentalDates(item);
+        const editUrl = getProductDetailUrl(item, index);
+        const rentalLine = dated
+          ? `<p class="text-[0.6875rem] text-on-secondary-container mt-1">Rental: ${item.rental}</p>`
+          : `<a href="${editUrl}" class="mt-1 inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-[#b45309] no-underline hover:underline underline-offset-4">
+               <span class="material-symbols-outlined" style="font-size: 0.85rem;">event</span>Select rental date
+             </a>`;
         return `
-          <div class="cart-line flex gap-4 group" data-index="${index}" data-unit-price="${unitPrice}" data-rental="${item.rental || ''}">
-            <a href="${getProductDetailUrl(item, index)}" class="w-24 h-32 bg-white overflow-hidden shrink-0 block">
+          <div class="cart-line flex gap-4 group" data-index="${index}" data-unit-price="${unitPrice}" data-rental="${item.rental || ''}" data-id="${attrEscapeCart(item.id)}" data-collection="${attrEscapeCart(item.collection)}">
+            <a href="${editUrl}" class="w-24 h-32 bg-white overflow-hidden shrink-0 block">
               <img alt="${item.name || 'Selection item'}" class="w-full h-full object-cover" style="clip-path: inset(1px 0 0 1px);" src="${item.img || ''}" />
             </a>
             <div class="flex-1 flex flex-col justify-between py-1 min-w-0">
               <div class="flex justify-between items-start gap-2">
                 <div>
-                  <h3 class="text-sm font-medium text-on-surface leading-tight">${item.name || 'Untitled'}</h3>
-                  ${item.size && item.size !== '-' ? `<p class="text-[0.6875rem] text-on-secondary-container mt-1">Size: ${item.size}</p>` : ''}
-                  ${item.rental && item.rental !== '-' ? `<p class="text-[0.6875rem] text-on-secondary-container mt-1">Rental: ${item.rental}</p>` : ''}
+                  <h3 class="text-sm font-medium text-secondary leading-tight">${item.name || 'Untitled'}</h3>
+                  <p class="text-[0.6875rem] text-on-secondary-container mt-1">Size: ${window.arabelaSizeLabel(item.size)}</p>
+                  ${rentalLine}
                 </div>
-                <button type="button" class="text-on-surface hover:text-error transition-colors shrink-0" onclick="cartRemoveLine(this)" aria-label="Remove item">
+                <button type="button" class="text-secondary hover:text-error transition-colors shrink-0" onclick="cartRemoveLine(this)" aria-label="Remove item">
                   <span class="material-symbols-outlined text-lg">close</span>
                 </button>
               </div>
@@ -499,7 +671,7 @@
                     <span class="material-symbols-outlined text-xs">add</span>
                   </button>
                 </div>
-                <p class="cart-line-total font-['Inter',sans-serif] text-sm font-semibold text-on-surface tracking-wide tabular-nums shrink-0">${formatPeso(lineTotal)}</p>
+                <p class="cart-line-total font-['Inter',sans-serif] text-sm font-semibold text-secondary tracking-wide tabular-nums shrink-0">${formatPeso(lineTotal)}</p>
               </div>
             </div>
           </div>
@@ -528,7 +700,52 @@
       if (subEl) subEl.textContent = formatPeso(sub);
       if (depEl) depEl.textContent = formatPeso(deposit);
       if (totEl) totEl.textContent = formatPeso(sub + deposit);
+      updateCartBadge(itemCount);
     }
+
+    function updateCartBadge(count) {
+      const badge = document.getElementById('cart-count-badge');
+      if (!badge) return;
+      const prev = badge.textContent;
+      badge.textContent = String(count);
+      badge.style.display = count > 0 ? '' : 'none';
+      if (count > 0 && String(count) !== prev) {
+        badge.classList.remove('badge-pop');
+        void badge.offsetWidth;
+        badge.classList.add('badge-pop');
+      }
+    }
+
+    // Retriggers the icon pulse even when the badge NUMBER is unchanged --
+    // editing an existing row's size/date from the product page doesn't change
+    // item count, so updateCartBadge's own pop (count-change-gated) stays silent.
+    function pulseCartIcon() {
+      const btn = document.getElementById('cart-toggle-btn');
+      if (!btn) return;
+      btn.classList.remove('cart-icon-pulse');
+      void btn.offsetWidth;
+      btn.classList.add('cart-icon-pulse');
+    }
+
+    // Flashes one drawer row right after the product page live-synced it, so the
+    // change is traceable to a specific gown on the rare occasion the drawer
+    // happens to be open. A no-op when it isn't rendering that row -- most
+    // updates land with the drawer closed, where the icon pulse is the only cue,
+    // and that's the expected/common case, not a failure.
+    function flashCartRow(index) {
+      const row = document.querySelector('#cart-drawer .cart-line[data-index="' + index + '"]');
+      if (!row) return;
+      row.classList.add('cart-line-synced');
+      window.setTimeout(function () { row.classList.remove('cart-line-synced'); }, 900);
+    }
+
+    // Public: called by products.html after it writes a size/date change
+    // straight into an existing cart row, so the update is visible immediately
+    // rather than only after Book Now navigates away.
+    window.notifyCartRowUpdated = function (index) {
+      pulseCartIcon();
+      flashCartRow(index);
+    };
 
     function cartAdjustQty(btn, delta) {
       const row = btn.closest('.cart-line');
@@ -558,10 +775,10 @@
 
     window.addCollectionItem = function (item) {
       if (!item || !item.id) return;
+      // "Still needs finishing" now means only the date -- size is optional, so a
+      // dated row with no size must NOT keep absorbing repeat adds as extra qty.
       function lineComplete(ci) {
-        const hasRent = ci.rental && String(ci.rental).trim() && ci.rental !== '-';
-        const hasSize = ci.size && String(ci.size).trim() && ci.size !== '-';
-        return !!(hasRent && hasSize);
+        return window.arabelaHasRentalDates(ci);
       }
       const cart = getDrawerCart();
       const wantName = item.name || 'Untitled';
@@ -605,6 +822,42 @@
         scrim.classList.add('pointer-events-none');
         scrim.classList.remove('opacity-100');
         scrim.classList.add('opacity-0');
+      }
+    }
+
+    function closeMobileNavDrawer() {
+      const drawer = document.getElementById('mobile-nav-drawer');
+      const scrim = document.getElementById('mobile-nav-click-away');
+      if (drawer) {
+        drawer.classList.add('-translate-x-full');
+        drawer.setAttribute('aria-hidden', 'true');
+      }
+      if (scrim) {
+        scrim.classList.add('pointer-events-none');
+        scrim.classList.remove('opacity-100');
+        scrim.classList.add('opacity-0');
+      }
+    }
+
+    function toggleMobileNav() {
+      const drawer = document.getElementById('mobile-nav-drawer');
+      const scrim = document.getElementById('mobile-nav-click-away');
+      if (!drawer) return;
+      const opening = drawer.classList.contains('-translate-x-full');
+      closeCartDrawer();
+      closeExploreDrawer();
+      const search = document.getElementById('search-overlay');
+      if (search) search.classList.remove('open');
+      closeAIPanel();
+      if (opening) {
+        drawer.classList.remove('-translate-x-full');
+        drawer.setAttribute('aria-hidden', 'false');
+        if (scrim) {
+          scrim.classList.remove('pointer-events-none', 'opacity-0');
+          scrim.classList.add('opacity-100');
+        }
+      } else {
+        closeMobileNavDrawer();
       }
     }
 
@@ -655,12 +908,10 @@
 
     function closeOverlaysForCollectionsDrawer() {
       closeCartDrawer();
+      closeMobileNavDrawer();
       const search = document.getElementById('search-overlay');
-      const ai = document.getElementById('ai-concierge');
-      const aiScrim = document.getElementById('ai-click-away');
       if (search) search.classList.remove('open');
-      if (ai) ai.classList.add('translate-x-full');
-      if (aiScrim) aiScrim.classList.add('pointer-events-none');
+      closeAIPanel();
     }
 
     function openExploreDrawerWithMode(mode) {
@@ -740,13 +991,11 @@
       const drawer = document.getElementById('cart-drawer');
       const scrim = document.getElementById('cart-click-away');
       const search = document.getElementById('search-overlay');
-      const ai = document.getElementById('ai-concierge');
-      const aiScrim = document.getElementById('ai-click-away');
 
       closeExploreDrawer();
+      closeMobileNavDrawer();
       if (search) search.classList.remove('open');
-      if (ai) ai.classList.add('translate-x-full');
-      if (aiScrim) aiScrim.classList.add('pointer-events-none');
+      closeAIPanel();
 
       if (!drawer) return;
       drawer.classList.toggle('translate-x-full');
@@ -769,21 +1018,41 @@
       }
     }
 
+    function setAIFabIcon(open) {
+      const fabIcon = document.getElementById('ai-fab-icon');
+      if (fabIcon) fabIcon.textContent = open ? 'keyboard_arrow_down' : 'auto_fix_high';
+    }
+
+    // Force-close the chat widget (used by the other panels so only one is open at a time).
+    function closeAIPanel() {
+      const ai = document.getElementById('ai-concierge');
+      if (ai) {
+        ai.classList.remove('ai-open');
+        ai.setAttribute('aria-hidden', 'true');
+      }
+      setAIFabIcon(false);
+      aiSetPanelOpenState(false);
+    }
+
     function toggleAI() {
       const panel = document.getElementById('ai-concierge');
-      const scrim = document.getElementById('ai-click-away');
       closeCartDrawer();
       closeExploreDrawer();
+      closeMobileNavDrawer();
       if (!panel) return;
-      panel.classList.toggle('translate-x-full');
-      const closed = panel.classList.contains('translate-x-full');
-      panel.setAttribute('aria-hidden', closed ? 'true' : 'false');
-      if (scrim) {
-        if (closed) scrim.classList.add('pointer-events-none');
-        else scrim.classList.remove('pointer-events-none');
-      }
+      panel.classList.toggle('ai-open');
+      const open = panel.classList.contains('ai-open');
+      panel.setAttribute('aria-hidden', open ? 'false' : 'true');
+      setAIFabIcon(open);
+      // Remembered so the chat survives following a link the assistant gave.
+      aiSetPanelOpenState(open);
       const search = document.getElementById('search-overlay');
       if (search) search.classList.remove('open');
+      if (open) {
+        aiScrollToBottom();
+        const aiInput = document.getElementById('ai-chat-input');
+        if (aiInput) setTimeout(() => aiInput.focus(), 120);
+      }
     }
 
     function toggleSearch() {
@@ -792,6 +1061,7 @@
       const isOpening = !search.classList.contains('open');
       closeCartDrawer();
       closeExploreDrawer();
+      closeMobileNavDrawer();
       search.classList.toggle('open');
       if (!search.classList.contains('open') && typeof window.resetMainSearchOverlay === 'function') {
         window.resetMainSearchOverlay();
@@ -800,50 +1070,290 @@
         setTimeout(() => {
           const input = document.getElementById('main-search-input');
           if (input) input.focus();
-        }, 400);
-        const panel = document.getElementById('ai-concierge');
-        if (panel) panel.classList.add('translate-x-full');
-        const scrim = document.getElementById('ai-click-away');
-        if (scrim) scrim.classList.add('pointer-events-none');
+        }, 350);
+        closeAIPanel();
       }
     }
 
+    // ----- Arabela Recommends: real AI chat (Google Gemini via ai_recommendation:chat) -----
+    const AI_CHAT_URL = "{% url 'ai_recommendation:chat' %}";
+    const AI_FALLBACK_TEXT = "Sorry, I'm having trouble connecting right now. Please try again in a moment, or reach us directly through Facebook or by phone.";
+
+    // Quick-reply chips: [key, label, prompt sent to the AI].
+    const AI_OCCASIONS = [
+      ['Wedding', 'Wedding', 'What gown would you recommend for a wedding?'],
+      ['Birthday', 'Birthday', 'What would you recommend for a birthday celebration?'],
+      ['Editorial', 'Editorial Shoot', 'What would you recommend for an editorial photoshoot?'],
+      ['Red Carpet', 'Red Carpet', 'What gown suits a red carpet event?'],
+      ['Private View', 'Private View', "What's a good outfit for a private viewing event?"]
+    ];
+
+    function aiEscape(s) {
+      return String(s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function aiScrollToBottom() {
+      const box = document.getElementById('ai-messages');
+      if (box) box.scrollTop = box.scrollHeight;
+    }
+
+    // `animate` is false when replaying a saved transcript -- restoring 20
+    // messages would otherwise fire 20 entrance animations at once.
+    function aiAppendUserBubble(text, animate) {
+      const box = document.getElementById('ai-messages');
+      if (!box) return;
+      const wrap = document.createElement('div');
+      wrap.className = 'flex justify-end' + (animate === false ? '' : ' ai-msg-in');
+      wrap.innerHTML = `<div class="max-w-[80%] bg-primary text-white text-[0.8rem] leading-relaxed px-4 py-2.5 rounded-2xl rounded-br-md">${aiEscape(text)}</div>`;
+      box.appendChild(wrap);
+      aiScrollToBottom();
+    }
+
+    function aiAppendBotBubble(html, animate) {
+      const box = document.getElementById('ai-messages');
+      if (!box) return;
+      const wrap = document.createElement('div');
+      wrap.className = 'flex justify-start' + (animate === false ? '' : ' ai-msg-in');
+      wrap.innerHTML = `<div class="max-w-[86%] bg-white border border-black/5 text-secondary text-[0.8rem] leading-relaxed px-4 py-3 rounded-2xl rounded-bl-md">${html}</div>`;
+      box.appendChild(wrap);
+      aiScrollToBottom();
+    }
+
+    function aiShowTyping() {
+      const box = document.getElementById('ai-messages');
+      if (!box) return;
+      const wrap = document.createElement('div');
+      wrap.className = 'flex justify-start ai-msg-in';
+      wrap.id = 'ai-typing';
+      wrap.innerHTML = `<div class="bg-white border border-black/5 px-4 py-3 rounded-2xl rounded-bl-md flex items-center gap-1.5"><span class="ai-typing-dot"></span><span class="ai-typing-dot"></span><span class="ai-typing-dot"></span></div>`;
+      box.appendChild(wrap);
+      aiScrollToBottom();
+    }
+
+    function aiRemoveTyping() {
+      const t = document.getElementById('ai-typing');
+      if (t) t.remove();
+    }
+
+    // Render the AI's reply: turn **bold** into <strong>, markdown links
+    // [label](url) and bare URLs/site paths into real <a> tags, and preserve
+    // line breaks. Links are extracted (and their pieces escaped) before the
+    // rest of the text is escaped, so nothing gets double-escaped.
+    function aiFormatReply(text) {
+      const raw = String(text || '');
+      const links = [];
+      let working = raw.replace(/\[([^\[\]]+)\]\((https?:\/\/[^\s)]+|\/(?:collections|pages)\/[a-z0-9\-\/]*\/?)\)/gi, (_, label, url) => {
+        const external = /^https?:\/\//i.test(url);
+        const attrs = external ? ' target="_blank" rel="noopener"' : '';
+        const token = '@@ARABELALINK' + links.length + '@@';
+        links.push(`<a href="${aiEscape(url)}"${attrs} class="underline text-on-surface hover:opacity-70">${aiEscape(label)}</a>`);
+        return token;
+      });
+
+      let safe = aiEscape(working);
+      links.forEach((html, i) => {
+        safe = safe.split('@@ARABELALINK' + i + '@@').join(html);
+      });
+
+      safe = safe.replace(/\*\*(.+?)\*\*/g, '<strong class="text-on-surface">$1</strong>');
+      safe = safe.replace(/(?<!href=")(\/(?:collections|pages)\/[a-z0-9-]+(?:\/[a-z0-9-]+)*\/)/gi, '<a href="$1" class="underline text-on-surface hover:opacity-70">$1</a>');
+      safe = safe.replace(/(?<!href=")(https?:\/\/[^\s<]+[^\s<.,;:!?)])/gi, '<a href="$1" target="_blank" rel="noopener" class="underline text-on-surface hover:opacity-70">$1</a>');
+      safe = safe.replace(/\r?\n+/g, '<br>');
+      return safe;
+    }
+
+    function getCsrfToken() {
+      const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+      return match ? decodeURIComponent(match[1]) : '';
+    }
+
+    // The transcript is kept in localStorage, not just in memory: every internal
+    // link the assistant suggests reloads the page, and an in-memory chat would
+    // be wiped exactly when the customer follows the advice they asked for.
+    // Keyed per user (same convention as the cart) so a shared computer never
+    // shows one person's conversation to the next.
+    const AI_CHAT_STORAGE_KEY = `arabela_ai_chat_${USER_STORAGE_KEY}`;
+    const AI_PANEL_OPEN_KEY = `arabela_ai_open_${USER_STORAGE_KEY}`;
+    const AI_MAX_STORED_MESSAGES = 40;
+
+    let aiConversation = [];
+
+    function aiSaveConversation() {
+      try {
+        localStorage.setItem(AI_CHAT_STORAGE_KEY, JSON.stringify(aiConversation));
+      } catch (err) {
+        /* storage full or blocked -- the chat still works for this page view */
+      }
+    }
+
+    function aiLoadConversation() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(AI_CHAT_STORAGE_KEY) || '[]');
+        if (!Array.isArray(parsed)) return [];
+        // Drop anything malformed rather than trusting whatever is in storage.
+        return parsed.filter(function (m) {
+          return m && (m.role === 'user' || m.role === 'model') && typeof m.text === 'string';
+        });
+      } catch (err) {
+        return [];
+      }
+    }
+
+    function aiConversationPush(role, text) {
+      aiConversation.push({ role, text });
+      if (aiConversation.length > AI_MAX_STORED_MESSAGES) {
+        aiConversation = aiConversation.slice(-AI_MAX_STORED_MESSAGES);
+      }
+      aiSaveConversation();
+    }
+
+    function aiSetPanelOpenState(open) {
+      try {
+        localStorage.setItem(AI_PANEL_OPEN_KEY, open ? '1' : '0');
+      } catch (err) {
+        /* non-fatal: the panel just won't reopen after navigating */
+      }
+    }
+
+    function aiWasPanelOpen() {
+      try {
+        return localStorage.getItem(AI_PANEL_OPEN_KEY) === '1';
+      } catch (err) {
+        return false;
+      }
+    }
+
+    // Send the user's message to the real AI backend (Gemini, grounded in the
+    // site's real content -- see ai_recommendation/views.py) and render the reply.
+    async function arabelaSendToAI(userText) {
+      aiAppendUserBubble(userText);
+      const historyBeforeThisTurn = aiConversation.slice();
+      aiConversationPush('user', userText);
+      aiShowTyping();
+      let replyText = AI_FALLBACK_TEXT;
+      try {
+        const res = await fetch(AI_CHAT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+          body: JSON.stringify({ message: userText, history: historyBeforeThisTurn }),
+        });
+        const data = await res.json();
+        if (data && data.reply) replyText = data.reply;
+      } catch (err) {
+        // network error -- keep the fallback text
+      }
+      aiRemoveTyping();
+      aiAppendBotBubble(aiFormatReply(replyText));
+      aiConversationPush('model', replyText);
+    }
+
+    // Occasion quick-reply chip -> send its prompt to the AI.
     function selectOccasion(occ) {
-      const data = recommendations[occ] || recommendations['Wedding'];
-      const resultsDiv = document.getElementById('ai-results');
-      const textEl = document.getElementById('recommendation-text');
-      const cardsDiv = document.getElementById('suggestion-cards');
-      const picker = document.getElementById('occasion-picker');
-      if (!resultsDiv || !textEl || !cardsDiv || !picker) return;
-      picker.classList.add('opacity-40', 'pointer-events-none');
-      textEl.textContent = data.text;
-      cardsDiv.innerHTML = data.items.map(item => `
-        <div class="group cursor-pointer">
-          <div class="aspect-[4/5] overflow-hidden rounded mb-3 bg-surface-container-high">
-            <img src="${item.img}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
-          </div>
-          <h5 class="text-[0.7rem] font-bold uppercase tracking-wider truncate">${item.brand}</h5>
-          <p class="text-[0.6rem] text-on-surface-variant uppercase tracking-widest mt-0.5">${item.name}</p>
-          <p class="text-[0.6rem] font-bold mt-1 text-primary">${item.price}</p>
-        </div>
-      `).join('');
-      resultsDiv.classList.remove('hidden');
+      const found = AI_OCCASIONS.find(o => o[0] === occ);
+      const prompt = found ? found[2] : ('What would you recommend for ' + occ + '?');
+      arabelaSendToAI(prompt);
     }
 
-    function resetAI() {
-      const results = document.getElementById('ai-results');
-      const picker = document.getElementById('occasion-picker');
-      if (results) results.classList.add('hidden');
-      if (picker) picker.classList.remove('opacity-40', 'pointer-events-none');
-    }
-
+    // Free-text input -> send straight to the AI.
     function sendAIMessage() {
       const input = document.getElementById('ai-chat-input');
       if (!input) return;
       const message = input.value.trim();
       if (!message) return;
       input.value = '';
+      arabelaSendToAI(message);
     }
+
+    // Paint the opening state: greeting + occasion chips. Does NOT clear the
+    // stored transcript -- that's startNewAIChat's job.
+    function aiRenderGreeting() {
+      const box = document.getElementById('ai-messages');
+      if (!box) return;
+      const chips = AI_OCCASIONS.map(([key, label]) =>
+        `<button type="button" onclick="selectOccasion('${key}')" class="px-3.5 py-1.5 bg-white border border-black/10 rounded-full text-[0.66rem] text-secondary hover:bg-gray-50 hover:border-black/25 transition-all active:scale-95">${label}</button>`
+      ).join('');
+      box.innerHTML = `
+        <div class="flex justify-start ai-msg-in">
+          <div class="max-w-[86%] bg-white border border-black/5 text-secondary text-[0.8rem] leading-relaxed px-4 py-3 rounded-2xl rounded-bl-md">
+            Hi! I'm Arabela's stylist <span aria-hidden="true">✨</span> Tell me about your event and I'll suggest gowns you'll love.
+          </div>
+        </div>
+        <div class="flex justify-start ai-msg-in">
+          <div class="max-w-[86%] bg-white border border-black/5 text-secondary text-[0.8rem] leading-relaxed px-4 py-3 rounded-2xl rounded-bl-md">
+            What's the occasion -- or ask me anything about Arabela, like our shop location or how renting works.
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-2 pt-1">${chips}</div>
+      `;
+      box.scrollTop = 0;
+    }
+
+    // Replay a saved conversation. Bot replies are re-rendered from the stored
+    // plain text through aiFormatReply, so no HTML is ever read back out of
+    // localStorage and re-injected.
+    function aiRenderTranscript() {
+      const box = document.getElementById('ai-messages');
+      if (!box) return;
+      box.innerHTML = '';
+      aiConversation.forEach(function (m) {
+        if (m.role === 'user') aiAppendUserBubble(m.text, false);
+        else aiAppendBotBubble(aiFormatReply(m.text), false);
+      });
+      aiScrollToBottom();
+    }
+
+    // The header's restart button: clears the saved chat and starts fresh.
+    function startNewAIChat() {
+      const clear = function () {
+        aiConversation = [];
+        try {
+          localStorage.removeItem(AI_CHAT_STORAGE_KEY);
+        } catch (err) {
+          /* nothing stored to clear */
+        }
+        aiRenderGreeting();
+      };
+      if (!aiConversation.length) { clear(); return; }
+      arabelaConfirm({
+        title: 'Start a new chat?',
+        message: 'This clears the current conversation.',
+        confirmText: 'New chat',
+        cancelText: 'Keep it',
+      }).then(function (ok) { if (ok) clear(); });
+    }
+
+    // Kept for the existing onclick in the panel header.
+    function resetAI() {
+      startNewAIChat();
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      aiConversation = aiLoadConversation();
+      if (aiConversation.length) {
+        aiRenderTranscript();
+      } else {
+        aiRenderGreeting();
+      }
+      // Reopen the panel if it was open before this navigation, so following a
+      // link the assistant suggested doesn't feel like losing the conversation.
+      if (aiWasPanelOpen()) {
+        const panel = document.getElementById('ai-concierge');
+        if (panel) {
+          panel.classList.add('ai-open');
+          panel.setAttribute('aria-hidden', 'false');
+          setAIFabIcon(true);
+          aiScrollToBottom();
+        }
+      }
+      const aiInput = document.getElementById('ai-chat-input');
+      if (aiInput) {
+        aiInput.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); sendAIMessage(); }
+        });
+      }
+    });
 
     function addFeaturedToSelection(btn) {
       if (!btn) return;
@@ -863,6 +1373,7 @@
       }
     }
     window.addFeaturedToSelection = addFeaturedToSelection;
+
 
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', function () {
@@ -892,8 +1403,63 @@
   </script>
   {% endif %}
 
+  <script>
+    // Hide the navbar on scroll-down, reveal it on scroll-up or near the top --
+    // rAF-throttled so it doesn't run more than once per frame.
+    (function () {
+      var header = document.getElementById('site-header');
+      if (!header) return;
+
+      var lastY = window.scrollY || window.pageYOffset || 0;
+      var ticking = false;
+      var HIDE_AFTER = 96; // roughly one header height -- always show near the top
+      var MIN_DELTA = 6;   // ignore tiny scroll jitter
+
+      function anyPanelOpen() {
+        var search = document.getElementById('search-overlay');
+        var cart = document.getElementById('cart-drawer');
+        var ai = document.getElementById('ai-concierge');
+        var mobileNav = document.getElementById('mobile-nav-drawer');
+        return (
+          (search && search.classList.contains('open')) ||
+          (cart && !cart.classList.contains('translate-x-full')) ||
+          (ai && ai.classList.contains('ai-open')) ||
+          (mobileNav && !mobileNav.classList.contains('-translate-x-full'))
+        );
+      }
+
+      function onScroll() {
+        var currentY = window.scrollY || window.pageYOffset || 0;
+
+        if (anyPanelOpen()) {
+          header.classList.remove('nav-hidden');
+        } else if (currentY <= HIDE_AFTER) {
+          header.classList.remove('nav-hidden');
+        } else if (Math.abs(currentY - lastY) > MIN_DELTA) {
+          if (currentY > lastY) {
+            header.classList.add('nav-hidden');
+          } else {
+            header.classList.remove('nav-hidden');
+          }
+        }
+
+        lastY = currentY;
+        ticking = false;
+      }
+
+      window.addEventListener('scroll', function () {
+        if (!ticking) {
+          window.requestAnimationFrame(onScroll);
+          ticking = true;
+        }
+      }, { passive: true });
+    })();
+  </script>
+
   {% block extra_scripts %}{% endblock %}
+{% include "partials/dialog.html" %}
 </body>
 {% endwith %}
 </html>
 
+ 

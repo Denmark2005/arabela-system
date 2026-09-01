@@ -55,7 +55,7 @@
 {% endblock %}
 
 {% block content %}
-<div id="contact-page" class="relative bg-white text-on-surface font-body">
+<div id="contact-page" class="relative bg-white text-secondary font-body">
   <section class="mx-auto pt-0 pb-32">
     <div class="max-w-[1440px] mx-auto px-4 sm:px-8 md:px-16 mt-24">
       <div class="flex flex-col items-center text-center mb-24">
@@ -70,12 +70,12 @@
         <div class="md:col-span-4 space-y-12">
           <div class="editorial-reveal">
             <h3 class="font-label uppercase tracking-widest text-xs text-secondary mb-6">Our shop</h3>
-            <p class="font-body text-lg leading-relaxed max-w-xs text-on-surface">
-              3rd Flr Park Place Bldg Centre , Antipolo, Philippines, 1830
+            <p class="font-body text-lg leading-relaxed max-w-xs text-secondary">
+              {{ site_shop_street }}, {{ site_shop_city }}, {{ site_shop_country }}, {{ site_shop_postal_code }}
             </p>
             <a
-              class="inline-block mt-4 font-label uppercase tracking-widest text-[0.6875rem] border-b border-primary/20 pb-1 hover:border-primary transition-colors text-on-surface"
-              href="https://www.google.com/maps/search/?api=1&amp;query=3rd+Flr+Park+Place+Bldg+Centre+Antipolo+Philippines+1830"
+              class="inline-block mt-4 font-label uppercase tracking-widest text-[0.6875rem] border-b border-primary/20 pb-1 hover:border-primary transition-colors text-secondary"
+              href="https://www.google.com/maps/search/?api=1&amp;query={{ site_shop_address_line|urlencode }}"
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -94,14 +94,14 @@
             <div class="group cursor-default editorial-reveal">
               <h3 class="font-label uppercase tracking-widest text-xs text-secondary mb-4 group-hover:text-primary transition-colors">Phone</h3>
               <p class="font-body text-4xl md:text-5xl font-light tracking-tighter text-on-surface">
-                <a href="tel:+639635215485" class="hover:opacity-80 transition-opacity">09635215485</a>
+                <a href="{{ site_phone_tel }}" class="hover:opacity-80 transition-opacity">{{ site_phone }}</a>
               </p>
             </div>
             <div class="group cursor-default editorial-reveal">
               <h3 class="font-label uppercase tracking-widest text-xs text-secondary mb-4 group-hover:text-primary transition-colors">Facebook</h3>
               <a
                 class="flex items-center gap-4 group/link"
-                href="https://www.facebook.com/share/1EHAS1iemQ/"
+                href="{{ site_facebook_url }}"
                 target="_blank"
                 rel="noopener noreferrer"
               >

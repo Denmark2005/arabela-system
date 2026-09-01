@@ -28,6 +28,69 @@
             .replace(/</g, '&lt;');
     }
 
+    // THE one definition of "this line can actually be booked". Every screen that
+    // gates on rental dates -- cart drawer, selection page, checkout hand-off,
+    // order summary -- must call this rather than re-testing `rental` by hand, or
+    // the screens start disagreeing about which rows are ready.
+    //
+    // Deliberately matches the two rules that already exist downstream and must
+    // not drift from them: reservation.html's splitRentalDates(), which builds the
+    // submit payload, and the server's own `if not rental_date or not return_date`
+    // in gowns/views.py. Size is NOT part of this -- it is optional end to end
+    // (the server stores '' without complaint) and shows as TBD when unset.
+    window.arabelaHasRentalDates = function (item) {
+        var parts = String((item && item.rental) || '').split(' - ');
+        return parts.length === 2 && !!parts[0].trim() && !!parts[1].trim();
+    };
+
+    // Display label for a size that was never chosen. products.html seeds the
+    // sentinel '-' and the quick-add paths in base.html default to it too, so
+    // both that and an empty string mean "not chosen yet".
+    window.arabelaSizeLabel = function (size) {
+        var t = String(size == null ? '' : size).replace(/^\s*Size:\s*/i, '').trim();
+        return (!t || t === '-') ? 'TBD' : t;
+    };
+
+    // Rebuilds a gown's product URL from a stored line. Mirrors base.html's and
+    // selection.html's getProductDetailUrl, but the query parameter varies by
+    // caller: `cart_item_index` edits a drawer row, `edit_reservation_item` edits
+    // a row of the already-handed-off checkout snapshot. Returns '' when the line
+    // has no slug, so callers can fall back rather than link somewhere broken.
+    function buildProductUrl(item, index, paramName) {
+        var slug = item && item.id ? String(item.id).trim() : '';
+        if (!slug) return '';
+        var col = (item && item.collection) ? String(item.collection).trim() : 'wedding';
+        return '/collections/' + encodeURIComponent(col)
+            + '/products/' + encodeURIComponent(slug)
+            + '/?' + (paramName || 'cart_item_index') + '=' + index;
+    }
+
+    // The one dialog shown whenever undated gowns block a step forward. Uses
+    // arabelaConfirm rather than arabelaAlert on purpose: an alert's single "Got
+    // it" button is exactly what made the old checkout failure a dead end. This
+    // names the gowns and its primary button navigates straight to the first one.
+    // `entries` is [{name, url}, ...].
+    window.arabelaPromptForDates = function (entries) {
+        if (!entries || !entries.length) return;
+        var names = entries.map(function (e) { return e.name || 'a gown'; });
+        var listed = names.length === 1
+            ? names[0]
+            : names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1];
+        var many = names.length > 1;
+        window.arabelaConfirm({
+            title: many ? 'These gowns need rental dates' : 'This gown needs a rental date',
+            message: listed + (many ? ' have no rental dates yet.' : ' has no rental date yet.')
+                + ' Pick the date of your event and we will set the pick-up and return days for you.'
+                + (many ? ' We will start with ' + names[0] + '.' : ''),
+            confirmText: 'Set dates',
+            cancelText: 'Not now'
+        }).then(function (ok) {
+            if (!ok) return;
+            var target = entries[0].url;
+            if (target) window.location.href = target;
+        });
+    };
+
     function maybeMigrateGuestReservationPayload() {
         if (userKey === 'guest') return;
         var guestRaw = null;
@@ -141,15 +204,44 @@
         } catch (e4) {}
     }
 
+    // Starts the 20-minute checkout hold, then hands back a promise so the
+    // caller can navigate once the server knows about it -- that way the
+    // countdown banner is already there when the reservation page renders.
+    // Only ever called after the caller has confirmed there are real items, so
+    // a customer who merely opens the page never sees a phantom countdown.
+    window.startReservationHold = function () {
+        var body = document && document.body;
+        var url = body && body.dataset ? body.dataset.holdStartUrl : '';
+        if (!url) return Promise.resolve();
+        var match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+        return fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': match ? decodeURIComponent(match[1]) : ''
+            },
+            body: '{}'
+        }).catch(function () {
+            /* never block checkout on this -- the page still works without it */
+        });
+    };
+
     window.saveCartAndProceedToReservation = function (e) {
         if (e && e.preventDefault) e.preventDefault();
         var items = [];
         var sub = 0;
         var itemCount = 0;
+        // Parallel to `items`: each entry's index in the stored cart. Not the same
+        // as the position in `items`, because hidden rows are skipped below -- and
+        // products.html writes back by cart index, so getting this wrong would edit
+        // the wrong gown.
+        var cartIndexes = [];
         var rows = document.querySelectorAll('#cart-drawer .cart-line');
         for (var i = 0; i < rows.length; i++) {
             var row = rows[i];
             if (row.classList.contains('hidden')) continue;
+            var cartIndex = parseInt(row.getAttribute('data-index'), 10);
+            cartIndexes.push(Number.isInteger(cartIndex) ? cartIndex : i);
             var unit = parseFloat(row.getAttribute('data-unit-price') || '0', 10);
             var qtyEl = row.querySelector('.cart-qty');
             var qty = Math.max(1, parseInt(qtyEl && qtyEl.textContent, 10) || 1);
@@ -168,11 +260,43 @@
                 unitPrice: unit,
                 qty: qty,
                 lineTotal: lineTotal,
-                rental: rental
+                rental: rental,
+                // Carried through so the Order Summary can link each row back to
+                // its gown page. base.html's renderCartDrawer writes these; without
+                // them there is no valid product URL to rebuild later.
+                id: row.getAttribute('data-id') || '',
+                collection: row.getAttribute('data-collection') || ''
             });
         }
         if (!items.length) {
-            window.alert('Add at least one item to your selection before continuing.');
+            // This file is served statically so it can't include the dialog
+            // partial; fall back to the native alert if it somehow isn't loaded.
+            if (window.arabelaAlert) {
+                window.arabelaAlert({
+                    title: 'Your selection is empty',
+                    message: 'Add at least one item to your selection before continuing.'
+                });
+            } else {
+                window.alert('Add at least one item to your selection before continuing.');
+            }
+            return false;
+        }
+        // Refuse to hand off a bag that can't be booked. Checkout would otherwise
+        // take the whole form and the payment upload before failing, with no route
+        // back to the gown. Deliberately BEFORE the hold starts and before the
+        // drawer is cleared, so nothing is committed and the cart survives intact
+        // -- which is also why ?cart_item_index= still resolves from here.
+        var undated = [];
+        for (var u = 0; u < items.length; u++) {
+            if (!window.arabelaHasRentalDates(items[u])) {
+                undated.push({
+                    name: items[u].name,
+                    url: buildProductUrl(items[u], cartIndexes[u], 'cart_item_index')
+                });
+            }
+        }
+        if (undated.length) {
+            window.arabelaPromptForDates(undated);
             return false;
         }
         var deposit = itemCount * DEPOSIT_PER_ITEM;
@@ -197,7 +321,24 @@
             window.location.href = loginUrl + '?next=' + nextParam;
             return false;
         }
-        if (href) window.location.href = href;
+        // Start the hold first so the countdown is live when the page loads.
+        window.startReservationHold().then(function () {
+            // These items are now committed to the pending reservation, not sitting
+            // in the shop cart anymore -- clear the drawer so its badge/contents
+            // don't keep showing them (e.g. after a refresh) while the hold is live.
+            // Mirrors reservation_hold_banner.html's clearHeldSelection(), which does
+            // the same thing when a hold is cancelled instead of completed.
+            try {
+                if (typeof setDrawerCart === 'function') {
+                    setDrawerCart([]);
+                    if (typeof renderCartDrawer === 'function') renderCartDrawer();
+                    if (typeof updateCartTotals === 'function') updateCartTotals();
+                } else {
+                    localStorage.setItem('arabela_cart_' + userKey, '[]');
+                }
+            } catch (err) {}
+            if (href) window.location.href = href;
+        });
         return false;
     };
 
@@ -213,7 +354,6 @@
         var totalEl = document.getElementById('reservation-total-investment');
         var countEl = document.getElementById('reservation-items-count');
         var gcashDep = document.getElementById('gcash-deposit-amount');
-        var gcashFull = document.getElementById('gcash-full-amount');
 
         var raw = null;
         try {
@@ -231,12 +371,11 @@
                 else countEl.textContent = n + ' items reserved';
             }
             if (gcashDep) gcashDep.textContent = 'Amount: ' + formatPesoInt(deposit);
-            if (gcashFull) gcashFull.textContent = 'Amount: ' + formatPesoInt(total);
         }
 
         if (!raw) {
             root.innerHTML =
-                '<p class="text-[0.6875rem] uppercase tracking-widest text-secondary">No items in your selection. Return to the shop and add pieces first.</p>';
+                '<p class="text-sm text-secondary">No items in your selection. Return to the shop and add pieces first.</p>';
             setTotals(0, 0, 0, 0);
             return;
         }
@@ -250,45 +389,75 @@
 
         var items = data.items || [];
         var html = '';
+        var undated = [];
         for (var j = 0; j < items.length; j++) {
             var it = items[j];
             var qtyNote =
                 it.qty > 1
                     ? ' <span class="text-secondary font-normal normal-case">(\u00d7' + it.qty + ')</span>'
                     : '';
-            html +=
-                '<div class="flex gap-6 items-start">' +
-                '<div class="w-24 h-32 bg-surface-container flex-shrink-0 overflow-hidden rounded-lg">' +
-                '<img class="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-700" alt="' +
+            var dated = window.arabelaHasRentalDates(it);
+            // Round trip back to this exact row of the snapshot. The drawer cart is
+            // deliberately empty once checkout has begun, so ?cart_item_index= can't
+            // resolve from here -- edit_reservation_item addresses the snapshot.
+            var editUrl = buildProductUrl(it, j, 'edit_reservation_item');
+            if (!dated) undated.push({ name: it.name, url: editUrl });
+
+            // The date line is the whole point of this row: either it states the
+            // rental window, or it is the control that goes and sets one.
+            var dateLine = dated
+                ? '<p class="mt-1 flex items-center gap-1.5 text-[0.75rem] text-secondary">'
+                    + '<span class="material-symbols-outlined" style="font-size: 0.9rem;">calendar_today</span>'
+                    + escapeHtml(it.rental)
+                    + (editUrl ? '<span class="res-item-edit text-[0.6875rem] font-medium underline underline-offset-4">Change</span>' : '')
+                    + '</p>'
+                : '<span class="mt-1 inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-[#b45309]">'
+                    + '<span class="material-symbols-outlined" style="font-size: 0.9rem;">event</span>'
+                    + (editUrl ? 'Set rental date &rarr;' : 'Rental date needed')
+                    + '</span>';
+
+            var inner =
+                '<div class="w-16 h-20 shrink-0 overflow-hidden rounded-[6px] border border-black/10 bg-surface-container-low">' +
+                '<img class="w-full h-full object-cover" alt="' +
                 attrEscape(it.imageAlt || it.name) +
                 '" src="' +
                 attrEscape(it.image) +
                 '">' +
                 '</div>' +
-                '<div class="flex flex-col justify-between h-full py-1">' +
-                '<div>' +
-                '<h3 class="font-headline text-lg leading-tight uppercase tracking-tight">' +
+                '<div class="min-w-0 flex-1">' +
+                '<p class="text-sm font-medium text-on-surface leading-snug">' +
                 escapeHtml(it.name) +
-                '</h3>' +
-                '<p class="text-[0.6875rem] uppercase tracking-widest text-secondary mt-1">' +
-                escapeHtml(it.size) +
                 '</p>' +
-                '<p class="text-[0.6875rem] uppercase tracking-widest text-primary mt-1 font-semibold">' +
+                '<p class="mt-0.5 text-[0.75rem] text-secondary">Size: ' +
+                escapeHtml(window.arabelaSizeLabel(it.size)) +
+                '</p>' +
+                dateLine +
+                '</div>' +
+                '<p class="shrink-0 text-sm font-medium text-on-surface tabular-nums">' +
                 formatPesoSummary(it.lineTotal) +
                 qtyNote +
-                '</p>' +
-                '</div>' +
-                '<div class="mt-4 flex items-center gap-2">' +
-                '<span class="material-symbols-outlined text-sm text-secondary">calendar_today</span>' +
-                '<span class="text-[0.6875rem] uppercase tracking-widest font-medium">' +
-                escapeHtml(it.rental || 'TBD') +
-                '</span>' +
-                '</div>' +
-                '</div></div>';
+                '</p>';
+
+            // Only linkable when the line kept its slug -- older snapshots saved
+            // before this shipped have no id, and a broken link is worse than none.
+            if (editUrl) {
+                html += '<a href="' + attrEscape(editUrl) + '"'
+                    + ' class="res-item-row' + (dated ? '' : ' res-item-row--needs-date') + ' flex gap-4 items-start no-underline"'
+                    + ' aria-label="' + attrEscape((dated ? 'Change rental dates for ' : 'Set a rental date for ') + (it.name || 'this gown')) + '">'
+                    + inner + '</a>';
+            } else {
+                html += '<div class="flex gap-4 items-start">' + inner + '</div>';
+            }
         }
         root.innerHTML = html;
 
         setTotals(data.subtotal, data.deposit, data.total, data.itemCount);
+
+        // Tell the page which gowns still block checkout, so Confirm Rental can be
+        // held back up front instead of failing after the form and the upload.
+        if (typeof window.onReservationDateGaps === 'function') {
+            window.onReservationDateGaps(undated);
+        }
     };
 
     if (document.readyState === 'loading') {

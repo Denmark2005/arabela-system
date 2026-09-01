@@ -134,6 +134,27 @@
         background-size: 200% 100%;
         animation: shimmer 1.1s infinite linear;
       }
+      .icon-badge-btn {
+        position: relative;
+      }
+      .icon-count-badge {
+        position: absolute;
+        top: -8px;
+        right: -14px;
+        min-width: 16px;
+        height: 16px;
+        padding: 0 4px;
+        border-radius: 9999px;
+        background: #dc2626;
+        color: #ffffff;
+        font-family: "Inter", sans-serif;
+        font-size: 0.625rem;
+        font-weight: 700;
+        line-height: 16px;
+        text-align: center;
+        box-shadow: 0 0 0 2px #ffffff;
+        pointer-events: none;
+      }
       select.edit-input {
         appearance: none;
         -webkit-appearance: none;
@@ -170,7 +191,7 @@
         <div class="w-full max-w-[560px] translate-y-2 scale-[0.98] rounded-xl border border-black/10 bg-white opacity-0 shadow-[0_16px_50px_rgba(0,0,0,0.25)]" id="edit-profile-modal" role="dialog" aria-modal="true" aria-labelledby="edit-profile-title" onclick="event.stopPropagation()">
           <div class="flex items-center justify-between px-5 py-4">
             <h2 class="text-[2.15rem] font-semibold text-[#1b1c1c] leading-none" id="edit-profile-title">Edit profile</h2>
-            <button class="inline-flex h-8 w-8 items-center justify-center text-gray-400 transition-colors hover:text-[#222222]" id="close-edit-profile-btn" type="button" aria-label="Close edit profile">
+            <button class="inline-flex h-8 w-8 items-center justify-center text-gray-400 transition-colors hover:text-secondary" id="close-edit-profile-btn" type="button" aria-label="Close edit profile">
               <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
               </svg>
@@ -189,7 +210,7 @@
               </div>
             </div>
             <div class="mt-6 flex items-center justify-end gap-3">
-              <button class="rounded-lg border border-gray-200 bg-white px-4 py-2 text-base font-semibold text-[#222222] transition-colors hover:bg-gray-50" id="cancel-edit-profile-btn" type="button">Cancel</button>
+              <button class="rounded-lg border border-gray-200 bg-white px-4 py-2 text-base font-semibold text-secondary transition-colors hover:bg-gray-50" id="cancel-edit-profile-btn" type="button">Cancel</button>
               <button class="rounded-lg border border-[#0b0c0c] bg-[#0b0c0c] px-4 py-2 text-base font-semibold text-white transition-colors hover:bg-[#222222]" type="submit">Save</button>
             </div>
           </form>
@@ -202,7 +223,7 @@
         <div class="w-full max-w-[620px] translate-y-2 scale-[0.98] rounded-xl border border-black/10 bg-white opacity-0 p-5 shadow-[0_16px_50px_rgba(0,0,0,0.25)]" id="edit-address-modal" role="dialog" aria-modal="true" aria-labelledby="edit-address-title" onclick="event.stopPropagation()">
           <div class="mb-4 flex items-center justify-between">
             <h2 class="text-[2rem] font-semibold leading-none text-[#1b1c1c]" id="edit-address-title">Add address</h2>
-            <button class="inline-flex h-8 w-8 items-center justify-center text-gray-400 transition-colors hover:text-[#222222]" id="close-edit-address-btn" type="button" aria-label="Close add address">
+            <button class="inline-flex h-8 w-8 items-center justify-center text-gray-400 transition-colors hover:text-secondary" id="close-edit-address-btn" type="button" aria-label="Close add address">
               <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
               </svg>
@@ -227,12 +248,12 @@
               <input class="edit-input h-11 w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none" id="phone-input" type="tel" placeholder="Phone (+63)" />
               <p class="hidden field-error-text mt-1" id="phone-error"></p>
             </div>
-            <label class="flex items-center gap-3 pt-1 text-base text-[#1b1c1c]">
-              <input class="h-4 w-4 rounded border-gray-300 text-[#222222] focus:ring-[#222222]" id="default-address-input" type="checkbox" />
+            <label class="flex items-center gap-3 pt-1 text-base text-secondary">
+              <input class="h-4 w-4 rounded border-gray-300 text-secondary focus:ring-[#222222]" id="default-address-input" type="checkbox" />
               <span>This is my default address</span>
             </label>
             <div class="flex items-center justify-end gap-3 pt-2">
-              <button class="rounded-lg border border-gray-200 bg-white px-4 py-2 text-base font-semibold text-[#222222] transition-colors hover:bg-gray-50" id="cancel-edit-address-btn" type="button">Cancel</button>
+              <button class="rounded-lg border border-gray-200 bg-white px-4 py-2 text-base font-semibold text-secondary transition-colors hover:bg-gray-50" id="cancel-edit-address-btn" type="button">Cancel</button>
               <button class="rounded-lg border border-[#0b0c0c] bg-[#0b0c0c] px-4 py-2 text-base font-semibold text-white transition-colors hover:bg-[#222222]" type="submit">Save</button>
             </div>
           </form>
@@ -248,8 +269,14 @@
       </div>
       <div class="flex items-center gap-8">
         <div class="hidden items-center gap-6 md:flex">
-          <a class="js-page-link text-[0.6875rem] uppercase tracking-[0.1rem] text-[#615E57] transition-colors hover:text-[#222222]" href="{% url 'gowns:orders' %}">Reservations</a>
-          <a class="js-page-link border-b border-[#222222] text-[0.6875rem] uppercase tracking-[0.1rem] text-[#222222] transition-colors font-semibold" href="{% url 'gowns:profile' %}">Profile</a>
+          <a class="js-page-link text-[0.6875rem] uppercase tracking-[0.1rem] text-[#615E57] transition-colors hover:text-secondary" href="{% url 'gowns:orders' %}">Reservations</a>
+          <a class="js-page-link icon-badge-btn text-[0.6875rem] uppercase tracking-[0.1rem] text-[#615E57] transition-colors hover:text-secondary" href="{% url 'gowns:messages' %}">
+            Messages
+            {% if unread_messages_count > 0 %}
+              <span class="icon-count-badge">{{ unread_messages_count }}</span>
+            {% endif %}
+          </a>
+          <a class="js-page-link border-b border-[#222222] text-[0.6875rem] uppercase tracking-[0.1rem] text-secondary transition-colors font-semibold" href="{% url 'gowns:profile' %}">Profile</a>
         </div>
       </div>
     </nav>
@@ -620,12 +647,12 @@
                   <p class="text-sm font-medium text-gray-900">${item.addressLine || "Address"}</p>
                   <div class="flex items-center gap-2">
                     ${item.isDefault ? '<span class="rounded-full bg-gray-100 px-2.5 py-1 text-[0.65rem] font-medium uppercase tracking-wide text-gray-600">Default address</span>' : ""}
-                    <button class="inline-flex h-6 w-6 items-center justify-center text-[#222222] transition-colors hover:text-black/70" type="button" data-action="edit-address" data-index="${record.originalIndex}" aria-label="Edit address">
+                    <button class="inline-flex h-6 w-6 items-center justify-center text-secondary transition-colors hover:text-secondary/70" type="button" data-action="edit-address" data-index="${record.originalIndex}" aria-label="Edit address">
                       <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                         <path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
                       </svg>
                     </button>
-                    <button class="inline-flex h-6 w-6 items-center justify-center text-[#222222] transition-colors hover:text-black/70" type="button" data-action="delete-address" data-index="${record.originalIndex}" aria-label="Delete address">
+                    <button class="inline-flex h-6 w-6 items-center justify-center text-secondary transition-colors hover:text-secondary/70" type="button" data-action="delete-address" data-index="${record.originalIndex}" aria-label="Delete address">
                       <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                         <path d="M19 7l-1 12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 7m3 0V5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m-9 0h10" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
                       </svg>
@@ -725,5 +752,7 @@
         renderAddressList();
       }
     </script>
-  </body>
+  {% include "partials/reservation_hold_banner.html" %}
+{% include "partials/dialog.html" %}
+</body>
 </html>

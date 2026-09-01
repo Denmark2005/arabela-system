@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <style>html { visibility: hidden; }</style>
+    <script>
+      (function () {
+        function reveal() { document.documentElement.style.visibility = 'visible'; }
+        var safety = setTimeout(reveal, 2000);
+        function ready() { clearTimeout(safety); reveal(); }
+        if (document.fonts && document.fonts.ready) {
+          document.fonts.ready.then(ready, ready);
+        } else {
+          window.addEventListener('load', ready);
+        }
+      })();
+    </script>
+    <noscript><style>html { visibility: visible; }</style></noscript>
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Epilogue:wght@300;400;700;800&amp;family=Inter:wght@300;400;500;600;700&amp;family=Poppins:wght@300;400;500;600;700&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-primary-container": "#8a8989",
+              "tertiary-fixed": "#e4e2e2",
+              "on-secondary-container": "#67645d",
+              "on-secondary-fixed-variant": "#494640",
+              "surface-bright": "#fcf9f8",
+              "secondary-container": "#e7e2d9",
+              "primary-fixed": "#e5e2e1",
+              "on-primary-fixed-variant": "#474746",
+              "surface-container-lowest": "#ffffff",
+              "on-surface-variant": "#444748",
+              "surface-dim": "#dcd9d9",
+              "surface": "#fcf9f8",
+              "inverse-primary": "#c8c6c5",
+              "on-tertiary": "#ffffff",
+              "inverse-on-surface": "#f3f0ef",
+              "on-secondary": "#ffffff",
+              "on-tertiary-fixed-variant": "#474747",
+              "primary-fixed-dim": "#c8c6c5",
+              "surface-tint": "#5f5e5e",
+              "on-tertiary-fixed": "#1b1c1c",
+              "surface-container-low": "#f6f3f2",
+              "on-background": "#1b1c1c",
+              "secondary-fixed-dim": "#cbc6bd",
+              "surface-container-high": "#eae7e7",
+              "error-container": "#ffdad6",
+              "surface-container-highest": "#e5e2e1",
+              "on-secondary-fixed": "#1d1b16",
+              "inverse-surface": "#303030",
+              "outline-variant": "#c4c7c7",
+              "on-primary": "#ffffff",
+              "on-error": "#ffffff",
+              "tertiary-fixed-dim": "#c8c6c6",
+              "surface-variant": "#e5e2e1",
+              "on-primary-fixed": "#1b1c1c",
+              "outline": "#747878",
+              "on-surface": "#1b1c1c",
+              "on-error-container": "#93000a",
+              "error": "#ba1a1a",
+              "tertiary": "#0b0c0c",
+              "on-tertiary-container": "#8a8989",
+              "tertiary-container": "#222222",
+              "primary-container": "#222222",
+              "background": "#fcf9f8",
+              "surface-container": "#f0eded",
+              "secondary-fixed": "#e7e2d9",
+              "primary": "#0b0c0c",
+              "secondary": "#615e57",
+            },
+            borderRadius: {
+              DEFAULT: "0.125rem",
+              lg: "0.25rem",
+              xl: "0.5rem",
+              full: "0.75rem",
+            },
+            fontFamily: {
+              headline: ["Epilogue"],
+              body: ["Inter"],
+              label: ["Inter"],
+              poppins: ["Poppins"],
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      body {
+        font-family: "Poppins", sans-serif;
+        color: #1b1c1c;
+        background-color: #ffffff;
+      }
+      .material-symbols-outlined {
+        font-variation-settings: "FILL" 0, "wght" 300, "GRAD" 0, "opsz" 24;
+        font-size: 1.25rem;
+      }
+      .vibrant-green {
+        color: #10b981;
+      }
+      .bold-red {
+        color: #dc2626;
+      }
+      #account-sidebar {
+        transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      #sidebar-overlay {
+        transition: opacity 0.4s ease;
+      }
+      .sidebar-open #account-sidebar {
+        transform: translateX(0);
+      }
+      .sidebar-open #sidebar-overlay {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      #page-transition {
+        transition: opacity 0.28s ease;
+      }
+      #page-transition.active {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      /* Notification count badge on the account icon */
+      .icon-badge-btn {
+        position: relative;
+      }
+      .icon-count-badge {
+        position: absolute;
+        top: -6px;
+        right: -6px;
+        min-width: 16px;
+        height: 16px;
+        padding: 0 4px;
+        border-radius: 9999px;
+        background: #dc2626;
+        color: #ffffff;
+        font-family: "Inter", sans-serif;
+        font-size: 0.625rem;
+        font-weight: 700;
+        line-height: 16px;
+        text-align: center;
+        box-shadow: 0 0 0 2px #ffffff;
+        pointer-events: none;
+        animation: icon-badge-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+      @keyframes icon-badge-pop {
+        0% { transform: scale(0); opacity: 0; }
+        60% { transform: scale(1.2); opacity: 1; }
+        100% { transform: scale(1); }
+      }
+      /* Order summary slide-in panel -- same mechanics as base.html's cart drawer */
+      #order-summary-overlay {
+        transition: opacity 0.3s ease;
+      }
+      #order-summary-panel {
+        transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .icon-count-badge { animation: none; }
+        #order-summary-overlay, #order-summary-panel { transition: none; }
+      }
+    </style>
+    <title>{{ item.gown_name }} | Arabela</title>
+  </head>
+  <body class="bg-white">
+    <div class="fixed inset-0 z-[55] bg-black/20 opacity-0 pointer-events-none transition-opacity duration-300" id="sidebar-overlay"></div>
+    <div class="fixed inset-0 z-[100] bg-white opacity-0 pointer-events-none" id="page-transition"></div>
+    {% csrf_token %}
+
+    <nav class="fixed top-0 z-50 mx-auto flex h-20 w-full max-w-full items-center justify-between border-b border-black/5 bg-white/80 px-8 backdrop-blur-md">
+      <div class="flex-shrink-0">
+        <a href="{% url 'gowns:homepage' %}" class="block no-underline">
+          <h1 class="text-2xl font-bold tracking-tighter text-[#222222] dark:text-[#FAF4EB]">ARABELA</h1>
+        </a>
+      </div>
+      <div class="flex items-center gap-8">
+        <button type="button" class="md:hidden scale-95 active:scale-90 transition-all text-secondary" onclick="toggleMobileNav()" aria-label="Open menu">
+          <svg width="22" height="16" viewBox="0 0 22 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M0 1H22" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M0 8H22" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M0 15H22" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+        </button>
+        <div class="hidden items-center gap-6 md:flex">
+          <a class="js-page-link text-[0.6875rem] uppercase tracking-[0.1rem] text-[#615E57] transition-colors hover:text-secondary" href="{% url 'gowns:orders' %}">Reservations</a>
+          <a class="js-page-link icon-badge-btn text-[0.6875rem] uppercase tracking-[0.1rem] text-[#615E57] transition-colors hover:text-secondary" href="{% url 'gowns:messages' %}">
+            Messages
+            {% if unread_messages_count > 0 %}
+              <span class="icon-count-badge" style="top: -8px; right: -14px;">{{ unread_messages_count }}</span>
+            {% endif %}
+          </a>
+          <a class="js-page-link text-[0.6875rem] uppercase tracking-[0.1rem] text-[#615E57] transition-colors hover:text-secondary" href="{% url 'gowns:profile' %}" id="open-profile-link">Profile</a>
+        </div>
+        <button class="icon-badge-btn scale-95 active:scale-90 transition-all text-secondary" id="user-icon-btn">
+          <span class="material-symbols-outlined">person</span>
+          {% if active_reservations_count > 0 %}
+            <span class="icon-count-badge">{{ active_reservations_count }}</span>
+          {% endif %}
+        </button>
+      </div>
+    </nav>
+
+    <!-- Mobile nav click-away -->
+    <div id="mobile-nav-click-away" class="fixed inset-0 z-[74] bg-black/30 opacity-0 pointer-events-none transition-opacity duration-300 md:hidden" onclick="toggleMobileNav()" aria-hidden="true"></div>
+
+    <!-- MOBILE NAV DRAWER -->
+    <aside id="mobile-nav-drawer" class="fixed top-0 left-0 h-full w-full max-w-[340px] bg-white z-[75] -translate-x-full transform transition-transform duration-500 ease-in-out shadow-none flex flex-col md:hidden" aria-hidden="true">
+      <div class="p-8 flex justify-between items-center border-b border-black/5">
+        <h2 class="text-sm font-bold tracking-[0.2em] uppercase text-secondary">Menu</h2>
+        <button type="button" class="hover:opacity-50 transition-opacity text-secondary" onclick="toggleMobileNav()" aria-label="Close menu">
+          <svg class="fill-current" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M6.04289 16.5418C5.65237 16.9323 5.65237 17.5655 6.04289 17.956C6.43342 18.3465 7.06658 18.3465 7.45711 17.956L11.9987 13.4144L16.5408 17.9565C16.9313 18.347 17.5645 18.347 17.955 17.9565C18.3455 17.566 18.3455 16.9328 17.955 16.5423L13.4129 12.0002L17.955 7.45808C18.3455 7.06756 18.3455 6.43439 17.955 6.04387C17.5645 5.65335 16.9313 5.65335 16.5408 6.04387L11.9987 10.586L7.45711 6.04439C7.06658 5.65386 6.43342 5.65386 6.04289 6.04439C5.65237 6.43491 5.65237 7.06808 6.04289 7.4586L10.5845 12.0002L6.04289 16.5418Z" fill=""/>
+          </svg>
+        </button>
+      </div>
+      <nav class="flex-1 overflow-y-auto p-8 space-y-2">
+        <a class="block py-4 border-b border-black/5 uppercase tracking-[0.1rem] text-[0.6875rem] text-secondary" href="{% url 'gowns:orders' %}">Reservations</a>
+        <a class="block py-4 border-b border-black/5 uppercase tracking-[0.1rem] text-[0.6875rem] text-secondary" href="{% url 'gowns:messages' %}">Messages</a>
+        <a class="block py-4 border-b border-black/5 uppercase tracking-[0.1rem] text-[0.6875rem] text-secondary" href="{% url 'gowns:profile' %}">Profile</a>
+      </nav>
+    </aside>
+
+    <main class="min-h-screen px-6 pb-24 pt-32 md:px-12">
+      <div class="mx-auto w-full max-w-5xl">
+        <a class="js-page-link mb-10 inline-flex items-center gap-2 text-[0.6875rem] uppercase tracking-[0.15rem] text-secondary/60 transition-colors hover:text-secondary" href="{% url 'gowns:orders' %}">
+          <span class="material-symbols-outlined text-sm">arrow_back</span>
+          Back to Reservations
+        </a>
+
+        <section class="grid grid-cols-1 gap-16 lg:grid-cols-12 lg:items-start">
+          <!-- Gown photo -->
+          <div class="lg:col-span-6">
+            <div class="aspect-[4/5] w-full overflow-hidden rounded-lg bg-neutral-50">
+              <img alt="{{ item.gown_name }}" class="h-full w-full object-cover" src="{{ gown_photo }}" />
+            </div>
+          </div>
+
+          <!-- Status + details -->
+          <div class="flex flex-col pt-2 lg:col-span-6">
+            <div class="mb-8">
+              {% if variation == "pending" %}
+                <span class="mb-6 inline-flex w-fit items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-[0.625rem] font-bold uppercase tracking-widest text-amber-700">
+                  <span class="material-symbols-outlined text-[14px]">schedule</span>
+                  Reservation Pending Review
+                </span>
+              {% elif variation == "rejected" %}
+                <span class="mb-6 inline-flex w-fit items-center gap-1.5 rounded-full bg-red-50 px-3 py-1 text-[0.625rem] font-bold uppercase tracking-widest text-red-600">
+                  <span class="material-symbols-outlined text-[14px]">cancel</span>
+                  Reservation Rejected
+                </span>
+              {% elif variation == "cancelled" %}
+                <span class="mb-6 inline-flex w-fit items-center gap-1.5 rounded-full bg-neutral-100 px-3 py-1 text-[0.625rem] font-bold uppercase tracking-widest text-neutral-600">
+                  <span class="material-symbols-outlined text-[14px]">cancel</span>
+                  Reservation Cancelled
+                </span>
+              {% elif variation == "returned" %}
+                <span class="mb-6 inline-flex w-fit items-center gap-1.5 rounded-full {% if item.return_condition == 'Good' %}bg-emerald-50 text-emerald-600{% elif item.return_condition == 'Fair' %}bg-amber-50 text-amber-600{% else %}bg-red-50 text-red-600{% endif %} px-3 py-1 text-[0.625rem] font-bold uppercase tracking-widest">
+                  <span class="material-symbols-outlined text-[14px]">inventory_2</span>
+                  Reservation Completed{% if item.return_condition %} &middot; {{ item.return_condition }}{% endif %}
+                </span>
+              {% else %}
+                {% if item.stage == "Overdue" %}
+                  <span class="mb-6 inline-flex w-fit items-center gap-1.5 rounded-full bg-red-50 px-3 py-1 text-[0.625rem] font-bold uppercase tracking-widest text-red-600">
+                    <span class="material-symbols-outlined text-[14px]">warning</span>
+                    Return Overdue
+                  </span>
+                {% elif item.stage == "Pick-up" %}
+                  <span class="mb-6 inline-flex w-fit items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-[0.625rem] font-bold uppercase tracking-widest text-amber-700">
+                    <span class="material-symbols-outlined text-[14px]">local_shipping</span>
+                    Ready for Pick-up
+                  </span>
+                {% else %}
+                  <span class="mb-6 inline-flex w-fit items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-[0.625rem] font-bold uppercase tracking-widest text-emerald-600">
+                    <span class="material-symbols-outlined text-[14px]">check_circle</span>
+                    Currently Rented
+                  </span>
+                {% endif %}
+              {% endif %}
+
+              {% if reservation.payment_state %}
+                <span class="mb-6 ml-2 inline-flex w-fit items-center gap-1.5 rounded-full px-3 py-1 text-[0.625rem] font-bold uppercase tracking-widest {% if reservation.payment_state == 'Payment Verified' %}bg-emerald-50 text-emerald-600{% elif reservation.payment_state == 'Payment Under Review' %}bg-amber-50 text-amber-600{% else %}bg-red-50 text-red-600{% endif %}">
+                  <span class="material-symbols-outlined text-[14px]">{% if reservation.payment_state == 'Payment Verified' %}verified{% elif reservation.payment_state == 'Payment Under Review' %}hourglass_top{% else %}error{% endif %}</span>
+                  {{ reservation.payment_state }}
+                </span>
+              {% endif %}
+
+              <span class="mb-3 block text-[0.6875rem] uppercase tracking-[0.15rem] text-secondary/60">{{ reservation.reference_code }}{% if item.size %} &middot; Size {{ item.size }}{% endif %}</span>
+              <h1 class="mb-6 font-headline text-4xl font-extrabold tracking-tight text-[#1b1c1c] md:text-5xl">{{ item.gown_name }}</h1>
+              <div class="mb-8 h-px w-20 bg-[#1b1c1c] opacity-20"></div>
+            </div>
+
+            <div class="mb-12 space-y-8">
+              <div class="flex flex-col gap-2">
+                <label class="text-[0.6875rem] font-semibold uppercase tracking-[0.1rem] text-secondary/60">Rental Period</label>
+                <div class="flex items-center gap-3 text-lg font-semibold">
+                  <span class="material-symbols-outlined text-base">calendar_today</span>
+                  <span>{{ item.rental_date|date:"M d" }} &mdash; {{ item.return_date|date:"M d, Y" }}</span>
+                </div>
+              </div>
+
+              {% if variation == "returned" %}
+                <div class="flex flex-col gap-2">
+                  <label class="text-[0.6875rem] font-semibold uppercase tracking-[0.1rem] text-secondary/60">Returned On</label>
+                  <div class="text-lg font-semibold">{{ item.returned_on|date:"M d, Y" }}</div>
+                </div>
+                <div class="flex flex-col gap-2 border-l-2 border-emerald-200 bg-emerald-50/40 p-6">
+                  <span class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-emerald-700">
+                    <span class="material-symbols-outlined text-sm">verified</span>
+                    {% if reservation.deposit_returned_at %}Deposit refunded {{ reservation.deposit_returned_at|date:"M d, Y" }}{% else %}Security deposit refund pending{% endif %}
+                  </span>
+                </div>
+              {% elif variation == "rejected" or variation == "cancelled" %}
+                <div class="{% if variation == 'rejected' %}bg-red-50 border-red-200{% else %}bg-neutral-50 border-neutral-200{% endif %} border-l-2 p-6">
+                  <label class="mb-2 block text-[0.6875rem] font-semibold uppercase tracking-[0.1rem] {% if variation == 'rejected' %}text-red-800{% else %}text-neutral-600{% endif %}">
+                    {% if variation == "rejected" %}Reason for rejection{% else %}Cancelled reservation{% endif %}
+                  </label>
+                  <p class="text-sm leading-relaxed {% if variation == 'rejected' %}text-red-700/80{% else %}text-secondary/70{% endif %}">
+                    {% if variation == "rejected" %}{{ rejection_reason|default:"No specific reason was provided. Please contact us if you'd like more details." }}{% else %}This reservation was cancelled and will not be fulfilled.{% endif %}
+                  </p>
+                </div>
+              {% else %}
+                <div class="flex flex-col gap-2">
+                  <label class="text-[0.6875rem] font-semibold uppercase tracking-[0.1rem] text-secondary/60">Rental Price</label>
+                  <div class="text-3xl font-headline font-bold text-[#1b1c1c]">PHP {{ item.rental_price|floatformat:2 }}</div>
+                </div>
+              {% endif %}
+            </div>
+
+            <div class="mt-auto space-y-4">
+              {% if reservation.can_upload_proof %}
+                <!-- Trigger stays outside the label: a button inside a label ahead of
+                     the file input steals the label's click target. -->
+                <input type="file" id="detail-proof-input" accept="image/jpeg,image/png,image/webp" class="hidden"
+                  onchange="uploadPaymentProof('{% url 'gowns:reservation_upload_proof' item.id %}', this)">
+                <button type="button" onclick="document.getElementById('detail-proof-input').click()"
+                  class="w-full bg-white border border-[#dc2626]/40 text-[#dc2626] py-5 text-[0.75rem] font-bold uppercase tracking-[0.2rem] hover:bg-red-50 transition-colors duration-300 rounded-[6px] flex items-center justify-center gap-2">
+                  <span class="material-symbols-outlined text-sm">upload</span>
+                  Upload Proof of Payment
+                </button>
+              {% endif %}
+
+              {% if variation == "pending" and item.can_customer_cancel %}
+                <button type="button" onclick="cancelReservationItem('{% url 'gowns:reservation_item_cancel' item.id %}', this)"
+                  class="w-full bg-white border border-gray-300 text-secondary py-5 text-[0.75rem] font-bold uppercase tracking-[0.2rem] hover:bg-gray-50 transition-colors duration-300 rounded-[6px]">
+                  Cancel Reservation
+                </button>
+              {% endif %}
+
+              {% if variation == "rejected" or variation == "cancelled" %}
+                <a href="{% url 'gowns:collection_all' %}" class="w-full bg-primary py-6 text-white text-[0.75rem] uppercase tracking-[0.25rem] font-medium hover:bg-secondary transition-all duration-300 rounded-[6px] flex items-center justify-center gap-3 no-underline">
+                  Browse Gowns
+                  <span class="material-symbols-outlined text-sm">arrow_forward</span>
+                </a>
+                <a href="{% url 'gowns:contact' %}" class="w-full bg-white border border-gray-300 text-secondary py-5 text-[0.75rem] font-bold uppercase tracking-[0.2rem] hover:bg-gray-50 transition-colors duration-300 rounded-[6px] flex items-center justify-center no-underline">
+                  Contact Arabela
+                </a>
+              {% endif %}
+
+              <button type="button" onclick="openOrderSummary()"
+                class="w-full py-4 text-[0.6875rem] font-semibold uppercase tracking-[0.15rem] text-secondary/60 hover:text-secondary transition-colors duration-300 flex items-center justify-center gap-2">
+                View Order Summary &amp; Receipt
+                <span class="material-symbols-outlined text-sm">receipt_long</span>
+              </button>
+
+              {% if variation == "accepted" and item.can_customer_cancel %}
+                <button type="button" onclick="cancelReservationItem('{% url 'gowns:reservation_item_cancel' item.id %}', this)"
+                  class="w-full py-3 text-[#615E57] font-body text-xs uppercase tracking-[0.2rem] underline underline-offset-4 hover:text-[#dc2626] transition-all duration-300">
+                  Cancel Reservation
+                </button>
+              {% endif %}
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- Order summary slide-in panel -->
+    <div class="fixed inset-0 z-[84] bg-black/20 opacity-0 pointer-events-none" id="order-summary-overlay" onclick="closeOrderSummary()"></div>
+    <aside class="fixed right-0 top-0 z-[85] flex h-screen w-full translate-x-full flex-col border-l border-neutral-100 bg-white shadow-[-10px_0_40px_rgba(0,0,0,0.08)] sm:w-[480px]" id="order-summary-panel" aria-hidden="true">
+      <div class="flex items-center justify-between border-b border-black/5 p-8">
+        <div>
+          <h2 class="text-lg font-semibold text-secondary">Order Summary &amp; Receipt</h2>
+          <p class="text-[0.6875rem] uppercase tracking-[0.1rem] text-secondary/60">{{ reservation.reference_code }}</p>
+        </div>
+        <button type="button" class="material-symbols-outlined text-neutral-400 transition-colors hover:text-secondary" onclick="closeOrderSummary()" aria-label="Close order summary">close</button>
+      </div>
+      <div class="flex-1 overflow-y-auto p-8">
+        <div class="space-y-5">
+          {% for si in reservation_items %}
+            <div class="flex items-start justify-between gap-4 border-b border-black/5 pb-5">
+              <div>
+                <p class="text-sm font-medium text-secondary">{{ si.gown_name }}</p>
+                <p class="text-xs text-secondary/60">{% if si.size %}Size {{ si.size }} &middot; {% endif %}{{ si.rental_date|date:"M d" }}&ndash;{{ si.return_date|date:"M d, Y" }}</p>
+              </div>
+              <p class="whitespace-nowrap text-sm font-semibold text-secondary">PHP {{ si.rental_price|floatformat:2 }}</p>
+            </div>
+          {% endfor %}
+        </div>
+        <div class="mt-8 space-y-3 text-sm">
+          <div class="flex items-center justify-between text-secondary/70">
+            <span>Rental Fee Subtotal</span>
+            <span>PHP {{ reservation.rental_subtotal|floatformat:2 }}</span>
+          </div>
+          <div class="flex items-center justify-between text-secondary/70">
+            <span>Security Deposit</span>
+            <span>PHP {{ reservation.security_deposit|floatformat:2 }}</span>
+          </div>
+          <div class="h-px w-full bg-black/5"></div>
+          <div class="flex items-center justify-between text-base font-semibold text-secondary">
+            <span>Total Amount</span>
+            <span>PHP {{ reservation.total_amount|floatformat:2 }}</span>
+          </div>
+        </div>
+        <div class="mt-8 space-y-1">
+          <label class="text-[0.6875rem] font-semibold uppercase tracking-[0.1rem] text-secondary/60">Delivery Address</label>
+          <p class="text-sm text-secondary">{{ reservation.address }}{% if reservation.city %}, {{ reservation.city }}{% endif %}{% if reservation.postal_code %} {{ reservation.postal_code }}{% endif %}</p>
+        </div>
+        <div class="mt-6 space-y-1">
+          <label class="text-[0.6875rem] font-semibold uppercase tracking-[0.1rem] text-secondary/60">Payment Method</label>
+          <p class="text-sm text-secondary">{{ reservation.payment_method|default:"&mdash;" }}</p>
+        </div>
+        <div class="mt-6 space-y-1">
+          <label class="text-[0.6875rem] font-semibold uppercase tracking-[0.1rem] text-secondary/60">Payment Status</label>
+          <p class="text-sm {% if reservation.payment_state == 'Payment Verified' %}text-emerald-600{% elif reservation.payment_state == 'Payment Under Review' %}text-amber-600{% elif reservation.payment_state %}text-[#dc2626]{% else %}text-secondary{% endif %}">
+            {{ reservation.payment_state|default:"&mdash;" }}
+          </p>
+        </div>
+        {% if reservation.payment_proof_url %}
+        <div class="mt-6 space-y-2">
+          <label class="text-[0.6875rem] font-semibold uppercase tracking-[0.1rem] text-secondary/60">Proof of Payment</label>
+          <a href="{{ reservation.payment_proof_url }}" target="_blank" rel="noopener" class="block overflow-hidden rounded-[6px] border border-black/10">
+            <img src="{{ reservation.payment_proof_url }}" alt="Proof of payment you uploaded" class="h-32 w-full object-cover">
+          </a>
+          <a href="{{ reservation.payment_proof_url }}" target="_blank" rel="noopener" class="inline-block text-[0.6875rem] uppercase tracking-[0.1rem] text-secondary underline underline-offset-4">View full-size image</a>
+        </div>
+        {% endif %}
+      </div>
+    </aside>
+
+    <footer class="w-full bg-white px-8 py-12">
+      <div class="mx-auto w-full max-w-[1920px]">
+        <div class="flex flex-col flex-wrap items-start gap-x-8 gap-y-8 text-left sm:flex-row sm:gap-x-10 md:gap-x-12 lg:gap-x-16">
+          <div class="flex shrink-0 items-center gap-3">
+            <a href="{% url 'gowns:homepage' %}" class="font-body text-lg font-bold tracking-tighter text-[#222222]">ARABELA</a>
+          </div>
+          <div class="shrink-0">
+            <p class="mb-2 font-body text-base font-medium text-secondary">Rent</p>
+            <a href="{% url 'gowns:how_it_works' %}" class="inline-block scale-95 font-body text-[0.6875rem] uppercase tracking-widest text-[#615E57] transition-opacity hover:text-secondary hover:underline decoration-1 underline-offset-4 active:scale-90">How it works</a>
+          </div>
+          <div class="shrink-0">
+            <p class="mb-2 font-body text-base font-medium text-secondary">Info</p>
+            <ul class="flex flex-col gap-1.5">
+              <li><a href="{% url 'gowns:about' %}" class="inline-block scale-95 font-body text-[0.6875rem] uppercase tracking-widest text-[#615E57] transition-opacity hover:text-secondary hover:underline decoration-1 underline-offset-4 active:scale-90 leading-snug">About us</a></li>
+              <li><a href="{% url 'gowns:contact' %}" class="inline-block scale-95 font-body text-[0.6875rem] uppercase tracking-widest text-[#615E57] transition-opacity hover:text-secondary hover:underline decoration-1 underline-offset-4 active:scale-90 leading-snug">Contact us</a></li>
+              <li><a href="{% url 'gowns:faqs' %}" class="inline-block scale-95 font-body text-[0.6875rem] uppercase tracking-widest text-[#615E57] transition-opacity hover:text-secondary hover:underline decoration-1 underline-offset-4 active:scale-90 leading-snug">FAQs</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <aside class="fixed right-0 top-0 z-[60] flex h-screen w-full translate-x-full flex-col border-l border-neutral-100 bg-white shadow-[-10px_0_40px_rgba(0,0,0,0.05)] sm:w-96" id="account-sidebar">
+      <button class="material-symbols-outlined absolute right-8 top-6 text-neutral-400 transition-colors hover:text-secondary" id="close-sidebar-btn">close</button>
+      <div class="p-10 pt-20">
+        <div class="mb-12">
+          <div class="mb-4 flex items-center gap-4">
+            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100">
+              <span class="material-symbols-outlined text-neutral-400">person</span>
+            </div>
+            <div class="overflow-hidden">
+              <p class="truncate text-sm font-medium text-secondary">{{ display_name }}</p>
+              <p class="mt-0.5 text-[0.625rem] font-semibold uppercase tracking-widest text-neutral-400">Member</p>
+            </div>
+          </div>
+          <div class="h-[1px] w-full bg-neutral-100"></div>
+        </div>
+        <nav class="flex flex-col space-y-1">
+          <a class="js-page-link group flex items-center gap-4 rounded-lg px-2 py-4 transition-all hover:bg-neutral-50" href="{% url 'gowns:profile' %}">
+            <span class="material-symbols-outlined text-neutral-400 transition-colors group-hover:text-secondary">person_outline</span>
+            <span class="text-sm font-medium text-neutral-600 transition-colors group-hover:text-secondary">Profile</span>
+          </a>
+          <a class="js-page-link icon-badge-btn group flex items-center gap-4 rounded-lg px-2 py-4 transition-all hover:bg-neutral-50" href="{% url 'gowns:orders' %}">
+            <span class="material-symbols-outlined text-neutral-400 transition-colors group-hover:text-secondary">calendar_month</span>
+            <span class="text-sm font-medium text-neutral-600 transition-colors group-hover:text-secondary">Reservations</span>
+            {% if active_reservations_count > 0 %}
+              <span class="icon-count-badge" style="top: 8px; right: auto; left: 34px;">{{ active_reservations_count }}</span>
+            {% endif %}
+          </a>
+          <a class="js-page-link icon-badge-btn group flex items-center gap-4 rounded-lg px-2 py-4 transition-all hover:bg-neutral-50" href="{% url 'gowns:messages' %}">
+            <span class="material-symbols-outlined text-neutral-400 transition-colors group-hover:text-secondary">notifications</span>
+            <span class="text-sm font-medium text-neutral-600 transition-colors group-hover:text-secondary">Messages</span>
+            {% if unread_messages_count > 0 %}
+              <span class="icon-count-badge" style="top: 8px; right: auto; left: 34px;">{{ unread_messages_count }}</span>
+            {% endif %}
+          </a>
+          <a class="group flex items-center gap-4 rounded-lg px-2 py-4 transition-all hover:bg-neutral-50" href="#">
+            <span class="material-symbols-outlined text-neutral-400 transition-colors group-hover:text-secondary">settings</span>
+            <span class="text-sm font-medium text-neutral-600 transition-colors group-hover:text-secondary">Settings</span>
+          </a>
+          <div class="mt-4 border-t border-neutral-50 pt-4">
+            <a class="group flex items-center gap-4 rounded-lg px-2 py-4 transition-all hover:bg-neutral-50" href="{% url 'accounts:logout' %}">
+              <span class="material-symbols-outlined text-neutral-400 transition-colors group-hover:text-red-500">logout</span>
+              <span class="text-sm font-medium text-neutral-600 transition-colors group-hover:text-red-500">Sign out</span>
+            </a>
+          </div>
+        </nav>
+      </div>
+      <div class="mt-auto p-10">
+        <p class="text-center text-[0.625rem] uppercase tracking-widest text-neutral-300">ARABELA - 2026</p>
+      </div>
+    </aside>
+
+    <script>
+      const userBtn = document.getElementById("user-icon-btn");
+      const closeBtn = document.getElementById("close-sidebar-btn");
+      const overlay = document.getElementById("sidebar-overlay");
+      const transitionOverlay = document.getElementById("page-transition");
+      const pageLinks = document.querySelectorAll(".js-page-link");
+      const body = document.body;
+
+      function openSidebar() {
+        body.classList.add("sidebar-open");
+      }
+
+      function closeSidebar() {
+        body.classList.remove("sidebar-open");
+      }
+
+      function toggleMobileNav() {
+        const drawer = document.getElementById("mobile-nav-drawer");
+        const scrim = document.getElementById("mobile-nav-click-away");
+        if (!drawer) return;
+        const opening = drawer.classList.contains("-translate-x-full");
+        if (opening) {
+          drawer.classList.remove("-translate-x-full");
+          drawer.setAttribute("aria-hidden", "false");
+          if (scrim) {
+            scrim.classList.remove("pointer-events-none", "opacity-0");
+            scrim.classList.add("opacity-100");
+          }
+        } else {
+          drawer.classList.add("-translate-x-full");
+          drawer.setAttribute("aria-hidden", "true");
+          if (scrim) {
+            scrim.classList.add("pointer-events-none");
+            scrim.classList.remove("opacity-100");
+            scrim.classList.add("opacity-0");
+          }
+        }
+      }
+
+      function transitionTo(url) {
+        if (!transitionOverlay) {
+          window.location.href = url;
+          return;
+        }
+        transitionOverlay.classList.add("active");
+        window.setTimeout(function () {
+          window.location.href = url;
+        }, 260);
+      }
+
+      window.addEventListener("pageshow", function () {
+        if (transitionOverlay) {
+          transitionOverlay.classList.remove("active");
+        }
+      });
+
+      userBtn.addEventListener("click", openSidebar);
+      closeBtn.addEventListener("click", closeSidebar);
+      overlay.addEventListener("click", closeSidebar);
+      pageLinks.forEach(function (link) {
+        link.addEventListener("click", function (event) {
+          const href = link.getAttribute("href");
+          if (!href || href === "#") {
+            return;
+          }
+          if (link.target === "_blank" || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+            return;
+          }
+          event.preventDefault();
+          closeSidebar();
+          transitionTo(href);
+        });
+      });
+
+      // Order summary panel -- same toggle mechanics as the cart/mobile-nav drawers.
+      const summaryPanel = document.getElementById("order-summary-panel");
+      const summaryOverlay = document.getElementById("order-summary-overlay");
+
+      function openOrderSummary() {
+        summaryPanel.classList.remove("translate-x-full");
+        summaryPanel.setAttribute("aria-hidden", "false");
+        summaryOverlay.classList.remove("pointer-events-none", "opacity-0");
+        summaryOverlay.classList.add("opacity-100");
+      }
+
+      function closeOrderSummary() {
+        summaryPanel.classList.add("translate-x-full");
+        summaryPanel.setAttribute("aria-hidden", "true");
+        summaryOverlay.classList.add("pointer-events-none");
+        summaryOverlay.classList.remove("opacity-100");
+        summaryOverlay.classList.add("opacity-0");
+      }
+
+      document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") closeOrderSummary();
+      });
+
+      function getCsrfToken() {
+        var match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+        return match ? decodeURIComponent(match[1]) : '';
+      }
+
+      function cancelReservationItem(url, btn) {
+        arabelaConfirm({
+          title: 'Cancel reservation',
+          message: 'This cannot be undone, and repeated cancellations are recorded on your account.',
+          confirmText: 'Cancel reservation',
+          cancelText: 'Keep it',
+          danger: true,
+        }).then(function (ok) {
+          if (!ok) return;
+          btn.disabled = true;
+          fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+            body: '{}',
+          })
+            .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+            .then(function (result) {
+              if (!result.ok || !result.data.success) throw new Error(result.data.error || 'Could not cancel this reservation.');
+              window.location.reload();
+            })
+            .catch(function (err) {
+              btn.disabled = false;
+              arabelaAlert({ title: 'Something went wrong', message: err.message || 'Could not cancel this reservation.', danger: true });
+            });
+        });
+      }
+
+      function uploadPaymentProof(url, input) {
+        if (!input.files || !input.files[0]) return;
+        var formData = new FormData();
+        formData.append('proof_of_payment', input.files[0]);
+        input.disabled = true;
+        // No 'Content-Type' header: the browser must set it so the multipart
+        // boundary is included. Setting it by hand breaks the upload.
+        fetch(url, {
+          method: 'POST',
+          headers: { 'X-CSRFToken': getCsrfToken() },
+          body: formData,
+        })
+          .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+          .then(function (result) {
+            if (!result.ok || !result.data.success) throw new Error(result.data.error || 'Could not upload your proof of payment.');
+            window.location.reload();
+          })
+          .catch(function (err) {
+            input.disabled = false;
+            input.value = '';
+            arabelaAlert({ title: 'Upload failed', message: err.message || 'Could not upload your proof of payment.', danger: true });
+          });
+      }
+    </script>
+  {% include "partials/reservation_hold_banner.html" %}
+{% include "partials/dialog.html" %}
+</body>
+</html>

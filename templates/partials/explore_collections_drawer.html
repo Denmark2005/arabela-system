@@ -2,13 +2,13 @@
 
 <aside id="explore-collections-drawer" class="fixed top-0 right-0 h-full w-full max-w-[85vw] md:w-[400px] bg-white z-[87] translate-x-full transform transition-transform duration-500 ease-in-out shadow-none flex flex-col overflow-hidden" aria-hidden="true">
   <header class="shrink-0 p-8 flex justify-end items-center">
-    <button type="button" class="hover:opacity-50 transition-opacity text-[#222222]" onclick="closeExploreDrawer()" aria-label="Close collections">
+    <button type="button" class="hover:opacity-50 transition-opacity text-secondary" onclick="closeExploreDrawer()" aria-label="Close collections">
       <span class="material-symbols-outlined text-2xl">close</span>
     </button>
   </header>
   <div class="flex-1 overflow-y-auto ai-scroll px-8 py-8 min-h-0 flex flex-col">
     <button type="button" class="explore-reveal flex w-full cursor-pointer items-center justify-between text-left group" data-explore-toggle aria-expanded="true" aria-controls="explore-collections-panel">
-      <span class="font-label text-[0.75rem] font-semibold uppercase tracking-[0.15em] text-on-surface transition-colors group-hover:text-primary">Explore collections</span>
+      <span class="font-label text-[0.75rem] font-semibold uppercase tracking-[0.15em] text-secondary transition-colors group-hover:text-primary">Explore collections</span>
       <span class="text-[0.75rem] text-on-surface-variant shrink-0 transition-transform duration-400 ease-in-out group-hover:text-primary" data-explore-chevron aria-hidden="true">∨</span>
     </button>
 
@@ -16,87 +16,22 @@
       <div class="min-h-0 overflow-hidden">
       <div id="explore-collections-nav" class="space-y-6 pt-6" aria-label="Collections">
         {% with u=request.resolver_match.url_name %}
+        {% for c in search_overlay_collections_meta %}
         <div class="explore-reveal">
-          {% if u == 'collection_all' %}
-          <div class="flex w-full max-w-full items-center gap-2 rounded-full bg-gray-50 border border-black/5 px-4 py-2">
-            <span class="font-label text-[0.65rem] font-medium uppercase tracking-widest text-primary">All</span>
-          </div>
-          {% else %}
-          <a href="{% url 'gowns:collection_all' %}" class="block font-label text-[0.65rem] uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors" onclick="if (typeof closeExploreDrawer === 'function') closeExploreDrawer();">All</a>
-          {% endif %}
-        </div>
-        <div class="explore-reveal">
-          {% if u == 'collection_dresses' %}
-          <div class="flex w-full max-w-full items-center justify-between gap-2 rounded-full bg-gray-50 border border-black/5 px-4 py-2">
-            <span class="font-label text-[0.65rem] font-medium uppercase tracking-widest text-primary">Dresses</span>
+          {% if u == c.url_name %}
+          <div class="flex w-full max-w-full items-center {% if c.key != 'all' %}justify-between{% endif %} gap-2 rounded-full bg-gray-50 border border-black/5 px-4 py-2">
+            <span class="font-label text-[0.65rem] font-medium uppercase tracking-widest text-primary">{{ c.label }}</span>
+            {% if c.key != 'all' %}
             <a href="{% url 'gowns:collection_all' %}" class="inline-flex shrink-0 items-center justify-center text-primary hover:opacity-60 transition-opacity" aria-label="Back to all collections" onclick="if (typeof closeExploreDrawer === 'function') closeExploreDrawer();">
               <span class="material-symbols-outlined text-sm cursor-pointer">close</span>
             </a>
+            {% endif %}
           </div>
           {% else %}
-          <a href="{% url 'gowns:collection_dresses' %}" class="block font-label text-[0.65rem] uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors" onclick="if (typeof closeExploreDrawer === 'function') closeExploreDrawer();">Dresses</a>
+          <a href="{{ c.url }}" class="block font-label text-[0.65rem] uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors" onclick="if (typeof closeExploreDrawer === 'function') closeExploreDrawer();">{{ c.label }}</a>
           {% endif %}
         </div>
-        <div class="explore-reveal">
-          {% if u == 'collection_filipiniana' %}
-          <div class="flex w-full max-w-full items-center justify-between gap-2 rounded-full bg-gray-50 border border-black/5 px-4 py-2">
-            <span class="font-label text-[0.65rem] font-medium uppercase tracking-widest text-primary">Filipiniana</span>
-            <a href="{% url 'gowns:collection_all' %}" class="inline-flex shrink-0 items-center justify-center text-primary hover:opacity-60 transition-opacity" aria-label="Back to all collections" onclick="if (typeof closeExploreDrawer === 'function') closeExploreDrawer();">
-              <span class="material-symbols-outlined text-sm cursor-pointer">close</span>
-            </a>
-          </div>
-          {% else %}
-          <a href="{% url 'gowns:collection_filipiniana' %}" class="block font-label text-[0.65rem] uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors" onclick="if (typeof closeExploreDrawer === 'function') closeExploreDrawer();">Filipiniana</a>
-          {% endif %}
-        </div>
-        <div class="explore-reveal">
-          {% if u == 'collection_kid_suit' %}
-          <div class="flex w-full max-w-full items-center justify-between gap-2 rounded-full bg-gray-50 border border-black/5 px-4 py-2">
-            <span class="font-label text-[0.65rem] font-medium uppercase tracking-widest text-primary">Kids suit</span>
-            <a href="{% url 'gowns:collection_all' %}" class="inline-flex shrink-0 items-center justify-center text-primary hover:opacity-60 transition-opacity" aria-label="Back to all collections" onclick="if (typeof closeExploreDrawer === 'function') closeExploreDrawer();">
-              <span class="material-symbols-outlined text-sm cursor-pointer">close</span>
-            </a>
-          </div>
-          {% else %}
-          <a href="{% url 'gowns:collection_kid_suit' %}" class="block font-label text-[0.65rem] uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors" onclick="if (typeof closeExploreDrawer === 'function') closeExploreDrawer();">Kids suit</a>
-          {% endif %}
-        </div>
-        <div class="explore-reveal">
-          {% if u == 'collection_wedding' %}
-          <div class="flex w-full max-w-full items-center justify-between gap-2 rounded-full bg-gray-50 border border-black/5 px-4 py-2">
-            <span class="font-label text-[0.65rem] font-medium uppercase tracking-widest text-primary">Wedding</span>
-            <a href="{% url 'gowns:collection_all' %}" class="inline-flex shrink-0 items-center justify-center text-primary hover:opacity-60 transition-opacity" aria-label="Back to all collections" onclick="if (typeof closeExploreDrawer === 'function') closeExploreDrawer();">
-              <span class="material-symbols-outlined text-sm cursor-pointer">close</span>
-            </a>
-          </div>
-          {% else %}
-          <a href="{% url 'gowns:collection_wedding' %}" class="block font-label text-[0.65rem] uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors" onclick="if (typeof closeExploreDrawer === 'function') closeExploreDrawer();">Wedding</a>
-          {% endif %}
-        </div>
-        <div class="explore-reveal">
-          {% if u == 'collection_suit' %}
-          <div class="flex w-full max-w-full items-center justify-between gap-2 rounded-full bg-gray-50 border border-black/5 px-4 py-2">
-            <span class="font-label text-[0.65rem] font-medium uppercase tracking-widest text-primary">Suit</span>
-            <a href="{% url 'gowns:collection_all' %}" class="inline-flex shrink-0 items-center justify-center text-primary hover:opacity-60 transition-opacity" aria-label="Back to all collections" onclick="if (typeof closeExploreDrawer === 'function') closeExploreDrawer();">
-              <span class="material-symbols-outlined text-sm cursor-pointer">close</span>
-            </a>
-          </div>
-          {% else %}
-          <a href="{% url 'gowns:collection_suit' %}" class="block font-label text-[0.65rem] uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors" onclick="if (typeof closeExploreDrawer === 'function') closeExploreDrawer();">Suit</a>
-          {% endif %}
-        </div>
-        <div class="explore-reveal">
-          {% if u == 'collection_ball_gown' %}
-          <div class="flex w-full max-w-full items-center justify-between gap-2 rounded-full bg-gray-50 border border-black/5 px-4 py-2">
-            <span class="font-label text-[0.65rem] font-medium uppercase tracking-widest text-primary">Ball gown</span>
-            <a href="{% url 'gowns:collection_all' %}" class="inline-flex shrink-0 items-center justify-center text-primary hover:opacity-60 transition-opacity" aria-label="Back to all collections" onclick="if (typeof closeExploreDrawer === 'function') closeExploreDrawer();">
-              <span class="material-symbols-outlined text-sm cursor-pointer">close</span>
-            </a>
-          </div>
-          {% else %}
-          <a href="{% url 'gowns:collection_ball_gown' %}" class="block font-label text-[0.65rem] uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors" onclick="if (typeof closeExploreDrawer === 'function') closeExploreDrawer();">Ball gown</a>
-          {% endif %}
-        </div>
+        {% endfor %}
         {% endwith %}
       </div>
       </div>
@@ -104,7 +39,7 @@
 
     <div class="mt-8 pt-8">
       <button type="button" class="explore-reveal flex w-full cursor-pointer items-center justify-between text-left group" data-sort-toggle aria-expanded="false" aria-controls="collection-sort-options">
-        <span class="font-label text-[0.75rem] font-semibold uppercase tracking-[0.15em] text-on-surface transition-colors group-hover:text-primary">Sort by</span>
+        <span class="font-label text-[0.75rem] font-semibold uppercase tracking-[0.15em] text-secondary transition-colors group-hover:text-primary">Sort by</span>
         <span class="text-[0.75rem] text-on-surface-variant shrink-0 transition-transform duration-400 ease-in-out group-hover:text-primary" data-sort-chevron aria-hidden="true">∨</span>
       </button>
 
@@ -154,8 +89,8 @@
   </div>
 
   <div class="flex shrink-0 gap-4 bg-white p-8">
-    <button type="button" class="flex-1 bg-primary-container py-4 font-label text-[0.7rem] font-bold uppercase tracking-widest text-on-primary transition-colors hover:opacity-90" data-sort-apply-footer>Apply</button>
-    <button type="button" class="flex-1 border border-primary bg-transparent py-4 font-label text-[0.7rem] font-bold uppercase tracking-widest text-primary transition-colors hover:bg-gray-50" data-sort-drawer-reset>Reset</button>
+    <button type="button" class="flex-1 bg-primary-container py-4 font-label text-[0.7rem] font-bold uppercase tracking-widest text-on-primary transition-colors hover:opacity-90 rounded-[6px]" data-sort-apply-footer>Apply</button>
+    <button type="button" class="flex-1 border border-gray-300 bg-transparent py-4 font-label text-[0.7rem] font-bold uppercase tracking-widest text-primary transition-colors hover:bg-gray-50 rounded-[6px]" data-sort-drawer-reset>Reset</button>
   </div>
 </aside>
 

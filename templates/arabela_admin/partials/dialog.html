@@ -1,0 +1,215 @@
+{% comment %}
+   Admin dialog: styled, animated replacement for window.confirm / alert / prompt.
+   Self-contained (markup + CSS + JS) with its own .adm-dlg-* namespace -- the
+   admin stylesheet is a precompiled Tailwind build containing only the template
+   pack's own classes, so this deliberately depends on none of them.
+   Follows the panel's dark mode via the `.dark` class Alpine puts on <body>.
+
+   API (all return a Promise):
+     adminConfirm({title, message, confirmText, cancelText, danger}) -> bool
+     adminAlert({title, message, confirmText})                       -> true
+     adminPrompt({title, message, placeholder, confirmText})         -> string|null
+
+   NOTE: must be {% comment %}, not {# #} -- Django's hash comment is single-line
+   only, so a multi-line one renders as visible text on every page that includes
+   this partial (which is exactly what it was doing).
+{% endcomment %}
+<style>
+  .adm-dlg {
+    position: fixed; inset: 0; z-index: 99999;
+    display: flex; align-items: center; justify-content: center;
+    padding: 1.5rem; visibility: hidden; pointer-events: none;
+  }
+  .adm-dlg.is-open { visibility: visible; pointer-events: auto; }
+  .adm-dlg__backdrop {
+    position: absolute; inset: 0;
+    background: rgba(15, 20, 30, 0.55);
+    backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+    opacity: 0; transition: opacity 0.28s ease;
+  }
+  .adm-dlg.is-open .adm-dlg__backdrop { opacity: 1; }
+  .adm-dlg__card {
+    position: relative; width: 100%; max-width: 400px;
+    background: #ffffff; border-radius: 16px; padding: 1.75rem 1.5rem 1.35rem;
+    box-shadow: 0 24px 60px -12px rgba(16, 24, 40, 0.35), 0 8px 24px -8px rgba(16, 24, 40, 0.2);
+    text-align: center;
+    font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+    opacity: 0; transform: translateY(14px) scale(0.94);
+    transition: opacity 0.24s ease, transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .adm-dlg.is-open .adm-dlg__card { opacity: 1; transform: none; }
+  .adm-dlg__icon {
+    width: 48px; height: 48px; margin: 0 auto 0.9rem;
+    border-radius: 9999px; display: flex; align-items: center; justify-content: center;
+    background: #ecfdf3; color: #039855;
+    transform: scale(0.6); opacity: 0;
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.06s, opacity 0.3s ease 0.06s;
+  }
+  .adm-dlg.is-open .adm-dlg__icon { transform: none; opacity: 1; }
+  .adm-dlg__icon svg { width: 24px; height: 24px; }
+  .adm-dlg--danger .adm-dlg__icon { background: #fef3f2; color: #d92d20; }
+  .adm-dlg--info .adm-dlg__icon { background: #eff8ff; color: #175cd3; }
+  .adm-dlg__title {
+    font-size: 1.05rem; font-weight: 600; color: #101828; margin: 0 0 0.4rem;
+  }
+  .adm-dlg__msg {
+    font-size: 0.85rem; line-height: 1.6; color: #667085; margin: 0; white-space: pre-line;
+  }
+  .adm-dlg__input {
+    width: 100%; margin-top: 1.1rem; padding: 0.7rem 0.9rem;
+    border: 1px solid #d0d5dd; border-radius: 8px;
+    font-size: 0.875rem; font-family: inherit; color: #101828; outline: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .adm-dlg__input:focus { border-color: #465fff; box-shadow: 0 0 0 3px rgba(70, 95, 255, 0.12); }
+  .adm-dlg__input[hidden] { display: none; }
+  .adm-dlg__actions { display: flex; gap: 0.6rem; margin-top: 1.5rem; }
+  .adm-dlg__btn {
+    flex: 1; padding: 0.7rem 1rem; border-radius: 8px; cursor: pointer;
+    font-family: inherit; font-size: 0.875rem; font-weight: 500;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.12s ease;
+  }
+  .adm-dlg__btn:active { transform: scale(0.97); }
+  .adm-dlg__btn--ghost { background: #ffffff; color: #344054; border: 1px solid #d0d5dd; }
+  .adm-dlg__btn--ghost:hover { background: #f9fafb; }
+  .adm-dlg__btn--primary { background: #465fff; color: #ffffff; border: 1px solid #465fff; }
+  .adm-dlg__btn--primary:hover { background: #3641f5; }
+  .adm-dlg--danger .adm-dlg__btn--primary { background: #d92d20; border-color: #d92d20; }
+  .adm-dlg--danger .adm-dlg__btn--primary:hover { background: #b42318; }
+  .adm-dlg__btn:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+  .adm-dlg__actions--single .adm-dlg__btn--ghost { display: none; }
+
+  /* Dark mode -- the panel toggles `.dark` on <body>. */
+  .dark .adm-dlg__card { background: #1a2231; box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.6); }
+  .dark .adm-dlg__title { color: #f2f4f7; }
+  .dark .adm-dlg__msg { color: #98a2b3; }
+  .dark .adm-dlg__input { background: #101828; border-color: #344054; color: #f2f4f7; }
+  .dark .adm-dlg__btn--ghost { background: transparent; color: #d0d5dd; border-color: #344054; }
+  .dark .adm-dlg__btn--ghost:hover { background: rgba(255, 255, 255, 0.04); }
+  .dark .adm-dlg__icon { background: rgba(3, 152, 85, 0.15); }
+  .dark .adm-dlg--danger .adm-dlg__icon { background: rgba(217, 45, 32, 0.15); }
+  .dark .adm-dlg--info .adm-dlg__icon { background: rgba(23, 92, 211, 0.15); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .adm-dlg__backdrop, .adm-dlg__card, .adm-dlg__icon { transition: opacity 0.15s ease; transform: none !important; }
+  }
+</style>
+
+<div class="adm-dlg" id="adm-dialog" aria-hidden="true">
+  <div class="adm-dlg__backdrop" data-dlg-dismiss></div>
+  <div class="adm-dlg__card" role="dialog" aria-modal="true" aria-labelledby="adm-dlg-title" aria-describedby="adm-dlg-msg">
+    <div class="adm-dlg__icon" id="adm-dlg-icon">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+    </div>
+    <h2 class="adm-dlg__title" id="adm-dlg-title"></h2>
+    <p class="adm-dlg__msg" id="adm-dlg-msg"></p>
+    <input type="text" class="adm-dlg__input" id="adm-dlg-input" hidden>
+    <div class="adm-dlg__actions" id="adm-dlg-actions">
+      <button type="button" class="adm-dlg__btn adm-dlg__btn--ghost" id="adm-dlg-cancel" data-dlg-dismiss>Cancel</button>
+      <button type="button" class="adm-dlg__btn adm-dlg__btn--primary" id="adm-dlg-confirm">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const root = document.getElementById('adm-dialog');
+    if (!root) return;
+    const iconEl = document.getElementById('adm-dlg-icon');
+    const titleEl = document.getElementById('adm-dlg-title');
+    const msgEl = document.getElementById('adm-dlg-msg');
+    const inputEl = document.getElementById('adm-dlg-input');
+    const actionsEl = document.getElementById('adm-dlg-actions');
+    const cancelBtn = document.getElementById('adm-dlg-cancel');
+    const confirmBtn = document.getElementById('adm-dlg-confirm');
+
+    const ICONS = {
+      check: '<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />',
+      warn: '<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-2.994-1.5-3.86 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />',
+      info: '<path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />',
+    };
+
+    let settle = null;
+    let lastFocused = null;
+    let mode = 'confirm';
+
+    function finish(result) {
+      if (!settle) return;
+      const done = settle;
+      settle = null;
+      root.classList.remove('is-open');
+      root.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
+      if (lastFocused && typeof lastFocused.focus === 'function') lastFocused.focus();
+      done(result);
+    }
+
+    function onConfirm() {
+      if (mode === 'prompt') finish(inputEl.value.trim());
+      else finish(true);
+    }
+
+    function onDismiss() {
+      finish(mode === 'prompt' ? null : mode === 'alert');
+    }
+
+    confirmBtn.addEventListener('click', onConfirm);
+    Array.prototype.forEach.call(root.querySelectorAll('[data-dlg-dismiss]'), function (el) {
+      el.addEventListener('click', onDismiss);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (!settle) return;
+      if (e.key === 'Escape') { e.preventDefault(); onDismiss(); }
+      else if (e.key === 'Enter') { e.preventDefault(); onConfirm(); }
+    });
+
+    function open(opts) {
+      if (settle) finish(mode === 'prompt' ? null : false);
+      mode = opts.mode || 'confirm';
+      lastFocused = document.activeElement;
+
+      titleEl.textContent = opts.title || '';
+      msgEl.textContent = opts.message || '';
+      msgEl.style.display = opts.message ? '' : 'none';
+      root.classList.toggle('adm-dlg--danger', !!opts.danger);
+      root.classList.toggle('adm-dlg--info', mode === 'alert' && !opts.danger);
+      iconEl.innerHTML = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">'
+        + (opts.danger ? ICONS.warn : mode === 'alert' ? ICONS.info : ICONS.check)
+        + '</svg>';
+
+      if (mode === 'prompt') {
+        inputEl.hidden = false;
+        inputEl.value = opts.value || '';
+        inputEl.placeholder = opts.placeholder || '';
+      } else {
+        inputEl.hidden = true;
+        inputEl.value = '';
+      }
+
+      confirmBtn.textContent = opts.confirmText || (mode === 'alert' ? 'OK' : 'Confirm');
+      cancelBtn.textContent = opts.cancelText || 'Cancel';
+      actionsEl.classList.toggle('adm-dlg__actions--single', mode === 'alert');
+
+      root.classList.add('is-open');
+      root.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+
+      window.setTimeout(function () {
+        if (mode === 'prompt') inputEl.focus();
+        else confirmBtn.focus();
+      }, 60);
+
+      return new Promise(function (resolve) { settle = resolve; });
+    }
+
+    window.adminConfirm = function (opts) {
+      return open(Object.assign({ mode: 'confirm' }, typeof opts === 'string' ? { message: opts } : opts));
+    };
+    window.adminAlert = function (opts) {
+      return open(Object.assign({ mode: 'alert' }, typeof opts === 'string' ? { message: opts } : opts));
+    };
+    window.adminPrompt = function (opts) {
+      return open(Object.assign({ mode: 'prompt' }, typeof opts === 'string' ? { message: opts } : opts));
+    };
+  })();
+</script>

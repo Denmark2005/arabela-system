@@ -1,476 +1,287 @@
+{% extends "base.html" %}
 {% load static %}
-<!DOCTYPE html>
-<html class="light" lang="en">
-<head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>ARABELA | Editorial Archive</title>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Epilogue:wght@300;400;700;800&family=Inter:wght@300;400;500;600&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+
+{% block title %}ARABELA | Editorial Archive{% endblock %}
+
+{% block extra_head %}
 <link rel="preload" as="image" type="image/png" href="{% static 'images/hero-silk.png' %}">
-<script id="tailwind-config">
-      tailwind.config = {
-        darkMode: "class",
-        theme: {
-          extend: {
-            colors: {
-              "on-surface-variant": "#444748",
-              "on-primary-container": "#8a8989",
-              "surface-tint": "#5f5e5e",
-              "surface-dim": "#dcd9d9",
-              "error-container": "#ffdad6",
-              "tertiary-fixed": "#e4e2e2",
-              "surface-container-lowest": "#ffffff",
-              "outline": "#747878",
-              "error": "#ba1a1a",
-              "on-primary-fixed-variant": "#474746",
-              "primary-container": "#222222",
-              "secondary": "#615e57",
-              "primary": "#0b0c0c",
-              "on-primary-fixed": "#1b1c1c",
-              "on-secondary": "#ffffff",
-              "on-secondary-container": "#67645d",
-              "outline-variant": "#c4c7c7",
-              "secondary-fixed-dim": "#cbc6bd",
-              "tertiary-fixed-dim": "#c8c6c6",
-              "on-tertiary-fixed-variant": "#474747",
-              "surface-container-low": "#f6f3f2",
-              "secondary-fixed": "#e7e2d9",
-              "primary-fixed": "#e5e2e1",
-              "on-error": "#ffffff",
-              "on-secondary-fixed": "#1d1b16",
-              "secondary-container": "#e7e2d9",
-              "on-tertiary-fixed": "#1b1c1c",
-              "primary-fixed-dim": "#c8c6c5",
-              "tertiary-container": "#222222",
-              "inverse-primary": "#c8c6c5",
-              "on-surface": "#1b1c1c",
-              "surface-container": "#f0eded",
-              "surface": "#fcf9f8",
-              "surface-container-highest": "#e5e2e1",
-              "on-primary": "#ffffff",
-              "on-tertiary": "#ffffff",
-              "on-error-container": "#93000a",
-              "surface-container-high": "#eae7e7",
-              "tertiary": "#0b0c0c",
-              "surface-bright": "#fcf9f8",
-              "background": "#fcf9f8",
-              "surface-variant": "#e5e2e1",
-              "inverse-on-surface": "#f3f0ef",
-              "on-secondary-fixed-variant": "#494640",
-              "on-tertiary-container": "#8a8989",
-              "inverse-surface": "#303030",
-              "on-background": "#1b1c1c"
-            },
-            fontFamily: {
-              "headline": ["Poppins", "Epilogue"],
-              "body": ["Poppins", "Inter"],
-              "label": ["Poppins", "Inter"]
-            },
-            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
-          },
-        },
-      }
-</script>
 <style>
-        .material-symbols-outlined {
-            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
-            font-size: 1.25rem;
+    header.homepage-header { background: rgba(255,255,255,0.8); backdrop-filter: blur(18px); }
+    /* Navbar links, icon buttons, and dropdown items are deliberately NOT recolored on the
+       homepage -- they keep their own utility-class colors (grey nav/dropdown text, dark
+       icons, and the normal hover-to-dark), so the header looks IDENTICAL to every other
+       page. Previously these were forced to #111827, which made the homepage navbar read
+       darker/bolder than inner pages and visibly "changed" when navigating. */
+    header.homepage-header .dropdown-menu {
+        background: rgba(255,255,255,0.96);
+        border-color: rgba(148,163,184,0.24);
+    }
+    main .homepage-hero {
+        position: relative;
+        overflow: hidden;
+        background-color: #E1DFDA;
+        background-image: url("{% static 'images/hero-silk.png' %}");
+        background-repeat: no-repeat;
+        background-size: cover;
+        background-position: center center;
+    }
+    body .text-primary { color: #111827 !important; }
+    body .bg-primary { background-color: #111827 !important; }
+    body .border-primary { border-color: #E1DFDA !important; }
+    body .hover\:text-primary:hover { color: #111827 !important; }
+    body .hover\:bg-primary:hover { background-color: #111827 !important; }
+    body .hover\:border-primary:hover { border-color: #E1DFDA !important; }
+    body .focus\:border-primary:focus { border-color: #111827 !important; }
+    body .focus\:ring-primary:focus { --tw-ring-color: rgba(17,24,39,0.28) !important; }
+    main .homepage-hero::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: rgba(255,255,255,0.02);
+        pointer-events: none;
+    }
+    main .homepage-hero-content {
+        position: relative;
+        z-index: 10;
+    }
+    main .homepage-hero-label,
+    main .homepage-trending-label,
+    main .homepage-category-label {
+        font-family: "Poppins", sans-serif !important;
+        font-weight: 300 !important;
+        font-size: 0.75rem !important;
+        letter-spacing: 0.35em !important;
+        text-transform: uppercase !important;
+        color: #111827 !important;
+    }
+    main .homepage-hero-title,
+    main .homepage-trending-heading,
+    main .homepage-about-heading {
+        font-family: "Playfair Display", serif !important;
+        font-weight: 700 !important;
+        color: #111827 !important;
+        line-height: 0.92 !important;
+    }
+    main .homepage-hero-title {
+        font-size: clamp(4rem, 6vw, 7rem) !important;
+    }
+    main .homepage-trending-heading {
+        font-size: clamp(4rem, 6vw, 7rem) !important;
+    }
+    main .homepage-about-heading {
+        font-size: clamp(3rem, 4.5vw, 4.5rem) !important;
+    }
+    main .homepage-hero-description,
+    main .homepage-about-paragraph,
+    main .homepage-trending-copy {
+        font-family: "Poppins", sans-serif !important;
+        font-weight: 400 !important;
+        color: rgba(17, 24, 39, 0.88) !important;
+        line-height: 1.8 !important;
+    }
+    main .homepage-hero-description {
+        font-size: 1rem !important;
+    }
+    main .homepage-about-paragraph {
+        font-size: 1rem !important;
+    }
+    main .homepage-trending-copy {
+        font-size: 0.78rem !important;
+        letter-spacing: 0.35em !important;
+        text-transform: uppercase !important;
+        color: rgba(17, 24, 39, 0.72) !important;
+    }
+    main .homepage-hero-button,
+    main .homepage-stat-value,
+    main .homepage-stat-label {
+        font-family: "Poppins", sans-serif !important;
+        letter-spacing: 0.2em !important;
+        text-transform: uppercase !important;
+    }
+    main .homepage-hero-button {
+        font-weight: 500 !important;
+        color: #ffffff !important;
+        background-color: #111827 !important;
+        box-shadow: 0 24px 45px rgba(17, 24, 39, 0.18);
+    }
+    main .homepage-stat-value {
+        font-weight: 500 !important;
+        color: #111827 !important;
+        font-size: clamp(2.5rem, 4vw, 3.5rem) !important;
+        line-height: 1 !important;
+    }
+    main .homepage-stat-label {
+        font-weight: 300 !important;
+        color: #111827 !important;
+        font-size: 0.75rem !important;
+    }
+
+    /* ---- Homepage scroll reveal ---- */
+    /* Re-animates in BOTH directions: elements fade+glide in when they enter
+       the viewport and reset once fully out, so scrolling back up replays it.
+       Longer, softer easing than the About/How-it-works reveal for a richer feel. */
+    .hp-reveal,
+    .hp-reveal-left,
+    .hp-reveal-right {
+        opacity: 0;
+        transition: opacity 1s cubic-bezier(0.16, 1, 0.3, 1),
+                    transform 1.15s cubic-bezier(0.16, 1, 0.3, 1);
+        will-change: transform, opacity;
+    }
+    .hp-reveal { transform: translateY(52px); }
+    .hp-reveal-left { transform: translateX(-64px); }
+    .hp-reveal-right { transform: translateX(64px); }
+    .hp-reveal.active,
+    .hp-reveal-left.active,
+    .hp-reveal-right.active {
+        opacity: 1;
+        transform: none;
+    }
+    /* Stagger children inside a group so a row of cards cascades in */
+    .hp-stagger > .hp-d1 { transition-delay: 0.06s; }
+    .hp-stagger > .hp-d2 { transition-delay: 0.14s; }
+    .hp-stagger > .hp-d3 { transition-delay: 0.22s; }
+    .hp-stagger > .hp-d4 { transition-delay: 0.30s; }
+    .hp-stagger > .hp-d5 { transition-delay: 0.38s; }
+    .hp-stagger > .hp-d6 { transition-delay: 0.46s; }
+    .hp-d1 { transition-delay: 0.06s; }
+    .hp-d2 { transition-delay: 0.16s; }
+    .hp-d3 { transition-delay: 0.26s; }
+    .hp-d4 { transition-delay: 0.36s; }
+    /* Featured-gown cards cascade by DOM order regardless of count */
+    .hp-cards > *:nth-child(1) { transition-delay: 0.04s; }
+    .hp-cards > *:nth-child(2) { transition-delay: 0.12s; }
+    .hp-cards > *:nth-child(3) { transition-delay: 0.20s; }
+    .hp-cards > *:nth-child(4) { transition-delay: 0.28s; }
+    .hp-cards > *:nth-child(5) { transition-delay: 0.36s; }
+    .hp-cards > *:nth-child(6) { transition-delay: 0.44s; }
+    .hp-cards > *:nth-child(7) { transition-delay: 0.52s; }
+    .hp-cards > *:nth-child(8) { transition-delay: 0.60s; }
+    @media (prefers-reduced-motion: reduce) {
+        .hp-reveal, .hp-reveal-left, .hp-reveal-right {
+            opacity: 1 !important;
+            transform: none !important;
+            transition: none !important;
         }
-        .editorial-shadow { box-shadow: 0 20px 40px rgba(27, 28, 28, 0.06); }
-        .search-bar-spinner {
-            display: inline-block;
-            width: 1.125rem;
-            height: 1.125rem;
-            border: 2px solid #e5e2e1;
-            border-top-color: #0b0c0c;
-            border-radius: 50%;
-            animation: search-bar-spin 0.7s linear infinite;
-        }
-        @keyframes search-bar-spin {
-            to { transform: rotate(360deg); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-            .search-bar-spinner { animation: none; border-color: #c4c7c7; border-top-color: #747878; }
-        }
-        header.homepage-header { background: rgba(255,255,255,0.8); backdrop-filter: blur(18px); }
-        header.homepage-header nav a,
-        header.homepage-header nav button,
-        header.homepage-header nav button span.material-symbols-outlined {
-            color: #111827 !important;
-        }
-        header.homepage-header .dropdown-menu {
-            background: rgba(255,255,255,0.96);
-            border-color: rgba(148,163,184,0.24);
-        }
-        header.homepage-header .dropdown-menu a {
-            color: #111827 !important;
-        }
-        main .homepage-hero {
-            position: relative;
-            overflow: hidden;
-            background-color: #E1DFDA;
-            background-image: url("{% static 'images/hero-silk.png' %}");
-            background-repeat: no-repeat;
-            background-size: cover;
-            background-position: center center;
-        }
-        body .text-primary { color: #111827 !important; }
-        body .bg-primary { background-color: #111827 !important; }
-        body .border-primary { border-color: #E1DFDA !important; }
-        body .hover\:text-primary:hover { color: #111827 !important; }
-        body .hover\:bg-primary:hover { background-color: #111827 !important; }
-        body .hover\:border-primary:hover { border-color: #E1DFDA !important; }
-        body .focus\:border-primary:focus { border-color: #111827 !important; }
-        body .focus\:ring-primary:focus { --tw-ring-color: rgba(17,24,39,0.28) !important; }
-        main .homepage-hero::before {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background: rgba(255,255,255,0.02);
-            pointer-events: none;
-        }
-        main .homepage-hero-content {
-            position: relative;
-            z-index: 10;
-        }
-        main .homepage-hero-label,
-        main .homepage-trending-label,
-        main .homepage-category-label {
-            font-family: "Poppins", sans-serif !important;
-            font-weight: 300 !important;
-            font-size: 0.75rem !important;
-            letter-spacing: 0.35em !important;
-            text-transform: uppercase !important;
-            color: #111827 !important;
-        }
-        main .homepage-hero-title,
-        main .homepage-trending-heading,
-        main .homepage-about-heading {
-            font-family: "Playfair Display", serif !important;
-            font-weight: 700 !important;
-            color: #111827 !important;
-            line-height: 0.92 !important;
-        }
-        
-        main .homepage-hero-title {
-            font-size: clamp(4rem, 6vw, 7rem) !important;
-        }
-        main .homepage-trending-heading {
-            font-size: clamp(4rem, 6vw, 7rem) !important;
-        }
-        main .homepage-about-heading {
-            font-size: clamp(3rem, 4.5vw, 4.5rem) !important;
-        }
-        main .homepage-hero-description,
-        main .homepage-about-paragraph,
-        main .homepage-trending-copy {
-            font-family: "Poppins", sans-serif !important;
-            font-weight: 400 !important;
-            color: rgba(17, 24, 39, 0.88) !important;
-            line-height: 1.8 !important;
-        }
-        main .homepage-hero-description {
-            font-size: 1rem !important;
-        }
-        main .homepage-about-paragraph {
-            font-size: 1rem !important;
-        }
-        main .homepage-trending-copy {
-            font-size: 0.78rem !important;
-            letter-spacing: 0.35em !important;
-            text-transform: uppercase !important;
-            color: rgba(17, 24, 39, 0.72) !important;
-        }
-        main .homepage-hero-button,
-        main .homepage-stat-value,
-        main .homepage-stat-label {
-            font-family: "Poppins", sans-serif !important;
-            letter-spacing: 0.2em !important;
-            text-transform: uppercase !important;
-        }
-        main .homepage-hero-button {
-            font-weight: 500 !important;
-            color: #ffffff !important;
-            background-color: #111827 !important;
-            box-shadow: 0 24px 45px rgba(17, 24, 39, 0.18);
-        }
-        main .homepage-stat-value {
-            font-weight: 500 !important;
-            color: #111827 !important;
-            font-size: clamp(2.5rem, 4vw, 3.5rem) !important;
-            line-height: 1 !important;
-        }
-        main .homepage-stat-label {
-            font-weight: 300 !important;
-            color: #111827 !important;
-            font-size: 0.75rem !important;
-        }
-        .ai-panel-shadow { box-shadow: -10px 0 30px rgba(0,0,0,0.1); }
-        .ai-scroll::-webkit-scrollbar { width: 2px; }
-        .ai-scroll::-webkit-scrollbar-track { background: transparent; }
-        .ai-scroll::-webkit-scrollbar-thumb { background: #e5e2e1; }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fade-in { animation: fadeIn 0.4s ease forwards; }
-        #search-overlay {
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            transform: translateY(-100%);
-            opacity: 0;
-            pointer-events: none;
-        }
-        #search-overlay.open {
-            transform: translateY(0);
-            opacity: 1;
-            pointer-events: auto;
-        }
-        .group:hover .dropdown-menu {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-            pointer-events: auto;
-        }
-        .dropdown-menu {
-            transition: all 0.4s cubic-bezier(0.23, 1, 0.320, 1);
-            transform: translateY(-15px) scale(0.92);
-            opacity: 0;
-            pointer-events: none;
-        }
-        body { font-family: 'Poppins', sans-serif; }
+    }
+
+    /* ---- Rent by occasion ---- */
+    /* A landscape band (NOT a full-screen hero) whose image drifts against the scroll,
+       so you see a different part of the fabric on the way past instead of a static
+       pane. Done with a transform on an oversized child rather than
+       background-attachment:fixed -- that keyword is ignored on iOS and can't reveal
+       the top of the image the way this does. */
+    .hp-band {
+        position: relative;
+        display: block;
+        overflow: hidden;
+        height: clamp(420px, 62vh, 620px);
+        background-color: #E1DFDA;
+    }
+    .hp-band-media {
+        position: absolute;
+        /* taller than the band so there is room to travel without exposing an edge */
+        top: -12%;
+        bottom: -12%;
+        left: 0;
+        right: 0;
+        will-change: transform;
+    }
+    .hp-band-media img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+    /* Keeps white type legible over a very pale fabric without muddying it -- weighted
+       to the centre where the words sit, so the edges of the silk stay bright. */
+    .hp-band-scrim {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(ellipse at center,
+                    rgba(27,28,28,0.30) 0%,
+                    rgba(27,28,28,0.17) 45%,
+                    rgba(27,28,28,0.03) 100%);
+        pointer-events: none;
+    }
+    .hp-band-inner {
+        position: relative;
+        z-index: 2;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 0 2rem;
+    }
+    .hp-band-eyebrow {
+        font-family: "Poppins", sans-serif;
+        font-weight: 300;
+        font-size: 0.6875rem;
+        letter-spacing: 0.35em;
+        text-transform: uppercase;
+        color: #ffffff;
+        text-shadow: 0 1px 12px rgba(27,28,28,0.35);
+        margin-bottom: 1.15rem;
+    }
+    .hp-band-title {
+        font-family: "Playfair Display", serif;
+        font-weight: 700;
+        color: #ffffff;
+        line-height: 0.95;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        font-size: clamp(2.75rem, 5.5vw, 5rem);
+        /* Two shadows: a tight one for edge definition against pale silk, a wide soft
+           one to lift the whole word off the fabric. Lets the scrim stay light. */
+        text-shadow: 0 1px 3px rgba(27,28,28,0.30), 0 2px 34px rgba(27,28,28,0.45);
+        margin-bottom: 2rem;
+    }
+    /* The solid white plate from the reference -- it reads clearly over any part of the
+       image, which a translucent/outline button would not. */
+    .hp-band-cta {
+        display: inline-block;
+        background: #ffffff;
+        color: #1b1c1c;
+        font-family: "Poppins", sans-serif;
+        font-weight: 500;
+        font-size: 0.6875rem;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        padding: 1.05rem 2.4rem;
+        box-shadow: 0 18px 40px rgba(27,28,28,0.18);
+        transition: background-color 0.4s ease, color 0.4s ease, transform 0.4s ease;
+    }
+    .hp-band:hover .hp-band-cta {
+        background: #1b1c1c;
+        color: #ffffff;
+        transform: translateY(-2px);
+    }
+
+    /* Occasion cards under the band reuse the Rentals (collections.html) card design
+       verbatim -- see that template's .coll-reveal cards -- so the same tile appears
+       consistently whether a customer meets it on the homepage or the browse-all page.
+       No extra CSS needed here: it's the same plain utility classes, just with this
+       page's own hp-reveal scroll-in instead of collections.html's coll-reveal. */
+
+    @media (prefers-reduced-motion: reduce) {
+        .hp-band-media { transform: none !important; }
+        .hp-band-cta { transition: none !important; }
+    }
 </style>
-</head>
-<body class="bg-white text-on-surface selection:bg-primary-fixed-dim overflow-x-hidden" data-authenticated="{{ request.user.is_authenticated|yesno:'true,false' }}" data-user-key="{% if request.user.is_authenticated %}{{ request.user.id }}{% else %}guest{% endif %}" data-login-url="{% url 'accounts:login' %}" data-orders-url="{% url 'gowns:orders' %}">
+{% endblock %}
 
-<!-- TOP NAVBAR -->
-<header class="fixed top-0 w-full z-[70] homepage-header bg-white/80 dark:bg-[#222222]/80 backdrop-blur-md border-b border-black/5">
-<nav class="flex justify-between items-center w-full px-8 h-20">
-    <div class="flex items-center gap-12">
-        <div class="flex-shrink-0">
-            <a href="{% url 'gowns:homepage' %}" class="block" onclick="event.preventDefault(); location.reload(); return false;" aria-label="Refresh homepage">
-            <h1 class="text-2xl font-bold tracking-tighter text-[#222222] dark:text-[#FAF4EB]">ARABELA</h1>
-            </a>
-        </div>
-        <div class="hidden md:flex gap-8 items-center self-stretch">
-            <div class="relative group h-full flex items-center">
-                <a class="uppercase tracking-[0.1rem] text-[0.6875rem] text-[#615E57] dark:text-[#A09E99] hover:text-[#222222] dark:hover:text-white transition-colors duration-300 font-body" href="#">Rent</a>
-                <div class="dropdown-menu absolute top-full left-0 w-52 bg-white dark:bg-[#222222] shadow-[0_10px_30px_rgba(0,0,0,0.08)] border-t-2 border-[#222222] dark:border-[#FAF4EB] py-6 z-[80]" style="background-color: #ffffff;">
-                    <ul class="flex flex-col gap-4">
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{% url 'gowns:collection_all' %}">All</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{% url 'gowns:collection_dresses' %}">Dresses</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{% url 'gowns:collection_filipiniana' %}">Filipiniana</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{% url 'gowns:collection_kid_suit' %}">Kids suit</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{% url 'gowns:collection_wedding' %}">Wedding</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{% url 'gowns:collection_suit' %}">Suit</a></li>
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{% url 'gowns:collection_ball_gown' %}">Ball gown</a></li>
-                    </ul>
-                </div>
-            </div>
-            <div class="relative group h-full flex items-center">
-                <a class="uppercase tracking-[0.1rem] text-[0.6875rem] text-[#615E57] dark:text-[#A09E99] hover:text-[#222222] dark:hover:text-white transition-colors duration-300 font-body" href="{% url 'gowns:how_it_works' %}">How it Works</a>
-                <div class="dropdown-menu absolute top-full left-0 w-48 bg-white dark:bg-[#222222] shadow-[0_10px_30px_rgba(0,0,0,0.08)] border-t-2 border-[#222222] dark:border-[#FAF4EB] py-6 z-[80]" style="background-color: #ffffff;">
-                    <ul class="flex flex-col gap-4">
-                        <li><a class="block px-8 py-1 text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] hover:text-[#222222] dark:text-[#A09E99] dark:hover:text-white transition-colors font-body" href="{% url 'gowns:faqs' %}">FAQs</a></li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="flex gap-6 items-center">
-        <button class="scale-95 active:scale-90 transition-all text-slate-900 flex items-center gap-2 group" onclick="toggleAI()">
-            <span class="font-label text-[0.6rem] uppercase tracking-widest hidden lg:block opacity-0 group-hover:opacity-100 transition-opacity">Arabela Reccomends</span>
-            <span class="material-symbols-outlined" style='font-variation-settings: "FILL" 1;'>auto_fix_high</span>
-        </button>
-        <button class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]" onclick="toggleSearch()">
-            <span class="material-symbols-outlined" id="search-icon">search</span>
-        </button>
-        <button type="button" class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]" onclick="toggleCart()" aria-label="Open selection">
-            <span class="material-symbols-outlined">shopping_bag</span>
-        </button>
-        {% if request.user.is_authenticated %}
-        <button id="user-icon-btn" class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]">
-            <span class="material-symbols-outlined">person</span>
-        </button>
-        {% else %}
-        <a href="{% url 'accounts:login' %}">
-            <button class="scale-95 active:scale-90 transition-all text-[#222222] dark:text-[#FAF4EB]">
-                <span class="material-symbols-outlined">person</span>
-            </button>
-        </a>
-        {% endif %}
-    </div>
-</nav>
-</header>
-
-
-<!-- SEARCH OVERLAY -->
-<div class="fixed top-20 left-0 right-0 bottom-0 z-[65] flex flex-col" id="search-overlay">
-    {% include "partials/search_overlay.html" %}
-    <div class="flex-1 min-h-0 w-full bg-transparent cursor-pointer" onclick="toggleSearch()" role="presentation" aria-hidden="true"></div>
-</div>
-
-<!-- AI: invisible click-away (no dim/blur on page; same close as X) -->
-<div id="ai-click-away" class="fixed inset-0 z-[69] bg-transparent pointer-events-none" onclick="toggleAI()" aria-hidden="true"></div>
-
-<!-- AI CONCIERGE PANEL -->
-<aside class="fixed top-0 right-0 h-full w-full md:w-[480px] bg-white z-[80] translate-x-full transform transition-transform duration-500 ease-in-out shadow-none flex flex-col" id="ai-concierge">
-    <div class="p-8 flex justify-between items-center border-b border-black/5">
-        <h2 class="text-sm font-bold tracking-[0.2em] uppercase flex items-center gap-3">
-            <span class="material-symbols-outlined text-primary" style='font-variation-settings: "FILL" 1;'>auto_fix_high</span>
-            Arabela Reccomends
-        </h2>
-        <button class="hover:rotate-90 transition-transform p-2" onclick="toggleAI()">
-            <span class="material-symbols-outlined">close</span>
-        </button>
-    </div>
-    <div class="flex-1 overflow-y-auto ai-scroll p-8 space-y-10" id="ai-content">
-        <div class="space-y-4 pt-4">
-            <p class="text-2xl font-light italic leading-tight text-primary">Find the definitive piece for your silhouette.</p>
-        </div>
-        <div class="space-y-6" id="occasion-picker">
-            <p class="text-[0.6875rem] uppercase tracking-[0.15em] text-on-surface-variant font-semibold">What is the occasion?</p>
-            <div class="flex flex-wrap gap-3">
-                <button class="px-6 py-3 bg-white border border-black rounded-full text-[0.6rem] uppercase tracking-widest text-black hover:bg-gray-50 transition-all active:scale-95" onclick="selectOccasion('Birthday')">Birthday</button>
-                <button class="px-6 py-3 bg-white border border-black rounded-full text-[0.6rem] uppercase tracking-widest text-black hover:bg-gray-50 transition-all active:scale-95" onclick="selectOccasion('Wedding')">Wedding</button>
-                <button class="px-6 py-3 bg-white border border-black rounded-full text-[0.6rem] uppercase tracking-widest text-black hover:bg-gray-50 transition-all active:scale-95" onclick="selectOccasion('Editorial')">Editorial Shoot</button>
-                <button class="px-6 py-3 bg-white border border-black rounded-full text-[0.6rem] uppercase tracking-widest text-black hover:bg-gray-50 transition-all active:scale-95" onclick="selectOccasion('Red Carpet')">Red Carpet</button>
-                <button class="px-6 py-3 bg-white border border-black rounded-full text-[0.6rem] uppercase tracking-widest text-black hover:bg-gray-50 transition-all active:scale-95" onclick="selectOccasion('Private View')">Private View</button>
-            </div>
-        </div>
-        <div class="hidden space-y-10 pt-4 animate-fade-in" id="ai-results">
-            <div class="space-y-4">
-                <div class="flex items-center gap-2">
-                    <span class="w-1.5 h-1.5 bg-primary rounded-full"></span>
-                    <p class="text-lg font-light leading-snug text-primary" id="recommendation-text"></p>
-                </div>
-                <p class="text-[0.6875rem] uppercase tracking-[0.15em] text-on-surface-variant font-semibold">Curated Suggestions</p>
-            </div>
-            <div class="grid grid-cols-2 gap-6" id="suggestion-cards"></div>
-            <button class="text-[0.6rem] uppercase tracking-[0.2em] border-b border-primary/20 pb-1 hover:border-primary transition-all" onclick="resetAI()">Start Over</button>
-        </div>
-    </div>
-    <div class="p-8 border-t border-black/5 bg-white">
-        <div class="relative">
-            <input class="w-full bg-white border border-black/10 py-4 px-4 focus:ring-0 focus:border-black text-sm placeholder:text-black/20 rounded" placeholder="Describe the perfect gown for your occasion..." type="text" id="ai-chat-input"/>
-            <button class="absolute right-0 bottom-4 mr-4" onclick="sendAIMessage()">
-                <span class="material-symbols-outlined">arrow_forward</span>
-            </button>
-        </div>
-        <p class="text-[0.6rem] text-on-surface-variant leading-relaxed mt-6 opacity-60">
-            AI recommendations tailored to your unique style and fitting requirements.
-        </p>
-    </div>
-</aside>
-
-<!-- Cart: invisible click-away (no dim/blur on page; same pattern as Arabela Recommends) -->
-<div id="cart-click-away" class="fixed inset-0 z-[84] bg-transparent pointer-events-none" onclick="toggleCart()" aria-hidden="true"></div>
-
-<!-- Cart / selection drawer -->
-<aside id="cart-drawer" class="fixed top-0 right-0 h-full w-full md:w-[480px] bg-white z-[85] translate-x-full transform transition-transform duration-500 ease-in-out shadow-none flex flex-col" aria-hidden="true">
-    <header class="p-8 flex justify-between items-center border-b border-black/5 shrink-0">
-        <h2 class="text-sm font-bold tracking-[0.2em] uppercase text-on-surface flex items-center gap-3">
-            <span class="material-symbols-outlined text-primary" style='font-variation-settings: "FILL" 0;'>shopping_bag</span>
-            Your Selection
-        </h2>
-        <button type="button" class="hover:opacity-50 transition-opacity text-[#222222] dark:text-[#FAF4EB]" onclick="toggleCart()" aria-label="Close selection">
-            <span class="material-symbols-outlined text-2xl">close</span>
-        </button>
-    </header>
-    <div class="flex-1 overflow-y-auto ai-scroll px-8 py-4 space-y-10 min-h-0">
-        <div class="cart-line flex gap-4 group" data-unit-price="4500">
-            <div class="w-24 h-32 bg-white overflow-hidden shrink-0">
-                <img alt="Structured Wool Blazer" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-            </div>
-            <div class="flex-1 flex flex-col justify-between py-1 min-w-0">
-                <div class="flex justify-between items-start gap-2">
-                    <div>
-                        <h3 class="text-sm font-medium text-on-surface leading-tight">Structured Wool Blazer</h3>
-                        <p class="text-[0.6875rem] text-on-secondary-container mt-1">Size: Large</p>
-                    </div>
-                    <button type="button" class="text-on-surface hover:text-error transition-colors shrink-0" onclick="cartRemoveLine(this)" aria-label="Remove item">
-                        <span class="material-symbols-outlined text-lg">close</span>
-                    </button>
-                </div>
-                <div class="flex justify-between items-end gap-2">
-                    <div class="flex items-center space-x-3">
-                        <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, -1)" aria-label="Decrease quantity">
-                            <span class="material-symbols-outlined text-xs">remove</span>
-                        </button>
-                        <span class="cart-qty text-xs font-medium tabular-nums">1</span>
-                        <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, 1)" aria-label="Increase quantity">
-                            <span class="material-symbols-outlined text-xs">add</span>
-                        </button>
-                    </div>
-                    <p class="cart-line-total font-['Inter',sans-serif] text-sm font-semibold text-on-surface tracking-wide tabular-nums shrink-0">₱ 4,500.00</p>
-                </div>
-            </div>
-        </div>
-        <div class="cart-line flex gap-4 group" data-unit-price="6200">
-            <div class="w-24 h-32 bg-white overflow-hidden shrink-0">
-                <img alt="Emerald Silk Midi Dress" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-            </div>
-            <div class="flex-1 flex flex-col justify-between py-1 min-w-0">
-                <div class="flex justify-between items-start gap-2">
-                    <div>
-                        <h3 class="text-sm font-medium text-on-surface leading-tight">Emerald Silk Midi Dress</h3>
-                        <p class="text-[0.6875rem] text-on-secondary-container mt-1">Size: Small</p>
-                    </div>
-                    <button type="button" class="text-on-surface hover:text-error transition-colors shrink-0" onclick="cartRemoveLine(this)" aria-label="Remove item">
-                        <span class="material-symbols-outlined text-lg">close</span>
-                    </button>
-                </div>
-                <div class="flex justify-between items-end gap-2">
-                    <div class="flex items-center space-x-3">
-                        <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, -1)" aria-label="Decrease quantity">
-                            <span class="material-symbols-outlined text-xs">remove</span>
-                        </button>
-                        <span class="cart-qty text-xs font-medium tabular-nums">1</span>
-                        <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, 1)" aria-label="Increase quantity">
-                            <span class="material-symbols-outlined text-xs">add</span>
-                        </button>
-                    </div>
-                    <p class="cart-line-total font-['Inter',sans-serif] text-sm font-semibold text-on-surface tracking-wide tabular-nums shrink-0">₱ 6,200.00</p>
-                </div>
-            </div>
-        </div>
-    </div>
-    <footer class="p-8 space-y-6 bg-white border-t border-black/5 shrink-0">
-        <div class="space-y-2">
-            <div class="flex justify-between items-center">
-                <span class="text-xs uppercase tracking-widest text-secondary">subtotal</span>
-                <span id="cart-subtotal" class="font-['Inter',sans-serif] text-sm text-on-surface tabular-nums">₱ 10,700.00</span>
-            </div>
-            <div class="flex justify-between items-center">
-                <span class="text-xs uppercase tracking-widest text-secondary">Security Deposit</span>
-                <span id="cart-deposit" class="font-['Inter',sans-serif] text-sm text-on-surface tabular-nums">₱ 4,000.00</span>
-            </div>
-            <div class="pt-4 flex justify-between items-center border-t border-black/5">
-                <span class="text-sm font-bold uppercase tracking-[0.2rem] text-on-surface">Total Amount</span>
-                <span id="cart-total" class="font-['Epilogue',sans-serif] text-lg font-bold text-on-surface tabular-nums tracking-tight">₱ 14,700.00</span>
-            </div>
-        </div>
-        <a href="{% url 'gowns:reservation' %}" onclick="return saveCartAndProceedToReservation(event)" class="w-full bg-white border border-black text-black uppercase text-xs font-bold tracking-[0.2rem] py-5 hover:bg-gray-50 transition-colors duration-300 inline-flex items-center justify-center no-underline">Proceed to Reservation</a>
-    </footer>
-</aside>
-
-<!-- AI FLOATING BUTTON -->
-<button class="fixed bottom-10 right-10 z-[81] w-14 h-14 bg-white text-black border border-black rounded-full flex items-center justify-center shadow-none hover:bg-gray-50 active:scale-95 transition-all group overflow-hidden" onclick="toggleAI()">
-    <div class="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-    <span class="material-symbols-outlined relative z-10" style='font-variation-settings: "FILL" 1;'>auto_fix_high</span>
-</button>
-
-<main class="pt-20">
-
+{% block content %}
     <!-- HERO SECTION -->
     <section class="relative h-[90vh] w-full flex items-center overflow-hidden homepage-hero">
-        <div class="container mx-auto px-8 relative z-10 homepage-hero-content">
+        <div class="container mx-auto px-8 relative z-10 homepage-hero-content hp-stagger">
             <div class="max-w-2xl">
-                <span class="font-label homepage-hero-label mb-4 block">ARABELA | COLLECTION 2026</span>
-                <h2 class="font-headline homepage-hero-title leading-[0.9] font-extrabold tracking-tight mb-8">Rent The Dream</h2>
-                <p class="homepage-hero-description max-w-sm mb-10">Browse our full collection online. Check real-time availability, reserve your outfit, and pick it up at the shop.</p>
+                <span class="font-label homepage-hero-label mb-4 block hp-reveal hp-d1">ARABELA | COLLECTION 2026</span>
+                <h2 class="font-headline homepage-hero-title leading-[0.9] font-extrabold tracking-tight mb-8 hp-reveal hp-d2">Rent The Dream</h2>
+                <p class="homepage-hero-description max-w-sm mb-10 hp-reveal hp-d3">Browse our full collection online. Check real-time availability, reserve your outfit, and pick it up at the shop.</p>
                 <!-- Links to Collections page -->
-                <a href="{% url 'gowns:collections' %}" class="inline-flex rounded-full overflow-hidden">
+                <a href="{% url 'gowns:collections' %}" class="inline-flex rounded-full overflow-hidden hp-reveal hp-d4">
                     <span class="homepage-hero-button inline-flex items-center justify-center px-12 py-5">Explore Collections</span>
                 </a>
             </div>
@@ -480,88 +291,107 @@
     <!-- CATEGORIES SECTION -->
     <section class="py-32 bg-white px-8">
         <div class="container mx-auto grid grid-cols-1 md:grid-cols-12 gap-8 items-end">
-            <div class="md:col-span-5 relative">
-                <div class="aspect-[3/4] overflow-hidden bg-surface-container-lowest">
-                    <!-- ARABELA CATEGORY IMAGE: Replace with actual photo of women's gown collection -->
-                    <img alt="Arabela Women Gown Collection" class="w-full h-full object-cover transition-transform duration-700 hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDoXBFqStMnToVb80lpNcOu2L2sM791MrJmBW76ONWSN9NNxjYwIKr62lrtgKTsJUJ3EdwdmrXdEDzIHlQCq5cpBFNLIqmKKBHScdoIF8ax4ontDI3vyH_7UJJMwghVtSjqVoDofM_FIQR_XMOaK-QLh9v1H1Ub672NUBIJdFsaDRq5ICqksBDjNV55RZmXuFb6qC1v_poZpZMvRt7A5Qzegj5Go1Ot_xpj0qIyESs5_TLYUYBwEiG9fQi1e4y5MFTCzYsCtPcwQ-o"/>
-                </div>
-                <div class="absolute -bottom-8 -right-8 p-12 bg-surface-container-lowest editorial-shadow">
-                    <a class="font-label text-[0.6875rem] uppercase tracking-widest border-b border-primary pb-1" href="{% url 'gowns:featured_women_collections' %}">Women Collection</a>
-                </div>
+            <div class="md:col-span-5 hp-reveal-left">
+                <!-- Same overlay label pattern as the Rentals cards: centered white
+                     uppercase text with an underline rule, sitting on the image. -->
+                <a href="{% url 'gowns:featured_women_collections' %}" class="group cursor-pointer block">
+                    <div class="relative aspect-[3/4] overflow-hidden bg-surface-container-lowest">
+                        <!-- ARABELA CATEGORY IMAGE: Replace with actual photo of women's gown collection -->
+                        <img alt="Arabela Women Gown Collection" class="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDoXBFqStMnToVb80lpNcOu2L2sM791MrJmBW76ONWSN9NNxjYwIKr62lrtgKTsJUJ3EdwdmrXdEDzIHlQCq5cpBFNLIqmKKBHScdoIF8ax4ontDI3vyH_7UJJMwghVtSjqVoDofM_FIQR_XMOaK-QLh9v1H1Ub672NUBIJdFsaDRq5ICqksBDjNV55RZmXuFb6qC1v_poZpZMvRt7A5Qzegj5Go1Ot_xpj0qIyESs5_TLYUYBwEiG9fQi1e4y5MFTCzYsCtPcwQ-o"/>
+                        <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                            <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">Women Collection</span>
+                            <span class="mt-2 block w-10 sm:w-12 border-t border-white" aria-hidden="true"></span>
+                        </div>
+                    </div>
+                </a>
             </div>
             <div class="md:col-span-2"></div>
-            <div class="md:col-span-5 relative mt-24 md:mt-0">
-                <div class="aspect-[3/4] overflow-hidden bg-surface-container-lowest">
-                    <!-- ARABELA CATEGORY IMAGE: Replace with actual photo of men's barong/suit collection -->
-                    <img alt="Arabela Men Collection" class="w-full h-full object-cover transition-transform duration-700 hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDvYD3Wun7AWJcPA4TmiIaIRFvTUXZ5TR4wigNkmxhOQLCFwpe1f_w-ahiG8-Zrzk7ITEqSLF1yUbyjxMjhdd0jc-YkxtfbSHXQ4KkCntSAigKZf-w_v3uAsvLEU32hL4GvtrokdVjzQ4W6agvmGeYODkHRsEBfNtPWWhBm5VB2NhY8piBhBRMTMeYjxxexO15JQFbyF6Ifx-y5Jb5ICNE6k2x1DVgKnaOKMWa2pNOE3XtKTIejAjLRu37UXWPoBM-xl8SiX9Vl4CA"/>
-                </div>
-                <div class="absolute -top-8 -left-8 p-12 bg-surface-container-lowest editorial-shadow">
-                    <a class="font-label text-[0.6875rem] uppercase tracking-widest border-b border-primary pb-1" href="{% url 'gowns:featured_men_collections' %}">Men Collection</a>
-                </div>
+            <div class="md:col-span-5 mt-24 md:mt-0 hp-reveal-right">
+                <a href="{% url 'gowns:featured_men_collections' %}" class="group cursor-pointer block">
+                    <div class="relative aspect-[3/4] overflow-hidden bg-surface-container-lowest">
+                        <!-- ARABELA CATEGORY IMAGE: Replace with actual photo of men's barong/suit collection -->
+                        <img alt="Arabela Men Collection" class="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDvYD3Wun7AWJcPA4TmiIaIRFvTUXZ5TR4wigNkmxhOQLCFwpe1f_w-ahiG8-Zrzk7ITEqSLF1yUbyjxMjhdd0jc-YkxtfbSHXQ4KkCntSAigKZf-w_v3uAsvLEU32hL4GvtrokdVjzQ4W6agvmGeYODkHRsEBfNtPWWhBm5VB2NhY8piBhBRMTMeYjxxexO15JQFbyF6Ifx-y5Jb5ICNE6k2x1DVgKnaOKMWa2pNOE3XtKTIejAjLRu37UXWPoBM-xl8SiX9Vl4CA"/>
+                        <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                            <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">Men Collection</span>
+                            <span class="mt-2 block w-10 sm:w-12 border-t border-white" aria-hidden="true"></span>
+                        </div>
+                    </div>
+                </a>
             </div>
         </div>
     </section>
 
-    <!-- FEATURED GOWNS SECTION (The Archive) -->
-    <section class="py-32 bg-white px-8">
-        <div class="container mx-auto">
-            <div class="flex flex-col md:flex-row justify-between items-baseline mb-20 gap-8">
-                <button type="button" onclick="toggleSearch()" class="font-headline homepage-trending-heading tracking-tighter text-left bg-transparent border-0 p-0 cursor-pointer hover:opacity-80 transition-opacity" aria-label="Open search and top picks">Top picks</button>
-                <p class="homepage-trending-copy max-w-xs leading-loose">
-                    Hand-picked collections for every occasion. Redefining style through sharing.
+    <!-- RENT BY OCCASION -->
+    <!-- Replaces the old "Top picks" grid: customers arrive knowing the EVENT they need
+         a gown for, not a product name, so the homepage now sorts by occasion. Wedding
+         gets the full parallax band (the biggest booking driver); the four next-most
+         rented occasions sit under it as cards. -->
+    <section class="bg-white">
+        <div class="container mx-auto px-8 pt-32 pb-16">
+            <div class="flex flex-col md:flex-row justify-between items-baseline gap-8">
+                <h2 class="font-headline homepage-trending-heading tracking-tighter hp-reveal hp-d1">Rent by occasion</h2>
+                <p class="homepage-trending-copy max-w-xs leading-loose hp-reveal hp-d2">
+                    The pieces our customers reserve most, chosen for the moments that matter.
                 </p>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-12">
+        </div>
 
-                <!-- FEATURED GOWNS FROM DATABASE -->
-                <!-- Django will loop through featured gowns here -->
-                {% for gown in featured_gowns %}
-                <div class="group cursor-pointer {% if forloop.counter == 2 or forloop.counter == 4 %}md:mt-16{% endif %}">
-                    <div class="relative overflow-hidden bg-surface-container-lowest mb-6">
-                        {% if gown.availability_status == 'Available' %}
-                        <div class="absolute left-0 top-1/4 z-10 bg-secondary-container text-on-secondary-container px-2 py-6 rounded-full">
-                            <span class="[writing-mode:vertical-rl] font-label text-[0.6rem] uppercase tracking-widest font-bold">Available Now</span>
-                        </div>
-                        {% endif %}
-                        <!-- ARABELA PRODUCT IMAGE: Replace src with {{ gown.photos.url }} once real gown photos are uploaded by admin -->
-                        <img alt="Arabela Gown - {{ gown.name }}" class="w-full aspect-[4/5] object-cover rounded-lg group-hover:scale-105 transition-transform duration-500" src="{{ gown.photos.url }}"/>
-                    </div>
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <h4 class="font-headline text-lg font-bold">{{ gown.name }}</h4>
-                            <p class="text-[0.6875rem] text-on-surface-variant uppercase tracking-widest mt-1">{{ gown.category }}</p>
-                        </div>
-                        <span class="text-[0.6875rem] font-bold">₱{{ gown.rental_price }} / Day</span>
-                    </div>
-                </div>
-                {% empty %}
-                {% for item in featured_search_items %}
-                <div class="group cursor-pointer {% if forloop.counter == 2 or forloop.counter == 4 %}md:mt-16{% endif %}">
-                    <a href="{% url 'gowns:product_detail' collection=item.collection_key slug=item.slug %}" class="block no-underline text-inherit">
-                        <div class="relative overflow-hidden bg-surface-container-lowest mb-6">
-                            {% if forloop.counter == 1 %}
-                            <div class="absolute left-0 top-1/4 z-10 bg-secondary-container text-on-secondary-container px-2 py-6 rounded-full">
-                                <span class="[writing-mode:vertical-rl] font-label text-[0.6rem] uppercase tracking-widest font-bold">Available Now</span>
-                            </div>
-                            {% elif forloop.counter == 4 %}
-                            <div class="absolute left-0 top-1/4 z-10 bg-secondary-container text-on-secondary-container px-2 py-6 rounded-full">
-                                <span class="[writing-mode:vertical-rl] font-label text-[0.6rem] uppercase tracking-widest font-bold">New Arrival</span>
-                            </div>
-                            {% endif %}
-                            <img alt="{{ item.title }}" class="w-full aspect-[4/5] object-cover rounded-lg group-hover:scale-105 transition-transform duration-500" src="{{ item.image }}"/>
-                        </div>
-                        <div class="flex justify-between items-start">
-                            <div>
-                                <h4 class="font-headline text-lg font-bold">{{ item.title }}</h4>
-                                <p class="text-[0.6875rem] text-on-surface-variant uppercase tracking-widest mt-1">{% if item.collection_key == 'kid-suit' %}Kids suit{% elif item.collection_key == 'dresses' %}Dresses{% elif item.collection_key == 'filipiniana' %}Filipiniana{% elif item.collection_key == 'wedding' %}Wedding{% elif item.collection_key == 'suit' %}Suit{% elif item.collection_key == 'ball-gown' %}Ball gown{% else %}{{ item.collection_key }}{% endif %}</p>
-                            </div>
-                            <span class="text-[0.6875rem] font-bold">{{ item.price_label }}</span>
-                        </div>
-                    </a>
-                </div>
-                {% endfor %}
-                {% endfor %}
+        <!-- Wedding band. The silk here is the same fabric plate as the hero, cropped and
+             drifting differently -- it reads as one house texture rather than a repeat. -->
+        <a href="{% url 'gowns:collection_wedding' %}" class="hp-band group" aria-label="Discover the Wedding collection">
+            <div class="hp-band-media" data-parallax>
+                <img src="{% static 'images/hero-silk.png' %}" alt="" aria-hidden="true"/>
+            </div>
+            <div class="hp-band-scrim"></div>
+            <div class="hp-band-inner hp-stagger">
+                <span class="hp-band-eyebrow hp-reveal hp-d1">Dress for the occasion</span>
+                <h3 class="hp-band-title hp-reveal hp-d2">Wedding</h3>
+                <span class="hp-band-cta hp-reveal hp-d3">Discover our selection</span>
+            </div>
+        </a>
 
+        <div class="container mx-auto px-8 pt-20 pb-32">
+            <!-- Same card design as the Rentals browse page (templates/collections.html
+                 .coll-reveal cards): image + centered overlay label + underline rule.
+                 hp-cards/hp-reveal drive the scroll-in here, matching the rest of this
+                 page, instead of collections.html's own coll-reveal. -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-8 sm:gap-x-6 md:gap-x-8 hp-cards">
+                <a href="{% url 'gowns:collection_ninang_gown' %}" class="group hp-reveal cursor-pointer flex flex-col items-center">
+                    <div class="relative w-full aspect-[2/3] overflow-hidden bg-surface-container-high rounded-sm">
+                        <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuAjReG6BS4gyWCW4RlLjZjjW9aam7GCNjd80JyHGd_rZy_i_GVGoZYq8_ySiM9IHg4vm1IuZaX_kTU1WlExZjrLibM0am-Wwr31pNVZb0Ytv53LWV-oCQgwiPGQwbQcKE1A8JTzeiciKl9Lwklj2cp9trtrThsMqPb7OecedsuQ3DJ1PfBAeaYmQ4zhydY7_Ht3Zh42f1ucG82HCYmabAG_uaruSZeeeJiZuacGRxOT1L-y-iuZNNR0YY1x7-urgpmZurKgQlU-N0g" alt="Ninang gown collection" class="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
+                        <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                            <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">Ninang</span>
+                            <span class="mt-2 block w-10 sm:w-12 border-t border-white" aria-hidden="true"></span>
+                        </div>
+                    </div>
+                </a>
+                <a href="{% url 'gowns:collection_filipiniana' %}" class="group hp-reveal cursor-pointer flex flex-col items-center">
+                    <div class="relative w-full aspect-[2/3] overflow-hidden bg-surface-container-high rounded-sm">
+                        <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuDPoJ-CJc3c76J-itMK3Xu3-7H-QhmcbeTXcY_-9atbblNbhbvi3Y30ytcD6_3FLfpM5XX7ndXzS2SKGfKEPeoUB-gVDaK3TcHP39RWItFbbHGtasalNo2IyFaR3ktt5aIJHH0X7S7kCp45dxo-wOF7oSLQ3ycBSoCiZslRNzjjUNhA0eTA5onV5iPtvApJwmWkexxTQVhc-5JnOY9Ipnw7JnpTLbDzfp1V_iP686oZZCKa7XmFl7NIJGzfqZl1-_F16IDVdvu-GmQ" alt="Filipiniana collection" class="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
+                        <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                            <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">Filipiniana</span>
+                            <span class="mt-2 block w-10 sm:w-12 border-t border-white" aria-hidden="true"></span>
+                        </div>
+                    </div>
+                </a>
+                <a href="{% url 'gowns:collection_ball_gown' %}" class="group hp-reveal cursor-pointer flex flex-col items-center">
+                    <div class="relative w-full aspect-[2/3] overflow-hidden bg-surface-container-high rounded-sm">
+                        <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuDoXBFqStMnToVb80lpNcOu2L2sM791MrJmBW76ONWSN9NNxjYwIKr62lrtgKTsJUJ3EdwdmrXdEDzIHlQCq5cpBFNLIqmKKBHScdoIF8ax4ontDI3vyH_7UJJMwghVtSjqVoDofM_FIQR_XMOaK-QLh9v1H1Ub672NUBIJdFsaDRq5ICqksBDjNV55RZmXuFb6qC1v_poZpZMvRt7A5Qzegj5Go1Ot_xpj0qIyESs5_TLYUYBwEiG9fQi1e4y5MFTCzYsCtPcwQ-o" alt="Ball gown collection" class="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
+                        <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                            <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">Ball Gown</span>
+                            <span class="mt-2 block w-10 sm:w-12 border-t border-white" aria-hidden="true"></span>
+                        </div>
+                    </div>
+                </a>
+                <a href="{% url 'gowns:collection_suit' %}" class="group hp-reveal cursor-pointer flex flex-col items-center">
+                    <div class="relative w-full aspect-[2/3] overflow-hidden bg-surface-container-high rounded-sm">
+                        <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuDvYD3Wun7AWJcPA4TmiIaIRFvTUXZ5TR4wigNkmxhOQLCFwpe1f_w-ahiG8-Zrzk7ITEqSLF1yUbyjxMjhdd0jc-YkxtfbSHXQ4KkCntSAigKZf-w_v3uAsvLEU32hL4GvtrokdVjzQ4W6agvmGeYODkHRsEBfNtPWWhBm5VB2NhY8piBhBRMTMeYjxxexO15JQFbyF6Ifx-y5Jb5ICNE6k2x1DVgKnaOKMWa2pNOE3XtKTIejAjLRu37UXWPoBM-xl8SiX9Vl4CA" alt="Men's suit collection" class="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
+                        <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                            <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">Suit</span>
+                            <span class="mt-2 block w-10 sm:w-12 border-t border-white" aria-hidden="true"></span>
+                        </div>
+                    </div>
+                </a>
             </div>
         </div>
     </section>
@@ -569,11 +399,11 @@
     <!-- NARRATIVE SECTION -->
     <section class="py-32 bg-white px-8 overflow-hidden">
         <div class="container mx-auto grid grid-cols-1 md:grid-cols-2 gap-20 items-center">
-            <div class="order-2 md:order-1">
+            <div class="order-2 md:order-1 hp-reveal-left">
                 <!-- ARABELA STORE IMAGE: Replace with actual photo of Arabela Gown Rental shop interior or gowns on display -->
                 <img alt="Arabela Gown Rental Store" class="w-full h-auto rounded-lg grayscale" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDPoJ-CJc3c76J-itMK3Xu3-7H-QhmcbeTXcY_-9atbblNbhbvi3Y30ytcD6_3FLfpM5XX7ndXzS2SKGfKEPeoUB-gVDaK3TcHP39RWItFbbHGtasalNo2IyFaR3ktt5aIJHH0X7S7kCp45dxo-wOF7oSLQ3ycBSoCiZslRNzjjUNhA0eTA5onV5iPtvApJwmWkexxTQVhc-5JnOY9Ipnw7JnpTLbDzfp1V_iP686oZZCKa7XmFl7NIJGzfqZl1-_F16IDVdvu-GmQ"/>
             </div>
-            <div class="order-1 md:order-2">
+            <div class="order-1 md:order-2 hp-reveal-right hp-stagger">
                 <h3 class="font-headline homepage-about-heading mb-8 leading-tight">Conscious Luxury. <br/>Permanent Style.</h3>
                 <p class="homepage-about-paragraph text-on-surface-variant mb-12">
                     Arabela is more than a rental platform; it is a movement towards sustainable luxury. We believe in the power of beautiful objects and the importance of extending their lifecycle. Our archive is curated for those who value heritage over fast trends.
@@ -591,383 +421,83 @@
             </div>
         </div>
     </section>
+{% endblock %}
 
-</main>
-
-<!-- FOOTER -->
-<footer class="bg-white dark:bg-[#1B1C1C] w-full py-12 px-8">
-    <div class="w-full max-w-[1920px] mx-auto">
-        <div class="flex flex-col sm:flex-row sm:flex-wrap items-start gap-x-8 sm:gap-x-10 md:gap-x-12 lg:gap-x-16 gap-y-8 text-left">
-            <div class="flex items-center gap-3 shrink-0">
-                <a href="{% url 'gowns:homepage' %}" class="text-lg font-bold text-[#222222] dark:text-[#FAF4EB] tracking-tighter font-body">ARABELA</a>
-                <a href="https://www.facebook.com/share/1EHAS1iemQ/" target="_blank" rel="noopener noreferrer" class="inline-flex text-[#222222] dark:text-[#FAF4EB] scale-95 active:scale-90 transition-all hover:opacity-70" aria-label="Arabela on Facebook">
-                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-                </a>
-            </div>
-            <div class="shrink-0">
-                <p class="text-base font-medium text-[#222222] dark:text-[#FAF4EB] font-body mb-2">Rent</p>
-                <a href="{% url 'gowns:how_it_works' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body">How it works</a>
-            </div>
-            <div class="shrink-0">
-                <p class="text-base font-medium text-[#222222] dark:text-[#FAF4EB] font-body mb-2">Info</p>
-                <ul class="flex flex-col gap-1.5">
-                    <li>
-                        <button type="button" onclick="toggleSearch()" class="text-left text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white bg-transparent border-0 p-0 cursor-pointer font-body leading-snug">Search</button>
-                    </li>
-                    <li>
-                        <a href="{% url 'gowns:about' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">About us</a>
-                    </li>
-                    <li>
-                        <a href="{% url 'gowns:contact' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">Contact us</a>
-                    </li>
-                    <li>
-                        <a href="{% url 'gowns:faqs' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">FAQs</a>
-                    </li>
-                    <li>
-                        <a href="{% url 'gowns:terms_and_conditions' %}" class="inline-block text-[0.6875rem] tracking-widest uppercase text-[#615E57] dark:text-[#A09E99] hover:underline decoration-1 underline-offset-4 transition-opacity scale-95 active:scale-90 hover:text-[#222222] dark:hover:text-white font-body leading-snug">Terms and conditions</a>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </div>
-</footer>
-
-<script src="{% static 'js/reservation-flow.js' %}"></script>
+{% block extra_scripts %}
 <script>
-    const recommendations = {
-        'Birthday': {
-            text: 'For a Birthday celebration, we suggest a vibrant evening gown or cocktail dress.',
-            items: [
-                { name: 'Column Gown', brand: 'Old Celine', price: '₱10,360', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA' },
-                { name: 'Silk Tuxedo', brand: 'Saint Laurent', price: '₱6,720', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDvrOUto9vy9py6fxR-YxuiQ7pL4WzddWzTNeVPBgk4qOrjLVsLT4uDAoXaKs7u1i7RXCaNnzcYFP-p16uIuULPo9aHvnWqqA_8NjhDlYa18k4FVHck1C2Gz80q-qvohzTgGYhT6Joc0gU5AiqDMxwGulS-59idA4ehLkllD_ADzTgoq8jmuolfvGYkSJfCy3KM20GMCLiQ4Lfj9E1rAkuQUPYF2_YX-5lUAOQKHU6OqqLU5ym1Kz-EDW6FLRhJrERNMDEhuiHEs-c' }
-            ]
-        },
-        'Wedding': {
-            text: 'Elegant and timeless. Consider an Asymmetric Silk silhouette or Minimalist Tailoring.',
-            items: [
-                { name: 'Asymmetric Dress', brand: 'Old Celine', price: '₱10,360', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA' },
-                { name: 'Ivory Blazer', brand: 'The Row', price: '₱8,900', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDvrOUto9vy9py6fxR-YxuiQ7pL4WzddWzTNeVPBgk4qOrjLVsLT4uDAoXaKs7u1i7RXCaNnzcYFP-p16uIuULPo9aHvnWqqA_8NjhDlYa18k4FVHck1C2Gz80q-qvohzTgGYhT6Joc0gU5AiqDMxwGulS-59idA4ehLkllD_ADzTgoq8jmuolfvGYkSJfCy3KM20GMCLiQ4Lfj9E1rAkuQUPYF2_YX-5lUAOQKHU6OqqLU5ym1Kz-EDW6FLRhJrERNMDEhuiHEs-c' }
-            ]
-        },
-        'Editorial': {
-            text: 'For an Editorial Shoot, prioritize avant-garde shapes and high-texture fabrics.',
-            items: [
-                { name: 'Deconstructed Knit', brand: 'Jacquemus', price: '₱6,160', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuA5RjcB-St3FYLokqdJWtfToKyHnDeR3Tu6EhVM79YSkA6bBTSU4tl7rZAAEgY_JP756fTwDY10jkUOp1hrXwu2GNrO9jjw43klIlAw4G0MiBDBkW6SRJ8z8IYOKAihezN7LM2aobs5oqzxnbVSGNnFoWUxGB9xeuCoFORYRDNLVSicCvy29b_6lyITgLYnLIxk8Ska5gk4Lub4OCWEXEEIFe4jkTHRRVfPAfF8h8FzMIzltXoG8hdtsMI0bnBcFWzWBxpeheTd4kI' },
-                { name: 'Avant Garment', brand: 'Loewe', price: '₱12,400', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDoXBFqStMnToVb80lpNcOu2L2sM791MrJmBW76ONWSN9NNxjYwIKr62lrtgKTsJUJ3EdwdmrXdEDzIHlQCq5cpBFNLIqmKKBHScdoIF8ax4ontDI3vyH_7UJJMwghVtSjqVoDofM_FIQR_XMOaK-QLh9v1H1Ub672NUBIJdFsaDRq5ICqksBDjNV55RZmXuFb6qC1v_poZpZMvRt7A5Qzegj5Go1Ot_xpj0qIyESs5_TLYUYBwEiG9fQi1e4y5MFTCzYsCtPcwQ-o' }
-            ]
-        },
-        'Red Carpet': {
-            text: 'For a Red Carpet event, go bold with a floor-length gown or dramatic silhouette.',
-            items: [
-                { name: 'Column Gown', brand: 'Old Celine', price: '₱10,360', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA' },
-                { name: 'Silk Tuxedo', brand: 'Saint Laurent', price: '₱6,720', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDvrOUto9vy9py6fxR-YxuiQ7pL4WzddWzTNeVPBgk4qOrjLVsLT4uDAoXaKs7u1i7RXCaNnzcYFP-p16uIuULPo9aHvnWqqA_8NjhDlYa18k4FVHck1C2Gz80q-qvohzTgGYhT6Joc0gU5AiqDMxwGulS-59idA4ehLkllD_ADzTgoq8jmuolfvGYkSJfCy3KM20GMCLiQ4Lfj9E1rAkuQUPYF2_YX-5lUAOQKHU6OqqLU5ym1Kz-EDW6FLRhJrERNMDEhuiHEs-c' }
-            ]
-        },
-        'Private View': {
-            text: 'For a Private View, opt for understated elegance with a tailored silhouette.',
-            items: [
-                { name: 'Asymmetric Dress', brand: 'Old Celine', price: '₱10,360', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA' },
-                { name: 'Ivory Blazer', brand: 'The Row', price: '₱8,900', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDvrOUto9vy9py6fxR-YxuiQ7pL4WzddWzTNeVPBgk4qOrjLVsLT4uDAoXaKs7u1i7RXCaNnzcYFP-p16uIuULPo9aHvnWqqA_8NjhDlYa18k4FVHck1C2Gz80q-qvohzTgGYhT6Joc0gU5AiqDMxwGulS-59idA4ehLkllD_ADzTgoq8jmuolfvGYkSJfCy3KM20GMCLiQ4Lfj9E1rAkuQUPYF2_YX-5lUAOQKHU6OqqLU5ym1Kz-EDW6FLRhJrERNMDEhuiHEs-c' }
-            ]
-        }
-    };
-
-    const SECURITY_DEPOSIT_PESOS = 2000;
-    const USER_STORAGE_KEY = document.body?.dataset?.userKey || 'guest';
-    const DRAWER_STORAGE_KEY = `arabela_cart_${USER_STORAGE_KEY}`;
-
-    function formatPeso(amount) {
-        return '₱ ' + Number(amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
-
-    function getDrawerCart() {
-        try {
-            return JSON.parse(localStorage.getItem(DRAWER_STORAGE_KEY) || '[]');
-        } catch (err) {
-            return [];
-        }
-    }
-
-    function setDrawerCart(cart) {
-        localStorage.setItem(DRAWER_STORAGE_KEY, JSON.stringify(cart));
-    }
-
-    function addFeaturedToSelection(btn) {
-        if (!btn) return;
-        const cart = getDrawerCart();
-        const next = {
-            id: btn.dataset.productSlug || '',
-            name: btn.dataset.productName || 'Untitled',
-            price: Number(btn.dataset.productPrice) || 0,
-            qty: 1,
-            size: '-',
-            img: btn.dataset.productImage || '',
-            rental: '',
-            collection: btn.dataset.productCollection || 'wedding',
-        };
-        if (!next.id) return;
-
-        function lineComplete(ci) {
-            const hasRent = ci.rental && String(ci.rental).trim() && ci.rental !== '-';
-            const hasSize = ci.size && String(ci.size).trim() && ci.size !== '-';
-            return !!(hasRent && hasSize);
-        }
-
-        const incomplete = cart.find(function (ci) {
-            return (
-                ci &&
-                ci.id === next.id &&
-                (ci.name || 'Untitled') === next.name &&
-                (ci.collection ? String(ci.collection).trim() : 'wedding') === next.collection &&
-                !lineComplete(ci)
-            );
-        });
-
-        if (incomplete) {
-            incomplete.qty = (Number(incomplete.qty) || 1) + 1;
-        } else {
-            cart.push(next);
-        }
-
-        setDrawerCart(cart);
-        if (typeof toggleCart === 'function') toggleCart();
-    }
-    window.addFeaturedToSelection = addFeaturedToSelection;
-
-    function getCartLinesContainer() {
-        return document.querySelector('#cart-drawer .flex-1.overflow-y-auto');
-    }
-
-    function getProductDetailUrl(item, index) {
-        const slug = item && item.id ? String(item.id).trim() : '';
-        if (!slug) return '';
-        const col = item && item.collection ? String(item.collection).trim() : 'wedding';
-        return `/collections/${encodeURIComponent(col)}/products/${encodeURIComponent(slug)}/?cart_item_index=${index}`;
-    }
-
-    function renderCartDrawer() {
-        const lines = getCartLinesContainer();
-        if (!lines) return;
-
-        const cart = getDrawerCart();
-        if (!cart.length) {
-            lines.innerHTML = '<p class="text-[0.6875rem] uppercase tracking-widest text-secondary py-4">No items in your selection.</p>';
-            return;
-        }
-
-        lines.innerHTML = cart.map((item, index) => {
-            const qty = Math.max(1, Number(item.qty) || 1);
-            const unitPrice = Number(item.price) || 0;
-            const lineTotal = unitPrice * qty;
-            return `
-                <div class="cart-line flex gap-4 group" data-index="${index}" data-unit-price="${unitPrice}" data-rental="${item.rental || ''}">
-                    <a href="${getProductDetailUrl(item, index)}" class="w-24 h-32 bg-white overflow-hidden shrink-0 block">
-                        <img alt="${item.name || 'Selection item'}" class="w-full h-full object-cover" style="clip-path: inset(1px 0 0 1px);" src="${item.img || ''}"/>
-                    </a>
-                    <div class="flex-1 flex flex-col justify-between py-1 min-w-0">
-                        <div class="flex justify-between items-start gap-2">
-                            <div>
-                                <h3 class="text-sm font-medium text-on-surface leading-tight">${item.name || 'Untitled'}</h3>
-                                ${item.size && item.size !== '-' ? `<p class="text-[0.6875rem] text-on-secondary-container mt-1">Size: ${item.size}</p>` : ''}
-                                ${item.rental && item.rental !== '-' ? `<p class="text-[0.6875rem] text-on-secondary-container mt-1">Rental: ${item.rental}</p>` : ''}
-                            </div>
-                            <button type="button" class="text-on-surface hover:text-error transition-colors shrink-0" onclick="cartRemoveLine(this)" aria-label="Remove item">
-                                <span class="material-symbols-outlined text-lg">close</span>
-                            </button>
-                        </div>
-                        <div class="flex justify-between items-end gap-2">
-                            <div class="flex items-center space-x-3">
-                                <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, -1)" aria-label="Decrease quantity">
-                                    <span class="material-symbols-outlined text-xs">remove</span>
-                                </button>
-                                <span class="cart-qty text-xs font-medium tabular-nums">${qty}</span>
-                                <button type="button" class="w-6 h-6 border border-black/10 flex items-center justify-center hover:bg-black/5 transition-colors" onclick="cartAdjustQty(this, 1)" aria-label="Increase quantity">
-                                    <span class="material-symbols-outlined text-xs">add</span>
-                                </button>
-                            </div>
-                            <p class="cart-line-total font-['Inter',sans-serif] text-sm font-semibold text-on-surface tracking-wide tabular-nums shrink-0">${formatPeso(lineTotal)}</p>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-    }
-
-    function updateCartTotals() {
-        let sub = 0;
-        let itemCount = 0;
-        document.querySelectorAll('#cart-drawer .cart-line').forEach(function (row) {
-            if (row.classList.contains('hidden')) return;
-            const unit = parseFloat(row.dataset.unitPrice || '0');
-            const qtyEl = row.querySelector('.cart-qty');
-            const qty = Math.max(1, parseInt(qtyEl.textContent, 10) || 1);
-            itemCount += qty;
-            const lineTotal = unit * qty;
-            sub += lineTotal;
-            const lt = row.querySelector('.cart-line-total');
-            if (lt) lt.textContent = formatPeso(lineTotal);
-        });
-        const deposit = itemCount * SECURITY_DEPOSIT_PESOS;
-        const subEl = document.getElementById('cart-subtotal');
-        const totEl = document.getElementById('cart-total');
-        const depEl = document.getElementById('cart-deposit');
-        if (subEl) subEl.textContent = formatPeso(sub);
-        if (depEl) depEl.textContent = formatPeso(deposit);
-        if (totEl) totEl.textContent = formatPeso(sub + deposit);
-    }
-
-    function cartAdjustQty(btn, delta) {
-        const row = btn.closest('.cart-line');
-        if (!row || row.classList.contains('hidden')) return;
-        const cart = getDrawerCart();
-        const idx = Number(row.dataset.index);
-        if (!Number.isInteger(idx) || !cart[idx]) return;
-        let q = parseInt(cart[idx].qty, 10) || 1;
-        q = Math.max(1, q + delta);
-        cart[idx].qty = q;
-        setDrawerCart(cart);
-        renderCartDrawer();
-        updateCartTotals();
-    }
-
-    function cartRemoveLine(btn) {
-        const row = btn.closest('.cart-line');
-        if (!row) return;
-        const cart = getDrawerCart();
-        const idx = Number(row.dataset.index);
-        if (!Number.isInteger(idx) || !cart[idx]) return;
-        cart.splice(idx, 1);
-        setDrawerCart(cart);
-        renderCartDrawer();
-        updateCartTotals();
-    }
-
-    function closeCartDrawer() {
-        const drawer = document.getElementById('cart-drawer');
-        const scrim = document.getElementById('cart-click-away');
-        if (drawer) {
-            drawer.classList.add('translate-x-full');
-            drawer.setAttribute('aria-hidden', 'true');
-        }
-        if (scrim) scrim.classList.add('pointer-events-none');
-    }
-
-    function toggleCart() {
-        const drawer = document.getElementById('cart-drawer');
-        const scrim = document.getElementById('cart-click-away');
-        const search = document.getElementById('search-overlay');
-        const ai = document.getElementById('ai-concierge');
-        const aiScrim = document.getElementById('ai-click-away');
-
-        if (search) search.classList.remove('open');
-        if (ai) ai.classList.add('translate-x-full');
-        if (aiScrim) aiScrim.classList.add('pointer-events-none');
-
-        if (!drawer) return;
-        drawer.classList.toggle('translate-x-full');
-        const closed = drawer.classList.contains('translate-x-full');
-        drawer.setAttribute('aria-hidden', closed ? 'true' : 'false');
-        if (scrim) {
-            if (closed) scrim.classList.add('pointer-events-none');
-            else scrim.classList.remove('pointer-events-none');
-        }
-        if (!closed) {
-            renderCartDrawer();
-            updateCartTotals();
-        }
-    }
-
-    function toggleAI() {
-        const panel = document.getElementById('ai-concierge');
-        const scrim = document.getElementById('ai-click-away');
-        closeCartDrawer();
-        panel.classList.toggle('translate-x-full');
-        const closed = panel.classList.contains('translate-x-full');
-        if (scrim) {
-            if (closed) {
-                scrim.classList.add('pointer-events-none');
-            } else {
-                scrim.classList.remove('pointer-events-none');
-            }
-        }
-        const search = document.getElementById('search-overlay');
-        search.classList.remove('open');
-        if (!closed) panel.setAttribute('aria-hidden', 'false');
-        else panel.setAttribute('aria-hidden', 'true');
-    }
-
-    function toggleSearch() {
-        const search = document.getElementById('search-overlay');
-        const isOpening = !search.classList.contains('open');
-        closeCartDrawer();
-        search.classList.toggle('open');
-        if (!search.classList.contains('open') && typeof window.resetMainSearchOverlay === 'function') {
-            window.resetMainSearchOverlay();
-        }
-        if (isOpening) {
-            setTimeout(() => document.getElementById('main-search-input').focus(), 400);
-            document.getElementById('ai-concierge').classList.add('translate-x-full');
-            const scrim = document.getElementById('ai-click-away');
-            if (scrim) scrim.classList.add('pointer-events-none');
-        }
-    }
-
-    function selectOccasion(occ) {
-        const data = recommendations[occ] || recommendations['Wedding'];
-        const resultsDiv = document.getElementById('ai-results');
-        const textEl = document.getElementById('recommendation-text');
-        const cardsDiv = document.getElementById('suggestion-cards');
-        const picker = document.getElementById('occasion-picker');
-        picker.classList.add('opacity-40', 'pointer-events-none');
-        textEl.textContent = data.text;
-        cardsDiv.innerHTML = data.items.map(item => `
-            <div class="group cursor-pointer">
-                <div class="aspect-[4/5] overflow-hidden rounded mb-3 bg-surface-container-high">
-                    <img src="${item.img}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
-                </div>
-                <h5 class="text-[0.7rem] font-bold uppercase tracking-wider truncate">${item.brand}</h5>
-                <p class="text-[0.6rem] text-on-surface-variant uppercase tracking-widest mt-0.5">${item.name}</p>
-                <p class="text-[0.6rem] font-bold mt-1 text-primary">${item.price}</p>
-            </div>
-        `).join('');
-        resultsDiv.classList.remove('hidden');
-    }
-
-    function resetAI() {
-        document.getElementById('ai-results').classList.add('hidden');
-        document.getElementById('occasion-picker').classList.remove('opacity-40', 'pointer-events-none');
-    }
-
-    function sendAIMessage() {
-        const input = document.getElementById('ai-chat-input');
-        const message = input.value.trim();
-        if (!message) return;
-        // TODO: Connect to Django AI view at /ai-recommendation/
-        input.value = '';
-    }
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function () {
-            renderCartDrawer();
-            updateCartTotals();
-        });
-    } else {
-        renderCartDrawer();
-        updateCartTotals();
-    }
-
+// ---- Homepage scroll reveal ----
 (function () {
-    const userBtn = document.getElementById('user-icon-btn');
-    if (!userBtn) return;
-    const body = document.body;
-    const isAuthenticated = body && body.dataset ? body.dataset.authenticated : '';
-    const ordersUrl = body && body.dataset ? body.dataset.ordersUrl : '';
-    const loginUrl = body && body.dataset ? body.dataset.loginUrl : '';
-    userBtn.addEventListener('click', function () {
-        if (isAuthenticated === 'true' && ordersUrl) window.location.href = ordersUrl;
-        else if (loginUrl) window.location.href = loginUrl;
+    var els = document.querySelectorAll('.hp-reveal, .hp-reveal-left, .hp-reveal-right');
+    if (!els.length) return;
+
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || !('IntersectionObserver' in window)) {
+        els.forEach(function (el) { el.classList.add('active'); });
+        return;
+    }
+
+    // Reveal when an element scrolls into view; reset once it's fully out so the
+    // animation replays whether you scroll back down OR up past it.
+    var observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('active');
+            } else {
+                entry.target.classList.remove('active');
+            }
+        });
+    }, {
+        threshold: 0.15,
+        rootMargin: '0px 0px -8% 0px'
     });
+
+    els.forEach(function (el) { observer.observe(el); });
+})();
+
+// ---- Occasion band parallax ----
+// Drifts the band's image against the scroll so a different part of the fabric is
+// visible on the way past, instead of a pane that sits still. Deliberately NOT
+// background-attachment:fixed -- that is ignored on iOS Safari and can't reveal the
+// top of the image. Reads are batched into a rAF so scrolling stays smooth.
+(function () {
+    var media = document.querySelectorAll('[data-parallax]');
+    if (!media.length) return;
+
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) return;   // leave it centred and static
+
+    // Must stay under the 12% of slack the CSS gives the media, or an edge shows.
+    var MAX_SHIFT = 9;
+    var ticking = false;
+
+    function update() {
+        ticking = false;
+        var vh = window.innerHeight || document.documentElement.clientHeight;
+        for (var i = 0; i < media.length; i++) {
+            var el = media[i];
+            var band = el.parentElement;
+            if (!band) continue;
+            var rect = band.getBoundingClientRect();
+            if (rect.bottom < -200 || rect.top > vh + 200) continue;  // far off-screen
+            // 0 as the band enters from the bottom, 1 as it leaves past the top
+            var p = (vh - rect.top) / (vh + rect.height);
+            if (p < 0) p = 0; else if (p > 1) p = 1;
+            // positive while entering, negative while leaving -> image slides upward
+            var shift = (0.5 - p) * 2 * MAX_SHIFT;
+            el.style.transform = 'translate3d(0,' + shift.toFixed(2) + '%,0)';
+        }
+    }
+
+    function onScroll() {
+        if (!ticking) {
+            ticking = true;
+            window.requestAnimationFrame(update);
+        }
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    update();
 })();
 </script>
-</body>
-</html>
+{% endblock %}

@@ -11,7 +11,133 @@
     <title>Calendar | Arabela System Admin Panel</title>
     <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
   <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet">
-  <link href="{% static 'arabela_admin/css/calendar.css' %}" rel="stylesheet"></head>
+  <link href="{% static 'arabela_admin/css/calendar.css' %}" rel="stylesheet">
+  <style>
+    /* Bolder, clearly-distinguishable booking colours (yellow/green/blue/red) with
+       readable text -- the precompiled palette used pale -50 backgrounds with the
+       same grey text for every state, which was hard to tell apart at a glance. */
+    .event-fc-color.fc-bg-warning { background-color: #F59E0B; border-color: #F59E0B; }
+    .event-fc-color.fc-bg-warning .fc-event-title { color: #78350F; font-weight: 600; }
+    .event-fc-color.fc-bg-success { background-color: #16A34A; border-color: #16A34A; }
+    .event-fc-color.fc-bg-success .fc-event-title { color: #FFFFFF; font-weight: 600; }
+    .event-fc-color.fc-bg-primary { background-color: #2563EB; border-color: #2563EB; }
+    .event-fc-color.fc-bg-primary .fc-event-title { color: #FFFFFF; font-weight: 600; }
+    .event-fc-color.fc-bg-danger { background-color: #DC2626; border-color: #DC2626; }
+    .event-fc-color.fc-bg-danger .fc-event-title { color: #FFFFFF; font-weight: 600; }
+    /* Maintenance blocks (cleaning/repair) aren't customer bookings, so they read as a
+       neutral slate rather than competing with the four booking colours. */
+    .event-fc-color.fc-bg-blocked { background-color: #64748B; border-color: #64748B; }
+    .event-fc-color.fc-bg-blocked .fc-event-title { color: #FFFFFF; font-weight: 600; }
+    .event-fc-color.fc-bg-blocked .fc-daygrid-event-dot { background-color: #64748B; }
+    .event-fc-color.fc-bg-blocked { cursor: default; }
+    .event-fc-color.fc-bg-warning .fc-daygrid-event-dot { background-color: #F59E0B; }
+    .event-fc-color.fc-bg-success .fc-daygrid-event-dot { background-color: #16A34A; }
+    .event-fc-color.fc-bg-primary .fc-daygrid-event-dot { background-color: #2563EB; }
+    .event-fc-color.fc-bg-danger .fc-daygrid-event-dot { background-color: #DC2626; }
+
+    /* Long titles (e.g. "Overdue · Denmark Concepcion — Dresses One") truncate cleanly
+       with an ellipsis instead of wrapping or overflowing a narrow day cell. */
+    .fc-event-title {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Busy days (many bookings landing on the same date -- e.g. several customers with
+       the same event day) are capped via dayMaxEvents so the week row never balloons in
+       height; the rest collapse into a "+N more" link that opens a small readable list. */
+    .fc-daygrid-more-link {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #465FFF;
+      padding: 2px 6px;
+    }
+    .fc-daygrid-more-link:hover { text-decoration: underline; }
+    .dark .fc-daygrid-more-link { color: #8098FF; }
+
+    .fc-popover {
+      background: #FFFFFF;
+      border: 1px solid #E5E7EB;
+      border-radius: 0.75rem;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.15), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+      z-index: 99999;
+    }
+    .dark .fc-popover { background: #101828; border-color: #344054; }
+    .fc-popover-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.5rem 0.75rem;
+      background: #F9FAFB;
+      border-bottom: 1px solid #E5E7EB;
+    }
+    .dark .fc-popover-header { background: #1D2939; border-color: #344054; }
+    .fc-popover-title { font-size: 0.75rem; font-weight: 600; color: #1D2939; }
+    .dark .fc-popover-title { color: #D0D5DD; }
+    .fc-popover-close {
+      font-size: 1rem;
+      line-height: 1;
+      color: #667085;
+      cursor: pointer;
+      background: none;
+      border: none;
+    }
+    .dark .fc-popover-close { color: #98A2B3; }
+    .fc-popover-body {
+      padding: 0.5rem;
+      max-height: 320px;
+      overflow-y: auto;
+    }
+    .fc-popover-body .fc-daygrid-event { margin-bottom: 4px; }
+
+    /* The four status-date inputs in a 2x2 grid on wider screens (defined here since
+       these grid utilities aren't in the precompiled stylesheet). */
+    .booking-date-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+    @media (min-width: 640px) {
+      .booking-date-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    /* Status picker chips -- same 4 colours as the calendar events/legend, so choosing a
+       status previews the exact colour the booking will show once saved. */
+    .booking-status-chip {
+      border: 1px solid #E5E7EB;
+      border-radius: 9999px;
+      padding: 0.5rem 1rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #374151;
+      background: #FFFFFF;
+      cursor: pointer;
+      transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+    }
+    .dark .booking-status-chip { border-color: #374151; color: #D1D5DB; background: #1F2937; }
+    .booking-status-chip:hover { opacity: 0.85; }
+    .booking-status-chip[data-status="Pick-up"].is-selected { background: #F59E0B; border-color: #F59E0B; color: #78350F; }
+    .booking-status-chip[data-status="Reserved"].is-selected { background: #16A34A; border-color: #16A34A; color: #FFFFFF; }
+    .booking-status-chip[data-status="Overdue"].is-selected { background: #DC2626; border-color: #DC2626; color: #FFFFFF; }
+
+    /* Return-condition chips on the Mark Returned step -- staff records the gown's checked-in
+       condition here (same palette family as the status chips, kept visually distinct). */
+    .booking-condition-chip {
+      border: 1px solid #E5E7EB;
+      border-radius: 9999px;
+      padding: 0.5rem 1rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #374151;
+      background: #FFFFFF;
+      cursor: pointer;
+      transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+    }
+    .dark .booking-condition-chip { border-color: #374151; color: #D1D5DB; background: #1F2937; }
+    .booking-condition-chip:hover { opacity: 0.85; }
+    .booking-condition-chip[data-condition="Good"].is-selected { background: #16A34A; border-color: #16A34A; color: #FFFFFF; }
+    .booking-condition-chip[data-condition="Fair"].is-selected { background: #F59E0B; border-color: #F59E0B; color: #78350F; }
+    .booking-condition-chip[data-condition="Needs Repair"].is-selected { background: #DC2626; border-color: #DC2626; color: #FFFFFF; }
+  </style>
+  </head>
   <body
     x-data="{ page: 'rental', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false }"
     x-init="
@@ -62,7 +188,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown' || page === 'condition' || page === 'categories') { selected = 'InventoryManagement' } else if (page === 'clients' || page === 'abuse') { selected = 'CustomerManagement' } else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown' || page === 'condition' || page === 'categories') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits' || page === 'receipt-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -236,7 +362,7 @@
                 </li>
                 <li>
                   <a
-                    href="active-reservations.html"
+                    href="{% url 'arabela_admin:active_reservations' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'active' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
@@ -245,7 +371,7 @@
                 </li>
                 <li>
                   <a
-                    href="pending-approval.html"
+                    href="{% url 'arabela_admin:pending_approval' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'pending' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
@@ -319,7 +445,7 @@
               >
                 <li>
                   <a
-                    href="gown-catalog.html"
+                    href="{% url 'arabela_admin:gown_catalog' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'gown' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
@@ -328,16 +454,7 @@
                 </li>
                 <li>
                   <a
-                    href="condition-tracker.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'condition' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Condition Tracker
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="categories.html"
+                    href="{% url 'arabela_admin:categories' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'categories' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
@@ -409,20 +526,11 @@
               >
                 <li>
                   <a
-                    href="clients.html"
+                    href="{% url 'arabela_admin:clients' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'clients' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
                     Client List
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="abuse-monitor.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'abuse' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Abuse Monitor
                   </a>
                 </li>
               </ul>
@@ -430,6 +538,82 @@
             <!-- Dropdown Menu End -->
           </li>
           <!-- Menu Item Customer Management -->
+
+          {% if admin_is_owner %}
+          <!-- Menu Item Staff Management -->
+          <li>
+            <a
+              href="#"
+              @click.prevent="selected = (selected === 'StaffManagement' ? '':'StaffManagement')"
+              class="menu-item group"
+              :class=" (selected === 'StaffManagement') ? 'menu-item-active' : 'menu-item-inactive'"
+            >
+              <svg
+                :class="(selected === 'StaffManagement') ? 'menu-item-icon-active'  :'menu-item-icon-inactive'"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  fill-rule="evenodd"
+                  clip-rule="evenodd"
+                  d="M6.75 7.5V6a3.75 3.75 0 0 1 3.75-3.75h3a3.75 3.75 0 0 1 3.75 3.75v1.5h1.875c1.036 0 1.875.84 1.875 1.875v11.25c0 1.035-.84 1.875-1.875 1.875H4.875C3.839 21.75 3 20.91 3 19.875V9.375c0-1.036.84-1.875 1.875-1.875H6.75Zm7.5 0v-1.5a2.25 2.25 0 0 0-2.25-2.25h-3a2.25 2.25 0 0 0-2.25 2.25v1.5h7.5Z"
+                  fill=""
+                />
+              </svg>
+
+              <span
+                class="menu-item-text"
+                :class="sidebarToggle ? 'lg:hidden' : ''"
+              >
+                Staff Management
+              </span>
+
+              <svg
+                class="menu-item-arrow"
+                :class="[(selected === 'StaffManagement') ? 'menu-item-arrow-active' : 'menu-item-arrow-inactive', sidebarToggle ? 'lg:hidden' : '' ]"
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M4.79175 7.39584L10.0001 12.6042L15.2084 7.39585"
+                  stroke=""
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </a>
+
+            <!-- Dropdown Menu Start -->
+            <div
+              class="transform overflow-hidden translate"
+              :class="(selected === 'StaffManagement') ? 'block' :'hidden'"
+            >
+              <ul
+                :class="sidebarToggle ? 'lg:hidden' : 'flex'"
+                class="menu-dropdown mt-2 flex flex-col gap-1 pl-9"
+              >
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:staff_management' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'staff-management' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Staff Accounts
+                  </a>
+                </li>
+              </ul>
+            </div>
+            <!-- Dropdown Menu End -->
+          </li>
+          <!-- Menu Item Staff Management -->
+          {% endif %}
 
           <!-- Menu Item Financial Report -->
           <li>
@@ -487,7 +671,7 @@
               >
                 <li>
                   <a
-                    href="payment-verification.html"
+                    href="{% url 'arabela_admin:payment_verification' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'payment-verification' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
@@ -496,11 +680,20 @@
                 </li>
                 <li>
                   <a
-                    href="security-deposits.html"
+                    href="{% url 'arabela_admin:security_deposits' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'security-deposits' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
                     Security Deposits
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:receipt_records' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'receipt-records' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Receipt Records
                   </a>
                 </li>
               </ul>
@@ -512,7 +705,7 @@
           <!-- Menu Item Profile -->
           <li>
             <a
-              href="profile.html"
+              href="{% url 'arabela_admin:page' page='profile' %}"
               @click="selected = (selected === 'Profile' ? '':'Profile')"
               class="menu-item group"
               :class=" (selected === 'Profile') && (page === 'profile') ? 'menu-item-active' : 'menu-item-inactive'"
@@ -544,7 +737,7 @@
           <!-- Menu Item Profile -->
 
           <!-- Menu Item Forms -->
-          <li class="hidden" data-admin-template-nav="forms">
+          <li data-admin-template-nav="forms">
             <a
               href="#"
               @click.prevent="selected = (selected === 'Forms' ? '':'Forms')"
@@ -604,7 +797,7 @@
               >
                 <li>
                   <a
-                    href="form-elements.html"
+                    href="{% url 'arabela_admin:page' page='form-elements' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'formElements' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
@@ -617,158 +810,11 @@
           </li>
           <!-- Menu Item Forms -->
 
-          <!-- Menu Item Tables -->
-          <li class="hidden" data-admin-template-nav="tables">
-            <a
-              href="#"
-              @click.prevent="selected = (selected === 'Tables' ? '':'Tables')"
-              class="menu-item group"
-              :class="(selected === 'Tables') || (page === 'basicTables' || page === 'dataTables') ? 'menu-item-active' : 'menu-item-inactive'"
-            >
-              <svg
-                :class="(selected === 'Tables') || (page === 'basicTables' || page === 'dataTables') ? 'menu-item-icon-active'  :'menu-item-icon-inactive'"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  fill-rule="evenodd"
-                  clip-rule="evenodd"
-                  d="M3.25 5.5C3.25 4.25736 4.25736 3.25 5.5 3.25H18.5C19.7426 3.25 20.75 4.25736 20.75 5.5V18.5C20.75 19.7426 19.7426 20.75 18.5 20.75H5.5C4.25736 20.75 3.25 19.7426 3.25 18.5V5.5ZM5.5 4.75C5.08579 4.75 4.75 5.08579 4.75 5.5V8.58325L19.25 8.58325V5.5C19.25 5.08579 18.9142 4.75 18.5 4.75H5.5ZM19.25 10.0833H15.416V13.9165H19.25V10.0833ZM13.916 10.0833L10.083 10.0833V13.9165L13.916 13.9165V10.0833ZM8.58301 10.0833H4.75V13.9165H8.58301V10.0833ZM4.75 18.5V15.4165H8.58301V19.25H5.5C5.08579 19.25 4.75 18.9142 4.75 18.5ZM10.083 19.25V15.4165L13.916 15.4165V19.25H10.083ZM15.416 19.25V15.4165H19.25V18.5C19.25 18.9142 18.9142 19.25 18.5 19.25H15.416Z"
-                  fill=""
-                />
-              </svg>
-
-              <span
-                class="menu-item-text"
-                :class="sidebarToggle ? 'lg:hidden' : ''"
-              >
-                Tables
-              </span>
-
-              <svg
-                class="menu-item-arrow absolute right-2.5 top-1/2 -translate-y-1/2 stroke-current"
-                :class="[(selected === 'Tables') ? 'menu-item-arrow-active' : 'menu-item-arrow-inactive', sidebarToggle ? 'lg:hidden' : '' ]"
-                width="20"
-                height="20"
-                viewBox="0 0 20 20"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M4.79175 7.39584L10.0001 12.6042L15.2084 7.39585"
-                  stroke=""
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-            </a>
-
-            <!-- Dropdown Menu Start -->
-            <div
-              class="overflow-hidden transform translate"
-              :class="(selected === 'Tables') ? 'block' :'hidden'"
-            >
-              <ul
-                :class="sidebarToggle ? 'lg:hidden' : 'flex'"
-                class="flex flex-col gap-1 mt-2 menu-dropdown pl-9"
-              >
-                <li>
-                  <a
-                    href="basic-tables.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'basicTables' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Basic Tables
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <!-- Dropdown Menu End -->
-          </li>
-          <!-- Menu Item Tables -->
-
-          <!-- Menu Item Pages -->
-          <li class="hidden" data-admin-template-nav="pages">
-            <a
-              href="#"
-              @click.prevent="selected = (selected === 'Pages' ? '':'Pages')"
-              class="menu-item group"
-              :class="(selected === 'Pages') || (page === 'fileManager' || page === 'pricingTables' || page === 'blank' || page === 'page500' || page === 'page503' || page === 'success' || page === 'faq' || page === 'comingSoon' || page === 'maintenance') ? 'menu-item-active' : 'menu-item-inactive'"
-            >
-              <svg
-                :class="(selected === 'Pages') || (page === 'fileManager' || page === 'pricingTables' || page === 'blank' || page === 'page500' || page === 'page503' || page === 'success' || page === 'faq' || page === 'comingSoon' || page === 'maintenance') ? 'menu-item-icon-active'  :'menu-item-icon-inactive'"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  fill-rule="evenodd"
-                  clip-rule="evenodd"
-                  d="M8.50391 4.25C8.50391 3.83579 8.83969 3.5 9.25391 3.5H15.2777C15.4766 3.5 15.6674 3.57902 15.8081 3.71967L18.2807 6.19234C18.4214 6.333 18.5004 6.52376 18.5004 6.72268V16.75C18.5004 17.1642 18.1646 17.5 17.7504 17.5H16.248V17.4993H14.748V17.5H9.25391C8.83969 17.5 8.50391 17.1642 8.50391 16.75V4.25ZM14.748 19H9.25391C8.01126 19 7.00391 17.9926 7.00391 16.75V6.49854H6.24805C5.83383 6.49854 5.49805 6.83432 5.49805 7.24854V19.75C5.49805 20.1642 5.83383 20.5 6.24805 20.5H13.998C14.4123 20.5 14.748 20.1642 14.748 19.75L14.748 19ZM7.00391 4.99854V4.25C7.00391 3.00736 8.01127 2 9.25391 2H15.2777C15.8745 2 16.4468 2.23705 16.8687 2.659L19.3414 5.13168C19.7634 5.55364 20.0004 6.12594 20.0004 6.72268V16.75C20.0004 17.9926 18.9931 19 17.7504 19H16.248L16.248 19.75C16.248 20.9926 15.2407 22 13.998 22H6.24805C5.00541 22 3.99805 20.9926 3.99805 19.75V7.24854C3.99805 6.00589 5.00541 4.99854 6.24805 4.99854H7.00391Z"
-                  fill=""
-                />
-              </svg>
-
-              <span
-                class="menu-item-text"
-                :class="sidebarToggle ? 'lg:hidden' : ''"
-              >
-                Pages
-              </span>
-
-              <svg
-                class="menu-item-arrow absolute right-2.5 top-1/2 -translate-y-1/2 stroke-current"
-                :class="[(selected === 'Pages') ? 'menu-item-arrow-active' : 'menu-item-arrow-inactive', sidebarToggle ? 'lg:hidden' : '' ]"
-                width="20"
-                height="20"
-                viewBox="0 0 20 20"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M4.79175 7.39584L10.0001 12.6042L15.2084 7.39585"
-                  stroke=""
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-            </a>
-
-            <!-- Dropdown Menu Start -->
-            <div
-              class="overflow-hidden transform translate"
-              :class="(selected === 'Pages') ? 'block' :'hidden'"
-            >
-              <ul
-                :class="sidebarToggle ? 'lg:hidden' : 'flex'"
-                class="flex flex-col gap-1 mt-2 menu-dropdown pl-9"
-              >
-                <li>
-                  <a
-                    href="blank.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'blank' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Blank Page
-                  </a>
-                </li>
-                </ul>
-            </div>
-            <!-- Dropdown Menu End -->
-          </li>
-          <!-- Menu Item Pages -->
-        </ul>
+                  </ul>
       </div>
 
       <!-- Others Group -->
-      <div class="hidden" data-admin-template-nav="others-ui">
+      <div data-admin-template-nav="others-ui">
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
           <span
             class="menu-group-title"
@@ -859,7 +905,7 @@
               >
                 <li>
                   <a
-                    href="alerts.html"
+                    href="{% url 'arabela_admin:page' page='alerts' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'alerts' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
@@ -868,7 +914,7 @@
                 </li>
                 <li>
                   <a
-                    href="badge.html"
+                    href="{% url 'arabela_admin:page' page='badge' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'badge' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
@@ -877,7 +923,7 @@
                 </li>
                 <li>
                   <a
-                    href="buttons.html"
+                    href="{% url 'arabela_admin:page' page='buttons' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'buttons' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
@@ -1094,425 +1140,7 @@
         </button>
         <!-- Dark Mode Toggler -->
 
-        <!-- Notification Menu Area -->
-        <div
-          class="relative"
-          x-data="{ dropdownOpen: false, notifying: true }"
-          @click.outside="dropdownOpen = false"
-        >
-          <button
-            class="hover:text-dark-900 relative flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
-            @click.prevent="dropdownOpen = ! dropdownOpen; notifying = false"
-          >
-            <span
-              :class="!notifying ? 'hidden' : 'flex'"
-              class="absolute top-0.5 right-0 z-1 h-2 w-2 rounded-full bg-orange-400"
-            >
-              <span
-                class="absolute -z-1 inline-flex h-full w-full animate-ping rounded-full bg-orange-400 opacity-75"
-              ></span>
-            </span>
-            <svg
-              class="fill-current"
-              width="20"
-              height="20"
-              viewBox="0 0 20 20"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                fill-rule="evenodd"
-                clip-rule="evenodd"
-                d="M10.75 2.29248C10.75 1.87827 10.4143 1.54248 10 1.54248C9.58583 1.54248 9.25004 1.87827 9.25004 2.29248V2.83613C6.08266 3.20733 3.62504 5.9004 3.62504 9.16748V14.4591H3.33337C2.91916 14.4591 2.58337 14.7949 2.58337 15.2091C2.58337 15.6234 2.91916 15.9591 3.33337 15.9591H4.37504H15.625H16.6667C17.0809 15.9591 17.4167 15.6234 17.4167 15.2091C17.4167 14.7949 17.0809 14.4591 16.6667 14.4591H16.375V9.16748C16.375 5.9004 13.9174 3.20733 10.75 2.83613V2.29248ZM14.875 14.4591V9.16748C14.875 6.47509 12.6924 4.29248 10 4.29248C7.30765 4.29248 5.12504 6.47509 5.12504 9.16748V14.4591H14.875ZM8.00004 17.7085C8.00004 18.1228 8.33583 18.4585 8.75004 18.4585H11.25C11.6643 18.4585 12 18.1228 12 17.7085C12 17.2943 11.6643 16.9585 11.25 16.9585H8.75004C8.33583 16.9585 8.00004 17.2943 8.00004 17.7085Z"
-                fill=""
-              />
-            </svg>
-          </button>
-
-          <!-- Dropdown Start -->
-          <div
-            x-show="dropdownOpen"
-            class="shadow-theme-lg dark:bg-gray-dark absolute -right-[240px] mt-[17px] flex h-[480px] w-[350px] flex-col rounded-2xl border border-gray-200 bg-white p-3 sm:w-[361px] lg:right-0 dark:border-gray-800"
-          >
-            <div
-              class="mb-3 flex items-center justify-between border-b border-gray-100 pb-3 dark:border-gray-800"
-            >
-              <h5
-                class="text-lg font-semibold text-gray-800 dark:text-white/90"
-              >
-                Notification
-              </h5>
-
-              <button
-                @click="dropdownOpen = false"
-                class="text-gray-500 dark:text-gray-400"
-              >
-                <svg
-                  class="fill-current"
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    fill-rule="evenodd"
-                    clip-rule="evenodd"
-                    d="M6.21967 7.28131C5.92678 6.98841 5.92678 6.51354 6.21967 6.22065C6.51256 5.92775 6.98744 5.92775 7.28033 6.22065L11.999 10.9393L16.7176 6.22078C17.0105 5.92789 17.4854 5.92788 17.7782 6.22078C18.0711 6.51367 18.0711 6.98855 17.7782 7.28144L13.0597 12L17.7782 16.7186C18.0711 17.0115 18.0711 17.4863 17.7782 17.7792C17.4854 18.0721 17.0105 18.0721 16.7176 17.7792L11.999 13.0607L7.28033 17.7794C6.98744 18.0722 6.51256 18.0722 6.21967 17.7794C5.92678 17.4865 5.92678 17.0116 6.21967 16.7187L10.9384 12L6.21967 7.28131Z"
-                    fill=""
-                  />
-                </svg>
-              </button>
-            </div>
-
-            <ul class="custom-scrollbar flex h-auto flex-col overflow-y-auto">
-              <li>
-                <a
-                  class="flex gap-3 rounded-lg border-b border-gray-100 p-3 px-4.5 py-3 hover:bg-gray-100 dark:border-gray-800 dark:hover:bg-white/5"
-                  href="#"
-                >
-                  <span
-                    class="relative z-1 block h-10 w-full max-w-10 rounded-full"
-                  >
-                    <img
-                      src="{% static 'arabela_admin/images/user/user-02.jpg' %}"
-                      alt="User"
-                      class="overflow-hidden rounded-full"
-                    />
-                    <span
-                      class="bg-success-500 absolute right-0 bottom-0 z-10 h-2.5 w-full max-w-2.5 rounded-full border-[1.5px] border-white dark:border-gray-900"
-                    ></span>
-                  </span>
-
-                  <span class="block">
-                    <span
-                      class="text-theme-sm mb-1.5 block text-gray-500 dark:text-gray-400"
-                    >
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Terry Franci</span
-                      >
-                      requests permission to change
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Project - Nganter App</span
-                      >
-                    </span>
-
-                    <span
-                      class="text-theme-xs flex items-center gap-2 text-gray-500 dark:text-gray-400"
-                    >
-                      <span>Project</span>
-                      <span class="h-1 w-1 rounded-full bg-gray-400"></span>
-                      <span>5 min ago</span>
-                    </span>
-                  </span>
-                </a>
-              </li>
-
-              <li>
-                <a
-                  class="flex gap-3 rounded-lg border-b border-gray-100 p-3 px-4.5 py-3 hover:bg-gray-100 dark:border-gray-800 dark:hover:bg-white/5"
-                  href="#"
-                >
-                  <span
-                    class="relative z-1 block h-10 w-full max-w-10 rounded-full"
-                  >
-                    <img
-                      src="{% static 'arabela_admin/images/user/user-03.jpg' %}"
-                      alt="User"
-                      class="overflow-hidden rounded-full"
-                    />
-                    <span
-                      class="bg-success-500 absolute right-0 bottom-0 z-10 h-2.5 w-full max-w-2.5 rounded-full border-[1.5px] border-white dark:border-gray-900"
-                    ></span>
-                  </span>
-
-                  <span class="block">
-                    <span
-                      class="text-theme-sm mb-1.5 block text-gray-500 dark:text-gray-400"
-                    >
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Alena Franci</span
-                      >
-                      requests permission to change
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Project - Nganter App</span
-                      >
-                    </span>
-
-                    <span
-                      class="text-theme-xs flex items-center gap-2 text-gray-500 dark:text-gray-400"
-                    >
-                      <span>Project</span>
-                      <span class="h-1 w-1 rounded-full bg-gray-400"></span>
-                      <span>8 min ago</span>
-                    </span>
-                  </span>
-                </a>
-              </li>
-
-              <li>
-                <a
-                  class="flex gap-3 rounded-lg border-b border-gray-100 p-3 px-4.5 py-3 hover:bg-gray-100 dark:border-gray-800 dark:hover:bg-white/5"
-                  href="#"
-                >
-                  <span
-                    class="relative z-1 block h-10 w-full max-w-10 rounded-full"
-                  >
-                    <img
-                      src="{% static 'arabela_admin/images/user/user-04.jpg' %}"
-                      alt="User"
-                      class="overflow-hidden rounded-full"
-                    />
-                    <span
-                      class="bg-success-500 absolute right-0 bottom-0 z-10 h-2.5 w-full max-w-2.5 rounded-full border-[1.5px] border-white dark:border-gray-900"
-                    ></span>
-                  </span>
-
-                  <span class="block">
-                    <span
-                      class="text-theme-sm mb-1.5 block text-gray-500 dark:text-gray-400"
-                    >
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Jocelyn Kenter</span
-                      >
-                      requests permission to change
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Project - Nganter App</span
-                      >
-                    </span>
-
-                    <span
-                      class="text-theme-xs flex items-center gap-2 text-gray-500 dark:text-gray-400"
-                    >
-                      <span>Project</span>
-                      <span class="h-1 w-1 rounded-full bg-gray-400"></span>
-                      <span>15 min ago</span>
-                    </span>
-                  </span>
-                </a>
-              </li>
-
-              <li>
-                <a
-                  class="flex gap-3 rounded-lg border-b border-gray-100 p-3 px-4.5 py-3 hover:bg-gray-100 dark:border-gray-800 dark:hover:bg-white/5"
-                  href="#"
-                >
-                  <span
-                    class="relative z-1 block h-10 w-full max-w-10 rounded-full"
-                  >
-                    <img
-                      src="{% static 'arabela_admin/images/user/user-05.jpg' %}"
-                      alt="User"
-                      class="overflow-hidden rounded-full"
-                    />
-                    <span
-                      class="bg-error-500 absolute right-0 bottom-0 z-10 h-2.5 w-full max-w-2.5 rounded-full border-[1.5px] border-white dark:border-gray-900"
-                    ></span>
-                  </span>
-
-                  <span class="block">
-                    <span
-                      class="text-theme-sm mb-1.5 block text-gray-500 dark:text-gray-400"
-                    >
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Brandon Philips</span
-                      >
-                      requests permission to change
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Project - Nganter App</span
-                      >
-                    </span>
-
-                    <span
-                      class="text-theme-xs flex items-center gap-2 text-gray-500 dark:text-gray-400"
-                    >
-                      <span>Project</span>
-                      <span class="h-1 w-1 rounded-full bg-gray-400"></span>
-                      <span>1 hr ago</span>
-                    </span>
-                  </span>
-                </a>
-              </li>
-
-              <li>
-                <a
-                  class="flex gap-3 rounded-lg border-b border-gray-100 p-3 px-4.5 py-3 hover:bg-gray-100 dark:border-gray-800 dark:hover:bg-white/5"
-                  href="#"
-                >
-                  <span
-                    class="relative z-1 block h-10 w-full max-w-10 rounded-full"
-                  >
-                    <img
-                      src="{% static 'arabela_admin/images/user/user-02.jpg' %}"
-                      alt="User"
-                      class="overflow-hidden rounded-full"
-                    />
-                    <span
-                      class="bg-success-500 absolute right-0 bottom-0 z-10 h-2.5 w-full max-w-2.5 rounded-full border-[1.5px] border-white dark:border-gray-900"
-                    ></span>
-                  </span>
-
-                  <span class="block">
-                    <span
-                      class="text-theme-sm mb-1.5 block text-gray-500 dark:text-gray-400"
-                    >
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Terry Franci</span
-                      >
-                      requests permission to change
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Project - Nganter App</span
-                      >
-                    </span>
-
-                    <span
-                      class="text-theme-xs flex items-center gap-2 text-gray-500 dark:text-gray-400"
-                    >
-                      <span>Project</span>
-                      <span class="h-1 w-1 rounded-full bg-gray-400"></span>
-                      <span>5 min ago</span>
-                    </span>
-                  </span>
-                </a>
-              </li>
-
-              <li>
-                <a
-                  class="flex gap-3 rounded-lg border-b border-gray-100 p-3 px-4.5 py-3 hover:bg-gray-100 dark:border-gray-800 dark:hover:bg-white/5"
-                  href="#"
-                >
-                  <span
-                    class="relative z-1 block h-10 w-full max-w-10 rounded-full"
-                  >
-                    <img
-                      src="{% static 'arabela_admin/images/user/user-03.jpg' %}"
-                      alt="User"
-                      class="overflow-hidden rounded-full"
-                    />
-                    <span
-                      class="bg-success-500 absolute right-0 bottom-0 z-10 h-2.5 w-full max-w-2.5 rounded-full border-[1.5px] border-white dark:border-gray-900"
-                    ></span>
-                  </span>
-
-                  <span class="block">
-                    <span
-                      class="text-theme-sm mb-1.5 block text-gray-500 dark:text-gray-400"
-                    >
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Alena Franci</span
-                      >
-                      requests permission to change
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Project - Nganter App</span
-                      >
-                    </span>
-
-                    <span
-                      class="text-theme-xs flex items-center gap-2 text-gray-500 dark:text-gray-400"
-                    >
-                      <span>Project</span>
-                      <span class="h-1 w-1 rounded-full bg-gray-400"></span>
-                      <span>8 min ago</span>
-                    </span>
-                  </span>
-                </a>
-              </li>
-
-              <li>
-                <a
-                  class="flex gap-3 rounded-lg border-b border-gray-100 p-3 px-4.5 py-3 hover:bg-gray-100 dark:border-gray-800 dark:hover:bg-white/5"
-                  href="#"
-                >
-                  <span
-                    class="relative z-1 block h-10 w-full max-w-10 rounded-full"
-                  >
-                    <img
-                      src="{% static 'arabela_admin/images/user/user-04.jpg' %}"
-                      alt="User"
-                      class="overflow-hidden rounded-full"
-                    />
-                    <span
-                      class="bg-success-500 absolute right-0 bottom-0 z-10 h-2.5 w-full max-w-2.5 rounded-full border-[1.5px] border-white dark:border-gray-900"
-                    ></span>
-                  </span>
-
-                  <span class="block">
-                    <span
-                      class="text-theme-sm mb-1.5 block text-gray-500 dark:text-gray-400"
-                    >
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Jocelyn Kenter</span
-                      >
-                      requests permission to change
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Project - Nganter App</span
-                      >
-                    </span>
-
-                    <span
-                      class="text-theme-xs flex items-center gap-2 text-gray-500 dark:text-gray-400"
-                    >
-                      <span>Project</span>
-                      <span class="h-1 w-1 rounded-full bg-gray-400"></span>
-                      <span>15 min ago</span>
-                    </span>
-                  </span>
-                </a>
-              </li>
-
-              <li>
-                <a
-                  class="flex gap-3 rounded-lg border-b border-gray-100 p-3 px-4.5 py-3 hover:bg-gray-100 dark:border-gray-800 dark:hover:bg-white/5"
-                  href="#"
-                >
-                  <span
-                    class="relative z-1 block h-10 w-full max-w-10 rounded-full"
-                  >
-                    <img
-                      src="{% static 'arabela_admin/images/user/user-05.jpg' %}"
-                      alt="User"
-                      class="overflow-hidden rounded-full"
-                    />
-                    <span
-                      class="bg-error-500 absolute right-0 bottom-0 z-10 h-2.5 w-full max-w-2.5 rounded-full border-[1.5px] border-white dark:border-gray-900"
-                    ></span>
-                  </span>
-
-                  <span class="block">
-                    <span
-                      class="text-theme-sm mb-1.5 block text-gray-500 dark:text-gray-400"
-                    >
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Brandon Philips</span
-                      >
-                      requests permission to change
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Project - Nganter App</span
-                      >
-                    </span>
-
-                    <span
-                      class="text-theme-xs flex items-center gap-2 text-gray-500 dark:text-gray-400"
-                    >
-                      <span>Project</span>
-                      <span class="h-1 w-1 rounded-full bg-gray-400"></span>
-                      <span>1 hr ago</span>
-                    </span>
-                  </span>
-                </a>
-              </li>
-            </ul>
-
-            <a
-              href="#"
-              class="text-theme-sm shadow-theme-xs mt-3 flex justify-center rounded-lg border border-gray-300 bg-white p-3 font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
-            >
-              View All Notification
-            </a>
-          </div>
-          <!-- Dropdown End -->
-        </div>
-        <!-- Notification Menu Area -->
+        {% include "arabela_admin/partials/notifications.html" %}
       </div>
 
       <!-- User Area -->
@@ -1526,11 +1154,17 @@
           href="#"
           @click.prevent="dropdownOpen = ! dropdownOpen"
         >
-          <span class="mr-3 h-11 w-11 overflow-hidden rounded-full">
-            <img src="{% static 'arabela_admin/images/user/user-24.jpg' %}" alt="User" />
+          <span class="mr-3 flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border border-gray-200 bg-gray-100 text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
+            {% if admin_avatar_url %}
+            <img src="{{ admin_avatar_url }}" alt="{{ admin_full_name }}" class="h-full w-full object-cover" style="object-position: {{ admin_avatar_position }};" />
+            {% else %}
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+            </svg>
+            {% endif %}
           </span>
 
-          <span class="text-theme-sm mr-1 block font-medium"> Alucard </span>
+          <span class="text-theme-sm mr-1 block font-medium"> {{ admin_display_name }} </span>
 
           <svg
             :class="dropdownOpen && 'rotate-180'"
@@ -1560,12 +1194,12 @@
             <span
               class="text-theme-sm block font-medium text-gray-700 dark:text-gray-400"
             >
-              Alucard Balmond
+              {{ admin_full_name }}
             </span>
             <span
               class="text-theme-xs mt-0.5 block text-gray-500 dark:text-gray-400"
             >
-              alucardbalmond@gmail.com
+              {{ admin_email }}
             </span>
           </div>
 
@@ -1574,7 +1208,7 @@
           >
             <li>
               <a
-                href="profile.html"
+                href="{% url 'arabela_admin:page' page='profile' %}"
                 class="group text-theme-sm flex items-center gap-3 rounded-lg px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
               >
                 <svg
@@ -1642,28 +1276,31 @@
               </a>
             </li>
           </ul>
-          <a
-            href="{% url 'arabela_admin:admin_login' %}"
-            class="group text-theme-sm mt-3 flex items-center gap-3 rounded-lg px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
-          >
-            <svg
-              class="fill-gray-500 group-hover:fill-gray-700 dark:group-hover:fill-gray-300"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
+          <form method="POST" action="{% url 'arabela_admin:admin_logout' %}" class="mt-3">
+            {% csrf_token %}
+            <button
+              type="submit"
+              class="group text-theme-sm flex w-full items-center gap-3 rounded-lg px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
             >
-              <path
-                fill-rule="evenodd"
-                clip-rule="evenodd"
-                d="M15.1007 19.247C14.6865 19.247 14.3507 18.9112 14.3507 18.497L14.3507 14.245H12.8507V18.497C12.8507 19.7396 13.8581 20.747 15.1007 20.747H18.5007C19.7434 20.747 20.7507 19.7396 20.7507 18.497L20.7507 5.49609C20.7507 4.25345 19.7433 3.24609 18.5007 3.24609H15.1007C13.8581 3.24609 12.8507 4.25345 12.8507 5.49609V9.74501L14.3507 9.74501V5.49609C14.3507 5.08188 14.6865 4.74609 15.1007 4.74609L18.5007 4.74609C18.9149 4.74609 19.2507 5.08188 19.2507 5.49609L19.2507 18.497C19.2507 18.9112 18.9149 19.247 18.5007 19.247H15.1007ZM3.25073 11.9984C3.25073 12.2144 3.34204 12.4091 3.48817 12.546L8.09483 17.1556C8.38763 17.4485 8.86251 17.4487 9.15549 17.1559C9.44848 16.8631 9.44863 16.3882 9.15583 16.0952L5.81116 12.7484L16.0007 12.7484C16.4149 12.7484 16.7507 12.4127 16.7507 11.9984C16.7507 11.5842 16.4149 11.2484 16.0007 11.2484L5.81528 11.2484L9.15585 7.90554C9.44864 7.61255 9.44847 7.13767 9.15547 6.84488C8.86248 6.55209 8.3876 6.55226 8.09481 6.84525L3.52309 11.4202C3.35673 11.5577 3.25073 11.7657 3.25073 11.9984Z"
-                fill=""
-              />
-            </svg>
+              <svg
+                class="fill-gray-500 group-hover:fill-gray-700 dark:group-hover:fill-gray-300"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  fill-rule="evenodd"
+                  clip-rule="evenodd"
+                  d="M15.1007 19.247C14.6865 19.247 14.3507 18.9112 14.3507 18.497L14.3507 14.245H12.8507V18.497C12.8507 19.7396 13.8581 20.747 15.1007 20.747H18.5007C19.7434 20.747 20.7507 19.7396 20.7507 18.497L20.7507 5.49609C20.7507 4.25345 19.7433 3.24609 18.5007 3.24609H15.1007C13.8581 3.24609 12.8507 4.25345 12.8507 5.49609V9.74501L14.3507 9.74501V5.49609C14.3507 5.08188 14.6865 4.74609 15.1007 4.74609L18.5007 4.74609C18.9149 4.74609 19.2507 5.08188 19.2507 5.49609L19.2507 18.497C19.2507 18.9112 18.9149 19.247 18.5007 19.247H15.1007ZM3.25073 11.9984C3.25073 12.2144 3.34204 12.4091 3.48817 12.546L8.09483 17.1556C8.38763 17.4485 8.86251 17.4487 9.15549 17.1559C9.44848 16.8631 9.44863 16.3882 9.15583 16.0952L5.81116 12.7484L16.0007 12.7484C16.4149 12.7484 16.7507 12.4127 16.7507 11.9984C16.7507 11.5842 16.4149 11.2484 16.0007 11.2484L5.81528 11.2484L9.15585 7.90554C9.44864 7.61255 9.44847 7.13767 9.15547 6.84488C8.86248 6.55209 8.3876 6.55226 8.09481 6.84525L3.52309 11.4202C3.35673 11.5577 3.25073 11.7657 3.25073 11.9984Z"
+                  fill=""
+                />
+              </svg>
 
-            Sign out
-          </a>
+              Sign out
+            </button>
+          </form>
         </div>
         <!-- Dropdown End -->
       </div>
@@ -1722,313 +1359,124 @@
 
             <div class="status-legend mb-3 flex flex-wrap items-center gap-4 text-[24px] font-semibold text-gray-800 dark:text-white">
               <span class="status-legend-item inline-flex items-center gap-2">
-                <span style="display:inline-block;width:16px;height:16px;border-radius:9999px;background:#FDE68A;box-shadow:0 0 0 2px rgba(0,0,0,0.06)"></span>
+                <span style="display:inline-block;width:16px;height:16px;border-radius:9999px;background:#F59E0B;box-shadow:0 0 0 2px rgba(0,0,0,0.06)"></span>
                 Pick-up
               </span>
               <span class="status-legend-item inline-flex items-center gap-2">
-                <span style="display:inline-block;width:16px;height:16px;border-radius:9999px;background:#BBF7D0;box-shadow:0 0 0 2px rgba(0,0,0,0.06)"></span>
+                <span style="display:inline-block;width:16px;height:16px;border-radius:9999px;background:#16A34A;box-shadow:0 0 0 2px rgba(0,0,0,0.06)"></span>
                 Reserved
               </span>
               <span class="status-legend-item inline-flex items-center gap-2">
-                <span style="display:inline-block;width:16px;height:16px;border-radius:9999px;background:#BFDBFE;box-shadow:0 0 0 2px rgba(0,0,0,0.06)"></span>
+                <span style="display:inline-block;width:16px;height:16px;border-radius:9999px;background:#2563EB;box-shadow:0 0 0 2px rgba(0,0,0,0.06)"></span>
                 Return
               </span>
               <span class="status-legend-item inline-flex items-center gap-2">
-                <span style="display:inline-block;width:16px;height:16px;border-radius:9999px;background:#FCA5A5;box-shadow:0 0 0 2px rgba(0,0,0,0.06)"></span>
+                <span style="display:inline-block;width:16px;height:16px;border-radius:9999px;background:#DC2626;box-shadow:0 0 0 2px rgba(0,0,0,0.06)"></span>
                 Overdue
               </span>
+              <span class="status-legend-item inline-flex items-center gap-2">
+                <span style="display:inline-block;width:16px;height:16px;border-radius:9999px;background:#64748B;box-shadow:0 0 0 2px rgba(0,0,0,0.06)"></span>
+                Blocked
+              </span>
             </div>
+            <p class="mb-3 text-sm text-gray-500 dark:text-gray-400">
+              Blocked days are gowns held back for cleaning or repair, not customer bookings — set them
+              from a gown's row in <a href="{% url 'arabela_admin:gown_catalog' %}" class="text-brand-500">Gown Catalog</a>.
+              Customers can't book a date until every gown in that category is free.
+            </p>
             <div
               class="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]"
             >
               <div id="calendar" class="min-h-screen"></div>
+              {{ calendar_events|json_script:"calendar-events-data" }}
             </div>
 
-            <!-- BEGIN MODAL -->
+            <!-- BEGIN BOOKING DETAIL PANEL -->
             <div
-  class="fixed inset-0 items-center justify-center hidden p-5 overflow-y-auto modal z-99999"
-  id="eventModal"
->
-  <div
-    class="modal-close-btn fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]"
-  ></div>
-  <div
-    class="modal-dialog modal-dialog-scrollable modal-lg no-scrollbar relative flex w-full max-w-[700px] flex-col overflow-y-auto rounded-3xl bg-white p-6 dark:bg-gray-900 lg:p-11"
-  >
-    <!-- close btn -->
-    <button
-      class="modal-close-btn transition-color absolute right-5 top-5 z-999 flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300 sm:h-11 sm:w-11"
-    >
-      <svg
-        class="fill-current"
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <path
-          fill-rule="evenodd"
-          clip-rule="evenodd"
-          d="M6.04289 16.5418C5.65237 16.9323 5.65237 17.5655 6.04289 17.956C6.43342 18.3465 7.06658 18.3465 7.45711 17.956L11.9987 13.4144L16.5408 17.9565C16.9313 18.347 17.5645 18.347 17.955 17.9565C18.3455 17.566 18.3455 16.9328 17.955 16.5423L13.4129 12.0002L17.955 7.45808C18.3455 7.06756 18.3455 6.43439 17.955 6.04387C17.5645 5.65335 16.9313 5.65335 16.5408 6.04387L11.9987 10.586L7.45711 6.04439C7.06658 5.65386 6.43342 5.65386 6.04289 6.04439C5.65237 6.43491 5.65237 7.06808 6.04289 7.4586L10.5845 12.0002L6.04289 16.5418Z"
-          fill=""
-        />
-      </svg>
-    </button>
-
-    <div
-      class="flex flex-col px-2 overflow-y-auto modal-content custom-scrollbar"
-    >
-      <div class="modal-header">
-        <h5
-          class="mb-2 font-semibold text-gray-800 modal-title text-theme-xl dark:text-white/90 lg:text-2xl"
-          id="eventModalLabel"
-        >
-          Add / Edit Event
-        </h5>
-        <p class="text-sm text-gray-500 dark:text-gray-400">
-          Plan your next big moment: schedule or edit an event to stay on track
-        </p>
-      </div>
-      <div class="mt-8 modal-body">
-        <div>
-          <div>
-            <div>
-              <label
-                class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400"
+              class="fixed inset-0 items-center justify-center hidden p-5 overflow-y-auto modal z-99999"
+              id="bookingDetailModal"
+            >
+              <div
+                class="modal-close-btn fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]"
+              ></div>
+              <div
+                class="modal-dialog modal-dialog-scrollable modal-lg no-scrollbar relative flex w-full max-w-[700px] flex-col overflow-y-auto rounded-3xl bg-white p-6 dark:bg-gray-900 lg:p-8"
               >
-                Event Title
-              </label>
-              <input
-                id="event-title"
-                type="text"
-                class="dark:bg-dark-900 h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-              />
-            </div>
-          </div>
-          <div class="mt-6">
-            <div>
-              <label
-                class="block mb-4 text-sm font-medium text-gray-700 dark:text-gray-400"
-              >
-                Event Color
-              </label>
-            </div>
-            <div class="flex flex-wrap items-center gap-4 sm:gap-5">
-              <div class="n-chk">
-                <div class="form-check form-check-primary form-check-inline">
-                  <label
-                    class="flex items-center text-sm text-gray-700 form-check-label dark:text-gray-400"
-                    for="modalDanger"
-                  >
-                    <span class="relative">
-                      <input
-                        class="sr-only form-check-input"
-                        type="radio"
-                        name="event-level"
-                        value="Danger"
-                        id="modalDanger"
-                      />
-                      <span
-                        class="flex items-center justify-center w-5 h-5 mr-2 border border-gray-300 rounded-full box dark:border-gray-700"
-                      >
-                        <span
-                          class="w-2 h-2 bg-white rounded-full dark:bg-transparent"
-                        >
-                        </span>
-                      </span>
-                    </span>
-                    Pick-up
-                  </label>
-                </div>
-              </div>
-              <div class="n-chk">
-                <div class="form-check form-check-warning form-check-inline">
-                  <label
-                    class="flex items-center text-sm text-gray-700 form-check-label dark:text-gray-400"
-                    for="modalSuccess"
-                  >
-                    <span class="relative">
-                      <input
-                        class="sr-only form-check-input"
-                        type="radio"
-                        name="event-level"
-                        value="Success"
-                        id="modalSuccess"
-                      />
-                      <span
-                        class="flex items-center justify-center w-5 h-5 mr-2 border border-gray-300 rounded-full box dark:border-gray-700"
-                      >
-                        <span
-                          class="w-2 h-2 bg-white rounded-full dark:bg-transparent"
-                        >
-                        </span>
-                      </span>
-                    </span>
-                    Reserved
-                  </label>
-                </div>
-              </div>
-              <div class="n-chk">
-                <div class="form-check form-check-success form-check-inline">
-                  <label
-                    class="flex items-center text-sm text-gray-700 form-check-label dark:text-gray-400"
-                    for="modalPrimary"
-                  >
-                    <span class="relative">
-                      <input
-                        class="sr-only form-check-input"
-                        type="radio"
-                        name="event-level"
-                        value="Primary"
-                        id="modalPrimary"
-                      />
-                      <span
-                        class="flex items-center justify-center w-5 h-5 mr-2 border border-gray-300 rounded-full box dark:border-gray-700"
-                      >
-                        <span
-                          class="w-2 h-2 bg-white rounded-full dark:bg-transparent"
-                        >
-                        </span>
-                      </span>
-                    </span>
-                    Return
-                  </label>
-                </div>
-              </div>
-              <div class="n-chk">
-                <div class="form-check form-check-danger form-check-inline">
-                  <label
-                    class="flex items-center text-sm text-gray-700 form-check-label dark:text-gray-400"
-                    for="modalWarning"
-                  >
-                    <span class="relative">
-                      <input
-                        class="sr-only form-check-input"
-                        type="radio"
-                        name="event-level"
-                        value="Warning"
-                        id="modalWarning"
-                      />
-                      <span
-                        class="flex items-center justify-center w-5 h-5 mr-2 border border-gray-300 rounded-full box dark:border-gray-700"
-                      >
-                        <span
-                          class="w-2 h-2 bg-white rounded-full dark:bg-transparent"
-                        >
-                        </span>
-                      </span>
-                    </span>
-                    Overdue
-                  </label>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="mt-6">
-            <div>
-              <label
-                class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400"
-              >
-                Enter Start Date
-              </label>
-              <div class="relative">
-                <input
-                  id="event-start-date"
-                  type="date"
-                  class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 pl-4 pr-11 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-                  onclick="this.showPicker()"
-                />
-                <span class="absolute right-3.5 top-1/2 -translate-y-1/2">
-                  <svg
-                    class="fill-gray-700 dark:fill-gray-400"
-                    width="14"
-                    height="14"
-                    viewBox="0 0 14 14"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      fill-rule="evenodd"
-                      clip-rule="evenodd"
-                      d="M4.33317 0.0830078C4.74738 0.0830078 5.08317 0.418794 5.08317 0.833008V1.24967H8.9165V0.833008C8.9165 0.418794 9.25229 0.0830078 9.6665 0.0830078C10.0807 0.0830078 10.4165 0.418794 10.4165 0.833008V1.24967L11.3332 1.24967C12.2997 1.24967 13.0832 2.03318 13.0832 2.99967V4.99967V11.6663C13.0832 12.6328 12.2997 13.4163 11.3332 13.4163H2.6665C1.70001 13.4163 0.916504 12.6328 0.916504 11.6663V4.99967V2.99967C0.916504 2.03318 1.70001 1.24967 2.6665 1.24967L3.58317 1.24967V0.833008C3.58317 0.418794 3.91896 0.0830078 4.33317 0.0830078ZM4.33317 2.74967H2.6665C2.52843 2.74967 2.4165 2.8616 2.4165 2.99967V4.24967H11.5832V2.99967C11.5832 2.8616 11.4712 2.74967 11.3332 2.74967H9.6665H4.33317ZM11.5832 5.74967H2.4165V11.6663C2.4165 11.8044 2.52843 11.9163 2.6665 11.9163H11.3332C11.4712 11.9163 11.5832 11.8044 11.5832 11.6663V5.74967Z"
-                      fill=""
-                    />
+                <button
+                  type="button"
+                  class="modal-close-btn transition-color absolute right-5 top-5 z-999 flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300 sm:h-11 sm:w-11"
+                >
+                  <svg class="fill-current" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path fill-rule="evenodd" clip-rule="evenodd" d="M6.04289 16.5418C5.65237 16.9323 5.65237 17.5655 6.04289 17.956C6.43342 18.3465 7.06658 18.3465 7.45711 17.956L11.9987 13.4144L16.5408 17.9565C16.9313 18.347 17.5645 18.347 17.955 17.9565C18.3455 17.566 18.3455 16.9328 17.955 16.5423L13.4129 12.0002L17.955 7.45808C18.3455 7.06756 18.3455 6.43439 17.955 6.04387C17.5645 5.65335 16.9313 5.65335 16.5408 6.04387L11.9987 10.586L7.45711 6.04439C7.06658 5.65386 6.43342 5.65386 6.04289 6.04439C5.65237 6.43491 5.65237 7.06808 6.04289 7.4586L10.5845 12.0002L6.04289 16.5418Z" fill=""/>
                   </svg>
-                </span>
+                </button>
+
+                <div class="flex flex-col px-2 overflow-y-auto modal-content custom-scrollbar">
+                  <div class="modal-header">
+                    <h5 class="mb-2 font-semibold text-gray-800 modal-title text-theme-xl dark:text-white/90 lg:text-2xl">
+                      Booking Details
+                    </h5>
+                    <p id="bookingModalSubtitle" class="text-sm text-gray-500 dark:text-gray-400"></p>
+                  </div>
+                  <div class="mt-6 modal-body space-y-5">
+                    <div>
+                      <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-400">Status</label>
+                      <div class="flex flex-wrap gap-2" id="bookingModalStatusGroup">
+                        <button type="button" data-status="Pick-up" class="booking-status-chip">Pick-up</button>
+                        <button type="button" data-status="Reserved" class="booking-status-chip">Reserved</button>
+                        <button type="button" data-status="Overdue" class="booking-status-chip">Overdue</button>
+                      </div>
+                      <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">Pick-up shows on its own. Reserved also shows the Return date. Overdue adds on top of both.</p>
+                    </div>
+
+                    <div class="booking-date-grid">
+                      <div>
+                        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Pick-up Date</label>
+                        <input id="bookingModalRentalDate" type="date" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" onclick="this.showPicker()" />
+                      </div>
+                      <div>
+                        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Event Date</label>
+                        <input id="bookingModalEventDate" type="date" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" onclick="this.showPicker()" />
+                      </div>
+                      <div>
+                        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Return Date</label>
+                        <input id="bookingModalReturnDate" type="date" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" onclick="this.showPicker()" />
+                      </div>
+                      <div>
+                        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Overdue Date</label>
+                        <input id="bookingModalOverdueDate" type="date" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" onclick="this.showPicker()" />
+                      </div>
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Pick-up = pick-up date to the day before the event · Return date shows automatically once Reserved is picked · Overdue = the overdue date.</p>
+
+                    <div id="bookingModalConditionSection">
+                      <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-400">Return Condition</label>
+                      <div class="flex flex-wrap gap-2" id="bookingModalConditionGroup">
+                        <button type="button" data-condition="Good" class="booking-condition-chip">Good</button>
+                        <button type="button" data-condition="Fair" class="booking-condition-chip">Fair</button>
+                        <button type="button" data-condition="Needs Repair" class="booking-condition-chip">Needs Repair</button>
+                      </div>
+                      <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">Checked in by staff before the deposit is released. The customer sees this on their Orders page.</p>
+                    </div>
+
+                    <p id="bookingModalError" class="hidden text-sm text-error-500"></p>
+                  </div>
+                  <div class="flex flex-col gap-3 mt-6 modal-footer sm:flex-row sm:justify-end">
+                    <button type="button" class="modal-close-btn flex w-full justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] sm:w-auto">
+                      Close
+                    </button>
+                    <button type="button" id="bookingModalMarkReturnedBtn" class="flex w-full justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] sm:w-auto">
+                      Mark Returned
+                    </button>
+                    <button type="button" id="bookingModalSaveChangesBtn" class="flex w-full justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 sm:w-auto">
+                      Save Changes
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+            <!-- END BOOKING DETAIL PANEL -->
 
-          <div class="mt-6">
-            <div>
-              <label
-                class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400"
-              >
-                Enter End Date
-              </label>
-              <div class="relative">
-                <input
-                  id="event-end-date"
-                  type="date"
-                  class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 pl-4 pr-11 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-                  onclick="this.showPicker()"
-                />
-                <span class="absolute right-3.5 top-1/2 -translate-y-1/2">
-                  <svg
-                    class="fill-gray-700 dark:fill-gray-400"
-                    width="14"
-                    height="14"
-                    viewBox="0 0 14 14"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      fill-rule="evenodd"
-                      clip-rule="evenodd"
-                      d="M4.33317 0.0830078C4.74738 0.0830078 5.08317 0.418794 5.08317 0.833008V1.24967H8.9165V0.833008C8.9165 0.418794 9.25229 0.0830078 9.6665 0.0830078C10.0807 0.0830078 10.4165 0.418794 10.4165 0.833008V1.24967L11.3332 1.24967C12.2997 1.24967 13.0832 2.03318 13.0832 2.99967V4.99967V11.6663C13.0832 12.6328 12.2997 13.4163 11.3332 13.4163H2.6665C1.70001 13.4163 0.916504 12.6328 0.916504 11.6663V4.99967V2.99967C0.916504 2.03318 1.70001 1.24967 2.6665 1.24967L3.58317 1.24967V0.833008C3.58317 0.418794 3.91896 0.0830078 4.33317 0.0830078ZM4.33317 2.74967H2.6665C2.52843 2.74967 2.4165 2.8616 2.4165 2.99967V4.24967H11.5832V2.99967C11.5832 2.8616 11.4712 2.74967 11.3332 2.74967H9.6665H4.33317ZM11.5832 5.74967H2.4165V11.6663C2.4165 11.8044 2.52843 11.9163 2.6665 11.9163H11.3332C11.4712 11.9163 11.5832 11.8044 11.5832 11.6663V5.74967Z"
-                      fill=""
-                    />
-                  </svg>
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="flex items-center gap-3 mt-6 modal-footer sm:justify-end">
-        <button
-          type="button"
-          class="btn modal-close-btn bg-danger-subtle text-danger flex w-full justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] sm:w-auto"
-          data-bs-dismiss="modal"
-        >
-          Close
-        </button>
-        <button
-          type="button"
-          class="btn btn-success btn-update-event flex w-full justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 sm:w-auto"
-          data-fc-event-public-id=""
-        >
-          Update changes
-        </button>
-        <button
-          type="button"
-          class="btn btn-primary btn-add-event flex w-full justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 sm:w-auto"
-        >
-          Add Event
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- <div
-  class="modal fixed left-0 top-0 z-99999 hidden min-h-screen w-full justify-center overflow-y-auto overflow-x-hidden bg-gray-400/50 px-4 py-4 backdrop-blur-[32px] lg:py-[120px]"
-  id="eventModal"
->
-</div> -->
-<!-- END MODAL -->
           </div>
         </main>
         <!-- ===== Main Content End ===== -->
@@ -2036,9 +1484,9 @@
       <!-- ===== Content Area End ===== -->
     </div>
     <!-- ===== Page Wrapper End ===== -->
-  <script defer src="{% static 'arabela_admin/bundle.js' %}"></script>
+  <script defer src="{% static 'arabela_admin/bundle.js' %}?v={{ admin_asset_version }}"></script>
+  <script defer src="{% static 'arabela_admin/global-search.js' %}"></script>
 
-  <script src="{% static 'arabela_admin/js/calendar.js' %}"></script>
 </body>
 </html>
 

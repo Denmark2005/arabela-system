@@ -2,18 +2,36 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <title>Basic Tables | Arabela System Admin Panel</title>
-    {% include 'arabela_admin/partials/_head.html' %}
-  </head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0"
+    />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <title>Active Reservations | Arabela System Admin Panel</title>
+    <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
+  <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet"></head>
   <body
-    x-data="{ page: 'basicTables', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false }"
+    x-data="{ page: 'active', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, openCustomerModal: false, viewingCustomer: {}, search: '' }"
     x-init="
          darkMode = JSON.parse(localStorage.getItem('darkMode'));
-         $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)))"
+         $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)));
+         const presetSearchParams = new URLSearchParams(window.location.search);
+         const presetSearch = presetSearchParams.get('search');
+         if (presetSearch) { search = presetSearch; }"
     :class="{'dark bg-gray-900': darkMode === true}"
   >
     <!-- ===== Preloader Start ===== -->
-    {% include 'arabela_admin/partials/_preloader.html' %}
+    <div
+  x-show="loaded"
+  x-init="window.addEventListener('DOMContentLoaded', () => {setTimeout(() => loaded = false, 500)})"
+  class="fixed left-0 top-0 z-999999 flex h-screen w-screen items-center justify-center bg-white dark:bg-black"
+>
+  <div
+    class="h-16 w-16 animate-spin rounded-full border-4 border-solid border-black border-t-transparent" style="border-color: #000 !important; border-top-color: transparent !important;"
+  ></div>
+</div>
+
     <!-- ===== Preloader End ===== -->
 
     <!-- ===== Page Wrapper Start ===== -->
@@ -46,7 +64,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown' || page === 'condition' || page === 'categories') { selected = 'InventoryManagement' } else if (page === 'clients' || page === 'abuse') { selected = 'CustomerManagement' } else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown' || page === 'condition' || page === 'categories') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits' || page === 'receipt-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -220,7 +238,7 @@
                 </li>
                 <li>
                   <a
-                    href="active-reservations.html"
+                    href="{% url 'arabela_admin:active_reservations' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'active' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
@@ -229,7 +247,7 @@
                 </li>
                 <li>
                   <a
-                    href="pending-approval.html"
+                    href="{% url 'arabela_admin:pending_approval' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'pending' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
@@ -303,7 +321,7 @@
               >
                 <li>
                   <a
-                    href="gown-catalog.html"
+                    href="{% url 'arabela_admin:gown_catalog' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'gown' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
@@ -312,16 +330,7 @@
                 </li>
                 <li>
                   <a
-                    href="condition-tracker.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'condition' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Condition Tracker
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="categories.html"
+                    href="{% url 'arabela_admin:categories' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'categories' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
@@ -393,20 +402,11 @@
               >
                 <li>
                   <a
-                    href="clients.html"
+                    href="{% url 'arabela_admin:clients' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'clients' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
                     Client List
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="abuse-monitor.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'abuse' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Abuse Monitor
                   </a>
                 </li>
               </ul>
@@ -414,6 +414,82 @@
             <!-- Dropdown Menu End -->
           </li>
           <!-- Menu Item Customer Management -->
+
+          {% if admin_is_owner %}
+          <!-- Menu Item Staff Management -->
+          <li>
+            <a
+              href="#"
+              @click.prevent="selected = (selected === 'StaffManagement' ? '':'StaffManagement')"
+              class="menu-item group"
+              :class=" (selected === 'StaffManagement') ? 'menu-item-active' : 'menu-item-inactive'"
+            >
+              <svg
+                :class="(selected === 'StaffManagement') ? 'menu-item-icon-active'  :'menu-item-icon-inactive'"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  fill-rule="evenodd"
+                  clip-rule="evenodd"
+                  d="M6.75 7.5V6a3.75 3.75 0 0 1 3.75-3.75h3a3.75 3.75 0 0 1 3.75 3.75v1.5h1.875c1.036 0 1.875.84 1.875 1.875v11.25c0 1.035-.84 1.875-1.875 1.875H4.875C3.839 21.75 3 20.91 3 19.875V9.375c0-1.036.84-1.875 1.875-1.875H6.75Zm7.5 0v-1.5a2.25 2.25 0 0 0-2.25-2.25h-3a2.25 2.25 0 0 0-2.25 2.25v1.5h7.5Z"
+                  fill=""
+                />
+              </svg>
+
+              <span
+                class="menu-item-text"
+                :class="sidebarToggle ? 'lg:hidden' : ''"
+              >
+                Staff Management
+              </span>
+
+              <svg
+                class="menu-item-arrow"
+                :class="[(selected === 'StaffManagement') ? 'menu-item-arrow-active' : 'menu-item-arrow-inactive', sidebarToggle ? 'lg:hidden' : '' ]"
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M4.79175 7.39584L10.0001 12.6042L15.2084 7.39585"
+                  stroke=""
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </a>
+
+            <!-- Dropdown Menu Start -->
+            <div
+              class="transform overflow-hidden translate"
+              :class="(selected === 'StaffManagement') ? 'block' :'hidden'"
+            >
+              <ul
+                :class="sidebarToggle ? 'lg:hidden' : 'flex'"
+                class="menu-dropdown mt-2 flex flex-col gap-1 pl-9"
+              >
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:staff_management' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'staff-management' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Staff Accounts
+                  </a>
+                </li>
+              </ul>
+            </div>
+            <!-- Dropdown Menu End -->
+          </li>
+          <!-- Menu Item Staff Management -->
+          {% endif %}
 
           <!-- Menu Item Financial Report -->
           <li>
@@ -471,7 +547,7 @@
               >
                 <li>
                   <a
-                    href="payment-verification.html"
+                    href="{% url 'arabela_admin:payment_verification' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'payment-verification' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
@@ -480,11 +556,20 @@
                 </li>
                 <li>
                   <a
-                    href="security-deposits.html"
+                    href="{% url 'arabela_admin:security_deposits' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'security-deposits' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
                     Security Deposits
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:receipt_records' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'receipt-records' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Receipt Records
                   </a>
                 </li>
               </ul>
@@ -496,7 +581,7 @@
           <!-- Menu Item Profile -->
           <li>
             <a
-              href="profile.html"
+              href="{% url 'arabela_admin:page' page='profile' %}"
               @click="selected = (selected === 'Profile' ? '':'Profile')"
               class="menu-item group"
               :class=" (selected === 'Profile') && (page === 'profile') ? 'menu-item-active' : 'menu-item-inactive'"
@@ -528,7 +613,7 @@
           <!-- Menu Item Profile -->
 
           <!-- Menu Item Forms -->
-          <li class="hidden" data-admin-template-nav="forms">
+          <li data-admin-template-nav="forms">
             <a
               href="#"
               @click.prevent="selected = (selected === 'Forms' ? '':'Forms')"
@@ -588,7 +673,7 @@
               >
                 <li>
                   <a
-                    href="form-elements.html"
+                    href="{% url 'arabela_admin:page' page='form-elements' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'formElements' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
@@ -601,158 +686,11 @@
           </li>
           <!-- Menu Item Forms -->
 
-          <!-- Menu Item Tables -->
-          <li class="hidden" data-admin-template-nav="tables">
-            <a
-              href="#"
-              @click.prevent="selected = (selected === 'Tables' ? '':'Tables')"
-              class="menu-item group"
-              :class="(selected === 'Tables') || (page === 'basicTables' || page === 'dataTables') ? 'menu-item-active' : 'menu-item-inactive'"
-            >
-              <svg
-                :class="(selected === 'Tables') || (page === 'basicTables' || page === 'dataTables') ? 'menu-item-icon-active'  :'menu-item-icon-inactive'"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  fill-rule="evenodd"
-                  clip-rule="evenodd"
-                  d="M3.25 5.5C3.25 4.25736 4.25736 3.25 5.5 3.25H18.5C19.7426 3.25 20.75 4.25736 20.75 5.5V18.5C20.75 19.7426 19.7426 20.75 18.5 20.75H5.5C4.25736 20.75 3.25 19.7426 3.25 18.5V5.5ZM5.5 4.75C5.08579 4.75 4.75 5.08579 4.75 5.5V8.58325L19.25 8.58325V5.5C19.25 5.08579 18.9142 4.75 18.5 4.75H5.5ZM19.25 10.0833H15.416V13.9165H19.25V10.0833ZM13.916 10.0833L10.083 10.0833V13.9165L13.916 13.9165V10.0833ZM8.58301 10.0833H4.75V13.9165H8.58301V10.0833ZM4.75 18.5V15.4165H8.58301V19.25H5.5C5.08579 19.25 4.75 18.9142 4.75 18.5ZM10.083 19.25V15.4165L13.916 15.4165V19.25H10.083ZM15.416 19.25V15.4165H19.25V18.5C19.25 18.9142 18.9142 19.25 18.5 19.25H15.416Z"
-                  fill=""
-                />
-              </svg>
-
-              <span
-                class="menu-item-text"
-                :class="sidebarToggle ? 'lg:hidden' : ''"
-              >
-                Tables
-              </span>
-
-              <svg
-                class="menu-item-arrow absolute right-2.5 top-1/2 -translate-y-1/2 stroke-current"
-                :class="[(selected === 'Tables') ? 'menu-item-arrow-active' : 'menu-item-arrow-inactive', sidebarToggle ? 'lg:hidden' : '' ]"
-                width="20"
-                height="20"
-                viewBox="0 0 20 20"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M4.79175 7.39584L10.0001 12.6042L15.2084 7.39585"
-                  stroke=""
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-            </a>
-
-            <!-- Dropdown Menu Start -->
-            <div
-              class="overflow-hidden transform translate"
-              :class="(selected === 'Tables') ? 'block' :'hidden'"
-            >
-              <ul
-                :class="sidebarToggle ? 'lg:hidden' : 'flex'"
-                class="flex flex-col gap-1 mt-2 menu-dropdown pl-9"
-              >
-                <li>
-                  <a
-                    href="basic-tables.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'basicTables' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Basic Tables
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <!-- Dropdown Menu End -->
-          </li>
-          <!-- Menu Item Tables -->
-
-          <!-- Menu Item Pages -->
-          <li class="hidden" data-admin-template-nav="pages">
-            <a
-              href="#"
-              @click.prevent="selected = (selected === 'Pages' ? '':'Pages')"
-              class="menu-item group"
-              :class="(selected === 'Pages') || (page === 'fileManager' || page === 'pricingTables' || page === 'blank' || page === 'page500' || page === 'page503' || page === 'success' || page === 'faq' || page === 'comingSoon' || page === 'maintenance') ? 'menu-item-active' : 'menu-item-inactive'"
-            >
-              <svg
-                :class="(selected === 'Pages') || (page === 'fileManager' || page === 'pricingTables' || page === 'blank' || page === 'page500' || page === 'page503' || page === 'success' || page === 'faq' || page === 'comingSoon' || page === 'maintenance') ? 'menu-item-icon-active'  :'menu-item-icon-inactive'"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  fill-rule="evenodd"
-                  clip-rule="evenodd"
-                  d="M8.50391 4.25C8.50391 3.83579 8.83969 3.5 9.25391 3.5H15.2777C15.4766 3.5 15.6674 3.57902 15.8081 3.71967L18.2807 6.19234C18.4214 6.333 18.5004 6.52376 18.5004 6.72268V16.75C18.5004 17.1642 18.1646 17.5 17.7504 17.5H16.248V17.4993H14.748V17.5H9.25391C8.83969 17.5 8.50391 17.1642 8.50391 16.75V4.25ZM14.748 19H9.25391C8.01126 19 7.00391 17.9926 7.00391 16.75V6.49854H6.24805C5.83383 6.49854 5.49805 6.83432 5.49805 7.24854V19.75C5.49805 20.1642 5.83383 20.5 6.24805 20.5H13.998C14.4123 20.5 14.748 20.1642 14.748 19.75L14.748 19ZM7.00391 4.99854V4.25C7.00391 3.00736 8.01127 2 9.25391 2H15.2777C15.8745 2 16.4468 2.23705 16.8687 2.659L19.3414 5.13168C19.7634 5.55364 20.0004 6.12594 20.0004 6.72268V16.75C20.0004 17.9926 18.9931 19 17.7504 19H16.248L16.248 19.75C16.248 20.9926 15.2407 22 13.998 22H6.24805C5.00541 22 3.99805 20.9926 3.99805 19.75V7.24854C3.99805 6.00589 5.00541 4.99854 6.24805 4.99854H7.00391Z"
-                  fill=""
-                />
-              </svg>
-
-              <span
-                class="menu-item-text"
-                :class="sidebarToggle ? 'lg:hidden' : ''"
-              >
-                Pages
-              </span>
-
-              <svg
-                class="menu-item-arrow absolute right-2.5 top-1/2 -translate-y-1/2 stroke-current"
-                :class="[(selected === 'Pages') ? 'menu-item-arrow-active' : 'menu-item-arrow-inactive', sidebarToggle ? 'lg:hidden' : '' ]"
-                width="20"
-                height="20"
-                viewBox="0 0 20 20"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M4.79175 7.39584L10.0001 12.6042L15.2084 7.39585"
-                  stroke=""
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-            </a>
-
-            <!-- Dropdown Menu Start -->
-            <div
-              class="overflow-hidden transform translate"
-              :class="(selected === 'Pages') ? 'block' :'hidden'"
-            >
-              <ul
-                :class="sidebarToggle ? 'lg:hidden' : 'flex'"
-                class="flex flex-col gap-1 mt-2 menu-dropdown pl-9"
-              >
-                <li>
-                  <a
-                    href="blank.html"
-                    class="menu-dropdown-item group"
-                    :class="page === 'blank' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Blank Page
-                  </a>
-                </li>
-                </ul>
-            </div>
-            <!-- Dropdown Menu End -->
-          </li>
-          <!-- Menu Item Pages -->
-        </ul>
+                  </ul>
       </div>
 
       <!-- Others Group -->
-      <div class="hidden" data-admin-template-nav="others-ui">
+      <div data-admin-template-nav="others-ui">
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
           <span
             class="menu-group-title"
@@ -843,7 +781,7 @@
               >
                 <li>
                   <a
-                    href="alerts.html"
+                    href="{% url 'arabela_admin:page' page='alerts' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'alerts' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
@@ -852,7 +790,7 @@
                 </li>
                 <li>
                   <a
-                    href="badge.html"
+                    href="{% url 'arabela_admin:page' page='badge' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'badge' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
@@ -861,7 +799,7 @@
                 </li>
                 <li>
                   <a
-                    href="buttons.html"
+                    href="{% url 'arabela_admin:page' page='buttons' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'buttons' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
@@ -885,7 +823,7 @@
 
       <!-- ===== Content Area Start ===== -->
       <div
-        class="relative flex flex-col flex-1 overflow-x-hidden overflow-y-auto"
+        class="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden"
       >
         <!-- Small Device Overlay Start -->
         <div
@@ -1078,425 +1016,7 @@
         </button>
         <!-- Dark Mode Toggler -->
 
-        <!-- Notification Menu Area -->
-        <div
-          class="relative"
-          x-data="{ dropdownOpen: false, notifying: true }"
-          @click.outside="dropdownOpen = false"
-        >
-          <button
-            class="hover:text-dark-900 relative flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
-            @click.prevent="dropdownOpen = ! dropdownOpen; notifying = false"
-          >
-            <span
-              :class="!notifying ? 'hidden' : 'flex'"
-              class="absolute top-0.5 right-0 z-1 h-2 w-2 rounded-full bg-orange-400"
-            >
-              <span
-                class="absolute -z-1 inline-flex h-full w-full animate-ping rounded-full bg-orange-400 opacity-75"
-              ></span>
-            </span>
-            <svg
-              class="fill-current"
-              width="20"
-              height="20"
-              viewBox="0 0 20 20"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                fill-rule="evenodd"
-                clip-rule="evenodd"
-                d="M10.75 2.29248C10.75 1.87827 10.4143 1.54248 10 1.54248C9.58583 1.54248 9.25004 1.87827 9.25004 2.29248V2.83613C6.08266 3.20733 3.62504 5.9004 3.62504 9.16748V14.4591H3.33337C2.91916 14.4591 2.58337 14.7949 2.58337 15.2091C2.58337 15.6234 2.91916 15.9591 3.33337 15.9591H4.37504H15.625H16.6667C17.0809 15.9591 17.4167 15.6234 17.4167 15.2091C17.4167 14.7949 17.0809 14.4591 16.6667 14.4591H16.375V9.16748C16.375 5.9004 13.9174 3.20733 10.75 2.83613V2.29248ZM14.875 14.4591V9.16748C14.875 6.47509 12.6924 4.29248 10 4.29248C7.30765 4.29248 5.12504 6.47509 5.12504 9.16748V14.4591H14.875ZM8.00004 17.7085C8.00004 18.1228 8.33583 18.4585 8.75004 18.4585H11.25C11.6643 18.4585 12 18.1228 12 17.7085C12 17.2943 11.6643 16.9585 11.25 16.9585H8.75004C8.33583 16.9585 8.00004 17.2943 8.00004 17.7085Z"
-                fill=""
-              />
-            </svg>
-          </button>
-
-          <!-- Dropdown Start -->
-          <div
-            x-show="dropdownOpen"
-            class="shadow-theme-lg dark:bg-gray-dark absolute -right-[240px] mt-[17px] flex h-[480px] w-[350px] flex-col rounded-2xl border border-gray-200 bg-white p-3 sm:w-[361px] lg:right-0 dark:border-gray-800"
-          >
-            <div
-              class="mb-3 flex items-center justify-between border-b border-gray-100 pb-3 dark:border-gray-800"
-            >
-              <h5
-                class="text-lg font-semibold text-gray-800 dark:text-white/90"
-              >
-                Notification
-              </h5>
-
-              <button
-                @click="dropdownOpen = false"
-                class="text-gray-500 dark:text-gray-400"
-              >
-                <svg
-                  class="fill-current"
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    fill-rule="evenodd"
-                    clip-rule="evenodd"
-                    d="M6.21967 7.28131C5.92678 6.98841 5.92678 6.51354 6.21967 6.22065C6.51256 5.92775 6.98744 5.92775 7.28033 6.22065L11.999 10.9393L16.7176 6.22078C17.0105 5.92789 17.4854 5.92788 17.7782 6.22078C18.0711 6.51367 18.0711 6.98855 17.7782 7.28144L13.0597 12L17.7782 16.7186C18.0711 17.0115 18.0711 17.4863 17.7782 17.7792C17.4854 18.0721 17.0105 18.0721 16.7176 17.7792L11.999 13.0607L7.28033 17.7794C6.98744 18.0722 6.51256 18.0722 6.21967 17.7794C5.92678 17.4865 5.92678 17.0116 6.21967 16.7187L10.9384 12L6.21967 7.28131Z"
-                    fill=""
-                  />
-                </svg>
-              </button>
-            </div>
-
-            <ul class="custom-scrollbar flex h-auto flex-col overflow-y-auto">
-              <li>
-                <a
-                  class="flex gap-3 rounded-lg border-b border-gray-100 p-3 px-4.5 py-3 hover:bg-gray-100 dark:border-gray-800 dark:hover:bg-white/5"
-                  href="#"
-                >
-                  <span
-                    class="relative z-1 block h-10 w-full max-w-10 rounded-full"
-                  >
-                    <img
-                      src="{% static 'arabela_admin/images/user/user-02.jpg' %}"
-                      alt="User"
-                      class="overflow-hidden rounded-full"
-                    />
-                    <span
-                      class="bg-success-500 absolute right-0 bottom-0 z-10 h-2.5 w-full max-w-2.5 rounded-full border-[1.5px] border-white dark:border-gray-900"
-                    ></span>
-                  </span>
-
-                  <span class="block">
-                    <span
-                      class="text-theme-sm mb-1.5 block text-gray-500 dark:text-gray-400"
-                    >
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Terry Franci</span
-                      >
-                      requests permission to change
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Project - Nganter App</span
-                      >
-                    </span>
-
-                    <span
-                      class="text-theme-xs flex items-center gap-2 text-gray-500 dark:text-gray-400"
-                    >
-                      <span>Project</span>
-                      <span class="h-1 w-1 rounded-full bg-gray-400"></span>
-                      <span>5 min ago</span>
-                    </span>
-                  </span>
-                </a>
-              </li>
-
-              <li>
-                <a
-                  class="flex gap-3 rounded-lg border-b border-gray-100 p-3 px-4.5 py-3 hover:bg-gray-100 dark:border-gray-800 dark:hover:bg-white/5"
-                  href="#"
-                >
-                  <span
-                    class="relative z-1 block h-10 w-full max-w-10 rounded-full"
-                  >
-                    <img
-                      src="{% static 'arabela_admin/images/user/user-03.jpg' %}"
-                      alt="User"
-                      class="overflow-hidden rounded-full"
-                    />
-                    <span
-                      class="bg-success-500 absolute right-0 bottom-0 z-10 h-2.5 w-full max-w-2.5 rounded-full border-[1.5px] border-white dark:border-gray-900"
-                    ></span>
-                  </span>
-
-                  <span class="block">
-                    <span
-                      class="text-theme-sm mb-1.5 block text-gray-500 dark:text-gray-400"
-                    >
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Alena Franci</span
-                      >
-                      requests permission to change
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Project - Nganter App</span
-                      >
-                    </span>
-
-                    <span
-                      class="text-theme-xs flex items-center gap-2 text-gray-500 dark:text-gray-400"
-                    >
-                      <span>Project</span>
-                      <span class="h-1 w-1 rounded-full bg-gray-400"></span>
-                      <span>8 min ago</span>
-                    </span>
-                  </span>
-                </a>
-              </li>
-
-              <li>
-                <a
-                  class="flex gap-3 rounded-lg border-b border-gray-100 p-3 px-4.5 py-3 hover:bg-gray-100 dark:border-gray-800 dark:hover:bg-white/5"
-                  href="#"
-                >
-                  <span
-                    class="relative z-1 block h-10 w-full max-w-10 rounded-full"
-                  >
-                    <img
-                      src="{% static 'arabela_admin/images/user/user-04.jpg' %}"
-                      alt="User"
-                      class="overflow-hidden rounded-full"
-                    />
-                    <span
-                      class="bg-success-500 absolute right-0 bottom-0 z-10 h-2.5 w-full max-w-2.5 rounded-full border-[1.5px] border-white dark:border-gray-900"
-                    ></span>
-                  </span>
-
-                  <span class="block">
-                    <span
-                      class="text-theme-sm mb-1.5 block text-gray-500 dark:text-gray-400"
-                    >
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Jocelyn Kenter</span
-                      >
-                      requests permission to change
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Project - Nganter App</span
-                      >
-                    </span>
-
-                    <span
-                      class="text-theme-xs flex items-center gap-2 text-gray-500 dark:text-gray-400"
-                    >
-                      <span>Project</span>
-                      <span class="h-1 w-1 rounded-full bg-gray-400"></span>
-                      <span>15 min ago</span>
-                    </span>
-                  </span>
-                </a>
-              </li>
-
-              <li>
-                <a
-                  class="flex gap-3 rounded-lg border-b border-gray-100 p-3 px-4.5 py-3 hover:bg-gray-100 dark:border-gray-800 dark:hover:bg-white/5"
-                  href="#"
-                >
-                  <span
-                    class="relative z-1 block h-10 w-full max-w-10 rounded-full"
-                  >
-                    <img
-                      src="{% static 'arabela_admin/images/user/user-05.jpg' %}"
-                      alt="User"
-                      class="overflow-hidden rounded-full"
-                    />
-                    <span
-                      class="bg-error-500 absolute right-0 bottom-0 z-10 h-2.5 w-full max-w-2.5 rounded-full border-[1.5px] border-white dark:border-gray-900"
-                    ></span>
-                  </span>
-
-                  <span class="block">
-                    <span
-                      class="text-theme-sm mb-1.5 block text-gray-500 dark:text-gray-400"
-                    >
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Brandon Philips</span
-                      >
-                      requests permission to change
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Project - Nganter App</span
-                      >
-                    </span>
-
-                    <span
-                      class="text-theme-xs flex items-center gap-2 text-gray-500 dark:text-gray-400"
-                    >
-                      <span>Project</span>
-                      <span class="h-1 w-1 rounded-full bg-gray-400"></span>
-                      <span>1 hr ago</span>
-                    </span>
-                  </span>
-                </a>
-              </li>
-
-              <li>
-                <a
-                  class="flex gap-3 rounded-lg border-b border-gray-100 p-3 px-4.5 py-3 hover:bg-gray-100 dark:border-gray-800 dark:hover:bg-white/5"
-                  href="#"
-                >
-                  <span
-                    class="relative z-1 block h-10 w-full max-w-10 rounded-full"
-                  >
-                    <img
-                      src="{% static 'arabela_admin/images/user/user-02.jpg' %}"
-                      alt="User"
-                      class="overflow-hidden rounded-full"
-                    />
-                    <span
-                      class="bg-success-500 absolute right-0 bottom-0 z-10 h-2.5 w-full max-w-2.5 rounded-full border-[1.5px] border-white dark:border-gray-900"
-                    ></span>
-                  </span>
-
-                  <span class="block">
-                    <span
-                      class="text-theme-sm mb-1.5 block text-gray-500 dark:text-gray-400"
-                    >
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Terry Franci</span
-                      >
-                      requests permission to change
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Project - Nganter App</span
-                      >
-                    </span>
-
-                    <span
-                      class="text-theme-xs flex items-center gap-2 text-gray-500 dark:text-gray-400"
-                    >
-                      <span>Project</span>
-                      <span class="h-1 w-1 rounded-full bg-gray-400"></span>
-                      <span>5 min ago</span>
-                    </span>
-                  </span>
-                </a>
-              </li>
-
-              <li>
-                <a
-                  class="flex gap-3 rounded-lg border-b border-gray-100 p-3 px-4.5 py-3 hover:bg-gray-100 dark:border-gray-800 dark:hover:bg-white/5"
-                  href="#"
-                >
-                  <span
-                    class="relative z-1 block h-10 w-full max-w-10 rounded-full"
-                  >
-                    <img
-                      src="{% static 'arabela_admin/images/user/user-03.jpg' %}"
-                      alt="User"
-                      class="overflow-hidden rounded-full"
-                    />
-                    <span
-                      class="bg-success-500 absolute right-0 bottom-0 z-10 h-2.5 w-full max-w-2.5 rounded-full border-[1.5px] border-white dark:border-gray-900"
-                    ></span>
-                  </span>
-
-                  <span class="block">
-                    <span
-                      class="text-theme-sm mb-1.5 block text-gray-500 dark:text-gray-400"
-                    >
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Alena Franci</span
-                      >
-                      requests permission to change
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Project - Nganter App</span
-                      >
-                    </span>
-
-                    <span
-                      class="text-theme-xs flex items-center gap-2 text-gray-500 dark:text-gray-400"
-                    >
-                      <span>Project</span>
-                      <span class="h-1 w-1 rounded-full bg-gray-400"></span>
-                      <span>8 min ago</span>
-                    </span>
-                  </span>
-                </a>
-              </li>
-
-              <li>
-                <a
-                  class="flex gap-3 rounded-lg border-b border-gray-100 p-3 px-4.5 py-3 hover:bg-gray-100 dark:border-gray-800 dark:hover:bg-white/5"
-                  href="#"
-                >
-                  <span
-                    class="relative z-1 block h-10 w-full max-w-10 rounded-full"
-                  >
-                    <img
-                      src="{% static 'arabela_admin/images/user/user-04.jpg' %}"
-                      alt="User"
-                      class="overflow-hidden rounded-full"
-                    />
-                    <span
-                      class="bg-success-500 absolute right-0 bottom-0 z-10 h-2.5 w-full max-w-2.5 rounded-full border-[1.5px] border-white dark:border-gray-900"
-                    ></span>
-                  </span>
-
-                  <span class="block">
-                    <span
-                      class="text-theme-sm mb-1.5 block text-gray-500 dark:text-gray-400"
-                    >
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Jocelyn Kenter</span
-                      >
-                      requests permission to change
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Project - Nganter App</span
-                      >
-                    </span>
-
-                    <span
-                      class="text-theme-xs flex items-center gap-2 text-gray-500 dark:text-gray-400"
-                    >
-                      <span>Project</span>
-                      <span class="h-1 w-1 rounded-full bg-gray-400"></span>
-                      <span>15 min ago</span>
-                    </span>
-                  </span>
-                </a>
-              </li>
-
-              <li>
-                <a
-                  class="flex gap-3 rounded-lg border-b border-gray-100 p-3 px-4.5 py-3 hover:bg-gray-100 dark:border-gray-800 dark:hover:bg-white/5"
-                  href="#"
-                >
-                  <span
-                    class="relative z-1 block h-10 w-full max-w-10 rounded-full"
-                  >
-                    <img
-                      src="{% static 'arabela_admin/images/user/user-05.jpg' %}"
-                      alt="User"
-                      class="overflow-hidden rounded-full"
-                    />
-                    <span
-                      class="bg-error-500 absolute right-0 bottom-0 z-10 h-2.5 w-full max-w-2.5 rounded-full border-[1.5px] border-white dark:border-gray-900"
-                    ></span>
-                  </span>
-
-                  <span class="block">
-                    <span
-                      class="text-theme-sm mb-1.5 block text-gray-500 dark:text-gray-400"
-                    >
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Brandon Philips</span
-                      >
-                      requests permission to change
-                      <span class="font-medium text-gray-800 dark:text-white/90"
-                        >Project - Nganter App</span
-                      >
-                    </span>
-
-                    <span
-                      class="text-theme-xs flex items-center gap-2 text-gray-500 dark:text-gray-400"
-                    >
-                      <span>Project</span>
-                      <span class="h-1 w-1 rounded-full bg-gray-400"></span>
-                      <span>1 hr ago</span>
-                    </span>
-                  </span>
-                </a>
-              </li>
-            </ul>
-
-            <a
-              href="#"
-              class="text-theme-sm shadow-theme-xs mt-3 flex justify-center rounded-lg border border-gray-300 bg-white p-3 font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
-            >
-              View All Notification
-            </a>
-          </div>
-          <!-- Dropdown End -->
-        </div>
-        <!-- Notification Menu Area -->
+        {% include "arabela_admin/partials/notifications.html" %}
       </div>
 
       <!-- User Area -->
@@ -1510,11 +1030,17 @@
           href="#"
           @click.prevent="dropdownOpen = ! dropdownOpen"
         >
-          <span class="mr-3 h-11 w-11 overflow-hidden rounded-full">
-            <img src="{% static 'arabela_admin/images/user/user-24.jpg' %}" alt="User" />
+          <span class="mr-3 flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border border-gray-200 bg-gray-100 text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
+            {% if admin_avatar_url %}
+            <img src="{{ admin_avatar_url }}" alt="{{ admin_full_name }}" class="h-full w-full object-cover" style="object-position: {{ admin_avatar_position }};" />
+            {% else %}
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+            </svg>
+            {% endif %}
           </span>
 
-          <span class="text-theme-sm mr-1 block font-medium"> Alucard </span>
+          <span class="text-theme-sm mr-1 block font-medium"> {{ admin_display_name }} </span>
 
           <svg
             :class="dropdownOpen && 'rotate-180'"
@@ -1544,12 +1070,12 @@
             <span
               class="text-theme-sm block font-medium text-gray-700 dark:text-gray-400"
             >
-              Alucard Balmond
+              {{ admin_full_name }}
             </span>
             <span
               class="text-theme-xs mt-0.5 block text-gray-500 dark:text-gray-400"
             >
-              alucardbalmond@gmail.com
+              {{ admin_email }}
             </span>
           </div>
 
@@ -1558,7 +1084,7 @@
           >
             <li>
               <a
-                href="profile.html"
+                href="{% url 'arabela_admin:page' page='profile' %}"
                 class="group text-theme-sm flex items-center gap-3 rounded-lg px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
               >
                 <svg
@@ -1626,28 +1152,31 @@
               </a>
             </li>
           </ul>
-          <a
-            href="{% url 'arabela_admin:admin_login' %}"
-            class="group text-theme-sm mt-3 flex items-center gap-3 rounded-lg px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
-          >
-            <svg
-              class="fill-gray-500 group-hover:fill-gray-700 dark:group-hover:fill-gray-300"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
+          <form method="POST" action="{% url 'arabela_admin:admin_logout' %}" class="mt-3">
+            {% csrf_token %}
+            <button
+              type="submit"
+              class="group text-theme-sm flex w-full items-center gap-3 rounded-lg px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
             >
-              <path
-                fill-rule="evenodd"
-                clip-rule="evenodd"
-                d="M15.1007 19.247C14.6865 19.247 14.3507 18.9112 14.3507 18.497L14.3507 14.245H12.8507V18.497C12.8507 19.7396 13.8581 20.747 15.1007 20.747H18.5007C19.7434 20.747 20.7507 19.7396 20.7507 18.497L20.7507 5.49609C20.7507 4.25345 19.7433 3.24609 18.5007 3.24609H15.1007C13.8581 3.24609 12.8507 4.25345 12.8507 5.49609V9.74501L14.3507 9.74501V5.49609C14.3507 5.08188 14.6865 4.74609 15.1007 4.74609L18.5007 4.74609C18.9149 4.74609 19.2507 5.08188 19.2507 5.49609L19.2507 18.497C19.2507 18.9112 18.9149 19.247 18.5007 19.247H15.1007ZM3.25073 11.9984C3.25073 12.2144 3.34204 12.4091 3.48817 12.546L8.09483 17.1556C8.38763 17.4485 8.86251 17.4487 9.15549 17.1559C9.44848 16.8631 9.44863 16.3882 9.15583 16.0952L5.81116 12.7484L16.0007 12.7484C16.4149 12.7484 16.7507 12.4127 16.7507 11.9984C16.7507 11.5842 16.4149 11.2484 16.0007 11.2484L5.81528 11.2484L9.15585 7.90554C9.44864 7.61255 9.44847 7.13767 9.15547 6.84488C8.86248 6.55209 8.3876 6.55226 8.09481 6.84525L3.52309 11.4202C3.35673 11.5577 3.25073 11.7657 3.25073 11.9984Z"
-                fill=""
-              />
-            </svg>
+              <svg
+                class="fill-gray-500 group-hover:fill-gray-700 dark:group-hover:fill-gray-300"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  fill-rule="evenodd"
+                  clip-rule="evenodd"
+                  d="M15.1007 19.247C14.6865 19.247 14.3507 18.9112 14.3507 18.497L14.3507 14.245H12.8507V18.497C12.8507 19.7396 13.8581 20.747 15.1007 20.747H18.5007C19.7434 20.747 20.7507 19.7396 20.7507 18.497L20.7507 5.49609C20.7507 4.25345 19.7433 3.24609 18.5007 3.24609H15.1007C13.8581 3.24609 12.8507 4.25345 12.8507 5.49609V9.74501L14.3507 9.74501V5.49609C14.3507 5.08188 14.6865 4.74609 15.1007 4.74609L18.5007 4.74609C18.9149 4.74609 19.2507 5.08188 19.2507 5.49609L19.2507 18.497C19.2507 18.9112 18.9149 19.247 18.5007 19.247H15.1007ZM3.25073 11.9984C3.25073 12.2144 3.34204 12.4091 3.48817 12.546L8.09483 17.1556C8.38763 17.4485 8.86251 17.4487 9.15549 17.1559C9.44848 16.8631 9.44863 16.3882 9.15583 16.0952L5.81116 12.7484L16.0007 12.7484C16.4149 12.7484 16.7507 12.4127 16.7507 11.9984C16.7507 11.5842 16.4149 11.2484 16.0007 11.2484L5.81528 11.2484L9.15585 7.90554C9.44864 7.61255 9.44847 7.13767 9.15547 6.84488C8.86248 6.55209 8.3876 6.55226 8.09481 6.84525L3.52309 11.4202C3.35673 11.5577 3.25073 11.7657 3.25073 11.9984Z"
+                  fill=""
+                />
+              </svg>
 
-            Sign out
-          </a>
+              Sign out
+            </button>
+          </form>
         </div>
         <!-- Dropdown End -->
       </div>
@@ -1659,9 +1188,9 @@
 
         <!-- ===== Main Content Start ===== -->
         <main>
-          <div class="p-4 mx-auto max-w-(--breakpoint-2xl) md:p-6">
+          <div class="mx-auto max-w-(--breakpoint-2xl) p-4 md:p-6">
             <!-- Breadcrumb Start -->
-            <div x-data="{ pageName: `Basic Tables`}">
+            <div x-data="{ pageName: `Active Reservations`}">
               <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
   <h2
     class="text-xl font-semibold text-gray-800 dark:text-white/90"
@@ -1704,278 +1233,176 @@
 </div>
             <!-- Breadcrumb End -->
 
-            <div class="space-y-5 sm:space-y-6">
-              <div
-                class="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]"
-              >
-                <div class="px-5 py-4 sm:px-6 sm:py-5">
-                  <h3
-                    class="text-base font-medium text-gray-800 dark:text-white/90"
-                  >
-                    OUR REFERENCE
-                  </h3>
+            <div class="status-legend mb-3 flex flex-wrap items-center gap-4 text-sm font-medium text-gray-600 dark:text-gray-300">
+              <span class="status-legend-item inline-flex items-center gap-2">
+                <span style="display:inline-block;width:12px;height:12px;border-radius:9999px;background:#BBF7D0;box-shadow:0 0 0 2px rgba(0,0,0,0.06)"></span>
+                Confirmed
+              </span>
+              <span class="status-legend-item inline-flex items-center gap-2">
+                <span style="display:inline-block;width:12px;height:12px;border-radius:9999px;background:#BFDBFE;box-shadow:0 0 0 2px rgba(0,0,0,0.06)"></span>
+                Active
+              </span>
+              <span class="status-legend-item inline-flex items-center gap-2">
+                <span style="display:inline-block;width:12px;height:12px;border-radius:9999px;background:#FCA5A5;box-shadow:0 0 0 2px rgba(0,0,0,0.06)"></span>
+                Overdue
+              </span>
+            </div>
+            <div
+              class="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]"
+            >
+              <div class="px-5 py-4 sm:px-6 sm:py-5">
+                <h3 class="text-base font-medium text-gray-800 dark:text-white/90">Confirmed &amp; Active Rentals</h3>
+              </div>
+              <div class="border-t border-gray-100 dark:border-gray-800">
+                <div class="max-w-full overflow-x-auto">
+                  <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;">
+                  <table class="min-w-full">
+                    <thead class="sticky top-0 z-10 bg-white dark:bg-gray-900">
+                      <tr class="border-b border-gray-100 dark:border-gray-800">
+                        <th class="px-5 py-3 sm:px-6 text-left">
+                          <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Customer</p>
+                        </th>
+                        <th class="px-5 py-3 sm:px-6 text-left">
+                          <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Gown Name</p>
+                        </th>
+                        <th class="px-5 py-3 sm:px-6 text-left">
+                          <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Rental Date</p>
+                        </th>
+                        <th class="px-5 py-3 sm:px-6 text-left">
+                          <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Return Date</p>
+                        </th>
+                        <th class="px-5 py-3 sm:px-6 text-left">
+                          <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Amount</p>
+                        </th>
+                        <th class="px-5 py-3 sm:px-6 text-left">
+                          <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Status</p>
+                        </th>
+                        <th class="px-5 py-3 sm:px-6 text-left">
+                          <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Action</p>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                      {% for r in reservations %}
+                      {% with item_count=r.items.all|length %}
+                      {% for item in r.items.all %}
+                      <tr class="bg-gray-50 dark:bg-white/5" x-show="search === '' || '{{ r.display_customer_name|lower|escapejs }} {{ r.reference_code|lower|escapejs }}'.includes(search.toLowerCase())">
+                        {% if forloop.first %}
+                        <td class="px-5 py-4 sm:px-6" rowspan="{{ item_count }}" style="vertical-align: top;">
+                          <div class="flex items-center gap-3">
+                            <div class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-gray-400 dark:bg-gray-800">
+                              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>
+                            </div>
+                            <div class="flex flex-col">
+                              <span class="block font-medium text-gray-800 text-theme-sm dark:text-white/90">{{ r.display_customer_name }}</span>
+                              {% if r.booked_as_name %}<span class="text-xs text-gray-400 dark:text-gray-500">Booked as: {{ r.booked_as_name }}</span>{% endif %}
+                              <span class="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ r.reference_code }}</span>
+                            </div>
+                          </div>
+                        </td>
+                        {% endif %}
+                        <td class="px-5 py-4 sm:px-6">
+                          <div class="flex items-center gap-2">
+                            <p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ item.gown_name }}</p>
+                            {% if item_count > 1 %}
+                            <span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ forloop.counter }} of {{ item_count }}</span>
+                            {% endif %}
+                          </div>
+                        </td>
+                        <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ item.rental_date|date:"M j, Y" }}</p></td>
+                        <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ item.return_date|date:"M j, Y" }}</p></td>
+                        <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">&#8369; {{ item.rental_price|floatformat:0 }}</p></td>
+                        {% if forloop.first %}
+                        <td class="px-5 py-4 sm:px-6" rowspan="{{ item_count }}" style="vertical-align: top;">
+                          {% if r.status == 'Confirmed' %}
+                          <p class="inline-flex rounded-full bg-success-50 px-2 py-0.5 text-theme-xs font-medium text-success-700 dark:bg-success-500/15 dark:text-success-500">Confirmed</p>
+                          {% elif r.status == 'Active' %}
+                          <p class="inline-flex rounded-full bg-brand-50 px-2 py-0.5 text-theme-xs font-medium text-brand-500 dark:bg-brand-500/15 dark:text-brand-400">Active</p>
+                          {% else %}
+                          <p class="inline-flex rounded-full bg-error-50 px-2 py-0.5 text-theme-xs font-medium text-error-700 dark:bg-error-500/15 dark:text-error-500">{{ r.status }}</p>
+                          {% endif %}
+                        </td>
+                        <td class="px-5 py-4 sm:px-6" rowspan="{{ item_count }}" style="vertical-align: top;">
+                          <div class="flex flex-wrap items-center gap-2">
+                            <a href="{% url 'arabela_admin:payment_verification' %}?search={{ r.display_customer_name|urlencode }}"
+                              class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View</a>
+                            <button type="button"
+                              @click="viewingCustomer = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reference: '{{ r.reference_code|escapejs }}', email: '{{ r.customer.email|default:"—"|escapejs }}', phone: '{{ r.phone|default:"—"|escapejs }}', address: '{{ r.address|escapejs }}', city: '{{ r.city|escapejs }}', postal: '{{ r.postal_code|escapejs }}', submitted: '{{ r.created_at|date:"M j, Y"|escapejs }}' }; openCustomerModal = true"
+                              class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View Customer</button>
+                          </div>
+                        </td>
+                        {% endif %}
+                      </tr>
+                      {% endfor %}
+                      {% endwith %}
+                      {% empty %}
+                      <tr>
+                        <td class="px-5 py-10 sm:px-6 text-center" colspan="7">
+                          <p class="text-gray-500 text-theme-sm dark:text-gray-400">No active reservations yet. Approved bookings will appear here.</p>
+                        </td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                  </div>
                 </div>
-                <div
-                  class="p-5 border-t border-gray-100 dark:border-gray-800 sm:p-6"
+              </div>
+            </div>
+
+            <div x-show="openCustomerModal" x-cloak class="fixed inset-0 flex items-center justify-center p-5 overflow-y-auto z-99999">
+              <div class="modal-close-btn fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]"></div>
+              <div @click.outside="openCustomerModal = false" class="no-scrollbar relative w-full overflow-y-auto rounded-3xl bg-white p-4 dark:bg-gray-900 lg:p-8" style="max-width: 500px;">
+                <button
+                  type="button"
+                  @click="openCustomerModal = false"
+                  class="transition-color absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300"
                 >
-                  <!-- ====== Table Six Start -->
-                  <div
-  class="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]"
->
-  <div class="max-w-full overflow-x-auto">
-    <table class="min-w-full">
-      <!-- table header start -->
-      <thead>
-        <tr class="border-b border-gray-100 dark:border-gray-800">
-          <th class="px-5 py-3 sm:px-6">
-            <div class="flex items-center">
-              <p
-                class="font-medium text-gray-500 text-theme-xs dark:text-gray-400"
-              >
-                Customer
-              </p>
-            </div>
-          </th>
-          <th class="px-5 py-3 sm:px-6">
-            <div class="flex items-center">
-              <p
-                class="font-medium text-gray-500 text-theme-xs dark:text-gray-400"
-              >
-                Gown Name
-              </p>
-            </div>
-          </th>
-          <th class="px-5 py-3 sm:px-6">
-            <div class="flex items-center">
-              <p
-                class="font-medium text-gray-500 text-theme-xs dark:text-gray-400"
-              >
-                Price of the gown
-              </p>
-            </div>
-          </th>
-          <th class="px-5 py-3 sm:px-6">
-            <div class="flex items-center">
-              <p
-                class="font-medium text-gray-500 text-theme-xs dark:text-gray-400"
-              >
-                Status
-              </p>
-            </div>
-          </th>
-        </tr>
-      </thead>
-      <!-- table header end -->
-      <!-- table body start -->
-      <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-        <tr>
-          <td class="px-5 py-4 sm:px-6">
-            <div class="flex items-center">
-              <div class="flex items-center gap-3">
-                <div class="w-10 h-10 overflow-hidden rounded-full">
-                  <img src="{% static 'arabela_admin/images/user/user-17.jpg' %}" alt="brand" />
+                  <svg class="fill-current" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path fill-rule="evenodd" clip-rule="evenodd" d="M6.04289 16.5418C5.65237 16.9323 5.65237 17.5655 6.04289 17.956C6.43342 18.3465 7.06658 18.3465 7.45711 17.956L11.9987 13.4144L16.5408 17.9565C16.9313 18.347 17.5645 18.347 17.955 17.9565C18.3455 17.566 18.3455 16.9328 17.955 16.5423L13.4129 12.0002L17.955 7.45808C18.3455 7.06756 18.3455 6.43439 17.955 6.04387C17.5645 5.65335 16.9313 5.65335 16.5408 6.04387L11.9987 10.586L7.45711 6.04439C7.06658 5.65386 6.43342 5.65386 6.04289 6.04439C5.65237 6.43491 5.65237 7.06808 6.04289 7.4586L10.5845 12.0002L6.04289 16.5418Z" fill=""/>
+                  </svg>
+                </button>
+                <div class="px-2 pr-14">
+                  <h4 class="mb-2 text-2xl font-semibold text-gray-800 dark:text-white/90">Customer Info</h4>
+                  <p class="mb-6 text-sm text-gray-500 dark:text-gray-400" x-text="viewingCustomer.name ? `${viewingCustomer.name} &middot; ${viewingCustomer.reference}` : ''"></p>
                 </div>
+                <div class="px-2">
+                  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div style="min-width: 0; overflow-wrap: break-word;">
+                      <p class="text-xs text-gray-500 dark:text-gray-400">Full Name</p>
+                      <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewingCustomer.name"></p>
+                    </div>
+                    <div x-show="viewingCustomer.bookedAs" style="min-width: 0; overflow-wrap: break-word;">
+                      <p class="text-xs text-gray-500 dark:text-gray-400">Booked As</p>
+                      <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewingCustomer.bookedAs"></p>
+                    </div>
+                    <div style="min-width: 0; overflow-wrap: break-word;">
+                      <p class="text-xs text-gray-500 dark:text-gray-400">Reference</p>
+                      <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewingCustomer.reference"></p>
+                    </div>
+                    <div style="min-width: 0; overflow-wrap: break-word;">
+                      <p class="text-xs text-gray-500 dark:text-gray-400">Email</p>
+                      <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewingCustomer.email"></p>
+                    </div>
+                    <div style="min-width: 0; overflow-wrap: break-word;">
+                      <p class="text-xs text-gray-500 dark:text-gray-400">Phone</p>
+                      <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewingCustomer.phone"></p>
+                    </div>
+                    <div class="sm:col-span-2" style="min-width: 0; overflow-wrap: break-word;">
+                      <p class="text-xs text-gray-500 dark:text-gray-400">Address</p>
+                      <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="[viewingCustomer.address, viewingCustomer.city, viewingCustomer.postal].filter(Boolean).join(', ') || '—'"></p>
+                    </div>
+                    <div style="min-width: 0; overflow-wrap: break-word;">
+                      <p class="text-xs text-gray-500 dark:text-gray-400">Submitted</p>
+                      <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewingCustomer.submitted"></p>
+                    </div>
+                  </div>
+                </div>
+                <div class="mt-6 flex justify-end px-2">
+                  <button type="button" @click="openCustomerModal = false" class="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">Close</button>
+                </div>
+              </div>
+            </div>
 
-                <div>
-                  <span
-                    class="block font-medium text-gray-800 text-theme-sm dark:text-white/90"
-                  >
-                    Lindsey Curtis
-                  </span>
-                </div>
-              </div>
-            </div>
-          </td>
-          <td class="px-5 py-4 sm:px-6">
-            <div class="flex items-center">
-              <p class="text-gray-500 text-theme-sm dark:text-gray-400">
-                Agency Website
-              </p>
-            </div>
-          </td>
-          <td class="px-5 py-4 sm:px-6">
-            <div class="flex items-center">
-              <p class="text-gray-500 text-theme-sm dark:text-gray-400">₱ 2,000</p>
-            </div>
-          </td>
-          <td class="px-5 py-4 sm:px-6">
-            <div class="flex items-center">
-              <p
-                class="rounded-full bg-success-50 px-2 py-0.5 text-theme-xs font-medium text-success-700 dark:bg-success-500/15 dark:text-success-500"
-              >
-                Approved
-              </p>
-            </div>
-          </td>
-        </tr>
-        <tr>
-          <td class="px-5 py-4 sm:px-6">
-            <div class="flex items-center">
-              <div class="flex items-center gap-3">
-                <div class="w-10 h-10 overflow-hidden rounded-full">
-                  <img src="{% static 'arabela_admin/images/user/user-18.jpg' %}" alt="brand" />
-                </div>
-
-                <div>
-                  <span
-                    class="block font-medium text-gray-800 text-theme-sm dark:text-white/90"
-                  >
-                    Kaiya George
-                  </span>
-                </div>
-              </div>
-            </div>
-          </td>
-          <td class="px-5 py-4 sm:px-6">
-            <div class="flex items-center">
-              <p class="text-gray-500 text-theme-sm dark:text-gray-400">
-                Technology
-              </p>
-            </div>
-          </td>
-          <td class="px-5 py-4 sm:px-6">
-            <div class="flex items-center">
-              <p class="text-gray-500 text-theme-sm dark:text-gray-400">₱ 1,000</p>
-            </div>
-          </td>
-          <td class="px-5 py-4 sm:px-6">
-            <div class="flex items-center">
-              <p
-                class="rounded-full bg-warning-50 px-2 py-0.5 text-theme-xs font-medium text-warning-700 dark:bg-warning-500/15 dark:text-warning-400"
-              >
-                Pending
-              </p>
-            </div>
-          </td>
-        </tr>
-        <tr>
-          <td class="px-5 py-4 sm:px-6">
-            <div class="flex items-center">
-              <div class="flex items-center gap-3">
-                <div class="w-10 h-10 overflow-hidden rounded-full">
-                  <img src="{% static 'arabela_admin/images/user/user-19.jpg' %}" alt="brand" />
-                </div>
-
-                <div>
-                  <span
-                    class="block font-medium text-gray-800 text-theme-sm dark:text-white/90"
-                  >
-                    Zain Geidt
-                  </span>
-                </div>
-              </div>
-            </div>
-          </td>
-          <td class="px-5 py-4 sm:px-6">
-            <div class="flex items-center">
-              <p class="text-gray-500 text-theme-sm dark:text-gray-400">
-                Blog Writing
-              </p>
-            </div>
-          </td>
-          <td class="px-5 py-4 sm:px-6">
-            <div class="flex items-center">
-              <p class="text-gray-500 text-theme-sm dark:text-gray-400">₱ 3,500</p>
-            </div>
-          </td>
-          <td class="px-5 py-4 sm:px-6">
-            <div class="flex items-center">
-              <p
-                class="rounded-full bg-success-50 px-2 py-0.5 text-theme-xs font-medium text-success-700 dark:bg-success-500/15 dark:text-success-500"
-              >
-                Approved
-              </p>
-            </div>
-          </td>
-        </tr>
-        <tr>
-          <td class="px-5 py-4 sm:px-6">
-            <div class="flex items-center">
-              <div class="flex items-center gap-3">
-                <div class="w-10 h-10 overflow-hidden rounded-full">
-                  <img src="{% static 'arabela_admin/images/user/user-20.jpg' %}" alt="brand" />
-                </div>
-
-                <div>
-                  <span
-                    class="block font-medium text-gray-800 text-theme-sm dark:text-white/90"
-                  >
-                    Abram Schleifer
-                  </span>
-                </div>
-              </div>
-            </div>
-          </td>
-          <td class="px-5 py-4 sm:px-6">
-            <div class="flex items-center">
-              <p class="text-gray-500 text-theme-sm dark:text-gray-400">
-                Social Media
-              </p>
-            </div>
-          </td>
-          <td class="px-5 py-4 sm:px-6">
-            <div class="flex items-center">
-              <p class="text-gray-500 text-theme-sm dark:text-gray-400">₱ 1,500</p>
-            </div>
-          </td>
-          <td class="px-5 py-4 sm:px-6">
-            <div class="flex items-center">
-              <p
-                class="rounded-full bg-error-50 px-2 py-0.5 text-theme-xs font-medium text-error-700 dark:bg-error-500/15 dark:text-error-500"
-              >
-                Cancel
-              </p>
-            </div>
-          </td>
-        </tr>
-        <tr>
-          <td class="px-5 py-4 sm:px-6">
-            <div class="flex items-center">
-              <div class="flex items-center gap-3">
-                <div class="w-10 h-10 overflow-hidden rounded-full">
-                  <img src="{% static 'arabela_admin/images/user/user-21.jpg' %}" alt="brand" />
-                </div>
-
-                <div>
-                  <span
-                    class="block font-medium text-gray-800 text-theme-sm dark:text-white/90"
-                  >
-                    Carla George
-                  </span>
-                </div>
-              </div>
-            </div>
-          </td>
-          <td class="px-5 py-4 sm:px-6">
-            <div class="flex items-center">
-              <p class="text-gray-500 text-theme-sm dark:text-gray-400">
-                Website
-              </p>
-            </div>
-          </td>
-          <td class="px-5 py-4 sm:px-6">
-            <div class="flex items-center">
-              <p class="text-gray-500 text-theme-sm dark:text-gray-400">₱ 2,200</p>
-            </div>
-          </td>
-          <td class="px-5 py-4 sm:px-6">
-            <div class="flex items-center">
-              <p
-                class="rounded-full bg-success-50 px-2 py-0.5 text-theme-xs font-medium text-success-700 dark:bg-success-500/15 dark:text-success-500"
-              >
-                Rejected
-              </p>
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-<!-- ====== Table Six End -->
-                </div>
-              </div>
-            </div>
           </div>
         </main>
         <!-- ===== Main Content End ===== -->
@@ -1983,7 +1410,10 @@
       <!-- ===== Content Area End ===== -->
     </div>
     <!-- ===== Page Wrapper End ===== -->
-  {% include 'arabela_admin/partials/_scripts.html' %}</body>
+  <script defer src="{% static 'arabela_admin/bundle.js' %}?v={{ admin_asset_version }}"></script>
+  <script defer src="{% static 'arabela_admin/global-search.js' %}"></script>
+
+</body>
 </html>
 
 

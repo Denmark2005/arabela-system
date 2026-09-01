@@ -1,0 +1,198 @@
+{% if reservation_hold_until %}
+{% comment %}
+   Reservation hold countdown. Self-contained (styles + markup + script) so the
+   standalone customer templates that don't extend base.html -- reservations,
+   messages, reservation_item_detail -- can include it with a single line and
+   keep the timer visible wherever the customer navigates.
+
+   NOTE: must be {% comment %}, not {# #} -- Django's hash comment is single-line
+   only, so a multi-line one renders as visible text on every page including it.
+{% endcomment %}
+<style>
+  :root { --hold-banner-h: 52px; }
+  #hold-banner {
+    transform: translateY(100%);
+    opacity: 0;
+    transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
+  }
+  #hold-banner.hold-in { transform: none; opacity: 1; }
+  @media (max-width: 767px) {
+    body.has-hold-banner .mobile-bottom-nav { bottom: var(--hold-banner-h); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #hold-banner { transition: opacity 0.2s ease; transform: none; }
+  }
+</style>
+
+<div id="hold-banner" data-deadline="{{ reservation_hold_until }}" data-remaining="{{ reservation_hold_seconds }}"
+     data-cart-key="arabela_cart_{{ request.user.id }}"
+     data-release-url="{% url 'gowns:reservation_hold_release' %}"
+     class="fixed bottom-0 inset-x-0 z-[79] bg-primary text-white border-t border-white/10"
+     role="status" aria-live="polite">
+  <div class="max-w-6xl mx-auto flex items-center gap-3 px-4 sm:px-6 py-3">
+    {% if url_name == "reservation" %}
+    <div class="flex items-center gap-3 min-w-0 flex-1">
+    {% else %}
+    <a href="{% url 'gowns:reservation' %}" class="flex items-center gap-3 min-w-0 flex-1 no-underline text-white group">
+    {% endif %}
+      <span class="material-symbols-outlined shrink-0" style="font-size: 1.1rem;">schedule</span>
+      <span id="hold-banner-text" class="text-[0.72rem] sm:text-xs uppercase tracking-[0.12em] truncate">Your selection is held</span>
+      <span id="hold-banner-clock" class="text-sm sm:text-base font-semibold tabular-nums shrink-0 ml-auto sm:ml-2">--:--</span>
+    {% if url_name == "reservation" %}
+    </div>
+    {% else %}
+      <span id="hold-banner-cta" class="hidden sm:inline-block text-[0.6rem] uppercase tracking-[0.2em] border border-white/30 rounded-[6px] px-3 py-1.5 shrink-0 group-hover:bg-white group-hover:text-primary transition-colors">Pay now</span>
+    </a>
+    {% endif %}
+    <button type="button" id="hold-banner-cancel" class="shrink-0 text-[0.6rem] uppercase tracking-[0.2em] text-white/70 hover:text-[#ff8a8a] underline underline-offset-4 transition-colors" aria-label="Release your selection">
+      Cancel
+    </button>
+    <button type="button" id="hold-banner-close" class="shrink-0 p-1 text-white/60 hover:text-white transition-colors" aria-label="Hide reminder">
+      <span class="material-symbols-outlined" style="font-size: 1.1rem;">close</span>
+    </button>
+  </div>
+</div>
+
+<script>
+  // Anchors to seconds-remaining supplied by the server (immune to a wrong
+  // device clock), converted once into an absolute client-side timestamp so the
+  // tick can't drift when the tab is backgrounded and throttled.
+  (function initHoldBanner() {
+    const banner = document.getElementById('hold-banner');
+    if (!banner) return;
+    if (document.body.dataset.authenticated === 'false') return;
+
+    const clock = document.getElementById('hold-banner-clock');
+    const label = document.getElementById('hold-banner-text');
+    const cta = document.getElementById('hold-banner-cta');
+    const closeBtn = document.getElementById('hold-banner-close');
+    const cancelBtn = document.getElementById('hold-banner-cancel');
+
+    const remaining = parseInt(banner.dataset.remaining || '0', 10);
+    if (!Number.isFinite(remaining) || remaining <= 0) {
+      banner.remove();
+      document.body.classList.remove('has-hold-banner');
+      return;
+    }
+    const endsAt = Date.now() + remaining * 1000;
+    let timerId = null;
+
+    function hideBanner() {
+      banner.classList.remove('hold-in');
+      document.body.classList.remove('has-hold-banner');
+      window.setTimeout(function () { banner.remove(); }, 450);
+    }
+
+    function stopTicking() {
+      if (timerId !== null) {
+        window.clearInterval(timerId);
+        timerId = null;
+      }
+    }
+
+    // Release the held selection. base.html's cart helpers also refresh the
+    // drawer/badge; the standalone pages have no cart UI, so there we write the
+    // key straight through (rendered server-side, because those pages carry no
+    // data-user-key on <body>).
+    function clearHeldSelection() {
+      try {
+        if (typeof setDrawerCart === 'function') {
+          setDrawerCart([]);
+          if (typeof renderCartDrawer === 'function') renderCartDrawer();
+          if (typeof updateCartTotals === 'function') updateCartTotals();
+        } else {
+          localStorage.setItem(banner.dataset.cartKey, '[]');
+        }
+      } catch (err) {
+        /* storage unavailable -- the banner still updates */
+      }
+    }
+
+    function readCsrfToken() {
+      const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+      return match ? decodeURIComponent(match[1]) : '';
+    }
+
+    function onExpired() {
+      stopTicking();
+      clearHeldSelection();
+      if (clock) clock.textContent = '00:00';
+      if (label) label.textContent = 'Hold expired -- your selection was released.';
+      if (cta) cta.textContent = 'Browse';
+      window.setTimeout(hideBanner, 8000);
+    }
+
+    function tick() {
+      const secondsLeft = Math.round((endsAt - Date.now()) / 1000);
+      if (secondsLeft <= 0) {
+        onExpired();
+        return;
+      }
+      const mins = Math.floor(secondsLeft / 60);
+      const secs = secondsLeft % 60;
+      if (clock) {
+        clock.textContent = String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+        // Final two minutes: a red light enough to stay legible on the near-black
+        // bar (the #ba1a1a error token is too dark against it).
+        clock.classList.toggle('text-[#ff8a8a]', secondsLeft <= 120);
+      }
+    }
+
+    tick();
+    timerId = window.setInterval(tick, 1000);
+
+    // Slide-in. A single requestAnimationFrame usually lands in the SAME style
+    // recalculation as the element's initial translateY(100%), so the browser
+    // never sees two states and skips the transition entirely -- which is why
+    // the bar used to just appear. Wait a beat, then commit the start state
+    // across two frames so the transition actually runs.
+    window.setTimeout(function () {
+      window.requestAnimationFrame(function () {
+        window.requestAnimationFrame(function () {
+          banner.classList.add('hold-in');
+        });
+      });
+    }, 300);
+
+    if (closeBtn) {
+      closeBtn.addEventListener('click', function () {
+        stopTicking();
+        hideBanner();
+      });
+    }
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', function () {
+        arabelaConfirm({
+          title: 'Release your selection?',
+          message: 'Your held items will be removed and the countdown will stop. You can pick them again anytime.',
+          confirmText: 'Release',
+          cancelText: 'Keep holding',
+          danger: true,
+        }).then(function (ok) {
+        if (!ok) return;
+        cancelBtn.disabled = true;
+        // The deadline lives in the server session, so the hold has to be
+        // released server-side or the bar returns on the next page load.
+        fetch(banner.dataset.releaseUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': readCsrfToken() },
+          body: '{}',
+        })
+          .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+          .then(function (result) {
+            if (!result.ok || !result.data.success) throw new Error(result.data.error || 'Could not release your selection.');
+            stopTicking();
+            clearHeldSelection();
+            hideBanner();
+          })
+          .catch(function (err) {
+            cancelBtn.disabled = false;
+            arabelaAlert({ title: 'Something went wrong', message: err.message || 'Could not release your selection.', danger: true });
+          });
+        });
+      });
+    }
+  })();
+</script>
+{% endif %}

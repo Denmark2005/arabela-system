@@ -2,7 +2,47 @@
 
 {% block title %}ARABELA | Rent{% endblock %}
 
-{% block main_class %}pt-24 pb-28 md:pb-20 px-6 sm:px-10 md:px-16 max-w-[1200px] mx-auto{% endblock %}
+{% block main_class %}pt-24 pb-28 md:pb-20 px-6 sm:px-10 md:px-16 max-w-[1400px] mx-auto{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* Collection card entrance -- same easing/duration as the homepage's
+       hp-reveal so navigating here from "Explore Collections" feels continuous.
+       One IntersectionObserver handles both "already in view on load" (fires
+       immediately) and "scrolled into view later" (fires when reached), and
+       replays if you scroll back up past a card. */
+    .coll-reveal {
+        opacity: 0;
+        transform: translateX(-24px);
+        transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+                    transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+        will-change: transform, opacity;
+    }
+    .coll-reveal.active {
+        opacity: 1;
+        transform: none;
+    }
+    /* Left-to-right cascade by DOM order (grid fills left-to-right, row by row) */
+    .coll-grid > *:nth-child(1) { transition-delay: 0s; }
+    .coll-grid > *:nth-child(2) { transition-delay: 0.1s; }
+    .coll-grid > *:nth-child(3) { transition-delay: 0.2s; }
+    .coll-grid > *:nth-child(4) { transition-delay: 0.3s; }
+    .coll-grid > *:nth-child(5) { transition-delay: 0.4s; }
+    .coll-grid > *:nth-child(6) { transition-delay: 0.5s; }
+    .coll-grid > *:nth-child(7) { transition-delay: 0.6s; }
+    .coll-grid > *:nth-child(8) { transition-delay: 0.7s; }
+    .coll-grid > *:nth-child(9) { transition-delay: 0.8s; }
+    .coll-grid > *:nth-child(10) { transition-delay: 0.9s; }
+    .coll-grid > *:nth-child(11) { transition-delay: 1s; }
+    @media (prefers-reduced-motion: reduce) {
+        .coll-reveal {
+            opacity: 1 !important;
+            transform: none !important;
+            transition: none !important;
+        }
+    }
+</style>
+{% endblock %}
 
 {% block content %}
 
@@ -11,85 +51,25 @@
         <p class="text-[0.6875rem] uppercase tracking-[0.28em] text-on-surface-variant font-body">Rentals</p>
     </div>
 
-    <!-- Category Grid: tighter cards, 4-up on large screens -->
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-10 sm:gap-x-6 sm:gap-y-12 md:gap-x-8">
-
-        <!-- Category: Dresses -->
-        <a href="{% url 'gowns:collection_dresses' %}" class="group cursor-pointer flex flex-col items-center">
-            <div class="relative mx-auto w-full max-w-[200px] sm:max-w-[220px] md:max-w-[240px] aspect-[3/5] overflow-hidden bg-surface-container-high rounded-sm">
-                <!-- ARABELA ACTUAL PRODUCT GOWNS HERE (Dresses) -->
-                <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuAjReG6BS4gyWCW4RlLjZjjW9aam7GCNjd80JyHGd_rZy_i_GVGoZYq8_ySiM9IHg4vm1IuZaX_kTU1WlExZjrLibM0am-Wwr31pNVZb0Ytv53LWV-oCQgwiPGQwbQcKE1A8JTzeiciKl9Lwklj2cp9trtrThsMqPb7OecedsuQ3DJ1PfBAeaYmQ4zhydY7_Ht3Zh42f1ucG82HCYmabAG_uaruSZeeeJiZuacGRxOT1L-y-iuZNNR0YY1x7-urgpmZurKgQlU-N0g" alt="Dresses" class="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
+    <!-- Category Grid: large boxes that fill each cell (Vestido-style), 4-up on large screens -->
+    <div class="coll-grid grid grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-8 sm:gap-x-6 md:gap-x-8">
+        {% for c in search_overlay_collections_meta %}
+        {% if c.key != 'all' %}
+        <a href="{{ c.url }}" class="group coll-reveal cursor-pointer flex flex-col items-center">
+            <div class="relative w-full aspect-[2/3] overflow-hidden bg-surface-container-high rounded-sm">
+                <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuAjReG6BS4gyWCW4RlLjZjjW9aam7GCNjd80JyHGd_rZy_i_GVGoZYq8_ySiM9IHg4vm1IuZaX_kTU1WlExZjrLibM0am-Wwr31pNVZb0Ytv53LWV-oCQgwiPGQwbQcKE1A8JTzeiciKl9Lwklj2cp9trtrThsMqPb7OecedsuQ3DJ1PfBAeaYmQ4zhydY7_Ht3Zh42f1ucG82HCYmabAG_uaruSZeeeJiZuacGRxOT1L-y-iuZNNR0YY1x7-urgpmZurKgQlU-N0g" alt="{{ c.label }}" class="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
                 <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">Dresses</span>
+                    <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">{{ c.label }}</span>
                     <span class="mt-2 block w-10 sm:w-12 border-t border-white" aria-hidden="true"></span>
                 </div>
             </div>
         </a>
-
-        <!-- Category: Filipiniana -->
-        <a href="{% url 'gowns:collection_filipiniana' %}" class="group cursor-pointer flex flex-col items-center">
-            <div class="relative mx-auto w-full max-w-[200px] sm:max-w-[220px] md:max-w-[240px] aspect-[3/5] overflow-hidden bg-surface-container-high rounded-sm">
-                <!-- ARABELA ACTUAL PRODUCT GOWNS HERE (Filipiniana) -->
-                <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuAjReG6BS4gyWCW4RlLjZjjW9aam7GCNjd80JyHGd_rZy_i_GVGoZYq8_ySiM9IHg4vm1IuZaX_kTU1WlExZjrLibM0am-Wwr31pNVZb0Ytv53LWV-oCQgwiPGQwbQcKE1A8JTzeiciKl9Lwklj2cp9trtrThsMqPb7OecedsuQ3DJ1PfBAeaYmQ4zhydY7_Ht3Zh42f1ucG82HCYmabAG_uaruSZeeeJiZuacGRxOT1L-y-iuZNNR0YY1x7-urgpmZurKgQlU-N0g" alt="Filipiniana" class="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
-                <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">Filipiniana</span>
-                    <span class="mt-2 block w-10 sm:w-12 border-t border-white" aria-hidden="true"></span>
-                </div>
-            </div>
-        </a>
-
-        <!-- Category: Kids suit -->
-        <a href="{% url 'gowns:collection_kid_suit' %}" class="group cursor-pointer flex flex-col items-center">
-            <div class="relative mx-auto w-full max-w-[200px] sm:max-w-[220px] md:max-w-[240px] aspect-[3/5] overflow-hidden bg-surface-container-high rounded-sm">
-                <!-- ARABELA ACTUAL PRODUCT GOWNS HERE (Kids suit) -->
-                <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuAjReG6BS4gyWCW4RlLjZjjW9aam7GCNjd80JyHGd_rZy_i_GVGoZYq8_ySiM9IHg4vm1IuZaX_kTU1WlExZjrLibM0am-Wwr31pNVZb0Ytv53LWV-oCQgwiPGQwbQcKE1A8JTzeiciKl9Lwklj2cp9trtrThsMqPb7OecedsuQ3DJ1PfBAeaYmQ4zhydY7_Ht3Zh42f1ucG82HCYmabAG_uaruSZeeeJiZuacGRxOT1L-y-iuZNNR0YY1x7-urgpmZurKgQlU-N0g" alt="Kids suit" class="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
-                <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">Kids suit</span>
-                    <span class="mt-2 block w-10 sm:w-12 border-t border-white" aria-hidden="true"></span>
-                </div>
-            </div>
-        </a>
-
-        <!-- Category: Wedding -->
-        <a href="{% url 'gowns:collection_wedding' %}" class="group cursor-pointer flex flex-col items-center">
-            <div class="relative mx-auto w-full max-w-[200px] sm:max-w-[220px] md:max-w-[240px] aspect-[3/5] overflow-hidden bg-surface-container-high rounded-sm">
-                <!-- ARABELA ACTUAL PRODUCT GOWNS HERE (Wedding) -->
-                <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuAjReG6BS4gyWCW4RlLjZjjW9aam7GCNjd80JyHGd_rZy_i_GVGoZYq8_ySiM9IHg4vm1IuZaX_kTU1WlExZjrLibM0am-Wwr31pNVZb0Ytv53LWV-oCQgwiPGQwbQcKE1A8JTzeiciKl9Lwklj2cp9trtrThsMqPb7OecedsuQ3DJ1PfBAeaYmQ4zhydY7_Ht3Zh42f1ucG82HCYmabAG_uaruSZeeeJiZuacGRxOT1L-y-iuZNNR0YY1x7-urgpmZurKgQlU-N0g" alt="Wedding" class="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
-                <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">Wedding</span>
-                    <span class="mt-2 block w-10 sm:w-12 border-t border-white" aria-hidden="true"></span>
-                </div>
-            </div>
-        </a>
-
-        <!-- Category: Suit -->
-        <a href="{% url 'gowns:collection_suit' %}" class="group cursor-pointer flex flex-col items-center">
-            <div class="relative mx-auto w-full max-w-[200px] sm:max-w-[220px] md:max-w-[240px] aspect-[3/5] overflow-hidden bg-surface-container-high rounded-sm">
-                <!-- ARABELA ACTUAL PRODUCT GOWNS HERE (Suit) -->
-                <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuAjReG6BS4gyWCW4RlLjZjjW9aam7GCNjd80JyHGd_rZy_i_GVGoZYq8_ySiM9IHg4vm1IuZaX_kTU1WlExZjrLibM0am-Wwr31pNVZb0Ytv53LWV-oCQgwiPGQwbQcKE1A8JTzeiciKl9Lwklj2cp9trtrThsMqPb7OecedsuQ3DJ1PfBAeaYmQ4zhydY7_Ht3Zh42f1ucG82HCYmabAG_uaruSZeeeJiZuacGRxOT1L-y-iuZNNR0YY1x7-urgpmZurKgQlU-N0g" alt="Suit" class="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
-                <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">Suit</span>
-                    <span class="mt-2 block w-10 sm:w-12 border-t border-white" aria-hidden="true"></span>
-                </div>
-            </div>
-        </a>
-
-        <!-- Category: Ball gown -->
-        <a href="{% url 'gowns:collection_ball_gown' %}" class="group cursor-pointer flex flex-col items-center">
-            <div class="relative mx-auto w-full max-w-[200px] sm:max-w-[220px] md:max-w-[240px] aspect-[3/5] overflow-hidden bg-surface-container-high rounded-sm">
-                <!-- ARABELA ACTUAL PRODUCT GOWNS HERE (Ball gown) -->
-                <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuAjReG6BS4gyWCW4RlLjZjjW9aam7GCNjd80JyHGd_rZy_i_GVGoZYq8_ySiM9IHg4vm1IuZaX_kTU1WlExZjrLibM0am-Wwr31pNVZb0Ytv53LWV-oCQgwiPGQwbQcKE1A8JTzeiciKl9Lwklj2cp9trtrThsMqPb7OecedsuQ3DJ1PfBAeaYmQ4zhydY7_Ht3Zh42f1ucG82HCYmabAG_uaruSZeeeJiZuacGRxOT1L-y-iuZNNR0YY1x7-urgpmZurKgQlU-N0g" alt="Ball gown" class="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
-                <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">Ball gown</span>
-                    <span class="mt-2 block w-10 sm:w-12 border-t border-white" aria-hidden="true"></span>
-                </div>
-            </div>
-        </a>
-
+        {% endif %}
+        {% endfor %}
     </div>
   <!-- Bottom Navigation (Mobile Only) -->
-  <nav class="md:hidden fixed bottom-0 left-0 w-full flex justify-around items-center px-6 pb-10 pt-4 bg-surface/95 backdrop-blur-md border-t border-black/5 z-50">
-    <a href="{% url 'gowns:homepage' %}" class="flex flex-col items-center justify-center text-on-surface">
+  <nav class="mobile-bottom-nav md:hidden fixed bottom-0 left-0 w-full flex justify-around items-center px-6 pb-10 pt-4 bg-surface/95 backdrop-blur-md border-t border-black/5 z-50">
+    <a href="{% url 'gowns:homepage' %}" class="flex flex-col items-center justify-center text-secondary">
       <span class="material-symbols-outlined scale-90" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
       <span class="text-[9px] uppercase tracking-[0.15rem] font-semibold font-body mt-2">Discover</span>
     </a>
@@ -106,4 +86,37 @@
       <span class="text-[9px] uppercase tracking-[0.15rem] font-semibold font-body mt-2">Inbox</span>
     </div>
   </nav>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// ---- Collections grid entrance/scroll reveal ----
+(function () {
+    var els = document.querySelectorAll('.coll-reveal');
+    if (!els.length) return;
+
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || !('IntersectionObserver' in window)) {
+        els.forEach(function (el) { el.classList.add('active'); });
+        return;
+    }
+
+    // Fires immediately for cards already in view on load, and again whenever a
+    // card scrolls into view later -- resets on exit so scrolling back up replays it.
+    var observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('active');
+            } else {
+                entry.target.classList.remove('active');
+            }
+        });
+    }, {
+        threshold: 0.15,
+        rootMargin: '0px 0px -8% 0px'
+    });
+
+    els.forEach(function (el) { observer.observe(el); });
+})();
+</script>
 {% endblock %}

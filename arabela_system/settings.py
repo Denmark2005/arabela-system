@@ -91,6 +91,14 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'gowns.context_processors.featured_search_items',
+                'gowns.context_processors.active_reservations_count',
+                'gowns.context_processors.unread_messages_count',
+                'gowns.context_processors.reservation_hold',
+                'gowns.context_processors.site_settings',
+                'arabela_admin.context_processors.admin_user',
+                'arabela_admin.context_processors.admin_notifications',
+                'arabela_admin.context_processors.admin_asset_version',
+                'arabela_admin.context_processors.site_asset_version',
             ],
         },
     },
@@ -230,3 +238,11 @@ elif _env_default_from == 'no-reply@arabela.local' and EMAIL_HOST_USER:
     DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 else:
     DEFAULT_FROM_EMAIL = _env_default_from
+
+# Arabela Recommends -- AI chat (Google Gemini, free tier).
+# NOT 'gemini-flash-latest': that alias currently resolves to gemini-3.6-flash,
+# whose free tier allows only 20 requests PER DAY and which burns ~800 output
+# tokens "thinking" before answering (4-11s per reply). flash-lite answers the
+# same questions in ~1.2s with no thinking overhead and a far larger free quota.
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '').strip()
+GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite')

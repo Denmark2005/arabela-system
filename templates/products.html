@@ -7,21 +7,102 @@
 <style>
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-  /* Keep hover responsive, but avoid "stretching/sliding" highlight transitions */
-  .product-calendar-day { transition: none; }
-  .product-calendar-day:hover { background: rgba(11,12,12,0.06); }
-  .product-calendar-day[aria-disabled="true"] { color: rgba(27,28,28,0.25); pointer-events: none; }
-  .product-calendar-day[data-selected="start"],
-  .product-calendar-day[data-selected="end"] { background: #0b0c0c; color: #ffffff; font-weight: 700; }
-  .product-calendar-day[data-selected="in-range"] { background: rgba(11,12,12,0.10); color: #0b0c0c; }
-  .product-calendar-day[data-selected="adjacent"] {
+
+  /* The day cell is just a full-width hit target; every visual state (hover, today,
+     selected, live preview) lives on the inner circular .cal-day-mark so highlights
+     read as a centered marker rather than a full-bleed square fill. */
+  .product-calendar-day { transition: none; position: relative; }
+  .cal-day-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    margin: 0 auto;
+    border-radius: 9999px;
+    position: relative;
+  }
+  .product-calendar-day:not([aria-disabled="true"]):hover .cal-day-mark { background: rgba(11,12,12,0.06); }
+
+  /* Unavailable day: greyed out and unclickable, but NOT pointer-events:none --
+     the tooltip needs hover/tap to still reach it. The click handler itself
+     (not CSS) is what stops it from being selected. */
+  .product-calendar-day[aria-disabled="true"] { color: rgba(27,28,28,0.25); cursor: not-allowed; }
+
+  .product-calendar-day[data-selected="start"] .cal-day-mark,
+  .product-calendar-day[data-selected="end"] .cal-day-mark { background: #0b0c0c; color: #ffffff; font-weight: 700; }
+  .product-calendar-day[data-selected="in-range"] .cal-day-mark { background: rgba(11,12,12,0.10); color: #0b0c0c; }
+  .product-calendar-day[data-selected="adjacent"] .cal-day-mark {
     background: rgba(11,12,12,0.14);
     color: #0b0c0c;
   }
 
-  /* Selection snap animation: fade + subtle scale */
-  .product-calendar-day[data-selected="start"],
-  .product-calendar-day[data-selected="adjacent"] {
+  /* Live hover preview of the would-be rental window -- same visual language as an
+     actual selection but lighter, and a real selection elsewhere on the grid is
+     never overridden by a preview (the :not([data-selected]) guard). */
+  .product-calendar-day[data-preview] .cal-day-mark { transition: background-color 120ms ease-out, color 120ms ease-out; }
+  .product-calendar-day[data-preview="start"]:not([data-selected]) .cal-day-mark { background: rgba(11,12,12,0.85); color: #ffffff; }
+  .product-calendar-day[data-preview="range"]:not([data-selected]) .cal-day-mark { background: rgba(11,12,12,0.08); }
+
+  /* Today: a small dot under the number -- the same restrained accent language as the
+     thin dividers used elsewhere on the site, not a new color, just an orientation cue. */
+  .product-calendar-day[data-today]:not([data-selected]):not([data-preview]) .cal-day-mark::after {
+    content: '';
+    position: absolute;
+    bottom: -3px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 3px;
+    height: 3px;
+    border-radius: 9999px;
+    background: #0b0c0c;
+  }
+
+  /* Soft fade-in on month navigation instead of an instant grid swap. */
+  #product-cal-grid.is-month-in { animation: product-cal-month-in 180ms ease-out both; }
+  @keyframes product-cal-month-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* Shared tooltip for unavailable days -- one element, moved/shown by JS. */
+  .product-cal-tooltip {
+    position: absolute;
+    z-index: 20;
+    top: 0; left: 0;
+    transform: translate(-50%, calc(-100% - 8px));
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+    background: #1b1c1c;
+    color: #fcf9f8;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 150ms ease-out, transform 150ms ease-out;
+  }
+  .product-cal-tooltip::after {
+    content: "";
+    position: absolute;
+    top: 100%; left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #1b1c1c;
+  }
+  .product-cal-tooltip.is-visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translate(-50%, calc(-100% - 4px));
+  }
+
+  /* Selection snap animation: fade + subtle scale, on the marker so the circle
+     itself pops rather than the whole grid cell. */
+  .product-calendar-day[data-selected="start"] .cal-day-mark,
+  .product-calendar-day[data-selected="adjacent"] .cal-day-mark {
     transform-origin: center;
     animation: product-cal-snap 200ms cubic-bezier(0.4, 0, 0.2, 1) both;
   }
@@ -97,14 +178,42 @@
     transition: opacity 180ms ease-out;
   }
 
+  /* Live-sync confirmation: shown only while this page is editing an EXISTING
+     bag row (arrived via ?cart_item_index=). A size/date change is written
+     straight to the cart the moment it's picked -- this is the on-page receipt
+     for that write, spinner settling into a check the same way a real network
+     save would read, even though the write itself is synchronous. */
+  .product-live-save {
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 220ms ease-out, transform 220ms ease-out;
+    pointer-events: none;
+  }
+  .product-live-save.is-visible { opacity: 1; transform: translateY(0); }
+  .product-live-save-spinner {
+    width: 11px;
+    height: 11px;
+    border: 1.5px solid rgba(11, 12, 12, 0.15);
+    border-top-color: #0b0c0c;
+    border-radius: 9999px;
+    display: inline-block;
+    animation: product-live-save-spin 0.6s linear infinite;
+  }
+  @keyframes product-live-save-spin { to { transform: rotate(360deg); } }
+
   @media (prefers-reduced-motion: reduce) {
     .product-calendar-day { transition: none; }
-    .product-calendar-day[data-selected="start"],
-    .product-calendar-day[data-selected="adjacent"] { animation: none; }
+    .product-calendar-day[data-selected="start"] .cal-day-mark,
+    .product-calendar-day[data-selected="adjacent"] .cal-day-mark { animation: none; }
+    .product-calendar-day[data-preview] .cal-day-mark { transition: none; }
+    #product-cal-grid.is-month-in { animation: none; }
     #product-cal-dates { transition: none; transform: none; }
     #product-cal-dates .product-cal-line { transition: none; transform: none; }
     .product-cal-xfade.is-animating > .product-cal-xfade-old,
     .product-cal-xfade.is-animating > .product-cal-xfade-new { transition: none; }
+    .product-cal-tooltip { transition: none; }
+    .product-live-save { transition: none; }
+    .product-live-save-spinner { animation: none; }
   }
 </style>
 {% endblock %}
@@ -137,7 +246,7 @@
     </div>
 
     <div class="space-y-4">
-      <p class="text-body-md text-on-surface/80 leading-relaxed font-light">
+      <p class="text-body-md text-secondary/80 leading-relaxed font-light">
         Hand-draped from heritage textiles, tailored for a clean editorial silhouette. Designed to photograph beautifully and move with effortless precision—crafted for modern luxury.
       </p>
       <div class="flex gap-4 border-t border-outline-variant/15 pt-4">
@@ -155,22 +264,22 @@
         <button type="button" class="font-label text-[0.625rem] tracking-widest uppercase underline underline-offset-4 decoration-outline-variant">Size Guide</button>
       </div>
       <div class="flex gap-3">
-        <button type="button" data-product-size="S" aria-pressed="false" class="w-12 h-12 flex items-center justify-center border border-outline-variant/30 text-on-surface font-body text-sm hover:bg-on-surface hover:text-white hover:border-on-surface transition-all">S</button>
-        <button type="button" data-product-size="M" aria-pressed="false" class="w-12 h-12 flex items-center justify-center border border-outline-variant/30 text-on-surface font-body text-sm hover:bg-on-surface hover:text-white hover:border-on-surface transition-all">M</button>
-        <button type="button" data-product-size="L" aria-pressed="false" class="w-12 h-12 flex items-center justify-center border border-outline-variant/30 text-on-surface font-body text-sm hover:bg-on-surface hover:text-white hover:border-on-surface transition-all">L</button>
-        <button type="button" class="w-12 h-12 flex items-center justify-center border border-outline-variant/30 text-on-surface/30 font-body text-sm cursor-not-allowed" aria-disabled="true">XL</button>
+        <button type="button" data-product-size="S" aria-pressed="false" class="w-12 h-12 flex items-center justify-center border border-outline-variant/30 text-secondary font-body text-sm hover:bg-on-surface hover:text-white hover:border-on-surface transition-all">S</button>
+        <button type="button" data-product-size="M" aria-pressed="false" class="w-12 h-12 flex items-center justify-center border border-outline-variant/30 text-secondary font-body text-sm hover:bg-on-surface hover:text-white hover:border-on-surface transition-all">M</button>
+        <button type="button" data-product-size="L" aria-pressed="false" class="w-12 h-12 flex items-center justify-center border border-outline-variant/30 text-secondary font-body text-sm hover:bg-on-surface hover:text-white hover:border-on-surface transition-all">L</button>
+        <button type="button" class="w-12 h-12 flex items-center justify-center border border-outline-variant/30 text-secondary/30 font-body text-sm cursor-not-allowed" aria-disabled="true">XL</button>
       </div>
     </div>
 
     <!-- Rental Date Picker (with JS logic) -->
     <div class="space-y-4">
       <label class="font-label text-[0.6875rem] tracking-widest uppercase font-bold">Select Rental Dates</label>
-      <div class="bg-white p-6 rounded-lg border border-outline-variant/15 shadow-none">
+      <div class="relative bg-white p-6 rounded-lg border border-outline-variant/15 shadow-none">
         <div class="flex justify-between items-center mb-6">
           <span id="product-cal-title" class="font-headline font-bold text-sm uppercase tracking-widest">October 2024</span>
-          <div class="flex gap-4">
-            <button type="button" class="material-symbols-outlined cursor-pointer text-sm" id="product-cal-prev" aria-label="Previous month">chevron_left</button>
-            <button type="button" class="material-symbols-outlined cursor-pointer text-sm" id="product-cal-next" aria-label="Next month">chevron_right</button>
+          <div class="flex gap-1">
+            <button type="button" class="w-7 h-7 flex items-center justify-center rounded-full text-secondary hover:bg-[#f4f3f1] hover:text-on-surface active:scale-95 transition-all cursor-pointer" id="product-cal-prev" aria-label="Previous month"><span class="material-symbols-outlined text-sm">chevron_left</span></button>
+            <button type="button" class="w-7 h-7 flex items-center justify-center rounded-full text-secondary hover:bg-[#f4f3f1] hover:text-on-surface active:scale-95 transition-all cursor-pointer" id="product-cal-next" aria-label="Next month"><span class="material-symbols-outlined text-sm">chevron_right</span></button>
           </div>
         </div>
 
@@ -184,19 +293,23 @@
           <span class="font-label text-[0.5rem] text-secondary">S</span>
         </div>
 
-        <div id="product-cal-grid" class="grid grid-cols-7 gap-y-2 text-center text-[0.75rem] font-medium"></div>
+        <div id="product-cal-grid" class="grid grid-cols-7 gap-y-2 text-center text-[0.75rem] font-medium" data-blocked-dates="{{ blocked_dates_json }}"></div>
+
+        <!-- Shared tooltip for unavailable days -- one element, repositioned by JS
+             rather than one per day, so it stays lightweight and consistent. -->
+        <div id="product-cal-tooltip" role="status" class="product-cal-tooltip" aria-hidden="true">Unavailable</div>
 
         <div class="mt-6 pt-4 border-t border-outline-variant/15 flex justify-between items-center">
           <div>
-            <p class="font-label text-[0.55rem] text-secondary uppercase tracking-widest">Rental Period</p>
-            <p id="product-cal-range" class="text-[0.75rem] font-bold">Select dates</p>
-            <div id="product-cal-dates" class="mt-1 space-y-0.5" aria-hidden="true">
-              <p class="product-cal-line product-cal-line--start text-[0.75rem] font-bold">
-                <span class="font-label text-[0.55rem] text-secondary uppercase tracking-widest font-medium">Start Date</span>
+            <p class="font-label text-[0.625rem] text-secondary uppercase tracking-widest">Rental Period</p>
+            <p id="product-cal-range" class="text-sm font-bold">Select dates</p>
+            <div id="product-cal-dates" class="mt-1 space-y-1" aria-hidden="true">
+              <p class="product-cal-line product-cal-line--start text-sm font-bold">
+                <span class="font-label text-[0.625rem] text-secondary uppercase tracking-widest font-medium">Start Date</span>
                 <span class="ml-2 tabular-nums" id="product-cal-start-date"></span>
               </p>
-              <p class="product-cal-line product-cal-line--return text-[0.75rem] font-bold">
-                <span class="font-label text-[0.55rem] text-secondary uppercase tracking-widest font-medium">Return Date</span>
+              <p class="product-cal-line product-cal-line--return text-sm font-bold">
+                <span class="font-label text-[0.625rem] text-secondary uppercase tracking-widest font-medium">Return Date</span>
                 <span class="ml-2 tabular-nums" id="product-cal-return-date"></span>
               </p>
             </div>
@@ -206,9 +319,16 @@
       </div>
     </div>
 
+    <!-- Live-sync confirmation (see .product-live-save above) -->
+    <p id="product-live-save" class="product-live-save flex items-center gap-1.5 text-[0.6875rem] uppercase tracking-widest text-secondary/70" aria-live="polite">
+      <span id="product-live-save-spinner" class="product-live-save-spinner"></span>
+      <span id="product-live-save-check" class="material-symbols-outlined hidden text-emerald-600" style="font-size: 0.9rem;">check_circle</span>
+      <span id="product-live-save-text">Saved to your bag</span>
+    </p>
+
     <!-- Rent Now Button -->
     <div class="pt-6 space-y-4">
-      <button id="product-book-now" type="button" class="w-full bg-primary hover:bg-secondary text-white py-5 font-headline font-bold uppercase tracking-[0.2rem] text-xs transition-colors duration-300">
+      <button id="product-book-now" type="button" class="w-full bg-primary hover:bg-secondary text-white py-5 font-headline font-bold uppercase tracking-[0.2rem] text-xs transition-colors duration-300 rounded-[6px]">
         Book Now
       </button>
     </div>
@@ -226,8 +346,8 @@
         <img alt="Wedding One" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
       </div>
       <div class="text-center">
-        <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Wedding One</h3>
-        <p class="text-[0.9rem] font-body font-medium text-on-surface">₱1,600</p>
+        <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-secondary">Wedding One</h3>
+        <p class="text-[0.9rem] font-body font-medium text-secondary">₱1,600</p>
       </div>
     </a>
     <a href="{% url 'gowns:product_detail' collection=collection slug='archive-satin' %}" class="group cursor-pointer block">
@@ -235,8 +355,8 @@
         <img alt="Wedding Two" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
       </div>
       <div class="text-center">
-        <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Wedding Two</h3>
-        <p class="text-[0.9rem] font-body font-medium text-on-surface">₱1,800</p>
+        <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-secondary">Wedding Two</h3>
+        <p class="text-[0.9rem] font-body font-medium text-secondary">₱1,800</p>
       </div>
     </a>
     <a href="{% url 'gowns:product_detail' collection=collection slug='florence-organza' %}" class="group cursor-pointer block">
@@ -244,8 +364,8 @@
         <img alt="Wedding Three" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
       </div>
       <div class="text-center">
-        <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Wedding Three</h3>
-        <p class="text-[0.9rem] font-body font-medium text-on-surface">₱2,000</p>
+        <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-secondary">Wedding Three</h3>
+        <p class="text-[0.9rem] font-body font-medium text-secondary">₱2,000</p>
       </div>
     </a>
     <a href="{% url 'gowns:product_detail' collection=collection slug='opulence-pearl' %}" class="group cursor-pointer block">
@@ -253,8 +373,8 @@
         <img alt="Wedding Five" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
       </div>
       <div class="text-center">
-        <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-on-surface">Wedding Five</h3>
-        <p class="text-[0.9rem] font-body font-medium text-on-surface">₱2,400</p>
+        <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-secondary">Wedding Five</h3>
+        <p class="text-[0.9rem] font-body font-medium text-secondary">₱2,400</p>
       </div>
     </a>
   </div>
@@ -282,7 +402,7 @@
           <p><strong>5. Pay the security deposit.</strong> After submitting, you will be directed to the payment page to pay the Php 2,000.00 security deposit via GCash or cash. This confirms your booking.</p>
           <p><strong>6. Pick up your gown.</strong> You may pick up the gown at the shop two days before your event during business hours (1:00 PM – 5:00 PM).</p>
           <p><strong>7. Return the gown.</strong> Return it to the shop within two days after your event. Once the gown is returned on time and in good condition, your security deposit will be refunded to you.</p>
-          <p>The system also automatically generates a digital receipt and rental agreement when your reservation is confirmed, so you always have a record of your transaction and the terms of your rental.</p>
+          <p>Once your payment is verified, open the reservation from your Reservations page — the Order Summary &amp; Receipt panel there shows the gown, rental dates, amount breakdown, and the payment proof you uploaded, all tied to your reference number. That is your official record of the transaction.</p>
         </div>
       </div>
     </div>
@@ -359,18 +479,18 @@
       </div>
       <div class="max-h-0 overflow-hidden transition-[max-height] duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]" data-faq-panel>
         <p class="pt-6 text-[0.95rem] leading-7 text-on-surface-variant font-body">
-          Yes. After a successful reservation and payment, the system automatically generates a digital receipt and a digital rental agreement for you. These replace the old paper-based process, so you always have a record of your transaction and the rental terms and conditions.
+          Yes. Once the admin verifies your payment, open your booking from Reservations — the Order Summary &amp; Receipt panel is your receipt: itemized gown, rental dates, amount breakdown, and the payment proof you uploaded, tied to your reference number. The rental terms themselves are covered in our Terms &amp; Conditions, which apply to every booking.
         </p>
       </div>
     </div>
     <div class="group py-8 cursor-pointer" data-faq-item role="button" tabindex="0" aria-expanded="false">
       <div class="flex justify-between items-center">
-        <h4 class="font-label text-[0.8125rem] tracking-[0.15em] uppercase font-medium">What happens if I have unpaid security deposits?</h4>
+        <h4 class="font-label text-[0.8125rem] tracking-[0.15em] uppercase font-medium">What happens if I cancel reservations often?</h4>
         <span class="text-[0.75rem] transition-transform group-hover:translate-y-1" data-faq-chevron>∨</span>
       </div>
       <div class="max-h-0 overflow-hidden transition-[max-height] duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]" data-faq-panel>
         <p class="pt-6 text-[0.95rem] leading-7 text-on-surface-variant font-body">
-          If you fail to pay the security deposit on three (3) or more reservations, the system will automatically restrict your account and prevent you from making new reservations. The restriction duration depends on the number of unpaid deposits. The admin can review and lift the restriction if appropriate.
+          Cancellation attempts are recorded on your account &mdash; both cancelling a reservation you already submitted, and holding a selection then leaving without submitting it (cancelling the countdown or letting it run out). Once you reach fifteen (15), your account is automatically flagged for review by our staff. A flagged account can still browse and reserve, but staff will review it before confirming further bookings. An admin can lift the flag.
         </p>
       </div>
     </div>
@@ -381,7 +501,7 @@
       </div>
       <div class="max-h-0 overflow-hidden transition-[max-height] duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]" data-faq-panel>
         <p class="pt-6 text-[0.95rem] leading-7 text-on-surface-variant font-body">
-          Yes, you can make as many reservations as you wish. However, keep in mind that if you accumulate three or more unpaid security deposits, your account will be automatically restricted. Make sure to complete the deposit payment for each reservation to keep your account active.
+          Yes, you can make as many reservations as you wish. Just keep in mind that cancellation attempts are recorded &mdash; including selections you hold and abandon &mdash; and fifteen (15) or more will automatically flag your account for staff review. Completing the deposit payment for each reservation keeps your account in good standing.
         </p>
       </div>
     </div>
@@ -394,6 +514,7 @@
   (function () {
     const titleEl = document.getElementById('product-cal-title');
     const gridEl = document.getElementById('product-cal-grid');
+    const calTooltipEl = document.getElementById('product-cal-tooltip');
     const rangeEl = document.getElementById('product-cal-range');
     const datesWrapEl = document.getElementById('product-cal-dates');
     const startDateEl = document.getElementById('product-cal-start-date');
@@ -408,8 +529,24 @@
     const productCollectionEl = document.getElementById('product-collection-label');
     const qs = new URLSearchParams(window.location.search);
     const requestedCartIndex = qs.has('cart_item_index') ? Number(qs.get('cart_item_index')) : NaN;
+    // Set when the customer came from the checkout Order Summary to fix or change
+    // one line's dates. That bag lives in sessionStorage, not the drawer cart --
+    // the drawer is deliberately emptied once checkout starts -- so this addresses
+    // the snapshot instead, and returns there afterwards rather than to selection.
+    const editReservationIndex = qs.has('edit_reservation_item') ? Number(qs.get('edit_reservation_item')) : NaN;
+    const isEditingReservationItem = Number.isInteger(editReservationIndex) && editReservationIndex >= 0;
+    const RESERVATION_SNAPSHOT_KEY = 'arabela_reservation_cart_' + USER_STORAGE_KEY;
     const PAGE_COLLECTION = '{{ collection|escapejs }}';
     let cartContextItem = null;
+
+    function readReservationSnapshot() {
+      try {
+        const parsed = JSON.parse(sessionStorage.getItem(RESERVATION_SNAPSHOT_KEY) || 'null');
+        return (parsed && Array.isArray(parsed.items)) ? parsed : null;
+      } catch (err) {
+        return null;
+      }
+    }
 
     if (!titleEl || !gridEl || !rangeEl || !datesWrapEl || !startDateEl || !returnDateEl || !prevBtn || !nextBtn) return;
 
@@ -421,6 +558,64 @@
     let viewYear = today.getFullYear();
     let viewMonth = today.getMonth();
     let selectedSize = '-';
+
+    // True only when this page is editing an EXISTING bag row (arrived via
+    // ?cart_item_index=) -- a fresh, not-yet-added product view has nothing in
+    // the cart to sync, and the checkout round trip (?edit_reservation_item=)
+    // keeps its own deliberate "click Book Now to save and return" contract, so
+    // it's deliberately excluded here.
+    const isEditingDrawerRow = !isEditingReservationItem
+      && Number.isInteger(requestedCartIndex) && requestedCartIndex >= 0;
+
+    const liveSaveEl = document.getElementById('product-live-save');
+    const liveSaveSpinner = document.getElementById('product-live-save-spinner');
+    const liveSaveCheck = document.getElementById('product-live-save-check');
+    const liveSaveText = document.getElementById('product-live-save-text');
+    let liveSaveCheckTimer = null;
+    let liveSaveHideTimer = null;
+
+    function showLiveSaveIndicator() {
+      if (!liveSaveEl) return;
+      if (liveSaveCheckTimer) clearTimeout(liveSaveCheckTimer);
+      if (liveSaveHideTimer) clearTimeout(liveSaveHideTimer);
+      liveSaveEl.classList.add('is-visible');
+      if (liveSaveSpinner) liveSaveSpinner.classList.remove('hidden');
+      if (liveSaveCheck) liveSaveCheck.classList.add('hidden');
+      if (liveSaveText) liveSaveText.textContent = 'Saving to your bag…';
+      // A deliberate beat before the check -- long enough to register as
+      // feedback, short enough not to read as a real network round trip.
+      liveSaveCheckTimer = setTimeout(function () {
+        if (liveSaveSpinner) liveSaveSpinner.classList.add('hidden');
+        if (liveSaveCheck) liveSaveCheck.classList.remove('hidden');
+        if (liveSaveText) liveSaveText.textContent = 'Saved to your bag';
+      }, 380);
+      liveSaveHideTimer = setTimeout(function () {
+        liveSaveEl.classList.remove('is-visible');
+      }, 2000);
+    }
+
+    // Writes a size/date change straight into the existing bag row so the cart
+    // drawer and its icon reflect the change immediately, instead of only ever
+    // updating on Book Now (which also navigates away to a different page).
+    // Never CREATES a row -- if the index has gone stale (e.g. the cart changed
+    // in another tab), this quietly does nothing rather than inventing a
+    // duplicate line.
+    function liveSyncEditableCartRow(patch) {
+      if (!isEditingDrawerRow) return;
+      let cart;
+      try {
+        cart = JSON.parse(localStorage.getItem(PRODUCT_CART_STORAGE_KEY) || '[]');
+      } catch (err) {
+        return;
+      }
+      if (!Array.isArray(cart) || !cart[requestedCartIndex]) return;
+      cart[requestedCartIndex] = Object.assign({}, cart[requestedCartIndex], patch);
+      localStorage.setItem(PRODUCT_CART_STORAGE_KEY, JSON.stringify(cart));
+      if (typeof renderCartDrawer === 'function') renderCartDrawer();
+      if (typeof updateCartTotals === 'function') updateCartTotals();
+      if (typeof notifyCartRowUpdated === 'function') notifyCartRowUpdated(requestedCartIndex);
+      showLiveSaveIndicator();
+    }
 
     function updateSizeButtonState() {
       sizeButtons.forEach(function (btn) {
@@ -439,32 +634,50 @@
         btn.addEventListener('click', function () {
           selectedSize = btn.dataset.productSize || '-';
           updateSizeButtonState();
+          liveSyncEditableCartRow({ size: selectedSize });
         });
       });
       updateSizeButtonState();
     }
 
-    if (Number.isInteger(requestedCartIndex) && requestedCartIndex >= 0) {
+    // Both entry points describe "the line being edited"; they differ only in
+    // where it is stored and what the fields are called (the snapshot renames
+    // img -> image and price -> unitPrice).
+    if (isEditingReservationItem) {
+      const snapshot = readReservationSnapshot();
+      const existing = snapshot && snapshot.items[editReservationIndex];
+      if (existing && typeof existing === 'object') {
+        cartContextItem = {
+          name: existing.name,
+          price: existing.unitPrice,
+          img: existing.image,
+          size: existing.size,
+          rental: existing.rental
+        };
+      }
+    } else if (Number.isInteger(requestedCartIndex) && requestedCartIndex >= 0) {
       try {
         const cart = JSON.parse(localStorage.getItem(PRODUCT_CART_STORAGE_KEY) || '[]');
         const existing = cart[requestedCartIndex];
-        if (existing && typeof existing === 'object') {
-          cartContextItem = existing;
-          if (productTitleEl && existing.name) productTitleEl.textContent = String(existing.name);
-          if (productPriceEl) {
-            const n = Number(existing.price) || 0;
-            productPriceEl.textContent = '₱' + n.toLocaleString('en-PH');
-          }
-          if (productImageEl && existing.img) {
-            productImageEl.src = String(existing.img);
-            productImageEl.alt = String(existing.name || 'Product image');
-          }
-          if (productCollectionEl && existing.name) {
-            const firstWord = String(existing.name).trim().split(/\s+/)[0] || '';
-            if (firstWord) productCollectionEl.textContent = firstWord;
-          }
-        }
+        if (existing && typeof existing === 'object') cartContextItem = existing;
       } catch (err) {}
+    }
+
+    if (cartContextItem) {
+      const existing = cartContextItem;
+      if (productTitleEl && existing.name) productTitleEl.textContent = String(existing.name);
+      if (productPriceEl) {
+        const n = Number(existing.price) || 0;
+        productPriceEl.textContent = '₱' + n.toLocaleString('en-PH');
+      }
+      if (productImageEl && existing.img) {
+        productImageEl.src = String(existing.img);
+        productImageEl.alt = String(existing.name || 'Product image');
+      }
+      if (productCollectionEl && existing.name) {
+        const firstWord = String(existing.name).trim().split(/\s+/)[0] || '';
+        if (firstWord) productCollectionEl.textContent = firstWord;
+      }
     }
 
     // Fixed-offset snap selection: always a 5-day block centered on the clicked date
@@ -483,6 +696,45 @@
 
     function fmt(d) {
       return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+
+    // Midnight today, so date-only comparisons don't get skewed by the time of day.
+    const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const todayStr = ymd(todayMidnight);
+
+    // Pick-up normally lands 2 days before the event, but it can't be a day that has
+    // already passed -- picking an event 1 day out means collecting the gown today, not
+    // "yesterday". Clamping here (rather than refusing the event date) keeps the near-term
+    // dates bookable, just with a shorter pick-up window.
+    function clampedPickup(eventDate) {
+      const naive = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate() - 2);
+      return naive < todayMidnight ? todayMidnight : naive;
+    }
+
+    // Live preview of the window a day WOULD produce if clicked, shown on hover before
+    // anything is committed. Deliberately uses clampedPickup -- the same function the
+    // real click path uses -- so the preview can never promise a pick-up date that
+    // selecting the day wouldn't actually give. Only paints buttons already rendered
+    // (no re-render), so moving across the grid stays cheap.
+    function showRangePreview(hoveredDate) {
+      const startStr = ymd(clampedPickup(hoveredDate));
+      const endStr = ymd(new Date(hoveredDate.getFullYear(), hoveredDate.getMonth(), hoveredDate.getDate() + 2));
+      const hoveredStr = ymd(hoveredDate);
+      for (const child of gridEl.children) {
+        const cellDate = child.dataset ? child.dataset.date : null;
+        if (!cellDate) continue;
+        if (cellDate >= startStr && cellDate <= endStr) {
+          child.dataset.preview = cellDate === hoveredStr ? 'start' : 'range';
+        } else {
+          delete child.dataset.preview;
+        }
+      }
+    }
+
+    function clearRangePreview() {
+      for (const child of gridEl.children) {
+        if (child.dataset && child.dataset.preview) delete child.dataset.preview;
+      }
     }
 
     function fmtMDY(d) {
@@ -546,7 +798,7 @@
         returnDateEl.dataset.value = '';
         return;
       }
-      const a = new Date(center.getFullYear(), center.getMonth(), center.getDate() - 2);
+      const a = clampedPickup(center);
       const b = new Date(center.getFullYear(), center.getMonth(), center.getDate() + 2);
       rangeEl.textContent = '';
       const wasClosed = !datesWrapEl.classList.contains('is-open');
@@ -577,7 +829,47 @@
       return diffDays !== 0 && Math.abs(diffDays) <= 2;
     }
 
+    // Dates the calendar must render as unavailable (server-computed -- see
+    // gowns/views.py product_detail). Parsed once; render() re-checks it on
+    // every month navigation.
+    const blockedDates = (function () {
+      try {
+        const raw = JSON.parse(gridEl.dataset.blockedDates || '[]');
+        return new Set(Array.isArray(raw) ? raw : []);
+      } catch (err) {
+        return new Set();
+      }
+    })();
+
+    // Single shared tooltip, repositioned above whichever unavailable day is
+    // hovered/tapped, rather than one tooltip per day.
+    let tooltipHideTimer = null;
+    function showCalTooltip(dayBtn) {
+      if (!calTooltipEl || !dayBtn) return;
+      window.clearTimeout(tooltipHideTimer);
+      const cardEl = calTooltipEl.parentElement;
+      const cardRect = cardEl.getBoundingClientRect();
+      const dayRect = dayBtn.getBoundingClientRect();
+      calTooltipEl.style.left = (dayRect.left - cardRect.left + dayRect.width / 2) + 'px';
+      calTooltipEl.style.top = (dayRect.top - cardRect.top) + 'px';
+      calTooltipEl.classList.add('is-visible');
+      calTooltipEl.setAttribute('aria-hidden', 'false');
+    }
+    function hideCalTooltip() {
+      if (!calTooltipEl) return;
+      calTooltipEl.classList.remove('is-visible');
+      calTooltipEl.setAttribute('aria-hidden', 'true');
+    }
+    function hideCalTooltipDelayed() {
+      window.clearTimeout(tooltipHideTimer);
+      tooltipHideTimer = window.setTimeout(hideCalTooltip, 1600);
+    }
+
     function render() {
+      // The tooltip is anchored to a specific day button; rebuilding the grid
+      // (month nav, or any re-render) destroys that button, so drop any
+      // lingering tooltip rather than leave it pointing at nothing.
+      hideCalTooltip();
       titleEl.textContent = `${monthNames[viewMonth]} ${viewYear}`;
       gridEl.innerHTML = '';
 
@@ -600,24 +892,85 @@
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'py-2 product-calendar-day';
-        btn.textContent = String(day);
-        btn.dataset.date = ymd(d);
+        // The number lives in an inner marker span so hover/selected/preview states
+        // render as a centered circle instead of filling the whole grid cell.
+        const mark = document.createElement('span');
+        mark.className = 'cal-day-mark';
+        mark.textContent = String(day);
+        btn.appendChild(mark);
+        const dateStr = ymd(d);
+        btn.dataset.date = dateStr;
+        if (dateStr === todayStr) btn.dataset.today = 'true';
 
-        // Selection styling: clicked date is black (use existing "start" styling),
-        // ±2 days are gray ("adjacent"). No cumulative ranges.
-        if (sameDay(d, center)) btn.dataset.selected = 'start';
-        else if (isAdjacentToStart(d)) btn.dataset.selected = 'adjacent';
+        // A day that has already been and gone can never be booked, whatever the
+        // inventory says -- checked before the server's blocked list so past days stay
+        // plainly disabled instead of claiming a gown is unavailable.
+        const isPast = dateStr < todayStr;
+        const isUnavailable = !isPast && blockedDates.has(dateStr);
 
-        btn.addEventListener('click', function () {
-          const clicked = new Date(viewYear, viewMonth, day);
-          // Reset-on-click: replace the entire selection state immediately
-          center = clicked;
-          setRangeText();
-          render();
-        });
+        if (isPast) {
+          // Greyed out like an unavailable day, but with no tooltip: "this date has
+          // passed" needs no explaining, and the "Unavailable" wording is about
+          // gowns being taken, which would be misleading here.
+          btn.dataset.pastDate = 'true';
+          btn.setAttribute('aria-disabled', 'true');
+          btn.setAttribute('aria-label', day + ' -- date has passed');
+        } else if (isUnavailable) {
+          // Grey + unclickable. Hover (desktop) and tap (mobile/touch) both
+          // surface the same "Unavailable" tooltip -- there's nothing else for
+          // this day to do, so a tap showing it (instead of doing nothing) is
+          // the more useful mobile behaviour.
+          btn.dataset.unavailable = 'true';
+          btn.setAttribute('aria-disabled', 'true');
+          btn.setAttribute('aria-label', day + ' -- Unavailable');
+          btn.addEventListener('mouseenter', function () { showCalTooltip(btn); });
+          btn.addEventListener('mouseleave', hideCalTooltip);
+          btn.addEventListener('touchstart', function (e) {
+            e.preventDefault();
+            showCalTooltip(btn);
+            hideCalTooltipDelayed();
+          }, { passive: false });
+          btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            showCalTooltip(btn);
+            hideCalTooltipDelayed();
+          });
+        } else {
+          // Selection styling: clicked date is black (use existing "start" styling),
+          // ±2 days are gray ("adjacent"). No cumulative ranges.
+          if (sameDay(d, center)) btn.dataset.selected = 'start';
+          else if (isAdjacentToStart(d)) btn.dataset.selected = 'adjacent';
+
+          // Only selectable days preview -- past and unavailable days deliberately
+          // don't, since showing a range for a day that can't be picked would lie.
+          btn.addEventListener('mouseenter', function () { showRangePreview(d); });
+          btn.addEventListener('mouseleave', clearRangePreview);
+
+          btn.addEventListener('click', function () {
+            const clicked = new Date(viewYear, viewMonth, day);
+            // Reset-on-click: replace the entire selection state immediately
+            center = clicked;
+            setRangeText();
+            render();
+            const liveStart = clampedPickup(clicked);
+            const liveReturn = new Date(clicked.getFullYear(), clicked.getMonth(), clicked.getDate() + 2);
+            liveSyncEditableCartRow({ rental: fmtMDY(liveStart) + ' - ' + fmtMDY(liveReturn) });
+          });
+        }
 
         gridEl.appendChild(btn);
       }
+    }
+
+    // Month nav rebuilds the whole grid; fade the new month in so it reads as a
+    // transition rather than a hard cut. Uses a restartable animation (not a manual
+    // opacity dip) so the grid always finishes fully visible even if the button is
+    // clicked repeatedly mid-animation.
+    function renderMonth() {
+      render();
+      gridEl.classList.remove('is-month-in');
+      void gridEl.offsetWidth; // reflow, so re-adding the class restarts the animation
+      gridEl.classList.add('is-month-in');
     }
 
     prevBtn.addEventListener('click', function () {
@@ -626,7 +979,7 @@
         viewMonth = 11;
         viewYear -= 1;
       }
-      render();
+      renderMonth();
     });
 
     nextBtn.addEventListener('click', function () {
@@ -635,30 +988,76 @@
         viewMonth = 0;
         viewYear += 1;
       }
-      render();
+      renderMonth();
     });
+
+    // Tapping anywhere outside an unavailable day (the common mobile case)
+    // dismisses its tooltip immediately, rather than waiting for the timer.
+    document.addEventListener('touchstart', function (e) {
+      if (!(e.target instanceof Element) || !e.target.closest('[data-unavailable="true"]')) {
+        hideCalTooltip();
+      }
+    }, { passive: true });
+    document.addEventListener('click', function (e) {
+      if (!(e.target instanceof Element) || !e.target.closest('[data-unavailable="true"]')) {
+        hideCalTooltip();
+      }
+    });
+
+    // Restore a previously chosen rental window, so arriving here to CHANGE dates
+    // shows the current ones rather than an empty calendar.
+    //
+    // Recover the event day from the RETURN date, never the start: returnDate is
+    // exactly center + 2 days, whereas startDate goes through clampedPickup() and
+    // is pinned to today for bookings less than two days out -- so only the return
+    // date round-trips reliably.
+    function restoreSelectionFrom(rental) {
+      const parts = String(rental || '').split(' - ');
+      if (parts.length !== 2) return false;
+      const bits = parts[1].trim().split('/');
+      if (bits.length !== 3) return false;
+      const mm = Number(bits[0]);
+      const dd = Number(bits[1]);
+      const yyyy = Number(bits[2]);
+      if (!mm || !dd || !yyyy) return false;
+      const returnDate = new Date(yyyy, mm - 1, dd);
+      if (isNaN(returnDate.getTime())) return false;
+      const recovered = new Date(yyyy, mm - 1, dd - 2);
+      if (recovered < todayMidnight) return false; // the window has already passed
+      center = recovered;
+      viewYear = center.getFullYear();
+      viewMonth = center.getMonth();
+      return true;
+    }
+
+    if (cartContextItem) restoreSelectionFrom(cartContextItem.rental);
 
     setRangeText();
     render();
 
-    if (cartContextItem && typeof cartContextItem.size === 'string' && cartContextItem.size.trim() && cartContextItem.size !== '-') {
-      selectedSize = cartContextItem.size.trim().toUpperCase();
-      updateSizeButtonState();
+    // arabelaSizeLabel normalises both shapes this can arrive in: the drawer cart
+    // stores a bare 'M', the checkout snapshot stores it prefixed as 'Size: M'.
+    // It maps the not-chosen-yet cases to 'TBD', which is not a real size button.
+    if (cartContextItem && typeof cartContextItem.size === 'string') {
+      const restoredSize = window.arabelaSizeLabel(cartContextItem.size);
+      if (restoredSize !== 'TBD') {
+        selectedSize = restoredSize.toUpperCase();
+        updateSizeButtonState();
+      }
     }
 
     if (bookNowBtn) {
       bookNowBtn.addEventListener('click', function () {
         if (!center) {
-          window.alert('Please select a rental date first.');
+          arabelaAlert({ title: 'Pick your dates', message: 'Please select a rental date first.' });
           return;
         }
 
-        if (!selectedSize || selectedSize === '-') {
-          window.alert('Please select a size first.');
-          return;
-        }
+        // Size is intentionally NOT required -- the shop fits the customer at
+        // pick-up, so it stays '-' (shown as "TBD") until they decide. The rental
+        // date above is the only thing a booking genuinely cannot be made without.
 
-        const startDate = new Date(center.getFullYear(), center.getMonth(), center.getDate() - 2);
+        const startDate = clampedPickup(center);
         const returnDate = new Date(center.getFullYear(), center.getMonth(), center.getDate() + 2);
         const resolvedId = cartContextItem && cartContextItem.id ? cartContextItem.id : '{{ slug|escapejs }}';
         const resolvedName = cartContextItem && cartContextItem.name ? cartContextItem.name : '{{ product.title|escapejs }}';
@@ -677,6 +1076,24 @@
           rentalReturn: fmtMDY(returnDate),
           selectedDate: fmtMDY(center)
         };
+
+        // Came from the checkout Order Summary: update that one line of the held
+        // bag and go straight back, so fixing a date is a two-hop round trip. The
+        // drawer cart is empty during checkout, so the branches below would have
+        // nothing to update -- they'd append a stray row instead.
+        if (isEditingReservationItem) {
+          const snapshot = readReservationSnapshot();
+          const target = snapshot && snapshot.items[editReservationIndex];
+          if (target) {
+            target.rental = item.rental;
+            target.size = selectedSize;
+            try {
+              sessionStorage.setItem(RESERVATION_SNAPSHOT_KEY, JSON.stringify(snapshot));
+            } catch (err) {}
+          }
+          window.location.href = "{% url 'gowns:reservation' %}";
+          return;
+        }
 
         let cart = [];
         try {

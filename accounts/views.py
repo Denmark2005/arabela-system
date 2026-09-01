@@ -2,9 +2,10 @@ from django.conf import settings
 from django.contrib.auth import get_user_model, login, logout
 from django.contrib.auth import authenticate
 from django.core.exceptions import ValidationError
-from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives
 from django.core.validators import validate_email
 from django.shortcuts import redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from smtplib import SMTPException
@@ -48,14 +49,17 @@ def _generate_verification_code() -> str:
 
 def _send_verification_code(request, email: str, code: str) -> None:
     subject = 'Arabela Email Verification Code'
-    message = (
+    text_message = (
         f'Hello,\n\nYour Arabela verification code is {code}.\n\n'
         'This code will expire in 5 minutes.\n\n'
         'Enter this 6-digit code on the verification page to activate your account.\n\n'
         'If you did not request this, please ignore this email.\n'
     )
+    html_message = render_to_string('emails/verification_code.html', {'code': code})
     from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', settings.EMAIL_HOST_USER) or 'no-reply@arabela.com'
-    send_mail(subject, message, from_email, [email], fail_silently=False)
+    email_message = EmailMultiAlternatives(subject, text_message, from_email, [email])
+    email_message.attach_alternative(html_message, 'text/html')
+    email_message.send(fail_silently=False)
 
 
 def login_view(request):

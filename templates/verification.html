@@ -4,6 +4,20 @@
 <head>
     <meta charset="utf-8"/>
     <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <style>html { visibility: hidden; }</style>
+    <script>
+      (function () {
+        function reveal() { document.documentElement.style.visibility = 'visible'; }
+        var safety = setTimeout(reveal, 2000);
+        function ready() { clearTimeout(safety); reveal(); }
+        if (document.fonts && document.fonts.ready) {
+          document.fonts.ready.then(ready, ready);
+        } else {
+          window.addEventListener('load', ready);
+        }
+      })();
+    </script>
+    <noscript><style>html { visibility: visible; }</style></noscript>
     <link href="https://fonts.googleapis.com/css2?family=Epilogue:wght@400;700;800&family=Inter:wght@300;400;500;600&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet"/>
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
     <title>Verify Your Email | Arabela</title>
@@ -165,10 +179,10 @@
         }
     </script>
 </head>
-<body class="font-body text-on-surface antialiased bg-white">
+<body class="font-body text-secondary antialiased bg-white">
 <main class="min-h-screen pt-24 pb-20 px-6 flex flex-col items-center">
     <div class="flex-1 flex items-center justify-center w-full">
-        <div class="w-full max-w-md bg-surface-container-lowest p-12 md:p-16 flex flex-col items-center">
+        <div class="w-full max-w-md bg-surface-container-lowest p-6 md:p-16 flex flex-col items-center">
             <div class="mb-10 text-center">
                 <h1 class="font-poppins text-[1.75rem] font-semibold text-[#1b1c1c] mb-3">Verification Code</h1>
                 <p class="font-poppins text-sm text-secondary tracking-wide">Enter the 6-digit code sent to your Gmail</p>
@@ -189,15 +203,15 @@
             <form id="verification-form" method="post" action="{% url 'accounts:verify_email_code' %}" class="w-full" novalidate>
                 {% csrf_token %}
                 <input type="hidden" id="code-input-hidden" name="code" value="">
-                <div class="flex gap-3 mb-10 justify-center">
-                    <input class="code-input w-12 h-14 border border-outline-variant/30 text-center font-poppins text-xl bg-transparent focus:border-primary transition-colors transition-all duration-300" maxlength="1" placeholder=" " type="text" inputmode="numeric" autocomplete="one-time-code" />
-                    <input class="code-input w-12 h-14 border border-outline-variant/30 text-center font-poppins text-xl bg-transparent focus:border-primary transition-colors transition-all duration-300" maxlength="1" placeholder=" " type="text" inputmode="numeric" autocomplete="one-time-code" />
-                    <input class="code-input w-12 h-14 border border-outline-variant/30 text-center font-poppins text-xl bg-transparent focus:border-primary transition-colors transition-all duration-300" maxlength="1" placeholder=" " type="text" inputmode="numeric" autocomplete="one-time-code" />
-                    <input class="code-input w-12 h-14 border border-outline-variant/30 text-center font-poppins text-xl bg-transparent focus:border-primary transition-colors transition-all duration-300" maxlength="1" placeholder=" " type="text" inputmode="numeric" autocomplete="one-time-code" />
-                    <input class="code-input w-12 h-14 border border-outline-variant/30 text-center font-poppins text-xl bg-transparent focus:border-primary transition-colors transition-all duration-300" maxlength="1" placeholder=" " type="text" inputmode="numeric" autocomplete="one-time-code" />
-                    <input class="code-input w-12 h-14 border border-outline-variant/30 text-center font-poppins text-xl bg-transparent focus:border-primary transition-colors transition-all duration-300" maxlength="1" placeholder=" " type="text" inputmode="numeric" autocomplete="one-time-code" />
+                <div class="flex gap-1 sm:gap-3 mb-10 justify-center">
+                    <input class="code-input w-8 h-10 sm:w-12 sm:h-14 border border-outline-variant/30 text-center font-poppins text-xl bg-transparent focus:border-primary transition-colors transition-all duration-300" maxlength="1" placeholder=" " type="text" inputmode="numeric" autocomplete="one-time-code" />
+                    <input class="code-input w-8 h-10 sm:w-12 sm:h-14 border border-outline-variant/30 text-center font-poppins text-xl bg-transparent focus:border-primary transition-colors transition-all duration-300" maxlength="1" placeholder=" " type="text" inputmode="numeric" autocomplete="one-time-code" />
+                    <input class="code-input w-8 h-10 sm:w-12 sm:h-14 border border-outline-variant/30 text-center font-poppins text-xl bg-transparent focus:border-primary transition-colors transition-all duration-300" maxlength="1" placeholder=" " type="text" inputmode="numeric" autocomplete="one-time-code" />
+                    <input class="code-input w-8 h-10 sm:w-12 sm:h-14 border border-outline-variant/30 text-center font-poppins text-xl bg-transparent focus:border-primary transition-colors transition-all duration-300" maxlength="1" placeholder=" " type="text" inputmode="numeric" autocomplete="one-time-code" />
+                    <input class="code-input w-8 h-10 sm:w-12 sm:h-14 border border-outline-variant/30 text-center font-poppins text-xl bg-transparent focus:border-primary transition-colors transition-all duration-300" maxlength="1" placeholder=" " type="text" inputmode="numeric" autocomplete="one-time-code" />
+                    <input class="code-input w-8 h-10 sm:w-12 sm:h-14 border border-outline-variant/30 text-center font-poppins text-xl bg-transparent focus:border-primary transition-colors transition-all duration-300" maxlength="1" placeholder=" " type="text" inputmode="numeric" autocomplete="one-time-code" />
                 </div>
-                <button type="button" onclick="submitCode()" class="w-full bg-primary text-on-primary py-4 px-8 font-label text-[0.6875rem] uppercase tracking-[0.2rem] hover:bg-secondary transition-all duration-300 mb-8">
+                <button type="button" onclick="submitCode()" class="w-full bg-primary text-on-primary py-4 px-8 font-label text-[0.6875rem] uppercase tracking-[0.2rem] hover:bg-secondary transition-all duration-300 rounded-[6px] mb-8">
                     Verify
                 </button>
             </form>
@@ -206,7 +220,7 @@
                 <form method="post" action="{% url 'accounts:resend_verification_email' %}" class="w-full">
                     {% csrf_token %}
                     <input type="hidden" name="email" value="{{ email }}">
-                    <button type="submit" class="w-full text-on-surface hover:opacity-70 transition-opacity duration-300">
+                    <button type="submit" class="w-full text-secondary hover:opacity-70 transition-opacity duration-300">
                         <span class="font-poppins text-[0.8rem]">Didn't receive code? <span class="border-b border-primary/20 pb-0.5 hover:opacity-70">Resend Code</span></span>
                     </button>
                 </form>
