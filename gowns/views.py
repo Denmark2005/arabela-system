@@ -463,11 +463,13 @@ def _validate_proof_file(proof_file) -> str:
 
 
 def _save_proof_file(proof_file) -> str:
-    """Store the upload under a collision-proof name and return its public URL."""
+    """Store the upload under a collision-proof name and return its public URL.
+    Uses the storage backend's own .url() rather than MEDIA_URL + path so this
+    keeps working whether files land on local disk or on Cloudinary."""
     saved_path = default_storage.save(
         f"payment_proofs/{uuid.uuid4().hex}_{proof_file.name}", proof_file
     )
-    return settings.MEDIA_URL + saved_path
+    return default_storage.url(saved_path)
 
 
 def _parse_money(value) -> Decimal:

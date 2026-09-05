@@ -576,11 +576,13 @@ def _validate_gown_photo(photo_file) -> str:
 
 
 def _save_gown_photo(photo_file) -> str:
-    """Store the upload under a collision-proof name and return its public URL."""
+    """Store the upload under a collision-proof name and return its public URL.
+    Uses the storage backend's own .url() rather than MEDIA_URL + path so this
+    keeps working whether files land on local disk or on Cloudinary."""
     saved_path = default_storage.save(
         f"gown_photos/{uuid.uuid4().hex}_{photo_file.name}", photo_file
     )
-    return settings.MEDIA_URL + saved_path
+    return default_storage.url(saved_path)
 
 
 @require_http_methods(["POST"])
@@ -1364,14 +1366,18 @@ def _clamp_position(value, default=50):
 
 def _delete_old_avatar(profile):
     """Remove the previously uploaded file so replacing a photo doesn't orphan it.
-    Only touches files we saved under MEDIA_URL -- an externally hosted picture
-    (e.g. the Google avatar set by accounts/adapters.py on social login) is left alone."""
+    Only touches files we saved ourselves under profile_pictures/ -- an externally
+    hosted picture (e.g. the Google avatar set by accounts/adapters.py on social
+    login) is left alone. Matches on the folder name appearing anywhere in the
+    URL (rather than requiring it to start with MEDIA_URL) so this still finds
+    the right file whether it's on local disk (/media/profile_pictures/x.jpg) or
+    on Cloudinary (https://res.cloudinary.com/.../profile_pictures/x.jpg)."""
     old = profile.profile_picture_url or ""
-    if not old.startswith(settings.MEDIA_URL):
+    marker = "profile_pictures/"
+    idx = old.find(marker)
+    if idx == -1:
         return
-    rel = old[len(settings.MEDIA_URL):]
-    if not rel.startswith("profile_pictures/"):
-        return
+    rel = old[idx:]
     try:
         if default_storage.exists(rel):
             default_storage.delete(rel)
@@ -1415,7 +1421,7 @@ def upload_profile_picture_view(request):
         saved_path = default_storage.save(
             f"profile_pictures/{uuid.uuid4().hex}{ext}", upload
         )
-        profile.profile_picture_url = settings.MEDIA_URL + saved_path
+        profile.profile_picture_url = default_storage.url(saved_path)
         # A freshly chosen photo is positioned via the same drag-to-place step the
         # upload form always runs first, so trust whatever it sent (default center
         # if it's missing for any reason) rather than keeping the old photo's crop.

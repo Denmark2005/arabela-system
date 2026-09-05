@@ -60,6 +60,8 @@ INSTALLED_APPS = [
     'django.contrib.sites',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'cloudinary_storage',
+    'cloudinary',
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
@@ -191,8 +193,25 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 # Where `collectstatic` gathers everything for WhiteNoise to serve -- only
 # matters once deployed; local `runserver` never touches this directory.
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+# Media uploads (gown photos, GCash proof-of-payment, profile pictures) go to
+# Cloudinary when it's configured -- Render's own disk is wiped on every
+# restart/redeploy, which would otherwise silently delete every uploaded file.
+# Falls back to local disk storage when no Cloudinary env vars are set (e.g.
+# a fresh checkout with no `.env` yet), so local dev keeps working either way.
+_cloudinary_cloud_name = os.getenv('CLOUDINARY_CLOUD_NAME', '').strip()
+
+if _cloudinary_cloud_name:
+    CLOUDINARY_STORAGE = {
+        'CLOUD_NAME': _cloudinary_cloud_name,
+        'API_KEY': os.getenv('CLOUDINARY_API_KEY', '').strip(),
+        'API_SECRET': os.getenv('CLOUDINARY_API_SECRET', '').strip(),
+    }
+    _default_file_storage = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+else:
+    _default_file_storage = 'django.core.files.storage.FileSystemStorage'
+
 STORAGES = {
-    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "default": {"BACKEND": _default_file_storage},
     # Compressed (gzip/brotli) but NOT the Manifest variant -- Manifest storage
     # hard-fails `collectstatic` if any {% static %} tag anywhere points at a
     # file that doesn't exist, which is too strict a first deploy to risk. The
@@ -202,7 +221,9 @@ STORAGES = {
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
 }
 
-# Media files (gown photos, GCash screenshots)
+# Media files (gown photos, GCash screenshots). MEDIA_URL/MEDIA_ROOT only
+# matter for the FileSystemStorage fallback above -- Cloudinary ignores them
+# and serves its own URLs instead.
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
