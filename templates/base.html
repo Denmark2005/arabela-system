@@ -860,6 +860,7 @@
         scrim.classList.add('opacity-0');
       }
       resetRevealGroup('cart-drawer', 'cart-reveal');
+      syncBodyScrollLock();
     }
 
     function closeMobileNavDrawer() {
@@ -875,6 +876,7 @@
         scrim.classList.add('opacity-0');
       }
       resetRevealGroup('mobile-nav-drawer', 'mobilenav-reveal');
+      syncBodyScrollLock();
     }
 
     function toggleMobileNav() {
@@ -895,6 +897,7 @@
           scrim.classList.add('opacity-100');
         }
         triggerMobileNavEntrance();
+        syncBodyScrollLock();
       } else {
         closeMobileNavDrawer();
       }
@@ -943,6 +946,59 @@
         exScrim.classList.add('opacity-0');
       }
       resetExploreEntrance();
+      syncBodyScrollLock();
+    }
+
+    // Locks the page behind whichever drawer/overlay is open so a touch-drag
+    // over it can't scroll the homepage underneath (that's the bug: on phones,
+    // a fixed-position drawer doesn't stop the browser from scrolling the
+    // nearest *scrollable* ancestor it finds under your finger, which is the
+    // page itself, unless something explicitly freezes it). Uses the
+    // position:fixed-with-saved-offset technique rather than plain
+    // overflow:hidden because that's the one that reliably also stops
+    // rubber-band scrolling on iOS Safari.
+    var isBodyScrollLocked = false;
+    var scrollLockY = 0;
+    function lockBodyScroll() {
+      if (isBodyScrollLocked) return;
+      isBodyScrollLocked = true;
+      scrollLockY = window.scrollY || window.pageYOffset || 0;
+      document.body.style.position = 'fixed';
+      document.body.style.top = '-' + scrollLockY + 'px';
+      document.body.style.left = '0';
+      document.body.style.right = '0';
+      document.body.style.width = '100%';
+    }
+    function unlockBodyScroll() {
+      if (!isBodyScrollLocked) return;
+      isBodyScrollLocked = false;
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.left = '';
+      document.body.style.right = '';
+      document.body.style.width = '';
+      window.scrollTo(0, scrollLockY);
+    }
+    // Derives the lock from actual current DOM state (rather than counting
+    // open/close calls) so it's always correct no matter which order these
+    // overlays close each other in.
+    function syncBodyScrollLock() {
+      var cartDrawer = document.getElementById('cart-drawer');
+      var mobileNav = document.getElementById('mobile-nav-drawer');
+      var exploreDrawer = document.getElementById('explore-collections-drawer');
+      var search = document.getElementById('search-overlay');
+      var ai = document.getElementById('ai-concierge');
+      var anyOpen =
+        (!!cartDrawer && !cartDrawer.classList.contains('translate-x-full')) ||
+        (!!mobileNav && !mobileNav.classList.contains('-translate-x-full')) ||
+        (!!exploreDrawer && !exploreDrawer.classList.contains('translate-x-full')) ||
+        (!!search && search.classList.contains('open')) ||
+        (!!ai && ai.classList.contains('ai-open'));
+      if (anyOpen) {
+        lockBodyScroll();
+      } else {
+        unlockBodyScroll();
+      }
     }
 
     // Same fade-up stagger entrance as the Explore/Sort By drawer (see
@@ -1016,6 +1072,7 @@
       if (typeof window.triggerExploreEntrance === 'function') {
         window.triggerExploreEntrance();
       }
+      syncBodyScrollLock();
       requestAnimationFrame(function () {
         if (mode === 'sort') {
           var so = document.getElementById('collection-sort-options');
@@ -1101,6 +1158,7 @@
         updateCartTotals();
         triggerCartEntrance();
       }
+      syncBodyScrollLock();
     }
 
     function setAIFabIcon(open) {
@@ -1117,6 +1175,7 @@
       }
       setAIFabIcon(false);
       aiSetPanelOpenState(false);
+      syncBodyScrollLock();
     }
 
     function toggleAI() {
@@ -1138,6 +1197,7 @@
         const aiInput = document.getElementById('ai-chat-input');
         if (aiInput) setTimeout(() => aiInput.focus(), 120);
       }
+      syncBodyScrollLock();
     }
 
     function toggleSearch() {
@@ -1173,6 +1233,7 @@
       } else {
         resetRevealGroup('search-overlay', 'search-reveal');
       }
+      syncBodyScrollLock();
     }
 
     // ----- Arabela Recommends: real AI chat (Google Gemini via ai_recommendation:chat) -----
