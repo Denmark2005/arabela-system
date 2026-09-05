@@ -212,14 +212,16 @@
        the cart drawer and mobile nav drawer so opening either "loads in" the
        same way. */
     #cart-drawer .cart-reveal,
-    #mobile-nav-drawer .mobilenav-reveal {
+    #mobile-nav-drawer .mobilenav-reveal,
+    #mobile-nav-drawer .rent-reveal {
       opacity: 0;
       transform: translateY(48px);
       transition: opacity 1.4s cubic-bezier(0.16, 1, 0.3, 1), transform 1.4s cubic-bezier(0.16, 1, 0.3, 1);
       will-change: transform, opacity;
     }
     #cart-drawer .cart-reveal.active,
-    #mobile-nav-drawer .mobilenav-reveal.active {
+    #mobile-nav-drawer .mobilenav-reveal.active,
+    #mobile-nav-drawer .rent-reveal.active {
       opacity: 1;
       transform: translateY(0);
     }
@@ -245,7 +247,8 @@
       #explore-collections-drawer .explore-reveal,
       #cart-drawer .cart-reveal,
       #search-overlay .search-reveal,
-      #mobile-nav-drawer .mobilenav-reveal {
+      #mobile-nav-drawer .mobilenav-reveal,
+      #mobile-nav-drawer .rent-reveal {
         opacity: 1;
         transform: none;
         transition: none;
@@ -440,17 +443,21 @@
       </button>
     </div>
     <nav class="flex-1 overflow-y-auto p-8 space-y-2">
-      <details class="mobilenav-reveal border-b border-black/5 py-4">
-        <summary class="uppercase tracking-[0.1rem] text-[0.6875rem] text-secondary dark:text-[#FAF4EB] font-body cursor-pointer list-none flex items-center justify-between">
+      <div class="mobilenav-reveal border-b border-black/5 py-4">
+        <button type="button" id="mobile-rent-toggle" class="w-full uppercase tracking-[0.1rem] text-[0.6875rem] text-secondary dark:text-[#FAF4EB] font-body cursor-pointer flex items-center justify-between text-left" onclick="toggleMobileRent()" aria-expanded="false" aria-controls="mobile-rent-panel">
           Rent
           <span class="text-[0.6rem]">+</span>
-        </summary>
-        <ul class="flex flex-col gap-4 mt-4 pl-2">
-          {% for c in search_overlay_collections_meta %}
-          <li><a class="block text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] dark:text-[#A09E99] hover:text-secondary dark:hover:text-white transition-colors font-body" href="{{ c.url }}">{{ c.label }}</a></li>
-          {% endfor %}
-        </ul>
-      </details>
+        </button>
+        <div id="mobile-rent-panel" class="grid overflow-hidden transition-[grid-template-rows] duration-400 ease-in-out motion-reduce:transition-none" style="grid-template-rows: 0fr">
+          <div class="min-h-0 overflow-hidden">
+            <ul class="flex flex-col gap-4 mt-4 pl-2">
+              {% for c in search_overlay_collections_meta %}
+              <li class="rent-reveal"><a class="block text-[0.6875rem] uppercase tracking-[0.15rem] text-[#615E57] dark:text-[#A09E99] hover:text-secondary dark:hover:text-white transition-colors font-body" href="{{ c.url }}">{{ c.label }}</a></li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
+      </div>
       <a class="mobilenav-reveal block py-4 border-b border-black/5 uppercase tracking-[0.1rem] text-[0.6875rem] text-secondary dark:text-[#FAF4EB] font-body" href="{% url 'gowns:how_it_works' %}">How it Works</a>
     </nav>
   </aside>
@@ -877,6 +884,24 @@
       }
       resetRevealGroup('mobile-nav-drawer', 'mobilenav-reveal');
       syncBodyScrollLock();
+    }
+
+    // "Rent" accordion inside the mobile hamburger menu: same fade-up stagger
+    // reveal as Explore/Sort By when the "+" is tapped, using the same
+    // grid-template-rows collapse (so the list's own overflow-hidden wrapper
+    // contains the reveal items' transform -- same fix as the search bar).
+    function toggleMobileRent() {
+      const toggle = document.getElementById('mobile-rent-toggle');
+      const panel = document.getElementById('mobile-rent-panel');
+      if (!toggle || !panel) return;
+      const isOpen = toggle.getAttribute('aria-expanded') === 'true';
+      toggle.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+      panel.style.gridTemplateRows = isOpen ? '0fr' : '1fr';
+      if (isOpen) {
+        resetRevealGroup('mobile-rent-panel', 'rent-reveal');
+      } else {
+        triggerRevealGroup('mobile-rent-panel', 'rent-reveal');
+      }
     }
 
     function toggleMobileNav() {

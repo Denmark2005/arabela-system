@@ -380,6 +380,14 @@
       </nav>
     </aside>
 
+    <!-- Quick account nav (mobile only -- desktop already shows the full row
+         above). One tap between Reservations and Profile, no need to open the
+         hamburger menu at all -- matches the Orders/Profile tabs pattern. -->
+    <div class="fixed top-20 left-0 right-0 z-40 flex items-center gap-6 bg-white/80 backdrop-blur-md px-6 pt-4 pb-2 md:hidden" aria-label="Account navigation">
+      <a href="{% url 'gowns:orders' %}" class="pb-2 text-sm font-semibold tracking-tight text-[#1b1c1c] border-b-2 border-[#1b1c1c]">Reservations</a>
+      <a href="{% url 'gowns:profile' %}" class="pb-2 text-sm font-semibold tracking-tight text-secondary/50 border-b-2 border-transparent">Profile</a>
+    </div>
+
     <main class="flex min-h-screen flex-col items-center px-6 pb-24 pt-32 md:px-12">
       <div class="w-full max-w-4xl rounded-xl bg-white p-8 shadow-[0_20px_40px_rgba(0,0,0,0.04)] md:p-16">
         <header class="mb-6">
