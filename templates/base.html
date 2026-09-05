@@ -207,9 +207,45 @@
     #explore-collections-drawer .explore-delay-500 { transition-delay: 500ms; }
     #explore-collections-drawer .explore-delay-600 { transition-delay: 600ms; }
     #explore-collections-drawer .explore-delay-700 { transition-delay: 700ms; }
+
+    /* Same fade-up stagger entrance as the Explore/Sort By drawer, reused for
+       the cart drawer and mobile nav drawer so opening either "loads in" the
+       same way. */
+    #cart-drawer .cart-reveal,
+    #mobile-nav-drawer .mobilenav-reveal {
+      opacity: 0;
+      transform: translateY(48px);
+      transition: opacity 1.4s cubic-bezier(0.16, 1, 0.3, 1), transform 1.4s cubic-bezier(0.16, 1, 0.3, 1);
+      will-change: transform, opacity;
+    }
+    #cart-drawer .cart-reveal.active,
+    #mobile-nav-drawer .mobilenav-reveal.active {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    /* Same fade-up entrance as Explore/Sort By. The results panel sits close to
+       its own max-height, and this translateY was previously registering as
+       extra *scrollable* overflow on the panel while mid-transition -- toggling
+       a scrollbar and shoving the search input sideways as it did. Fixed at the
+       source instead by containing the motion: the wrapper these items live in
+       (search_overlay.html's .max-w-6xl.mx-auto) is overflow-hidden, so the
+       transform can never leak out and register on the scrollable panel above. */
+    #search-overlay .search-reveal {
+      opacity: 0;
+      transform: translateY(48px);
+      transition: opacity 1.4s cubic-bezier(0.16, 1, 0.3, 1), transform 1.4s cubic-bezier(0.16, 1, 0.3, 1);
+      will-change: transform, opacity;
+    }
+    #search-overlay .search-reveal.active {
+      opacity: 1;
+      transform: translateY(0);
+    }
     @media (prefers-reduced-motion: reduce) {
       .search-bar-spinner { animation: none; border-color: #c4c7c7; border-top-color: #747878; }
-      #explore-collections-drawer .explore-reveal {
+      #explore-collections-drawer .explore-reveal,
+      #cart-drawer .cart-reveal,
+      #search-overlay .search-reveal,
+      #mobile-nav-drawer .mobilenav-reveal {
         opacity: 1;
         transform: none;
         transition: none;
@@ -395,7 +431,7 @@
 
   <!-- MOBILE NAV DRAWER -->
   <aside id="mobile-nav-drawer" class="fixed top-0 left-0 h-full w-full max-w-[340px] bg-white dark:bg-[#222222] z-[75] -translate-x-full transform transition-transform duration-500 ease-in-out shadow-none flex flex-col md:hidden" aria-hidden="true">
-    <div class="p-8 flex justify-between items-center border-b border-black/5">
+    <div class="mobilenav-reveal p-8 flex justify-between items-center border-b border-black/5">
       <h2 class="text-sm font-bold tracking-[0.2em] uppercase text-secondary dark:text-[#FAF4EB]">Menu</h2>
       <button type="button" class="hover:opacity-50 transition-opacity text-secondary dark:text-[#FAF4EB]" onclick="toggleMobileNav()" aria-label="Close menu">
         <svg class="fill-current" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -404,7 +440,7 @@
       </button>
     </div>
     <nav class="flex-1 overflow-y-auto p-8 space-y-2">
-      <details class="border-b border-black/5 py-4">
+      <details class="mobilenav-reveal border-b border-black/5 py-4">
         <summary class="uppercase tracking-[0.1rem] text-[0.6875rem] text-secondary dark:text-[#FAF4EB] font-body cursor-pointer list-none flex items-center justify-between">
           Rent
           <span class="text-[0.6rem]">+</span>
@@ -415,7 +451,7 @@
           {% endfor %}
         </ul>
       </details>
-      <a class="block py-4 border-b border-black/5 uppercase tracking-[0.1rem] text-[0.6875rem] text-secondary dark:text-[#FAF4EB] font-body" href="{% url 'gowns:how_it_works' %}">How it Works</a>
+      <a class="mobilenav-reveal block py-4 border-b border-black/5 uppercase tracking-[0.1rem] text-[0.6875rem] text-secondary dark:text-[#FAF4EB] font-body" href="{% url 'gowns:how_it_works' %}">How it Works</a>
     </nav>
   </aside>
 
@@ -476,7 +512,7 @@
 
   <!-- Cart / selection drawer -->
   <aside id="cart-drawer" class="fixed top-0 right-0 h-full w-full md:w-[480px] bg-white z-[85] translate-x-full transform transition-transform duration-500 ease-in-out shadow-none flex flex-col" aria-hidden="true">
-    <header class="p-8 flex justify-between items-center border-b border-black/5 shrink-0">
+    <header class="cart-reveal p-8 flex justify-between items-center border-b border-black/5 shrink-0">
       <h2 class="text-sm font-bold tracking-[0.2em] uppercase text-secondary flex items-center gap-3">
         <span class="material-symbols-outlined text-primary" style='font-variation-settings: "FILL" 0;'>shopping_bag</span>
         Your Selection
@@ -488,20 +524,20 @@
     <div id="cart-lines" class="flex-1 overflow-y-auto ai-scroll px-8 py-4 space-y-10 min-h-0"></div>
     <footer class="p-8 space-y-6 bg-white border-t border-black/5 shrink-0">
       <div class="space-y-2">
-        <div class="flex justify-between items-center">
+        <div class="cart-reveal flex justify-between items-center">
           <span class="text-xs uppercase tracking-widest text-secondary">subtotal</span>
           <span id="cart-subtotal" class="font-['Inter',sans-serif] text-sm text-secondary tabular-nums">₱ 10,700.00</span>
         </div>
-        <div class="flex justify-between items-center">
+        <div class="cart-reveal flex justify-between items-center">
           <span class="text-xs uppercase tracking-widest text-secondary">Security Deposit</span>
           <span id="cart-deposit" class="font-['Inter',sans-serif] text-sm text-secondary tabular-nums">₱ 4,000.00</span>
         </div>
-        <div class="pt-4 flex justify-between items-center border-t border-black/5">
+        <div class="cart-reveal pt-4 flex justify-between items-center border-t border-black/5">
           <span class="text-sm font-bold uppercase tracking-[0.2rem] text-secondary">Total Amount</span>
           <span id="cart-total" class="font-['Epilogue',sans-serif] text-lg font-bold text-secondary tabular-nums tracking-tight">₱ 14,700.00</span>
         </div>
       </div>
-      <a href="{% url 'gowns:reservation' %}" onclick="return saveCartAndProceedToReservation(event)" class="w-full bg-white border border-gray-300 text-secondary uppercase text-xs font-bold tracking-[0.2rem] py-5 rounded-[6px] hover:bg-gray-50 transition-colors duration-300 inline-flex items-center justify-center no-underline">Proceed to Reservation</a>
+      <a href="{% url 'gowns:reservation' %}" onclick="return saveCartAndProceedToReservation(event)" class="cart-reveal w-full bg-white border border-gray-300 text-secondary uppercase text-xs font-bold tracking-[0.2rem] py-5 rounded-[6px] hover:bg-gray-50 transition-colors duration-300 inline-flex items-center justify-center no-underline">Proceed to Reservation</a>
     </footer>
   </aside>
   {% endif %}
@@ -627,7 +663,7 @@
       if (!lines) return;
       const cart = getDrawerCart();
       if (!cart.length) {
-        lines.innerHTML = '<p class="text-[0.6875rem] uppercase tracking-widest text-secondary py-4">No items in your selection.</p>';
+        lines.innerHTML = '<p class="cart-reveal text-[0.6875rem] uppercase tracking-widest text-secondary py-4">No items in your selection.</p>';
         return;
       }
 
@@ -646,7 +682,7 @@
                <span class="material-symbols-outlined" style="font-size: 0.85rem;">event</span>Select rental date
              </a>`;
         return `
-          <div class="cart-line flex gap-4 group" data-index="${index}" data-unit-price="${unitPrice}" data-rental="${item.rental || ''}" data-id="${attrEscapeCart(item.id)}" data-collection="${attrEscapeCart(item.collection)}">
+          <div class="cart-line cart-reveal flex gap-4 group" data-index="${index}" data-unit-price="${unitPrice}" data-rental="${item.rental || ''}" data-id="${attrEscapeCart(item.id)}" data-collection="${attrEscapeCart(item.collection)}">
             <a href="${editUrl}" class="w-24 h-32 bg-white overflow-hidden shrink-0 block">
               <img alt="${item.name || 'Selection item'}" class="w-full h-full object-cover" style="clip-path: inset(1px 0 0 1px);" src="${item.img || ''}" />
             </a>
@@ -823,6 +859,7 @@
         scrim.classList.remove('opacity-100');
         scrim.classList.add('opacity-0');
       }
+      resetRevealGroup('cart-drawer', 'cart-reveal');
     }
 
     function closeMobileNavDrawer() {
@@ -837,6 +874,7 @@
         scrim.classList.remove('opacity-100');
         scrim.classList.add('opacity-0');
       }
+      resetRevealGroup('mobile-nav-drawer', 'mobilenav-reveal');
     }
 
     function toggleMobileNav() {
@@ -856,6 +894,7 @@
           scrim.classList.remove('pointer-events-none', 'opacity-0');
           scrim.classList.add('opacity-100');
         }
+        triggerMobileNavEntrance();
       } else {
         closeMobileNavDrawer();
       }
@@ -904,6 +943,51 @@
         exScrim.classList.add('opacity-0');
       }
       resetExploreEntrance();
+    }
+
+    // Same fade-up stagger entrance as the Explore/Sort By drawer (see
+    // resetExploreEntrance/triggerExploreEntrance above), generalized so the
+    // cart drawer, search overlay and mobile nav drawer can reuse it on open.
+    function resetRevealGroup(containerId, revealClass) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      container.querySelectorAll('.' + revealClass).forEach(function (el) {
+        el.classList.remove('active');
+      });
+    }
+
+    function triggerRevealGroup(containerId, revealClass) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        container.querySelectorAll('.' + revealClass).forEach(function (el) {
+          el.classList.add('active');
+        });
+        return;
+      }
+      resetRevealGroup(containerId, revealClass);
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          const items = container.querySelectorAll('.' + revealClass);
+          items.forEach(function (el, i) {
+            setTimeout(function () {
+              el.classList.add('active');
+            }, 40 + i * 70);
+          });
+        });
+      });
+    }
+
+    function triggerCartEntrance() {
+      triggerRevealGroup('cart-drawer', 'cart-reveal');
+    }
+
+    function triggerSearchEntrance() {
+      triggerRevealGroup('search-overlay', 'search-reveal');
+    }
+
+    function triggerMobileNavEntrance() {
+      triggerRevealGroup('mobile-nav-drawer', 'mobilenav-reveal');
     }
 
     function closeOverlaysForCollectionsDrawer() {
@@ -1015,6 +1099,7 @@
       if (!closed) {
         renderCartDrawer();
         updateCartTotals();
+        triggerCartEntrance();
       }
     }
 
@@ -1072,6 +1157,21 @@
           if (input) input.focus();
         }, 350);
         closeAIPanel();
+        // The overlay itself fades/slides in over 350ms (see #search-overlay.open
+        // above). Starting the content's own fade-up reveal at the same instant
+        // stacks two vertical motions on top of each other and reads as a visible
+        // flick/snap-back right as the text appears. Waiting for the overlay's own
+        // entrance to settle first, then playing the reveal, keeps the two motions
+        // separate so it looks like one clean cascade (same fix isn't needed for
+        // the cart/mobile-nav/explore drawers -- those slide in on X while this
+        // reveal moves on Y, so there's no shared-axis conflict there).
+        if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          triggerSearchEntrance();
+        } else {
+          setTimeout(triggerSearchEntrance, 360);
+        }
+      } else {
+        resetRevealGroup('search-overlay', 'search-reveal');
       }
     }
 

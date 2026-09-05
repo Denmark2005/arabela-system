@@ -20,11 +20,15 @@
 </style>
 <div class="shrink-0 bg-white border-b border-black/5 shadow-lg max-h-[80vh] overflow-y-auto" onclick="event.stopPropagation()">
   <div class="container mx-auto px-8 py-10">
-    <div class="max-w-6xl mx-auto">
-      <div class="flex justify-end mb-4">
+    <!-- overflow-hidden here (not on the scrollable panel above) contains the
+         .search-reveal items' entrance transform so it can never register as
+         extra *scrollable* overflow on the panel above -- see the reveal CSS
+         for why that matters. -->
+    <div class="max-w-6xl mx-auto overflow-hidden">
+      <div class="search-reveal flex justify-end mb-4">
         <button type="button" class="font-body text-[0.65rem] uppercase tracking-[0.25em] text-on-surface-variant hover:text-secondary transition-colors bg-transparent border-0 p-0 cursor-pointer" onclick="toggleSearch()">Cancel</button>
       </div>
-      <div class="relative flex items-center mb-10">
+      <div class="search-reveal relative flex items-center mb-10">
         <span class="material-symbols-outlined absolute left-0 text-black/40 text-2xl pointer-events-none">search</span>
         <input
           class="w-full bg-white border border-black/20 border-0 border-b pl-10 pr-28 py-4 focus:ring-0 focus:border-black text-2xl font-light placeholder:text-black/20 rounded-none"
@@ -41,7 +45,7 @@
         </button>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-12 gap-12">
-        <div id="search-overlay-sidebar" class="md:col-span-3">
+        <div id="search-overlay-sidebar" class="search-reveal md:col-span-3">
           <p class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-4">Suggestions</p>
           <ul id="search-suggestions-list" class="search-fade space-y-3 mb-10">
             <li class="text-sm text-on-surface-variant/70 font-body">Type to search gowns by name.</li>
@@ -53,7 +57,7 @@
             {% endfor %}
           </ul>
         </div>
-        <div id="search-products-column" class="md:col-span-9">
+        <div id="search-products-column" class="search-reveal md:col-span-9">
           <p id="search-products-heading" class="text-[0.6875rem] uppercase tracking-[0.2em] text-on-surface-variant/60 font-semibold mb-6">Top Picks</p>
           <div id="search-products-grid" class="search-fade grid grid-cols-2 sm:grid-cols-4 gap-10">
             {% for item in featured_search_items|slice:":4" %}
