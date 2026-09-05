@@ -103,16 +103,27 @@
 
     // Fires immediately for cards already in view on load, and again whenever a
     // card scrolls into view later -- resets on exit so scrolling back up replays it.
+    //
+    // Deliberately asymmetric: entering fires at ratio >= 0.15, but leaving only
+    // fires at ratio <= 0 (fully out), not the same 0.15 line. A card pinned near
+    // the bottom of the page -- nothing left to scroll, only a sliver of it ever
+    // in view -- has a ratio that hovers right at 0.15. Toggling both directions
+    // on one threshold let the reveal's own transform (it moves the card as it
+    // plays) nudge the ratio back across that same line mid-animation,
+    // re-triggering the observer and restarting the reveal -- a feedback loop
+    // that reads as the image blinking forever instead of settling once revealed.
+    // The dead zone between 0 and 0.15 breaks that loop: once shown, a card
+    // stays shown unless it becomes completely invisible.
     var observer = new IntersectionObserver(function (entries) {
         entries.forEach(function (entry) {
-            if (entry.isIntersecting) {
+            if (entry.intersectionRatio >= 0.15) {
                 entry.target.classList.add('active');
-            } else {
+            } else if (entry.intersectionRatio <= 0) {
                 entry.target.classList.remove('active');
             }
         });
     }, {
-        threshold: 0.15,
+        threshold: [0, 0.15],
         rootMargin: '0px 0px -8% 0px'
     });
 

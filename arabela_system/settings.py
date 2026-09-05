@@ -37,12 +37,17 @@ _load_dotenv(BASE_DIR / '.env')
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-3(u%*fi*=6nbx5x6x=rvvfca$vh3b#n#cjp3h&q^0taoxp4p5e'
+# The fallback below is a dev-only placeholder (the original hardcoded value,
+# already public in this repo's git history) -- any real deployment must set
+# SECRET_KEY in its own environment rather than rely on it.
+SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-3(u%*fi*=6nbx5x6x=rvvfca$vh3b#n#cjp3h&q^0taoxp4p5e')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Defaults to False -- a host that doesn't explicitly set DEBUG=True in its
+# environment gets the safe production behavior automatically.
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [h.strip() for h in os.getenv('ALLOWED_HOSTS', '').split(',') if h.strip()]
 
 
 # Application definition
@@ -69,6 +74,10 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # Serves collected static files directly from the app process -- needed once
+    # DEBUG=False, since Django's dev-server auto-serving of static files only
+    # ever worked because DEBUG was True. No separate static file host required.
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -179,10 +188,29 @@ USE_TZ = True
 # Static files
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
+# Where `collectstatic` gathers everything for WhiteNoise to serve -- only
+# matters once deployed; local `runserver` never touches this directory.
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    # Compressed (gzip/brotli) but NOT the Manifest variant -- Manifest storage
+    # hard-fails `collectstatic` if any {% static %} tag anywhere points at a
+    # file that doesn't exist, which is too strict a first deploy to risk. The
+    # admin bundle.js/site JS already have their own `?v=` cache-busting (see
+    # admin_asset_version/site_asset_version), so content-hashed filenames
+    # aren't needed for that problem to already be solved.
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
+}
 
 # Media files (gown photos, GCash screenshots)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# Required once the site is reachable over HTTPS on a real domain -- without
+# its own scheme+host listed here, Django rejects every POST (login, reservation
+# submit, admin actions) as a CSRF failure. Empty locally on purpose; set to
+# e.g. "https://yourapp.onrender.com" in that host's environment variables.
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()]
 
 SITE_ID = 2
 
