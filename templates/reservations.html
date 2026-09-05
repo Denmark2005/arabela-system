@@ -375,17 +375,20 @@
       </div>
       <nav class="flex-1 overflow-y-auto p-8 space-y-2">
         <a class="block py-4 border-b border-black/5 uppercase tracking-[0.1rem] text-[0.6875rem] text-secondary" href="{% url 'gowns:orders' %}">Reservations</a>
-        <a class="block py-4 border-b border-black/5 uppercase tracking-[0.1rem] text-[0.6875rem] text-secondary" href="{% url 'gowns:messages' %}">Messages</a>
-        <a class="block py-4 border-b border-black/5 uppercase tracking-[0.1rem] text-[0.6875rem] text-secondary" href="{% url 'gowns:profile' %}">Profile</a>
+        <a class="js-page-link block py-4 border-b border-black/5 uppercase tracking-[0.1rem] text-[0.6875rem] text-secondary" href="{% url 'gowns:messages' %}">Messages</a>
+        <a class="js-page-link block py-4 border-b border-black/5 uppercase tracking-[0.1rem] text-[0.6875rem] text-secondary" href="{% url 'gowns:profile' %}">Profile</a>
       </nav>
     </aside>
 
     <!-- Quick account nav (mobile only -- desktop already shows the full row
          above). One tap between Reservations and Profile, no need to open the
-         hamburger menu at all -- matches the Orders/Profile tabs pattern. -->
+         hamburger menu at all -- matches the Orders/Profile tabs pattern.
+         js-page-link on the Profile link only (not Reservations, since that's
+         already the current page here) gives it the same skeleton-loading page
+         transition the desktop nav already has. -->
     <div class="fixed top-20 left-0 right-0 z-40 flex items-center gap-6 bg-white/80 backdrop-blur-md px-6 pt-4 pb-2 md:hidden" aria-label="Account navigation">
       <a href="{% url 'gowns:orders' %}" class="pb-2 text-sm font-semibold tracking-tight text-[#1b1c1c] border-b-2 border-[#1b1c1c]">Reservations</a>
-      <a href="{% url 'gowns:profile' %}" class="pb-2 text-sm font-semibold tracking-tight text-secondary/50 border-b-2 border-transparent">Profile</a>
+      <a href="{% url 'gowns:profile' %}" class="js-page-link pb-2 text-sm font-semibold tracking-tight text-secondary/50 border-b-2 border-transparent">Profile</a>
     </div>
 
     <main class="flex min-h-screen flex-col items-center px-6 pb-24 pt-32 md:px-12">
