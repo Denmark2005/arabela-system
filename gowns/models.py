@@ -32,7 +32,6 @@ class Gown(models.Model):
     class Status(models.TextChoices):
         AVAILABLE = 'Available', 'Available'
         RESERVED = 'Reserved', 'Reserved'
-        IN_CLEANING = 'In-Cleaning', 'In-Cleaning'
         OUT_OF_STOCK = 'Out-of-Stock', 'Out-of-Stock'
 
     gown_id = models.CharField(max_length=40, unique=True)

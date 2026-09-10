@@ -284,13 +284,12 @@ def admin_notifications(request):
 
     # --- Inventory needing attention ----------------------------------------------
     for g in (
-        Gown.objects.filter(
-            status__in=[Gown.Status.IN_CLEANING, Gown.Status.OUT_OF_STOCK]
-        ).order_by("-updated_at")[:6]
+        Gown.objects.filter(status=Gown.Status.OUT_OF_STOCK)
+        .order_by("-updated_at")[:6]
     ):
         items.append({
             "kind": "inventory",
-            "level": "warning" if g.status == Gown.Status.IN_CLEANING else "critical",
+            "level": "critical",
             "icon": "inventory",
             "actor": g.gown_id,
             "text": "is marked",

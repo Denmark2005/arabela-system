@@ -10,7 +10,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
@@ -29,6 +29,9 @@ from gowns.models import Gown, GownUnavailability
 from reservations.models import Reservation, ReservationItem
 
 _VALID_COLLECTIONS = frozenset(category["key"] for category in _CATEGORIES)
+# key -> collection landing-page url name, for the "Back to collection" link on the
+# unavailable product page. Keys are exactly _VALID_COLLECTIONS, so lookups never miss.
+_COLLECTION_URL_NAME = {category["key"]: category["url_name"] for category in _CATEGORIES}
 _SEARCH_PRICES = (1600, 1800, 2000, 2200, 2400, 2600, 2800, 3000)
 
 # How far ahead the product calendar computes availability. Four months is well past
@@ -51,17 +54,17 @@ def _title_and_label(collection_key: str, slug: str) -> tuple[str, str]:
 
 
 def _products_for_category(collection_key: str) -> list[dict]:
-    """Real Gown rows for this category if any exist -- once a category has real
-    inventory, customers browse the actual gowns instead of the placeholder. Falls
-    back to the 8 fake products ("X One" through "X Eight") for any category still
-    at zero real inventory, so the rest of the demo is untouched."""
+    """Real Gown rows for this category once ANY real gown exists for it -- from that
+    point customers browse actual inventory, never the placeholder catalog again.
+    Out-of-Stock gowns are hidden from the grid, so a category whose real gowns are
+    ALL Out-of-Stock shows an empty grid (the templates' {% empty %} clause), NOT a
+    fallback to the 8 fake "X One".."X Eight" products. A category still at zero real
+    inventory keeps the placeholder catalog untouched."""
     label = _label_for(collection_key)
-    real_gowns = (
-        Gown.objects.filter(category=label)
-        .exclude(status=Gown.Status.OUT_OF_STOCK)
-        .order_by("color_code", "gown_id")
+    category_gowns = list(
+        Gown.objects.filter(category=label).order_by("color_code", "gown_id")
     )
-    if real_gowns:
+    if category_gowns:
         return [
             {
                 "slug": g.slug,
@@ -74,7 +77,8 @@ def _products_for_category(collection_key: str) -> list[dict]:
                 "collection_key": collection_key,
                 "reserved": g.status == Gown.Status.RESERVED,
             }
-            for g in real_gowns
+            for g in category_gowns
+            if g.status != Gown.Status.OUT_OF_STOCK
         ]
 
     products = []
@@ -352,28 +356,194 @@ def _blocked_dates_for_category(label: str) -> list[str]:
     )
 
 
+# --- Which physical unit does a cart item actually get? --------------------------
+# Outcomes of _find_available_unit(). Strings rather than booleans so call sites read
+# as prose. (The 4th outcome the original comment anticipated is now here.)
+_UNIT_NO_INVENTORY = "no_inventory"   # no real Gown row carries this slug/name -> gown=None, exactly as before
+_UNIT_ASSIGNED = "assigned"           # a specific free physical unit was picked
+_UNIT_UNAVAILABLE = "unavailable"     # real bookable units exist but every one is taken for these dates
+_UNIT_OUT_OF_STOCK = "out_of_stock"   # the slug/name IS a real gown, but every match is Out-of-Stock -> reject
+
+# products.html's size buttons emit 'S' / 'M' / 'L'; Gown.size stores 'Small' / 'Medium'
+# / 'Large' / 'Extra Large' / 'Free Size'. This bridges the two so size can act as a
+# PREFERENCE between free units. It is deliberately never a filter: an unmapped, blank
+# or mistyped size must never make a genuinely bookable gown look booked.
+_SIZE_ALIASES = {
+    "S": Gown.Size.SMALL, "SMALL": Gown.Size.SMALL,
+    "M": Gown.Size.MEDIUM, "MEDIUM": Gown.Size.MEDIUM,
+    "L": Gown.Size.LARGE, "LARGE": Gown.Size.LARGE,
+    "XL": Gown.Size.EXTRA_LARGE, "EXTRA LARGE": Gown.Size.EXTRA_LARGE,
+    "FREE": Gown.Size.FREE_SIZE, "FREE SIZE": Gown.Size.FREE_SIZE,
+}
+
+
+def _normalize_size(raw: str) -> str:
+    """'m' / 'M' / 'Medium' -> Gown.Size.MEDIUM; anything unrecognised -> ''."""
+    return _SIZE_ALIASES.get((raw or "").strip().upper(), "")
+
+
+def _find_available_unit(gown_name, rental_date, return_date, *, gown_slug="", size="", already_taken=frozenset()):
+    """Pick the specific physical Gown row a cart item should be booked against.
+
+    MUST be called inside transaction.atomic(): it takes SELECT ... FOR UPDATE row
+    locks on the candidate units and relies on the caller's transaction to hold them
+    until the ReservationItem rows are committed. Two customers racing for the same
+    last free unit are therefore serialized -- the loser re-reads and sees it taken.
+
+    Occupancy of the bookable pool is the SAME rule as _blocked_dates_for_category()
+    above -- keep the two in sync:
+      * Out-of-Stock units are not in the bookable pool at all.
+      * A ReservationItem whose window overlaps occupies its unit, unless its stage is
+        'Returned' or its reservation is Rejected/Cancelled.
+      * A GownUnavailability whose [start_date, end_date] overlaps occupies its unit.
+      * Gown.status == 'Reserved' does NOT disqualify anything -- that flag is set for
+        the whole life of a booking (arabela_admin.views.reservation_approve_view), so
+        a gown reserved for June is still bookable in August; the actual date-range
+        occupancy comes from ReservationItem/GownUnavailability instead.
+
+    already_taken: unit ids handed out earlier in the SAME submission, so one cart
+    containing the same gown twice cannot be given the same physical unit twice.
+
+    Returns (outcome, gown_or_None):
+      (_UNIT_NO_INVENTORY, None)  -> placeholder-catalog product; caller books gown=None
+      (_UNIT_ASSIGNED, <Gown>)    -> book this exact unit
+      (_UNIT_UNAVAILABLE, None)   -> real units exist but all date-blocked; reject submission
+      (_UNIT_OUT_OF_STOCK, None)  -> the slug/name IS a real gown, but every match is
+                                    Out-of-Stock (withdrawn); reject submission
+    """
+    # The exact unit whose product page the customer opened. gown_slug is Gown.slug
+    # (reservation.html's buildSubmitItems sends it.slug straight through). Looked up
+    # WITHOUT the Out-of-Stock filter so a withdrawn real gown (must reject) is told
+    # apart from "no such gown at all" (genuine placeholder -> harmless gown=None).
+    preferred = None
+    slug_is_out_of_stock = False
+    if gown_slug:
+        slug_gown = Gown.objects.filter(slug=gown_slug).first()
+        if slug_gown is not None:
+            if slug_gown.status == Gown.Status.OUT_OF_STOCK:
+                slug_is_out_of_stock = True
+            else:
+                preferred = slug_gown
+
+    # Interchangeable siblings = same product name. Narrowed to the preferred unit's
+    # category when we know it, so two gowns that happen to share a name across
+    # categories are never swapped for one another. Fetched WITHOUT excluding
+    # Out-of-Stock so an all-withdrawn name can be reported as such; the OOS rows are
+    # dropped from the bookable pool immediately below.
+    name_qs = Gown.objects.filter(name__iexact=gown_name)
+    if preferred is not None:
+        name_qs = name_qs.filter(category=preferred.category)
+    name_matches = list(name_qs)
+    name_all_out_of_stock = bool(name_matches) and all(
+        g.status == Gown.Status.OUT_OF_STOCK for g in name_matches
+    )
+
+    candidate_ids = {g.id for g in name_matches if g.status != Gown.Status.OUT_OF_STOCK}
+    if preferred is not None:
+        # The unit they actually chose is always in its own pool, even if staff
+        # renamed it after it went into the customer's bag.
+        candidate_ids.add(preferred.id)
+
+    if not candidate_ids:
+        # Nothing bookable under this slug/name -- two very different reasons:
+        if slug_is_out_of_stock or name_all_out_of_stock:
+            # A real gown, deliberately withdrawn. Caller must reject, NOT book gown=None.
+            return (_UNIT_OUT_OF_STOCK, None)
+        # No real inventory under this name at all -- the placeholder catalog
+        # (_WEDDING_PRODUCTS et al). Same harmless gown=None as before this fix.
+        return (_UNIT_NO_INVENTORY, None)
+
+    # Lock the pool. Ordered by id so concurrent transactions always grab the same
+    # rows in the same order and cannot deadlock against each other.
+    candidates = list(
+        Gown.objects.filter(id__in=candidate_ids)
+        .select_for_update()
+        .order_by("id")
+    )
+    if not candidates:
+        return (_UNIT_NO_INVENTORY, None)
+
+    # Inclusive overlap on both ends: a booking 10th-12th collides with a request
+    # 12th-14th, matching _blocked_dates_for_category's day-by-day inclusive occupy().
+    busy = set(already_taken)
+    busy.update(
+        ReservationItem.objects.filter(
+            gown_id__in=candidate_ids,
+            rental_date__lte=return_date,
+            return_date__gte=rental_date,
+        )
+        .exclude(stage=ReservationItem.Stage.RETURNED)
+        .exclude(
+            reservation__status__in=[
+                Reservation.Status.REJECTED,
+                Reservation.Status.CANCELLED,
+            ]
+        )
+        .values_list("gown_id", flat=True)
+    )
+    busy.update(
+        GownUnavailability.objects.filter(
+            gown_id__in=candidate_ids,
+            start_date__lte=return_date,
+            end_date__gte=rental_date,
+        ).values_list("gown_id", flat=True)
+    )
+
+    free = [g for g in candidates if g.id not in busy]
+    if not free:
+        return (_UNIT_UNAVAILABLE, None)
+
+    # 1st choice: the exact unit they browsed. 2nd: a free sibling in their size.
+    # 3rd: the lowest-id free sibling (stable, so repeated runs are reproducible).
+    if preferred is not None:
+        for gown in free:
+            if gown.id == preferred.id:
+                return (_UNIT_ASSIGNED, gown)
+
+    wanted_size = _normalize_size(size)
+    if wanted_size:
+        for gown in free:
+            if gown.size == wanted_size:
+                return (_UNIT_ASSIGNED, gown)
+
+    return (_UNIT_ASSIGNED, free[0])
+
+
 def product_detail(request, collection: str, slug: str):
     col = collection.strip().lower()
     if col not in _VALID_COLLECTIONS:
         col = "wedding"
+    collection_url = reverse("gowns:" + _COLLECTION_URL_NAME[col])
 
     # A real gown, if this slug belongs to one, wins over the placeholder catalog --
     # slugs are auto-generated unique per gown (Gown.save()) and never collide with the
-    # 8 fixed placeholder slugs, so there's no ambiguity. Out-of-Stock units are excluded,
-    # matching them already being excluded from availability capacity.
-    real_gown = Gown.objects.filter(slug=slug).exclude(status=Gown.Status.OUT_OF_STOCK).first()
+    # 8 fixed placeholder slugs. Looked up WITHOUT the Out-of-Stock filter: a withdrawn
+    # gown's URL (bookmark / back button / stale link) must render an explicit
+    # "unavailable" page, never fall through to the placeholder catalog and become a
+    # bookable ₱0 "Available Now" phantom.
+    real_gown = Gown.objects.filter(slug=slug).first()
 
-    if real_gown:
-        blocked_dates = _blocked_dates_for_category(real_gown.category)
+    if real_gown is not None:
+        is_out_of_stock = real_gown.status == Gown.Status.OUT_OF_STOCK
+        blocked_dates = [] if is_out_of_stock else _blocked_dates_for_category(real_gown.category)
         product = {
             "title": real_gown.name,
             "price": f"₱{real_gown.rental_price:,.0f}",
             "image": real_gown.photo_url or _FALLBACK_IMG,
-            "availability": "Limited Availability" if blocked_dates else "Available Now",
+            "availability": (
+                "Currently Unavailable"
+                if is_out_of_stock
+                else ("Limited Availability" if blocked_dates else "Available Now")
+            ),
             "collection": real_gown.category,
+            "unavailable": is_out_of_stock,
         }
     else:
         base = dict(_WEDDING_PRODUCTS[slug]) if slug in _WEDDING_PRODUCTS else None
+        if base is None:
+            # Not a real gown and not one of the 8 fixed placeholder slugs -- not a
+            # real product. 404 rather than fabricate a ₱0 "Available Now" page.
+            raise Http404("No such product.")
 
         # Availability is computed per CATEGORY, not per catalog slug: a real Gown row has
         # a category but no link to the placeholder catalog's per-product slugs, so every
@@ -381,19 +551,10 @@ def product_detail(request, collection: str, slug: str):
         blocked_dates = _blocked_dates_for_category(_label_for(col))
 
         title, lbl = _title_and_label(col, slug)
-        if not base:
-            product = {
-                "title": slug.replace("-", " ").title(),
-                "price": "₱0",
-                "image": _FALLBACK_IMG,
-                "availability": "Available Now",
-                "collection": lbl,
-            }
-        else:
-            base["title"] = title
-            base["collection"] = lbl
-            base["availability"] = "Limited Availability" if blocked_dates else "Available Now"
-            product = base
+        base["title"] = title
+        base["collection"] = lbl
+        base["availability"] = "Limited Availability" if blocked_dates else "Available Now"
+        product = base
 
     return render(
         request,
@@ -402,6 +563,7 @@ def product_detail(request, collection: str, slug: str):
             "product": product,
             "slug": slug,
             "collection": col,
+            "collection_url": collection_url,
             "blocked_dates_json": json.dumps(blocked_dates),
         },
     )
@@ -564,9 +726,71 @@ def reservation_submit(request):
     error = _validate_proof_file(proof_file)
     if error:
         return JsonResponse({"success": False, "error": error}, status=400)
-    payment_proof_url = _save_proof_file(proof_file)
 
     with transaction.atomic():
+        # Availability pass FIRST -- every item is resolved to a specific free unit
+        # (see _find_available_unit) before anything is written and before the
+        # proof-of-payment file is uploaded, so a rejection leaves no half-made
+        # reservation and no orphaned file on storage. _find_available_unit's row
+        # locks are held by this transaction until commit, which is what makes
+        # check-then-assign safe against two customers submitting for the same
+        # last unit at the same moment.
+        #
+        # Resolved in a stable name order (not cart order) so two multi-item carts
+        # sharing gowns can never grab them in opposite orders and deadlock. The
+        # dicts are mutated in place, so the creation loop below still runs in the
+        # customer's original cart order.
+        assigned_unit_ids = set()
+        for item in sorted(parsed_items, key=lambda i: i["gown_name"].casefold()):
+            outcome, unit = _find_available_unit(
+                item["gown_name"],
+                item["rental_date"],
+                item["return_date"],
+                gown_slug=item["gown_slug"],
+                size=item["size"],
+                already_taken=assigned_unit_ids,
+            )
+            if outcome == _UNIT_UNAVAILABLE:
+                # Nothing has been written yet, so returning from inside the block
+                # just commits an empty transaction and releases the row locks. The
+                # checkout hold is deliberately NOT cleared -- the customer still has
+                # a bag and can retry with different dates.
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "error": (
+                            f"{item['gown_name']} is no longer available for "
+                            f"{item['rental_date']:%b %d, %Y} - {item['return_date']:%b %d, %Y}. "
+                            "Please choose different dates or another gown."
+                        ),
+                    },
+                    status=400,
+                )
+            if outcome == _UNIT_OUT_OF_STOCK:
+                # The slug/name is a real gown that staff have pulled from the
+                # collection (status Out-of-Stock). Unlike a genuine placeholder
+                # (_UNIT_NO_INVENTORY -> booked with gown=None), this must NOT go
+                # through. Nothing is written yet; returning here commits an empty
+                # transaction and releases the locks. The checkout hold is left alone.
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "error": (
+                            f"{item['gown_name']} is no longer available to rent -- it has "
+                            "been removed from the collection. Please take it out of your "
+                            "bag or choose another gown."
+                        ),
+                    },
+                    status=400,
+                )
+            # None when this name has no real inventory (placeholder catalog) --
+            # unchanged behaviour: the item is still booked, just without a gown FK.
+            item["matched_gown"] = unit
+            if unit is not None:
+                assigned_unit_ids.add(unit.id)
+
+        payment_proof_url = _save_proof_file(proof_file)
+
         reservation_obj = Reservation.objects.create(
             customer=request.user,
             customer_name=customer_name[:120],
@@ -581,10 +805,9 @@ def reservation_submit(request):
             total_amount=total_amount,
         )
         for item in parsed_items:
-            matched_gown = Gown.objects.filter(name__iexact=item["gown_name"]).first()
             ReservationItem.objects.create(
                 reservation=reservation_obj,
-                gown=matched_gown,
+                gown=item["matched_gown"],
                 gown_name=item["gown_name"][:150],
                 gown_slug=item["gown_slug"],
                 size=item["size"],
@@ -686,7 +909,7 @@ def reservation_item_cancel(request, item_id):
 
     # Mirror/reverse reservation_approve_view's Available->Reserved flip
     # (arabela_admin/views.py): only revert gowns still sitting at Reserved, so we
-    # don't clobber In-Cleaning/Out-of-Stock that staff set for unrelated reasons.
+    # don't clobber Out-of-Stock that staff set for unrelated reasons.
     for sibling in reservation.items.select_related('gown').all():
         if sibling.gown_id and sibling.gown.status == Gown.Status.RESERVED:
             sibling.gown.status = Gown.Status.AVAILABLE

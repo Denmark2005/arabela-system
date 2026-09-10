@@ -2,13 +2,14 @@ import os
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from functools import wraps
 
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout, get_user_model
 from django.core.cache import cache
 from django.core.files.storage import default_storage
+from django.db import DataError, IntegrityError, transaction
 from django.db.models import Q, Count, Prefetch
 from django.db.models.functions import ExtractMonth
 from django.shortcuts import redirect, render
@@ -125,7 +126,7 @@ def dashboard_view(request):
             "gown_total": gown_total,
             "gown_available": gowns.filter(status=Gown.Status.AVAILABLE).count(),
             "gown_needs_attention": gowns.filter(
-                status__in=[Gown.Status.IN_CLEANING, Gown.Status.OUT_OF_STOCK]
+                status=Gown.Status.OUT_OF_STOCK
             ).count(),
             # Drives the empty-state call to action: with no gowns the shop cannot take
             # a real booking at all, so it is the single most important thing to surface.
@@ -511,7 +512,7 @@ def gown_catalog_view(request):
             "available_count": gowns.filter(status=Gown.Status.AVAILABLE).count(),
             "reserved_count": gowns.filter(status=Gown.Status.RESERVED).count(),
             "needs_attention_count": gowns.filter(
-                status__in=[Gown.Status.IN_CLEANING, Gown.Status.OUT_OF_STOCK]
+                status=Gown.Status.OUT_OF_STOCK
             ).count(),
         },
     )
@@ -547,6 +548,31 @@ def gown_delete_view(request, gown_id):
         gown = Gown.objects.get(id=gown_id)
     except Gown.DoesNotExist:
         return JsonResponse({"error": "Gown not found"}, status=404)
+
+    # Same "still a live commitment" rule used in gowns.views._blocked_dates_for_category,
+    # _find_available_unit, and gowns.context_processors -- not Returned, and not on a
+    # Rejected/Cancelled reservation. Keeping this identical means the delete guard can
+    # never disagree with what the availability calendar already shows as booked.
+    blocking_item = (
+        gown.reservation_items
+        .exclude(stage=ReservationItem.Stage.RETURNED)
+        .exclude(reservation__status__in=[Reservation.Status.REJECTED, Reservation.Status.CANCELLED])
+        .select_related("reservation__customer__profile")
+        .first()
+    )
+    if blocking_item:
+        reservation = blocking_item.reservation
+        return JsonResponse(
+            {
+                "error": (
+                    f"{gown.gown_id} is still on an active reservation "
+                    f"({reservation.reference_code} - {reservation.display_customer_name}). "
+                    "Mark it Returned, or reject/cancel the reservation, before deleting."
+                )
+            },
+            status=400,
+        )
+
     gown.delete()
     return JsonResponse({"success": True})
 
@@ -585,6 +611,60 @@ def _save_gown_photo(photo_file) -> str:
     return default_storage.url(saved_path)
 
 
+def _validate_gown_fields(name, category, color_name, color_code, size, design_variant=""):
+    """Shared field checks for Add Gown and Edit Gown, so a rule added to one can never
+    silently miss the other. Returns an error message, or '' when everything is valid.
+
+    Every length check here mirrors the model's max_length, so an over-long value is
+    turned into a sentence staff can act on instead of a raw database DataError. The
+    catalog's own dropdowns can't produce over-long values, but the "Other" free-text
+    fallbacks (and any caller that skips the page's JS) can."""
+    if not name:
+        return "Please enter a gown name."
+    if len(name) > 150:
+        return "Gown name must be 150 characters or fewer."
+    if category not in Gown.Category.values:
+        return "Please choose a valid category."
+    if not color_name:
+        return "Please enter a color name."
+    if not color_code:
+        return "Please enter a color code."
+    if len(color_code) > 2:
+        return "Color code must be 1-2 letters (e.g. WH)."
+    if len(color_name) > 40:
+        return "Color name must be 40 characters or fewer."
+    if size not in Gown.Size.values:
+        return "Please choose a valid size."
+    if len(design_variant) > 60:
+        return "Design variant must be 60 characters or fewer."
+    return ""
+
+
+def _parse_rental_price(raw):
+    """Returns (price, error). error is '' only when raw is a finite amount that fits
+    Gown.rental_price (max_digits=8, decimal_places=2): 0 < price <= 999999.99, quantized
+    to 2 decimal places. Every other input yields a staff-facing sentence, never a
+    downstream database DataError."""
+    price_raw = str(raw or "").replace(",", "").replace("₱", "").strip()
+    try:
+        price = Decimal(price_raw)
+    except (InvalidOperation, ValueError):
+        return None, "Please enter a valid rental price."
+    # is_finite() must be tested first: Decimal('NaN') <= 0 raises InvalidOperation, so
+    # this short-circuit is what keeps NaN / sNaN / Infinity out of the comparison.
+    if not price.is_finite() or price <= 0:
+        return None, "Please enter a valid rental price."
+    try:
+        price = price.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    except InvalidOperation:
+        return None, "That rental price looks too high. Please check the amount."
+    if price <= 0:  # e.g. "0.004" quantizes down to 0.00
+        return None, "Please enter a valid rental price."
+    if price > Decimal("999999.99"):
+        return None, "That rental price looks too high. Please check the amount."
+    return price, ""
+
+
 @require_http_methods(["POST"])
 def gown_create_view(request):
     if not _is_admin_staff(request):
@@ -597,51 +677,87 @@ def gown_create_view(request):
     size = request.POST.get("size")
     design_variant = (request.POST.get("design_variant") or "").strip()
     status = request.POST.get("status") or Gown.Status.AVAILABLE
+    # The Add form sends these too -- read them so they're not silently dropped
+    # (before this, condition/notes could only be set later via Edit Gown).
+    condition = request.POST.get("condition") or Gown.Condition.GOOD
+    if condition not in Gown.Condition.values:
+        condition = Gown.Condition.GOOD
+    notes = (request.POST.get("notes") or "").strip()
 
-    # One specific message per field instead of a single generic OR-check, so staff
-    # can tell exactly what's wrong instead of guessing across five possibilities.
-    if not name:
-        return JsonResponse({"error": "Please enter a gown name."}, status=400)
-    if category not in Gown.Category.values:
-        return JsonResponse({"error": "Please choose a valid category."}, status=400)
-    if not color_name:
-        return JsonResponse({"error": "Please enter a color name."}, status=400)
-    if not color_code:
-        return JsonResponse({"error": "Please enter a color code."}, status=400)
-    if size not in Gown.Size.values:
-        return JsonResponse({"error": "Please choose a valid size."}, status=400)
+    error = _validate_gown_fields(name, category, color_name, color_code, size, design_variant)
+    if error:
+        return JsonResponse({"error": error}, status=400)
 
     if status not in Gown.Status.values:
         status = Gown.Status.AVAILABLE
 
-    price_raw = str(request.POST.get("rental_price", "")).replace(",", "").replace("₱", "").strip()
-    try:
-        rental_price = Decimal(price_raw)
-        if rental_price <= 0:
-            raise InvalidOperation
-    except (InvalidOperation, ValueError):
-        return JsonResponse({"error": "Please enter a valid rental price."}, status=400)
+    rental_price, price_error = _parse_rental_price(request.POST.get("rental_price"))
+    if price_error:
+        return JsonResponse({"error": price_error}, status=400)
 
     photo_file = request.FILES.get("photo")
     photo_error = _validate_gown_photo(photo_file)
     if photo_error:
         return JsonResponse({"error": photo_error}, status=400)
 
-    tracking_number = Gown.next_tracking_number(category, color_code)
-    gown_id = f"{category}-{color_code}-{tracking_number:03d}-A"
+    # Photo first: nothing is in the DB yet, so a storage failure here is a clean
+    # "try again" with zero cleanup rather than a half-created gown.
+    photo_url = ""
+    if photo_file:
+        try:
+            photo_url = _save_gown_photo(photo_file)
+        except Exception:
+            return JsonResponse(
+                {"error": "The gown photo couldn't be uploaded just now. Please try again."},
+                status=502,
+            )
 
-    gown = Gown.objects.create(
-        gown_id=gown_id,
-        name=name,
-        category=category,
-        color_name=color_name,
-        color_code=color_code,
-        size=size,
-        design_variant=design_variant,
-        rental_price=rental_price,
-        status=status,
-        photo_url=_save_gown_photo(photo_file) if photo_file else "",
-    )
+    # gown_id (category+color+sequence) and slug (from name) each carry a UNIQUE
+    # constraint, and next_tracking_number / Gown._generate_unique_slug are both
+    # check-then-insert with no lock -- two staff adding at the same moment can compute
+    # the same value. Retry on the resulting IntegrityError: each attempt re-reads, so
+    # it sees whatever the other request just committed and steps past it. The
+    # per-attempt transaction.atomic() keeps the connection usable after the failed
+    # INSERT. The + _attempt offset guarantees the sequence still advances even in the
+    # (manual-DB-tamper only) case where next_tracking_number's legacy-id fallback keeps
+    # handing back a number that is already taken.
+    gown = None
+    for _attempt in range(6):
+        tracking_number = Gown.next_tracking_number(category, color_code) + _attempt
+        gown_id = f"{category}-{color_code}-{tracking_number:03d}"
+        try:
+            with transaction.atomic():
+                gown = Gown.objects.create(
+                    gown_id=gown_id,
+                    name=name,
+                    category=category,
+                    color_name=color_name,
+                    color_code=color_code,
+                    size=size,
+                    design_variant=design_variant,
+                    rental_price=rental_price,
+                    condition=condition,
+                    notes=notes,
+                    status=status,
+                    photo_url=photo_url,
+                )
+        except IntegrityError:
+            gown = None
+            continue
+        except DataError:
+            return JsonResponse(
+                {"error": "Some of those values are out of range. Please shorten the "
+                          "text fields or lower the price."},
+                status=400,
+            )
+        break
+
+    if gown is None:
+        return JsonResponse(
+            {"error": "Couldn't save that gown just now. Please try again."},
+            status=409,
+        )
+
     return JsonResponse({
         "success": True,
         "gown": {
@@ -653,6 +769,91 @@ def gown_create_view(request):
             "color_name": gown.color_name,
             "size": gown.size,
             "rental_price": str(gown.rental_price),
+            "status": gown.status,
+            "photo_url": gown.photo_url,
+        },
+    })
+
+
+@require_http_methods(["POST"])
+def gown_update_view(request, gown_id):
+    """Edits an existing gown's descriptive/business details.
+
+    Deliberately leaves 2 things untouched no matter what's submitted:
+      * gown_id -- a once-assigned tag, not something that should shuffle every time
+        a typo gets fixed elsewhere on the row.
+      * slug -- the stable, permanent identity a customer's product link (and the
+        booking-matching fix in gowns.views._find_available_unit) depends on. Letting
+        this regenerate on a name edit would silently break bookmarked product links.
+    Status and photo already have their own dedicated actions (gown_status_update_view,
+    gown_photo_update_view) and are intentionally not duplicated here."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    try:
+        gown = Gown.objects.get(id=gown_id)
+    except Gown.DoesNotExist:
+        return JsonResponse({"error": "Gown not found"}, status=404)
+
+    name = (request.POST.get("name") or "").strip()
+    category = request.POST.get("category")
+    color_name = (request.POST.get("color_name") or "").strip()
+    color_code = (request.POST.get("color_code") or "").strip().upper()
+    size = request.POST.get("size")
+    design_variant = (request.POST.get("design_variant") or "").strip()
+    condition = request.POST.get("condition") or gown.condition
+    notes = (request.POST.get("notes") or "").strip()
+
+    error = _validate_gown_fields(name, category, color_name, color_code, size, design_variant)
+    if error:
+        return JsonResponse({"error": error}, status=400)
+
+    rental_price, price_error = _parse_rental_price(request.POST.get("rental_price"))
+    if price_error:
+        return JsonResponse({"error": price_error}, status=400)
+
+    if condition not in Gown.Condition.values:
+        condition = gown.condition
+
+    gown.name = name
+    gown.category = category
+    gown.color_name = color_name
+    gown.color_code = color_code
+    gown.size = size
+    gown.design_variant = design_variant
+    gown.rental_price = rental_price
+    gown.condition = condition
+    gown.notes = notes
+    # _validate_gown_fields + _parse_rental_price already bound every field to its
+    # column, so DataError here should be unreachable -- this is a backstop that keeps
+    # even a future unguarded field from turning into a raw 500 for staff.
+    try:
+        with transaction.atomic():
+            gown.save(update_fields=[
+                "name", "category", "color_name", "color_code", "size",
+                "design_variant", "rental_price", "condition", "notes", "updated_at",
+            ])
+    except DataError:
+        return JsonResponse(
+            {"error": "Some of those values are out of range. Please shorten the "
+                      "text fields or lower the price."},
+            status=400,
+        )
+
+    return JsonResponse({
+        "success": True,
+        "gown": {
+            "id": gown.id,
+            "gown_id": gown.gown_id,
+            "slug": gown.slug,
+            "name": gown.name,
+            "category": gown.category,
+            "color_name": gown.color_name,
+            "color_code": gown.color_code,
+            "size": gown.size,
+            "design_variant": gown.design_variant,
+            "rental_price": str(gown.rental_price),
+            "condition": gown.condition,
+            "notes": gown.notes,
             "status": gown.status,
             "photo_url": gown.photo_url,
         },
@@ -712,6 +913,11 @@ def gown_block_create_view(request, gown_id):
         return JsonResponse({"error": "Please choose both a start and an end date."}, status=400)
     if end_date < start_date:
         return JsonResponse({"error": "The end date can't be before the start date."}, status=400)
+    # The template sets min= on the date inputs, but that's client-side only -- enforce
+    # it here too so a block can't be created entirely in the past (it would do nothing
+    # and just clutter the list).
+    if end_date < timezone.localdate():
+        return JsonResponse({"error": "The end date is already in the past."}, status=400)
 
     reason = data.get("reason")
     if reason not in GownUnavailability.Reason.values:

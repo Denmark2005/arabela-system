@@ -41,6 +41,10 @@
                     <p class="text-[0.9rem] font-body font-medium text-secondary">{{ item.price_display }}</p>
                 </div>
             </a>
+            {% empty %}
+            <p class="col-span-2 lg:col-span-4 py-16 text-center font-label text-[0.7rem] tracking-widest uppercase text-secondary/60">
+                No gowns available in this collection right now. Please check back soon.
+            </p>
             {% endfor %}
         </div>
     </section>
