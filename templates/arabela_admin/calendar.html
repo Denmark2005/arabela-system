@@ -146,13 +146,14 @@
     :class="{'dark bg-gray-900': darkMode === true}"
   >
     <!-- ===== Preloader Start ===== -->
+    <script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('admin-dark-boot');}catch(e){}</script>
     <div
   x-show="loaded"
   x-init="window.addEventListener('DOMContentLoaded', () => {setTimeout(() => loaded = false, 500)})"
-  class="fixed left-0 top-0 z-999999 flex h-screen w-screen items-center justify-center bg-white dark:bg-black"
+  class="admin-preloader fixed left-0 top-0 z-999999 flex h-screen w-screen items-center justify-center"
 >
   <div
-    class="h-16 w-16 animate-spin rounded-full border-4 border-solid border-black border-t-transparent" style="border-color: #000 !important; border-top-color: transparent !important;"
+    class="admin-preloader-spinner h-16 w-16 animate-spin rounded-full border-4 border-solid"
   ></div>
 </div>
 
@@ -1432,19 +1433,19 @@
                     <div class="booking-date-grid">
                       <div>
                         <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Pick-up Date</label>
-                        <input id="bookingModalRentalDate" type="date" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" onclick="this.showPicker()" />
+                        <input id="bookingModalRentalDate" type="date" class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" onclick="this.showPicker()" />
                       </div>
                       <div>
                         <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Event Date</label>
-                        <input id="bookingModalEventDate" type="date" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" onclick="this.showPicker()" />
+                        <input id="bookingModalEventDate" type="date" class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" onclick="this.showPicker()" />
                       </div>
                       <div>
                         <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Return Date</label>
-                        <input id="bookingModalReturnDate" type="date" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" onclick="this.showPicker()" />
+                        <input id="bookingModalReturnDate" type="date" class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" onclick="this.showPicker()" />
                       </div>
                       <div>
                         <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Overdue Date</label>
-                        <input id="bookingModalOverdueDate" type="date" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" onclick="this.showPicker()" />
+                        <input id="bookingModalOverdueDate" type="date" class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" onclick="this.showPicker()" />
                       </div>
                     </div>
                     <p class="text-xs text-gray-500 dark:text-gray-400">Pick-up = pick-up date to the day before the event · Return date shows automatically once Reserved is picked · Overdue = the overdue date.</p>
@@ -1487,6 +1488,7 @@
   <script defer src="{% static 'arabela_admin/bundle.js' %}?v={{ admin_asset_version }}"></script>
   <script defer src="{% static 'arabela_admin/global-search.js' %}"></script>
 
+{% include "arabela_admin/partials/dialog.html" %}
 </body>
 </html>
 

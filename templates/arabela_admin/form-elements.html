@@ -21,13 +21,14 @@
     :class="{'dark bg-gray-900': darkMode === true}"
   >
     <!-- ===== Preloader Start ===== -->
+    <script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('admin-dark-boot');}catch(e){}</script>
     <div
   x-show="loaded"
   x-init="window.addEventListener('DOMContentLoaded', () => {setTimeout(() => loaded = false, 500)})"
-  class="fixed left-0 top-0 z-999999 flex h-screen w-screen items-center justify-center bg-white dark:bg-black"
+  class="admin-preloader fixed left-0 top-0 z-999999 flex h-screen w-screen items-center justify-center"
 >
   <div
-    class="h-16 w-16 animate-spin rounded-full border-4 border-solid border-black border-t-transparent" style="border-color: #000 !important; border-top-color: transparent !important;"
+    class="admin-preloader-spinner h-16 w-16 animate-spin rounded-full border-4 border-solid"
   ></div>
 </div>
 

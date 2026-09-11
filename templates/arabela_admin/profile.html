@@ -225,12 +225,12 @@
           if (data.success) {
             this.isProfileInfoModal = false;
           } else {
-            alert('Error: ' + (data.error || 'Failed to save'));
+            adminAlert({ title: 'Could not save', message: data.error || 'Failed to save', danger: true });
           }
         })
         .catch(error => {
           console.error('Error:', error);
-          alert('Error saving profile');
+          adminAlert({ title: 'Could not save', message: 'Error saving profile', danger: true });
         });
       },
       getCsrfToken() {
@@ -269,12 +269,12 @@
           if (data.success) {
             this.isProfileAddressModal = false;
           } else {
-            alert('Error: ' + (data.error || 'Failed to save'));
+            adminAlert({ title: 'Could not save', message: data.error || 'Failed to save', danger: true });
           }
         })
         .catch(error => {
           console.error('Error:', error);
-          alert('Error saving address');
+          adminAlert({ title: 'Could not save', message: 'Error saving address', danger: true });
         });
       }
     }"
@@ -284,13 +284,14 @@
     :class="{'dark bg-gray-900': darkMode === true}"
   >
     <!-- ===== Preloader Start ===== -->
+    <script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('admin-dark-boot');}catch(e){}</script>
     <div
   x-show="loaded"
   x-init="window.addEventListener('DOMContentLoaded', () => {setTimeout(() => loaded = false, 500)})"
-  class="fixed left-0 top-0 z-999999 flex h-screen w-screen items-center justify-center bg-white dark:bg-black"
+  class="admin-preloader fixed left-0 top-0 z-999999 flex h-screen w-screen items-center justify-center"
 >
   <div
-    class="h-16 w-16 animate-spin rounded-full border-4 border-solid border-black border-t-transparent" style="border-color: #000 !important; border-top-color: transparent !important;"
+    class="admin-preloader-spinner h-16 w-16 animate-spin rounded-full border-4 border-solid"
   ></div>
 </div>
 
@@ -2294,7 +2295,10 @@
 </div>
 <!-- END MODAL -->
   <script defer src="{% static 'arabela_admin/bundle.js' %}?v={{ admin_asset_version }}"></script>
-  <script defer src="{% static 'arabela_admin/global-search.js' %}"></script></body>
+  <script defer src="{% static 'arabela_admin/global-search.js' %}"></script>
+
+{% include "arabela_admin/partials/dialog.html" %}
+</body>
 </html>
 
 

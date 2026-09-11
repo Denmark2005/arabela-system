@@ -475,7 +475,21 @@ def pending_approval_view(request):
 @_require_admin_staff
 def gown_catalog_view(request):
     today = timezone.localdate()
-    gowns = Gown.objects.all()
+    gowns = list(Gown.objects.all())  # one query; iterated by the row loop AND below
+
+    # Minimal per-gown data the catalog's Alpine layer needs for the client-side
+    # "no gowns match your filters" count and the select-all-visible checkbox. Kept
+    # separate from the rendered rows, but built from the same `gowns` list so the
+    # two can never drift. `hay` mirrors the row's own search haystack.
+    gowns_min = [
+        {
+            "id": g.id,
+            "category": g.category,
+            "status": g.status,
+            "hay": f"{g.gown_id} {g.name} {g.category} {g.color_name} {g.size}".lower(),
+        }
+        for g in gowns
+    ]
 
     # Keyed by gown pk so the catalog's Alpine modal can look up whichever gown the
     # staffer opened without re-fetching. Expired blocks are left out -- a finished
@@ -503,17 +517,18 @@ def gown_catalog_view(request):
         {
             "page": "gown",
             "gowns": gowns,
+            "gowns_min": gowns_min,
             "gown_blocks": dict(blocks_by_gown),
             "block_reasons": GownUnavailability.Reason.values,
             "today_iso": today.isoformat(),
             "blocked_today_count": sum(
                 1 for rows in blocks_by_gown.values() if any(r["active"] for r in rows)
             ),
-            "available_count": gowns.filter(status=Gown.Status.AVAILABLE).count(),
-            "reserved_count": gowns.filter(status=Gown.Status.RESERVED).count(),
-            "needs_attention_count": gowns.filter(
-                status=Gown.Status.OUT_OF_STOCK
-            ).count(),
+            "available_count": sum(1 for g in gowns if g.status == Gown.Status.AVAILABLE),
+            "reserved_count": sum(1 for g in gowns if g.status == Gown.Status.RESERVED),
+            "needs_attention_count": sum(
+                1 for g in gowns if g.status == Gown.Status.OUT_OF_STOCK
+            ),
         },
     )
 
@@ -540,6 +555,23 @@ def gown_status_update_view(request, gown_id):
     return JsonResponse({"success": True, "status": gown.status})
 
 
+def _gown_blocking_reservation_item(gown):
+    """The ReservationItem (if any) that makes this gown un-deletable -- a live
+    commitment: not Returned, and not on a Rejected/Cancelled reservation. Same rule
+    as gowns.views._blocked_dates_for_category / _find_available_unit / the
+    availability context processor, so a delete guard built on this can never
+    disagree with what the availability calendar already shows as booked. Returns
+    the item (reservation + customer preloaded for the message) or None. Shared by
+    the single delete and the bulk delete so the two can't drift."""
+    return (
+        gown.reservation_items
+        .exclude(stage=ReservationItem.Stage.RETURNED)
+        .exclude(reservation__status__in=[Reservation.Status.REJECTED, Reservation.Status.CANCELLED])
+        .select_related("reservation__customer__profile")
+        .first()
+    )
+
+
 @require_http_methods(["POST"])
 def gown_delete_view(request, gown_id):
     if not _is_admin_staff(request):
@@ -549,17 +581,7 @@ def gown_delete_view(request, gown_id):
     except Gown.DoesNotExist:
         return JsonResponse({"error": "Gown not found"}, status=404)
 
-    # Same "still a live commitment" rule used in gowns.views._blocked_dates_for_category,
-    # _find_available_unit, and gowns.context_processors -- not Returned, and not on a
-    # Rejected/Cancelled reservation. Keeping this identical means the delete guard can
-    # never disagree with what the availability calendar already shows as booked.
-    blocking_item = (
-        gown.reservation_items
-        .exclude(stage=ReservationItem.Stage.RETURNED)
-        .exclude(reservation__status__in=[Reservation.Status.REJECTED, Reservation.Status.CANCELLED])
-        .select_related("reservation__customer__profile")
-        .first()
-    )
+    blocking_item = _gown_blocking_reservation_item(gown)
     if blocking_item:
         reservation = blocking_item.reservation
         return JsonResponse(
@@ -575,6 +597,88 @@ def gown_delete_view(request, gown_id):
 
     gown.delete()
     return JsonResponse({"success": True})
+
+
+_BULK_MAX_IDS = 200
+
+
+@require_http_methods(["POST"])
+def gown_bulk_action_view(request):
+    """One request, many gowns -- the catalog's multi-select toolbar. action='status'
+    flips every selected gown's status; action='delete' removes them, skipping (not
+    failing) any that are still on a live reservation and reporting which. Kept a
+    single endpoint rather than a loop of per-gown fetches from the browser so a
+    half-finished batch can't happen from a dropped connection mid-loop."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid request."}, status=400)
+
+    action = data.get("action")
+    if action not in ("status", "delete"):
+        return JsonResponse({"error": "Unknown bulk action."}, status=400)
+
+    raw_ids = data.get("ids")
+    if not isinstance(raw_ids, list) or not raw_ids:
+        return JsonResponse({"error": "Please select at least one gown."}, status=400)
+    try:
+        ids = {int(x) for x in raw_ids}
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "Invalid selection."}, status=400)
+    if len(ids) > _BULK_MAX_IDS:
+        return JsonResponse(
+            {"error": f"Please select {_BULK_MAX_IDS} gowns or fewer at a time."},
+            status=400,
+        )
+
+    if action == "status":
+        new_status = data.get("status")
+        if new_status not in Gown.Status.values:
+            return JsonResponse({"error": "Invalid status."}, status=400)
+        # QuerySet.update() bypasses Model.save(), so it does NOT auto-bump the
+        # auto_now `updated_at` -- set it here, or the admin notification feed
+        # (which orders Out-of-Stock gowns by -updated_at) would show stale order.
+        with transaction.atomic():
+            updated = Gown.objects.filter(id__in=ids).update(
+                status=new_status, updated_at=timezone.now()
+            )
+        noun = "gown" if updated == 1 else "gowns"
+        return JsonResponse({
+            "success": True,
+            "updated": updated,
+            "message": f"{updated} {noun} marked {new_status}.",
+        })
+
+    # action == "delete" -- best-effort, NOT one atomic block: deleting what can be
+    # deleted and reporting the rest is the whole point.
+    deleted = 0
+    skipped = []
+    for gown in Gown.objects.filter(id__in=ids):
+        blocking = _gown_blocking_reservation_item(gown)
+        if blocking:
+            skipped.append({
+                "gown_id": gown.gown_id,
+                "reference_code": blocking.reservation.reference_code,
+            })
+            continue
+        try:
+            gown.delete()
+            deleted += 1
+        except Exception:
+            skipped.append({"gown_id": gown.gown_id, "reference_code": None})
+
+    noun = "gown" if deleted == 1 else "gowns"
+    message = f"{deleted} {noun} deleted."
+    if skipped:
+        message += f" {len(skipped)} skipped (still on active reservations)."
+    return JsonResponse({
+        "success": True,
+        "deleted": deleted,
+        "skipped": skipped,
+        "message": message,
+    })
 
 
 # Same allow-list this project already uses for reservation payment-proof uploads
@@ -923,13 +1027,45 @@ def gown_block_create_view(request, gown_id):
     if reason not in GownUnavailability.Reason.values:
         reason = GownUnavailability.Reason.CLEANING
 
-    block = GownUnavailability.objects.create(
-        gown=gown,
-        start_date=start_date,
-        end_date=end_date,
-        reason=reason,
-        note=(data.get("note") or "").strip()[:200],
-    )
+    # Locking the gown row serializes two staff blocking the same gown at the same
+    # instant, so the overlap check just below can never be fooled by a race -- the
+    # second request waits for the first to commit, then sees its new block.
+    with transaction.atomic():
+        try:
+            Gown.objects.select_for_update().get(id=gown.id)
+        except Gown.DoesNotExist:
+            return JsonResponse({"error": "Gown not found"}, status=404)
+
+        # Same inclusive-overlap rule gowns.views._blocked_dates_for_category and
+        # _find_available_unit already use for GownUnavailability -- one active block
+        # per date range per gown, so this can never disagree with what those two
+        # already treat as occupied. Expired blocks (end_date in the past) are left
+        # out -- they're history, not a live conflict.
+        conflict = (
+            GownUnavailability.objects
+            .filter(gown=gown, end_date__gte=timezone.localdate())
+            .filter(start_date__lte=end_date, end_date__gte=start_date)
+            .first()
+        )
+        if conflict:
+            return JsonResponse(
+                {
+                    "error": (
+                        f"This overlaps an existing block: {conflict.start_date:%b %d, %Y} "
+                        f"– {conflict.end_date:%b %d, %Y} ({conflict.reason}). Release "
+                        "that block first, or choose dates that don't overlap."
+                    )
+                },
+                status=400,
+            )
+
+        block = GownUnavailability.objects.create(
+            gown=gown,
+            start_date=start_date,
+            end_date=end_date,
+            reason=reason,
+            note=(data.get("note") or "").strip()[:200],
+        )
     return JsonResponse({
         "success": True,
         "block": {
@@ -1109,7 +1245,33 @@ def reservation_item_reschedule_view(request, item_id):
 
 @_require_admin_staff
 def categories_view(request):
-    return render(request, "arabela_admin/categories.html", {"page": "categories"})
+    # One query, grouped by category. Out-of-Stock is excluded -- it's a withdrawn
+    # gown, so it shouldn't count as "in stock" -- matching how every other tally in
+    # this admin already treats it (gown_catalog_view's available_count etc.).
+    rows = (
+        Gown.objects.exclude(status=Gown.Status.OUT_OF_STOCK)
+        .values("category")
+        .annotate(n=Count("id"))
+    )
+    counts_by_category = {row["category"]: row["n"] for row in rows}
+    return render(
+        request,
+        "arabela_admin/categories.html",
+        {
+            "page": "categories",
+            "wedding_gown_count": counts_by_category.get(Gown.Category.WEDDING_GOWN, 0),
+            "ball_gown_count": counts_by_category.get(Gown.Category.BALL_GOWN, 0),
+            "sexy_gown_count": counts_by_category.get(Gown.Category.SEXY_GOWN, 0),
+            "ninang_gown_count": counts_by_category.get(Gown.Category.NINANG_GOWN, 0),
+            "suit_count": counts_by_category.get(Gown.Category.SUIT, 0),
+            "filipiniana_count": counts_by_category.get(Gown.Category.FILIPINIANA, 0),
+            "guest_gown_count": counts_by_category.get(Gown.Category.GUEST_GOWN, 0),
+            "flower_girl_count": counts_by_category.get(Gown.Category.FLOWER_GIRL, 0),
+            "belo_count": counts_by_category.get(Gown.Category.BELO, 0),
+            "thailand_gown_count": counts_by_category.get(Gown.Category.THAILAND_GOWN, 0),
+            "dresses_count": counts_by_category.get(Gown.Category.DRESSES, 0),
+        },
+    )
 
 
 @_require_admin_staff
@@ -1692,11 +1854,13 @@ def update_avatar_position_view(request):
 
 def admin_search_view(request):
     """Global header search (all admin pages): matches reservations by customer name
-    or reference code, and points each result at the list page an admin would actually
-    act on it from -- Pending Approval while awaiting review, Active Reservations once
-    approved, Payment Verification as the catch-all for everything else (it lists every
-    reservation regardless of status). Those target pages read the ?search= query string
-    back into their own row filter, so the click actually lands pre-filtered."""
+    or reference code, and matches gowns by gown ID, name, or category. Each result
+    points at the list page an admin would actually act on it from -- for reservations
+    that's Pending Approval while awaiting review, Active Reservations once approved,
+    Payment Verification as the catch-all for everything else (it lists every
+    reservation regardless of status); for gowns it's always Gown Catalog. Those target
+    pages read the ?search= query string back into their own row filter, so the click
+    actually lands pre-filtered (and, on Gown Catalog, highlighted)."""
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
 
@@ -1711,7 +1875,7 @@ def admin_search_view(request):
             | Q(customer__profile__display_name__icontains=query)
         )
         .select_related("customer__profile")
-        .order_by("-created_at")[:8]
+        .order_by("-created_at")[:5]
     )
 
     results = []
@@ -1725,9 +1889,32 @@ def admin_search_view(request):
         name = r.display_customer_name
         target_url = reverse(target_name) + "?" + urlencode({"search": name})
         results.append({
+            "type": "reservation",
             "customer_name": name,
             "reference_code": r.reference_code,
             "status": r.status,
+            "target_url": target_url,
+        })
+
+    # Gowns are matched the same way the catalog's own local search already matches them
+    # (gown_id/name/category, case-insensitive) -- landing there with ?search=<gown_id>
+    # reuses that existing filter + row highlight, no new page logic needed.
+    gown_matches = (
+        Gown.objects.filter(
+            Q(gown_id__icontains=query)
+            | Q(name__icontains=query)
+            | Q(category__icontains=query)
+        )
+        .order_by("gown_id")[:5]
+    )
+    for g in gown_matches:
+        target_url = reverse("arabela_admin:gown_catalog") + "?" + urlencode({"search": g.gown_id})
+        results.append({
+            "type": "gown",
+            "gown_id": g.gown_id,
+            "gown_name": g.name,
+            "category": g.category,
+            "status": g.status,
             "target_url": target_url,
         })
 

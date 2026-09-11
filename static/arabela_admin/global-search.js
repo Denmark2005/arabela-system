@@ -13,6 +13,11 @@
     Returned: "bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500",
     Rejected: "bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500",
     Cancelled: "bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500",
+    // Gown statuses -- same classes gown-catalog.html's own status badge already uses,
+    // no key collisions with the reservation statuses above.
+    Available: "bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500",
+    Reserved: "bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400",
+    "Out-of-Stock": "bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500",
   };
 
   function escapeHtml(value) {
@@ -25,26 +30,46 @@
     return STATUS_CLASSES[status] || "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400";
   }
 
+  // Small "kind" tag so a gown result can't be mistaken for a reservation at a glance --
+  // reservation rows render exactly as before (no tag), this is purely additive.
+  var GOWN_TAG =
+    '<span class="rounded-full bg-gray-100 px-2 py-1 font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400" style="font-size:10px;">Gown</span>';
+
+  function renderResult(r) {
+    if (r.type === "gown") {
+      return (
+        '<a href="' + escapeHtml(r.target_url) + '" ' +
+        'class="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]">' +
+        '<span class="flex min-w-0 flex-col">' +
+        '<span class="flex items-center gap-2">' +
+        '<span class="truncate font-medium text-gray-800 dark:text-white/90">' + escapeHtml(r.gown_name) + '</span>' +
+        GOWN_TAG +
+        '</span>' +
+        '<span class="text-xs text-gray-400 dark:text-gray-500">' + escapeHtml(r.gown_id) + ' · ' + escapeHtml(r.category) + '</span>' +
+        '</span>' +
+        '<span class="inline-flex shrink-0 rounded-full px-2 py-0.5 text-theme-xs font-medium ' + statusClass(r.status) + '">' + escapeHtml(r.status) + '</span>' +
+        '</a>'
+      );
+    }
+    return (
+      '<a href="' + escapeHtml(r.target_url) + '" ' +
+      'class="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]">' +
+      '<span class="flex min-w-0 flex-col">' +
+      '<span class="truncate font-medium text-gray-800 dark:text-white/90">' + escapeHtml(r.customer_name) + '</span>' +
+      '<span class="text-xs text-gray-400 dark:text-gray-500">' + escapeHtml(r.reference_code) + '</span>' +
+      '</span>' +
+      '<span class="inline-flex shrink-0 rounded-full px-2 py-0.5 text-theme-xs font-medium ' + statusClass(r.status) + '">' + escapeHtml(r.status) + '</span>' +
+      '</a>'
+    );
+  }
+
   function renderResults(container, results) {
     if (!results.length) {
       container.innerHTML =
-        '<p class="px-3 py-4 text-center text-sm text-gray-400 dark:text-gray-500">No matching reservations.</p>';
+        '<p class="px-3 py-4 text-center text-sm text-gray-400 dark:text-gray-500">No matching results.</p>';
       return;
     }
-    container.innerHTML = results
-      .map(function (r) {
-        return (
-          '<a href="' + escapeHtml(r.target_url) + '" ' +
-          'class="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]">' +
-          '<span class="flex min-w-0 flex-col">' +
-          '<span class="truncate font-medium text-gray-800 dark:text-white/90">' + escapeHtml(r.customer_name) + '</span>' +
-          '<span class="text-xs text-gray-400 dark:text-gray-500">' + escapeHtml(r.reference_code) + '</span>' +
-          '</span>' +
-          '<span class="inline-flex shrink-0 rounded-full px-2 py-0.5 text-theme-xs font-medium ' + statusClass(r.status) + '">' + escapeHtml(r.status) + '</span>' +
-          '</a>'
-        );
-      })
-      .join("");
+    container.innerHTML = results.map(renderResult).join("");
   }
 
   function initSearch(input) {
@@ -60,7 +85,7 @@
     wrap.appendChild(container);
 
     input.setAttribute("autocomplete", "off");
-    input.setAttribute("placeholder", "Search customer name or reference (e.g. Maria, RSV-2026-0001)...");
+    input.setAttribute("placeholder", "Search customer, reference, or gown (e.g. Maria, RSV-2026-0001, Belo-RD-001)...");
 
     var debounceTimer = null;
     var activeController = null;

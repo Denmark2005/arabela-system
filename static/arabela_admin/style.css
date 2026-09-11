@@ -4953,3 +4953,52 @@ span.flatpickr-weekday,
 .admin-avatar-drag-frame img {
   pointer-events: none;
 }
+
+/* Gown Catalog bulk-select checkboxes -- the precompiled build has no accent-*
+   utility and no h-4/w-4, so the box size + brand tint are set here. Namespaced,
+   so it can't retroactively restyle any other checkbox. */
+.admin-bulk-check {
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+  accent-color: #465fff;
+}
+
+/* Admin date fields: paired with onclick="this.showPicker()" so the whole field
+   opens the browser's native calendar (no typing). color-scheme makes that popup +
+   the picker icon follow the admin theme -- light by default, dark when .dark is on
+   <body>. accent-color paints the selected day in the admin brand blue in both modes. */
+.admin-date-input {
+  color-scheme: light;
+  accent-color: #465fff;
+}
+.dark .admin-date-input {
+  color-scheme: dark;
+}
+.admin-date-input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.6;
+}
+.admin-date-input:hover::-webkit-calendar-picker-indicator {
+  opacity: 1;
+}
+
+/* Full-screen preloader shown on every admin page before content paints. The
+   template's Tailwind `dark:bg-black` isn't in this sparse build and its inline
+   `border-color:#000 !important` spinner was invisible against a dark background --
+   both are pinned here, theme-aware. Brand blue reads clearly on the white (light)
+   AND the dark shell, so the spinner needs no per-mode colour.
+   `.admin-dark-boot` is set on <html> by a synchronous inline script BEFORE first
+   paint (Alpine only adds `.dark` to <body> a moment later, which is why dark-mode
+   users used to see a white flash while the preloader was up). */
+.admin-preloader {
+  background-color: #ffffff;
+}
+.dark .admin-preloader,
+.admin-dark-boot .admin-preloader {
+  background-color: #1a2231; /* --color-gray-dark: the admin dark shell */
+}
+.admin-preloader-spinner {
+  border-color: #465fff;
+  border-top-color: transparent;
+}

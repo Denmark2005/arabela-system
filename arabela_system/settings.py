@@ -233,6 +233,30 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # e.g. "https://yourapp.onrender.com" in that host's environment variables.
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()]
 
+# HTTPS hardening for staff/customer login sessions -- gated on DEBUG (the same signal
+# used above) so local development is untouched: there's no HTTPS to redirect to on
+# 127.0.0.1, and cookies must still work over plain http:// there. Once DEBUG=False (a
+# real deployment) these lock the session and CSRF cookies to HTTPS-only, force any plain
+# HTTP request to redirect to HTTPS, and tell the browser (via HSTS) to remember that.
+#
+# SECURE_PROXY_SSL_HEADER matters first: Render (like Heroku) terminates HTTPS at its own
+# edge proxy and forwards the request to this app over plain HTTP, adding an
+# X-Forwarded-Proto header that says what the original connection really was. Without this
+# line Django can never see a request as "secure" even when it truly was, and
+# SECURE_SSL_REDIRECT below would then redirect every single request forever (infinite
+# loop, site down). This is safe specifically because Render's proxy is the only thing
+# that can set this header on traffic that actually reaches the app -- a visitor can't
+# forge it themselves to fake a secure connection.
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = True
+    # Starting small on purpose (1 hour, not the commonly copied 1 year): HSTS makes the
+    # browser refuse plain HTTP for this long even if something later goes wrong with the
+    # certificate, so proving it out at a short value first is the safe order of operations.
+    SECURE_HSTS_SECONDS = 3600
+
 SITE_ID = 2
 
 AUTHENTICATION_BACKENDS = [

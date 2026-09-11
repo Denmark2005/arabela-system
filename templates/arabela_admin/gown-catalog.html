@@ -20,7 +20,7 @@
       isGownImageModal: false, viewingGownImage: {},
       isViewModal: false, viewingGown: {}, deleteError: '', deleteBusy: false,
       photoUpdateError: '', photoUpdateBusy: false,
-      gownBlocks: {}, newBlockStart: '', newBlockEnd: '', newBlockReason: 'Cleaning', newBlockNote: '', blockError: '', blockBusy: false,
+      gownBlocks: {}, newBlockStart: '', newBlockEnd: '', newBlockReason: 'Cleaning', newBlockNote: '', blockError: '', blockBusy: false, releasingBlockId: null,
       showGownToast: false, gownToastMessage: '', gownToastTimeout: null,
       getCsrfToken() {
         const name = 'csrftoken';
@@ -221,12 +221,22 @@
       openGownBlockForm() {
         this.blockError = '';
         this.deleteError = ''; this.deleteBusy = false;
+        this.releasingBlockId = null;
         this.newBlockStart = ''; this.newBlockEnd = ''; this.newBlockReason = 'Cleaning'; this.newBlockNote = '';
       },
       addGownBlock() {
         this.blockError = '';
         if (!this.newBlockStart || !this.newBlockEnd) { this.blockError = 'Please choose both a start and an end date.'; return; }
         if (this.newBlockEnd < this.newBlockStart) { this.blockError = 'The end date can\'t be before the start date.'; return; }
+        // Mirrors the server's overlap check (gown_block_create_view) using the exact
+        // dates already shown on screen, so staff see the conflict instantly instead of
+        // waiting on a round trip. The server still re-checks -- this is a convenience,
+        // not the real enforcement.
+        const overlap = this.currentBlocks().find(b => this.newBlockStart <= b.end && b.start <= this.newBlockEnd);
+        if (overlap) {
+          this.blockError = 'This overlaps an existing block: ' + overlap.range + ' (' + overlap.reason + '). Release that block first, or choose dates that don\'t overlap.';
+          return;
+        }
         this.blockBusy = true;
         fetch(this.gownApiBase + this.viewingGown.id + '/block-dates/', {
           method: 'POST',
@@ -246,45 +256,169 @@
         .catch(() => { this.blockBusy = false; this.blockError = 'Network error. Please try again.'; });
       },
       removeGownBlock(block) {
-        fetch(block.delete_url, {
-          method: 'POST',
-          headers: { 'X-CSRFToken': this.getCsrfToken() },
-        })
-        .then(r => r.json().then(data => ({ ok: r.ok, data })))
-        .then(({ ok, data }) => {
-          if (!ok) { this.blockError = data.error || 'Could not remove that block.'; return; }
-          this.gownToast('Dates released — gown is bookable again.');
-          setTimeout(() => window.location.reload(), 800);
-        })
-        .catch(() => { this.blockError = 'Network error. Please try again.'; });
+        if (this.releasingBlockId) { return; }
+        this.blockError = '';
+        adminConfirm({
+          title: 'Release blocked dates',
+          message: block.range + ' (' + block.reason + ') — the gown becomes bookable again immediately. This can\'t be undone.',
+          confirmText: 'Release dates',
+        }).then((confirmed) => {
+          if (!confirmed) { return; }
+          this.releasingBlockId = block.id;
+          fetch(block.delete_url, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': this.getCsrfToken() },
+          })
+          .then(r => r.json().then(data => ({ ok: r.ok, data })))
+          .then(({ ok, data }) => {
+            if (!ok) { this.releasingBlockId = null; this.blockError = data.error || 'Could not remove that block.'; return; }
+            this.gownToast('Dates released — gown is bookable again.');
+            setTimeout(() => window.location.reload(), 800);
+          })
+          .catch(() => { this.releasingBlockId = null; this.blockError = 'Network error. Please try again.'; });
+        });
       },
       deleteGown() {
         if (this.deleteBusy) { return; }
         this.deleteError = '';
-        if (!confirm('Delete ' + this.viewingGown.gownId + ' permanently? This cannot be undone.')) { return; }
-        this.deleteBusy = true;
-        fetch(this.gownApiBase + this.viewingGown.id + '/delete/', {
+        adminConfirm({
+          title: 'Delete gown',
+          message: 'Delete ' + this.viewingGown.gownId + ' permanently? This cannot be undone.',
+          confirmText: 'Delete permanently',
+          danger: true,
+        }).then((confirmed) => {
+          if (!confirmed) { return; }
+          this.deleteBusy = true;
+          fetch(this.gownApiBase + this.viewingGown.id + '/delete/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': this.getCsrfToken() },
+          })
+          .then(r => r.json().then(data => ({ ok: r.ok, data })))
+          .then(({ ok, data }) => {
+            if (!ok) {
+              this.deleteBusy = false;
+              this.deleteError = data.error || 'Could not delete gown.';
+              return;
+            }
+            this.isViewModal = false;
+            this.gownToast('Gown deleted.');
+            setTimeout(() => window.location.reload(), 700);
+          })
+          .catch(() => { this.deleteBusy = false; this.deleteError = 'Network error. Please try again.'; });
+        });
+      },
+      selectedGownIds: [], sortKey: '', sortDir: 1, gownsMin: [], bulkBusy: false,
+      gownMatchesFilters(cat, gstatus, hay) {
+        return (this.category === 'All' || this.category === cat)
+          && (this.status === 'All' || this.status === gstatus)
+          && (this.search === '' || hay.includes(this.search.toLowerCase()));
+      },
+      visibleGownIds() {
+        return this.gownsMin
+          .filter(g => this.gownMatchesFilters(g.category, g.status, g.hay))
+          .map(g => g.id);
+      },
+      matchingGownCount() {
+        return this.visibleGownIds().length;
+      },
+      allVisibleSelected() {
+        const vis = this.visibleGownIds();
+        return vis.length > 0 && vis.every(id => this.selectedGownIds.includes(id));
+      },
+      someVisibleSelected() {
+        const vis = this.visibleGownIds();
+        const picked = vis.filter(id => this.selectedGownIds.includes(id)).length;
+        return picked > 0 && picked < vis.length;
+      },
+      toggleSelectAllVisible(checked) {
+        const vis = this.visibleGownIds();
+        if (checked) {
+          const merged = new Set(this.selectedGownIds);
+          vis.forEach(id => merged.add(id));
+          this.selectedGownIds = Array.from(merged);
+        } else {
+          const drop = new Set(vis);
+          this.selectedGownIds = this.selectedGownIds.filter(id => !drop.has(id));
+        }
+      },
+      clearGownSelection() {
+        this.selectedGownIds = [];
+      },
+      onGownFilterChanged() {
+        this.selectedGownIds = [];
+        this.filtering = true;
+        clearTimeout(this.filterTimeout);
+        this.filterTimeout = setTimeout(() => this.filtering = false, 500);
+      },
+      sortGowns(key) {
+        if (this.sortKey === key) { this.sortDir = -this.sortDir; }
+        else { this.sortKey = key; this.sortDir = 1; }
+        const tbody = this.$refs.gownTableBody;
+        if (!tbody) { return; }
+        const rows = Array.from(tbody.querySelectorAll('tr[data-gown-row]'));
+        const numeric = key === 'price';
+        rows.sort((a, b) => {
+          let av = a.getAttribute('data-sort-' + key) || '';
+          let bv = b.getAttribute('data-sort-' + key) || '';
+          if (numeric) {
+            av = parseFloat(av) || 0;
+            bv = parseFloat(bv) || 0;
+            return (av - bv) * this.sortDir;
+          }
+          return av.localeCompare(bv) * this.sortDir;
+        });
+        rows.forEach(r => tbody.appendChild(r));
+      },
+      bulkStatus(newStatus) {
+        if (this.bulkBusy || this.selectedGownIds.length === 0) { return; }
+        this.bulkBusy = true;
+        fetch(this.gownApiBase + 'bulk/', {
           method: 'POST',
-          headers: { 'X-CSRFToken': this.getCsrfToken() },
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.getCsrfToken() },
+          body: JSON.stringify({ action: 'status', status: newStatus, ids: this.selectedGownIds }),
         })
         .then(r => r.json().then(data => ({ ok: r.ok, data })))
         .then(({ ok, data }) => {
-          if (!ok) {
-            this.deleteBusy = false;
-            this.deleteError = data.error || 'Could not delete gown.';
-            return;
-          }
-          this.isViewModal = false;
-          this.gownToast('Gown deleted.');
-          setTimeout(() => window.location.reload(), 700);
+          this.bulkBusy = false;
+          if (!ok) { this.gownToast(data.error || 'Could not update those gowns.'); return; }
+          this.gownToast(data.message || 'Gowns updated.');
+          setTimeout(() => window.location.reload(), 800);
         })
-        .catch(() => { this.deleteBusy = false; this.deleteError = 'Network error. Please try again.'; });
+        .catch(() => { this.bulkBusy = false; this.gownToast('Network error. Please try again.'); });
+      },
+      bulkDelete() {
+        if (this.bulkBusy || this.selectedGownIds.length === 0) { return; }
+        const n = this.selectedGownIds.length;
+        adminConfirm({
+          title: 'Delete ' + n + ' gown' + (n === 1 ? '' : 's'),
+          message: 'Delete ' + n + ' selected gown' + (n === 1 ? '' : 's') + ' permanently? Any gown on an active reservation is skipped. This cannot be undone.',
+          confirmText: 'Delete permanently',
+          danger: true,
+        }).then((confirmed) => {
+          if (!confirmed) { return; }
+          this.bulkBusy = true;
+          fetch(this.gownApiBase + 'bulk/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.getCsrfToken() },
+            body: JSON.stringify({ action: 'delete', ids: this.selectedGownIds }),
+          })
+          .then(r => r.json().then(data => ({ ok: r.ok, data })))
+          .then(({ ok, data }) => {
+            this.bulkBusy = false;
+            if (!ok) { this.gownToast(data.error || 'Could not delete those gowns.'); return; }
+            this.gownToast(data.message || 'Gowns deleted.');
+            setTimeout(() => window.location.reload(), 900);
+          })
+          .catch(() => { this.bulkBusy = false; this.gownToast('Network error. Please try again.'); });
+        });
       } }"
     x-init="
          darkMode = JSON.parse(localStorage.getItem('darkMode'));
          $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)));
          const blocksEl = document.getElementById('gown-blocks-data');
          if (blocksEl) { try { gownBlocks = JSON.parse(blocksEl.textContent || '{}'); } catch (e) { gownBlocks = {}; } }
+         const minEl = document.getElementById('gowns-min-data');
+         if (minEl) { try { gownsMin = JSON.parse(minEl.textContent || '[]'); } catch (e) { gownsMin = []; } }
          const params = new URLSearchParams(window.location.search);
          const presetCategory = params.get('category');
          if (presetCategory) { category = presetCategory; }
@@ -293,13 +427,14 @@
     :class="{'dark bg-gray-900': darkMode === true}"
   >
     <!-- ===== Preloader Start ===== -->
+    <script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('admin-dark-boot');}catch(e){}</script>
     <div
   x-show="loaded"
   x-init="window.addEventListener('DOMContentLoaded', () => {setTimeout(() => loaded = false, 500)})"
-  class="fixed left-0 top-0 z-999999 flex h-screen w-screen items-center justify-center bg-white dark:bg-black"
+  class="admin-preloader fixed left-0 top-0 z-999999 flex h-screen w-screen items-center justify-center"
 >
   <div
-    class="h-16 w-16 animate-spin rounded-full border-4 border-solid border-black border-t-transparent" style="border-color: #000 !important; border-top-color: transparent !important;"
+    class="admin-preloader-spinner h-16 w-16 animate-spin rounded-full border-4 border-solid"
   ></div>
 </div>
 
@@ -1525,13 +1660,13 @@
                   <input
                     type="text"
                     x-model="search"
-                    @input="filtering = true; clearTimeout(filterTimeout); filterTimeout = setTimeout(() => filtering = false, 500)"
+                    @input="onGownFilterChanged()"
                     placeholder="Search by Gown ID or name..."
                     class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
                   />
                 </div>
                 <div class="sm:w-52">
-                  <select x-model="category" @change="filtering = true; clearTimeout(filterTimeout); filterTimeout = setTimeout(() => filtering = false, 500)" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
+                  <select x-model="category" @change="onGownFilterChanged()" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
                     <option value="All">All Categories</option>
                 <option value="Wedding Gown">Wedding Gown</option>
                 <option value="Ball Gown">Ball Gown</option>
@@ -1547,7 +1682,7 @@
                   </select>
                 </div>
                 <div class="sm:w-44">
-                  <select x-model="status" @change="filtering = true; clearTimeout(filterTimeout); filterTimeout = setTimeout(() => filtering = false, 500)" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
+                  <select x-model="status" @change="onGownFilterChanged()" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
                     <option value="All">All Status</option>
                     <option value="Available">Available</option>
                     <option value="Reserved">Reserved</option>
@@ -1577,16 +1712,30 @@
                 <table class="min-w-full">
                   <thead class="sticky top-0 z-10 bg-white dark:bg-gray-900">
                     <tr>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Gown</p></th>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Category &middot; Color &middot; Size</p></th>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Price</p></th>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Status</p></th>
+                      <th class="px-5 py-3 sm:px-6 text-left">
+                        <input type="checkbox" class="admin-bulk-check" :checked="allVisibleSelected()" x-effect="$el.indeterminate = someVisibleSelected()" @change="toggleSelectAllVisible($event.target.checked)" aria-label="Select all visible gowns" />
+                      </th>
+                      <th class="px-5 py-3 sm:px-6 text-left">
+                        <button type="button" @click="sortGowns('gown')" class="inline-flex items-center gap-1 cursor-pointer select-none font-medium text-gray-500 text-theme-xs dark:text-gray-400">Gown <span class="text-gray-400" x-show="sortKey === 'gown'" x-text="sortDir === 1 ? '↑' : '↓'"></span></button>
+                      </th>
+                      <th class="px-5 py-3 sm:px-6 text-left">
+                        <button type="button" @click="sortGowns('category')" class="inline-flex items-center gap-1 cursor-pointer select-none font-medium text-gray-500 text-theme-xs dark:text-gray-400">Category &middot; Color &middot; Size <span class="text-gray-400" x-show="sortKey === 'category'" x-text="sortDir === 1 ? '↑' : '↓'"></span></button>
+                      </th>
+                      <th class="px-5 py-3 sm:px-6 text-left">
+                        <button type="button" @click="sortGowns('price')" class="inline-flex items-center gap-1 cursor-pointer select-none font-medium text-gray-500 text-theme-xs dark:text-gray-400">Price <span class="text-gray-400" x-show="sortKey === 'price'" x-text="sortDir === 1 ? '↑' : '↓'"></span></button>
+                      </th>
+                      <th class="px-5 py-3 sm:px-6 text-left">
+                        <button type="button" @click="sortGowns('status')" class="inline-flex items-center gap-1 cursor-pointer select-none font-medium text-gray-500 text-theme-xs dark:text-gray-400">Status <span class="text-gray-400" x-show="sortKey === 'status'" x-text="sortDir === 1 ? '↑' : '↓'"></span></button>
+                      </th>
                       <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Actions</p></th>
                     </tr>
                   </thead>
-                  <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                  <tbody x-ref="gownTableBody" class="divide-y divide-gray-100 dark:divide-gray-800">
                     {% for gown in gowns %}
-                    <tr x-show="(category === 'All' || category === '{{ gown.category|escapejs }}') && (status === 'All' || status === '{{ gown.status|escapejs }}') && (search === '' || '{{ gown.gown_id|lower }} {{ gown.name|lower|escapejs }} {{ gown.category|lower }} {{ gown.color_name|lower|escapejs }} {{ gown.size|lower }}'.includes(search.toLowerCase()))" :class="search !== '' && '{{ gown.gown_id|lower|escapejs }}' === search.toLowerCase() ? 'bg-brand-50 dark:bg-brand-500/15' : ''">
+                    <tr data-gown-row data-sort-gown="{{ gown.gown_id|lower }}" data-sort-category="{{ gown.category|lower }}" data-sort-price="{{ gown.rental_price }}" data-sort-status="{{ gown.status|lower }}" x-show="gownMatchesFilters('{{ gown.category|escapejs }}', '{{ gown.status|escapejs }}', '{{ gown.gown_id|lower }} {{ gown.name|lower|escapejs }} {{ gown.category|lower }} {{ gown.color_name|lower|escapejs }} {{ gown.size|lower }}')" :class="search !== '' && '{{ gown.gown_id|lower|escapejs }}' === search.toLowerCase() ? 'bg-brand-50 dark:bg-brand-500/15' : ''">
+                      <td class="px-5 py-4 sm:px-6">
+                        <input type="checkbox" class="admin-bulk-check" value="{{ gown.id }}" x-model.number="selectedGownIds" aria-label="Select {{ gown.gown_id }}" />
+                      </td>
                       <td class="px-5 py-4 sm:px-6">
                         <div class="flex items-center gap-3">
                           <button
@@ -1622,9 +1771,14 @@
                     </tr>
                     {% empty %}
                     <tr>
-                      <td colspan="5" class="px-5 py-10 text-center text-sm text-gray-400 dark:text-gray-500">No gowns in the catalog yet. Click &quot;Add Gown&quot; to create the first one.</td>
+                      <td colspan="6" class="px-5 py-10 text-center text-sm text-gray-400 dark:text-gray-500">No gowns in the catalog yet. Click &quot;Add Gown&quot; to create the first one.</td>
                     </tr>
                     {% endfor %}
+                    {% if gowns %}
+                    <tr x-show="matchingGownCount() === 0" x-cloak>
+                      <td colspan="6" class="px-5 py-10 text-center text-sm text-gray-400 dark:text-gray-500">No gowns match your filters.</td>
+                    </tr>
+                    {% endif %}
                   </tbody>
                 </table>
               </div>
@@ -2055,9 +2209,11 @@
                 <button
                   type="button"
                   @click="removeGownBlock(block)"
+                  :disabled="releasingBlockId === block.id"
+                  :style="releasingBlockId === block.id ? 'flex:none; opacity:0.6; cursor:not-allowed;' : 'flex:none;'"
                   class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]"
-                  style="flex:none;"
-                >Release</button>
+                  x-text="releasingBlockId === block.id ? 'Releasing...' : 'Release'"
+                ></button>
               </div>
             </template>
           </div>
@@ -2070,7 +2226,8 @@
               type="date"
               x-model="newBlockStart"
               min="{{ today_iso }}"
-              class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
+              onclick="this.showPicker()"
+              class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
             />
           </div>
           <div>
@@ -2079,7 +2236,8 @@
               type="date"
               x-model="newBlockEnd"
               :min="newBlockStart || '{{ today_iso }}'"
-              class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
+              onclick="this.showPicker()"
+              class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
             />
           </div>
           <div>
@@ -2147,6 +2305,22 @@
     <!-- ===== Page Wrapper End ===== -->
 
 {{ gown_blocks|json_script:"gown-blocks-data" }}
+{{ gowns_min|json_script:"gowns-min-data" }}
+
+<!-- Bulk-select toolbar: appears when one or more catalog rows are ticked. -->
+<div
+  x-show="selectedGownIds.length > 0"
+  x-cloak
+  class="fixed bottom-6 left-1/2 -translate-x-1/2 z-99999 flex flex-wrap items-center justify-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-theme-lg dark:border-gray-800 dark:bg-gray-900"
+>
+  <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
+    <span x-text="selectedGownIds.length"></span> selected
+  </span>
+  <button type="button" @click="bulkStatus('Available')" :disabled="bulkBusy" :style="bulkBusy ? 'opacity:0.6; cursor:not-allowed;' : ''" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">Mark Available</button>
+  <button type="button" @click="bulkStatus('Out-of-Stock')" :disabled="bulkBusy" :style="bulkBusy ? 'opacity:0.6; cursor:not-allowed;' : ''" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">Mark Out-of-Stock</button>
+  <button type="button" @click="bulkDelete()" :disabled="bulkBusy" :style="bulkBusy ? 'color:#F04438; opacity:0.6; cursor:not-allowed;' : 'color:#F04438;'" class="rounded-lg border border-error-300 bg-error-50 px-3 py-2 text-xs font-medium shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-white/[0.03]">Delete Selected</button>
+  <button type="button" @click="clearGownSelection()" class="rounded-lg px-3 py-2 text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">Clear</button>
+</div>
 
 <!-- Gown Action Toast -->
 <div
@@ -2161,6 +2335,7 @@
   <script defer src="{% static 'arabela_admin/bundle.js' %}?v={{ admin_asset_version }}"></script>
   <script defer src="{% static 'arabela_admin/global-search.js' %}"></script>
 
+{% include "arabela_admin/partials/dialog.html" %}
 </body>
 </html>
 
