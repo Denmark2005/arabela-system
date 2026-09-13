@@ -54,12 +54,20 @@
 {% block extra_scripts %}
 <script>
   (function () {
+    // The real cleanup already ran on the reservation page before this redirect
+    // (clearReservationSelections in reservation.html, using these same keys) --
+    // this is a defensive backup in case that ever doesn't run. userKey matches
+    // exactly how every cart key is built elsewhere (base.html, reservation.html,
+    // reservation-flow.js): per-account, so one browser can hold separate carts
+    // for separate logged-in accounts without them stepping on each other.
+    var userKey = (document.body && document.body.dataset && document.body.dataset.userKey) ? document.body.dataset.userKey : 'guest';
     try {
-      localStorage.removeItem('arabela_cart');
+      localStorage.removeItem('arabela_cart_' + userKey);
       localStorage.removeItem('arabela_book_now_context');
+      if (typeof syncCartToServer === 'function') syncCartToServer([]);
     } catch (err) {}
     try {
-      sessionStorage.removeItem('arabela_reservation_cart');
+      sessionStorage.removeItem('arabela_reservation_cart_' + userKey);
     } catch (err2) {}
   })();
 </script>

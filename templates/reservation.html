@@ -392,7 +392,11 @@
                 if (!dates) return null;   // an item is missing its rental dates
                 result.push({
                     gown_name: it.name || '',
-                    gown_slug: it.slug || '',
+                    // The cart-drawer checkout path stores the slug under "id" (see
+                    // addCollectionItem in base.html), never a separate "slug" key --
+                    // same fallback templates/selection.html's own submit path already
+                    // uses. it.slug is only ever populated by the alternate route.
+                    gown_slug: it.slug || it.id || '',
                     size: stripSizePrefix(it.size),
                     rental_price: it.unitPrice || 0,
                     rental_date: dates.start,
@@ -607,6 +611,7 @@
             try {
                 localStorage.removeItem(CART_STORAGE_KEY);
                 localStorage.removeItem(BOOK_NOW_CONTEXT_KEY);
+                if (typeof syncCartToServer === 'function') syncCartToServer([]);
             } catch (err) {}
             try {
                 sessionStorage.removeItem(RESERVATION_STORAGE_KEY);

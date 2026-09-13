@@ -386,6 +386,72 @@
             </div>
           </div>
         </section>
+
+        {% comment %}
+          Reservation timeline: the append-only ReservationStatusEvent log for this
+          gown (its own events plus the reservation-wide ones), newest first.
+          Assembled and annotated in reservations/timeline.py.
+        {% endcomment %}
+        <section class="mt-20 border-t border-black/5 pt-16">
+          <span class="mb-3 block text-[0.6875rem] font-semibold uppercase tracking-[0.15rem] text-secondary/60">Order Activity</span>
+          <h2 class="mb-3 font-headline text-2xl font-extrabold tracking-tight text-[#1b1c1c] md:text-3xl">Reservation Timeline</h2>
+          <p class="mb-8 max-w-xl text-sm leading-relaxed text-secondary/70">
+            Every update to this reservation, newest first. All times are Philippine Standard Time.
+          </p>
+          <div class="mb-10 h-px w-20 bg-[#1b1c1c] opacity-20"></div>
+
+          <ol class="max-w-2xl list-none p-0">
+            {% for event in timeline %}
+              <li class="flex gap-4">
+                {% comment %}
+                  Dot + connecting rail. The rail is a flex child rather than an
+                  absolutely-positioned line so it always spans exactly the gap to the
+                  next dot, whatever height the entry's text turns out to be.
+                {% endcomment %}
+                <div class="flex w-4 shrink-0 flex-col items-center">
+                  <span class="mt-1.5 h-3.5 w-3.5 rounded-full border-2 {% if event.is_latest %}{% if event.is_negative %}border-red-500 bg-red-500{% else %}border-emerald-500 bg-emerald-500{% endif %}{% else %}{% if event.is_negative %}border-red-200 bg-white{% else %}border-neutral-300 bg-white{% endif %}{% endif %}"></span>
+                  {% if not forloop.last %}
+                    <span class="my-1.5 w-px flex-1 bg-neutral-200"></span>
+                  {% endif %}
+                </div>
+
+                <div class="min-w-0 flex-1 {% if not forloop.last %}pb-9{% endif %}">
+                  <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <h3 class="text-sm font-semibold leading-snug {% if event.is_latest %}text-[#1b1c1c]{% else %}text-secondary{% endif %}">{{ event.label }}</h3>
+                    {% if event.is_latest %}
+                      <span class="inline-flex items-center rounded-full {% if event.is_negative %}bg-red-50 text-red-600{% else %}bg-emerald-50 text-emerald-600{% endif %} px-2.5 py-0.5 text-[0.5625rem] font-bold uppercase tracking-widest">Latest</span>
+                    {% endif %}
+                  </div>
+
+                  <div class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-secondary/60">
+                    <span class="material-symbols-outlined text-[13px]">schedule</span>
+                    {% if event.time_known %}
+                      <span class="tabular-nums">{{ event.occurred_at|date:"M d, Y" }} &middot; {{ event.occurred_at|date:"g:i A" }}</span>
+                    {% else %}
+                      {% comment %}
+                        Reconstructed from a date-only record kept before this timeline
+                        existed: there is no real time to show, and inventing one would
+                        make the page lie.
+                      {% endcomment %}
+                      <span class="tabular-nums">{{ event.occurred_at|date:"M d, Y" }}</span>
+                      <span class="text-secondary/40">&middot; time not recorded</span>
+                    {% endif %}
+                    <span class="text-secondary/40">&middot;</span>
+                    <span>{% if event.actor == "Customer" %}by you{% elif event.actor == "Staff" %}by Arabela{% else %}automatic{% endif %}</span>
+                  </div>
+
+                  {% if event.detail %}
+                    <p class="mt-2 text-xs leading-relaxed text-secondary/70">{{ event.detail }}</p>
+                  {% endif %}
+                </div>
+              </li>
+            {% empty %}
+              <li class="rounded-lg bg-neutral-50 px-6 py-8 text-center text-sm text-secondary/60">
+                No activity has been recorded for this reservation yet.
+              </li>
+            {% endfor %}
+          </ol>
+        </section>
       </div>
     </main>
 

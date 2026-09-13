@@ -1,0 +1,47 @@
+{% comment %}
+One reservation's (or one gown's) status history, newest first.
+
+Usage:  {% include "arabela_admin/partials/timeline_rows.html" with timeline=r.timeline %}
+Requires partials/timeline_styles.html to be included once on the page.
+
+`timeline` is a list of ReservationStatusEvent already ordered and annotated by
+reservations.timeline -- is_latest / is_negative are set there so this markup never has
+to inspect label text.
+{% endcomment %}
+<div class="arb-tl-panel">
+  <p class="arb-tl-title">Status history &middot; Philippine time</p>
+  <ol class="arb-tl">
+    {% for event in timeline %}
+      <li class="arb-tl-row">
+        <div class="arb-tl-rail">
+          <span class="arb-tl-dot{% if event.is_latest %} is-latest{% endif %}{% if event.is_negative %} is-negative{% endif %}"></span>
+          {% if not forloop.last %}<span class="arb-tl-line"></span>{% endif %}
+        </div>
+        <div class="arb-tl-body">
+          <div class="arb-tl-head">
+            <p class="arb-tl-label">{{ event.label }}</p>
+            {% if event.is_latest %}
+              <span class="arb-tl-pill{% if event.is_negative %} is-negative{% endif %}">Latest</span>
+            {% endif %}
+          </div>
+          <p class="arb-tl-meta">
+            {% if event.time_known %}
+              {{ event.occurred_at|date:"M j, Y" }} &middot; {{ event.occurred_at|date:"g:i A" }}
+            {% else %}
+              {% comment %}
+                Reconstructed from a date-only column kept before this log existed --
+                there is no real time to show, and inventing one would make staff
+                trust a number that was never recorded.
+              {% endcomment %}
+              {{ event.occurred_at|date:"M j, Y" }} &middot; time not recorded
+            {% endif %}
+            &middot; {% if event.actor == "Customer" %}by customer{% elif event.actor == "Staff" %}by staff{% else %}automatic{% endif %}
+          </p>
+          {% if event.detail %}<p class="arb-tl-detail">{{ event.detail }}</p>{% endif %}
+        </div>
+      </li>
+    {% empty %}
+      <li class="arb-tl-empty">No status history recorded yet.</li>
+    {% endfor %}
+  </ol>
+</div>

@@ -1354,7 +1354,10 @@
                         <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ r.reference_code }}</p></td>
                         <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ r.payment_method|default:"&mdash;" }}</p></td>
                         <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">&#8369;{{ r.total_amount|floatformat:0 }}</p></td>
-                        <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ r.created_at|date:"M j, Y" }}</p></td>
+                        <td class="px-5 py-4 sm:px-6">
+                          <p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ r.created_at|date:"M j, Y" }}</p>
+                          <p class="text-xs text-gray-400 dark:text-gray-500">{{ r.created_at|date:"g:i A" }}</p>
+                        </td>
                         <td class="px-5 py-4 sm:px-6">
                           <p class="inline-flex rounded-full px-2 py-0.5 text-theme-xs font-medium"
                              :class="{

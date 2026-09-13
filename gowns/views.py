@@ -2,7 +2,7 @@ import json
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from django.conf import settings
 from django.core.files.storage import default_storage
@@ -20,19 +20,20 @@ from gowns.context_processors import (
     _CATEGORIES,
     _FALLBACK_IMG,
     _NUMERIC,
+    _SEARCH_PRICES,
     _SLUG_ORDER,
     clear_reservation_hold,
     get_reservation_hold_deadline,
     start_reservation_hold,
 )
 from gowns.models import Gown, GownUnavailability
-from reservations.models import Reservation, ReservationItem
+from reservations import timeline
+from reservations.models import Reservation, ReservationItem, ReservationStatusEvent
 
 _VALID_COLLECTIONS = frozenset(category["key"] for category in _CATEGORIES)
 # key -> collection landing-page url name, for the "Back to collection" link on the
 # unavailable product page. Keys are exactly _VALID_COLLECTIONS, so lookups never miss.
 _COLLECTION_URL_NAME = {category["key"]: category["url_name"] for category in _CATEGORIES}
-_SEARCH_PRICES = (1600, 1800, 2000, 2200, 2400, 2600, 2800, 3000)
 
 # How far ahead the product calendar computes availability. Four months is well past
 # any realistic booking lead time and keeps the per-day scan trivially cheap.
@@ -211,63 +212,22 @@ def legacy_wedding_product_url(request, slug: str):
     return redirect(target)
 
 
+# Built from the same _SLUG_ORDER/_NUMERIC/_SEARCH_PRICES/_FALLBACK_IMG this file
+# already imports from gowns.context_processors -- previously each of these 8 entries
+# was hand-typed with its own copy of the price and image, a second (this dict) and
+# third (the module-level _SEARCH_PRICES that used to live here) independent copy of
+# numbers _products_for_category() below already derives from the exact same source.
+# One source of truth now: change a price in context_processors.py and every one of
+# these follows automatically instead of needing the same edit repeated three times.
 _WEDDING_PRODUCTS = {
-    "valencia-lace": {
-        "title": "Wedding One",
-        "price": "₱1,600",
-        "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA",
+    slug: {
+        "title": f"Wedding {_NUMERIC[i]}",
+        "price": f"₱{_SEARCH_PRICES[i]:,}",
+        "image": _FALLBACK_IMG,
         "availability": "Available Now",
         "collection": "Wedding",
-    },
-    "archive-satin": {
-        "title": "Wedding Two",
-        "price": "₱1,800",
-        "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA",
-        "availability": "Available Now",
-        "collection": "Wedding",
-    },
-    "florence-organza": {
-        "title": "Wedding Three",
-        "price": "₱2,000",
-        "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA",
-        "availability": "Available Now",
-        "collection": "Wedding",
-    },
-    "modernist-crepe": {
-        "title": "Wedding Four",
-        "price": "₱2,200",
-        "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA",
-        "availability": "Available Now",
-        "collection": "Wedding",
-    },
-    "opulence-pearl": {
-        "title": "Wedding Five",
-        "price": "₱2,400",
-        "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA",
-        "availability": "Available Now",
-        "collection": "Wedding",
-    },
-    "heritage-lace": {
-        "title": "Wedding Six",
-        "price": "₱2,600",
-        "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA",
-        "availability": "Available Now",
-        "collection": "Wedding",
-    },
-    "city-reception": {
-        "title": "Wedding Seven",
-        "price": "₱2,800",
-        "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA",
-        "availability": "Available Now",
-        "collection": "Wedding",
-    },
-    "lumiere-silk": {
-        "title": "Wedding Eight",
-        "price": "₱3,000",
-        "image": "https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA",
-        "availability": "Available Now",
-        "collection": "Wedding",
-    },
+    }
+    for i, slug in enumerate(_SLUG_ORDER)
 }
 
 
@@ -509,6 +469,27 @@ def _find_available_unit(gown_name, rental_date, return_date, *, gown_slug="", s
     return (_UNIT_ASSIGNED, free[0])
 
 
+def _authoritative_price(gown_name, gown_slug, matched_gown):
+    """The ONLY trusted source for what a cart item costs -- the client's submitted
+    price is never used, anywhere. Returns a Decimal, or None if the item can't be
+    verified (caller must then reject the whole reservation, never guess)."""
+    if matched_gown is not None:
+        return matched_gown.rental_price  # real inventory: staff-maintained price
+
+    if gown_slug in _SLUG_ORDER:
+        return Decimal(_SEARCH_PRICES[_SLUG_ORDER.index(gown_slug)])
+
+    # Slug is frequently blank (the cart-drawer checkout path never sends one) -- fall
+    # back to the same trailing "One".."Eight" word _products_for_category used to
+    # build this exact name in the first place. Category-independent by design: every
+    # collection reuses the same 8 prices, so the name suffix alone is enough.
+    last_word = gown_name.rsplit(" ", 1)[-1] if gown_name else ""
+    if last_word in _NUMERIC:
+        return Decimal(_SEARCH_PRICES[_NUMERIC.index(last_word)])
+
+    return None
+
+
 def product_detail(request, collection: str, slug: str):
     col = collection.strip().lower()
     if col not in _VALID_COLLECTIONS:
@@ -634,17 +615,6 @@ def _save_proof_file(proof_file) -> str:
     return default_storage.url(saved_path)
 
 
-def _parse_money(value) -> Decimal:
-    """Turn '₱ 3,500' / '3500' / 3500 into a Decimal, defaulting to 0."""
-    if value in (None, ""):
-        return Decimal("0")
-    try:
-        cleaned = str(value).replace("₱", "").replace(",", "").strip()
-        return Decimal(cleaned or "0")
-    except (InvalidOperation, ValueError):
-        return Decimal("0")
-
-
 def _parse_date(value):
     """Accept ISO (YYYY-MM-DD) or common M/D/Y display formats; return a date or None."""
     if not value:
@@ -686,7 +656,9 @@ def reservation_submit(request):
             "gown_name": gown_name,
             "gown_slug": (raw.get("gown_slug") or raw.get("slug") or "").strip()[:150],
             "size": (raw.get("size") or "").strip()[:20],
-            "rental_price": _parse_money(raw.get("rental_price") or raw.get("price")),
+            # No "rental_price" here on purpose -- the client's number is never read,
+            # not even as a starting point. See _authoritative_price below, which is
+            # the only thing that ever sets this key.
             "rental_date": rental_date,
             "return_date": return_date,
         })
@@ -710,13 +682,9 @@ def reservation_submit(request):
     if payment_method not in Reservation.PaymentMethod.values:
         payment_method = ""
 
-    rental_subtotal = _parse_money(request.POST.get("rental_subtotal"))
-    if rental_subtotal == 0:
-        rental_subtotal = sum((i["rental_price"] for i in parsed_items), Decimal("0"))
-    security_deposit = _parse_money(request.POST.get("security_deposit")) or Decimal("2000")
-    total_amount = _parse_money(request.POST.get("total_amount"))
-    if total_amount == 0:
-        total_amount = rental_subtotal + security_deposit
+    # rental_subtotal / security_deposit / total_amount are NOT read from the client at
+    # all -- every peso amount is computed server-side after the availability/pricing
+    # loop below resolves each item's real price. See _authoritative_price.
 
     # Proof of payment is required. The form already blocks submitting without
     # it, but enforcing it here too stops a reservation being created unpaid by
@@ -789,6 +757,25 @@ def reservation_submit(request):
             if unit is not None:
                 assigned_unit_ids.add(unit.id)
 
+            # The ONLY place rental_price is ever set -- from the database (real
+            # inventory) or the fixed placeholder price table, never from the client.
+            # Nothing has been written yet, so rejecting here is exactly as safe as the
+            # _UNIT_UNAVAILABLE/_UNIT_OUT_OF_STOCK returns just above.
+            price = _authoritative_price(item["gown_name"], item["gown_slug"], unit)
+            if price is None:
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "error": f"{item['gown_name']} could not be verified. Please refresh the page and try again.",
+                    },
+                    status=400,
+                )
+            item["rental_price"] = price
+
+        rental_subtotal = sum((item["rental_price"] for item in parsed_items), Decimal("0"))
+        security_deposit = Decimal(len(parsed_items)) * Decimal("2000")
+        total_amount = rental_subtotal + security_deposit
+
         payment_proof_url = _save_proof_file(proof_file)
 
         reservation_obj = Reservation.objects.create(
@@ -815,6 +802,14 @@ def reservation_submit(request):
                 rental_date=item["rental_date"],
                 return_date=item["return_date"],
             )
+
+        # Recorded inside the same atomic block as the rows it describes: if the
+        # reservation rolls back, its history must not survive it.
+        ReservationStatusEvent.record(
+            reservation_obj, "Reservation submitted",
+            detail="Waiting for the shop to verify your payment.",
+            actor=ReservationStatusEvent.Actor.CUSTOMER,
+        )
 
     # The reservation exists now, so the checkout hold is over -- drop the
     # countdown banner instead of leaving it ticking on the confirmation page.
@@ -886,6 +881,7 @@ def reservation_item_detail(request, item_id):
                 if reservation.status == Reservation.Status.REJECTED else ""
             ),
             "reservation_items": reservation.items.select_related("gown").all(),
+            "timeline": timeline.for_item(item),
         },
     )
 
@@ -906,6 +902,14 @@ def reservation_item_cancel(request, item_id):
     reservation = item.reservation
     reservation.status = Reservation.Status.CANCELLED
     reservation.save(update_fields=["status", "updated_at"])
+    # Reservation-wide, not per-item: cancelling one item cancels the whole booking
+    # (see ReservationItem.can_customer_cancel), so the event must not be filed under
+    # the single gown the customer happened to click Cancel on.
+    ReservationStatusEvent.record(
+        reservation, "Reservation cancelled",
+        detail="Cancelled by the customer.",
+        actor=ReservationStatusEvent.Actor.CUSTOMER,
+    )
 
     # Mirror/reverse reservation_approve_view's Available->Reserved flip
     # (arabela_admin/views.py): only revert gowns still sitting at Reserved, so we
@@ -948,6 +952,11 @@ def reservation_upload_proof(request, item_id):
 
     reservation.payment_proof_url = _save_proof_file(proof_file)
     reservation.save(update_fields=["payment_proof_url", "updated_at"])
+    ReservationStatusEvent.record(
+        reservation, "Proof of payment uploaded",
+        detail="Waiting for the shop to verify your payment.",
+        actor=ReservationStatusEvent.Actor.CUSTOMER,
+    )
 
     return JsonResponse({"success": True, "payment_state": reservation.payment_state})
 
@@ -982,6 +991,50 @@ def reservation_hold_release(request):
         # stale tab re-POSTing must not inflate the customer's count.
         record_abandoned_hold(request.user)
     clear_reservation_hold(request)
+    return JsonResponse({"success": True})
+
+
+# Generous headroom for a real cart (a handful of gowns) while still bounding the
+# worst case someone could push here. This is purely a best-effort mirror of the
+# browser's own cart for cross-device convenience -- reservation_submit above
+# never trusts anything from it (or from the browser) for price/availability, so
+# there is nothing to gain by tampering with it beyond wasting your own storage.
+_CART_SNAPSHOT_MAX_ITEMS = 50
+_CART_SNAPSHOT_MAX_BYTES = 20_000
+
+
+@login_required(login_url='accounts:login')
+@require_http_methods(["GET"])
+def cart_fetch_view(request):
+    """Return this customer's last-synced cart, for a device/browser that doesn't
+    have it in localStorage yet (a new device, or one that had it cleared)."""
+    profile, _ = UserProfile.objects.get_or_create(user=request.user)
+    return JsonResponse({"success": True, "cart": profile.cart_snapshot})
+
+
+@login_required(login_url='accounts:login')
+@require_http_methods(["POST"])
+def cart_save_view(request):
+    """Mirror the customer's current browser cart onto their account, so it can be
+    picked back up from cart_fetch_view on another device. Fire-and-forget from the
+    browser's side -- called after every cart change, never blocking the customer's
+    actual shopping."""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    cart = data.get("cart")
+    if not isinstance(cart, list):
+        return JsonResponse({"error": "cart must be a list"}, status=400)
+    if len(cart) > _CART_SNAPSHOT_MAX_ITEMS:
+        return JsonResponse({"error": "Cart has too many items to sync."}, status=400)
+    if len(request.body) > _CART_SNAPSHOT_MAX_BYTES:
+        return JsonResponse({"error": "Cart is too large to sync."}, status=400)
+
+    profile, _ = UserProfile.objects.get_or_create(user=request.user)
+    profile.cart_snapshot = cart
+    profile.save(update_fields=["cart_snapshot"])
     return JsonResponse({"success": True})
 
 

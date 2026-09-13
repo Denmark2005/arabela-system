@@ -626,6 +626,7 @@
       if (!Array.isArray(cart) || !cart[requestedCartIndex]) return;
       cart[requestedCartIndex] = Object.assign({}, cart[requestedCartIndex], patch);
       localStorage.setItem(PRODUCT_CART_STORAGE_KEY, JSON.stringify(cart));
+      if (typeof syncCartToServer === 'function') syncCartToServer(cart);
       if (typeof renderCartDrawer === 'function') renderCartDrawer();
       if (typeof updateCartTotals === 'function') updateCartTotals();
       if (typeof notifyCartRowUpdated === 'function') notifyCartRowUpdated(requestedCartIndex);
@@ -1162,6 +1163,7 @@
         }
         localStorage.setItem(PRODUCT_CART_STORAGE_KEY, JSON.stringify(cart));
         localStorage.setItem('arabela_book_now_context', JSON.stringify(item));
+        if (typeof syncCartToServer === 'function') syncCartToServer(cart);
         window.location.href = "{% url 'gowns:selection' %}?source=book-now";
       });
     }

@@ -30,6 +30,12 @@ class UserProfile(models.Model):
     # Stored because a hold lives only in the session and leaves no other trace,
     # unlike cancelled reservations which are counted from the Reservation rows.
     hold_abandon_count = models.PositiveIntegerField(default=0)
+    # A mirror of the customer's shopping cart, so it survives switching devices
+    # or clearing browser data -- the cart itself still lives in localStorage for
+    # instant reads/writes (see base.html's setDrawerCart); this is a best-effort
+    # background copy written on every change and read back on login elsewhere,
+    # never the primary source of truth for the device someone is actively using.
+    cart_snapshot = models.JSONField(default=list, blank=True)
 
     @classmethod
     def customer_display_name(cls, user):
@@ -59,6 +65,12 @@ class CustomerMessage(models.Model):
     class Category(models.TextChoices):
         ACCOUNT_FLAGGED = 'Account Flagged', 'Account Flagged'
         ACCOUNT_UNFLAGGED = 'Account Unflagged', 'Account Unflagged'
+        # Written by the automatic due-date sweep (reservations/reminders.py). Split
+        # into two so the Messages page can style an overdue warning differently from
+        # a friendly heads-up -- the customer should be able to tell them apart at a
+        # glance without reading the body.
+        RESERVATION_REMINDER = 'Reservation Reminder', 'Reservation Reminder'
+        RETURN_OVERDUE = 'Return Overdue', 'Return Overdue'
         GENERAL = 'General', 'General'
 
     recipient = models.ForeignKey(

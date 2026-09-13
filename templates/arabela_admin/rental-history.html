@@ -12,7 +12,7 @@
     <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
   <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet"></head>
   <body
-    x-data="{ page: 'rental-history', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', monthFilter: 'All', yearFilter: '', filtering: false, filterTimeout: null, openProofModal: false, viewingRental: {},
+    x-data="{ page: 'rental-history', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', monthFilter: 'All', yearFilter: '', filtering: false, filterTimeout: null, openProofModal: false, viewingRental: {}, openTimeline: null,
       rentalRecords: [],
       totalRentals() {
         const q = this.search.toLowerCase();
@@ -35,6 +35,7 @@
          if (presetYear) { yearFilter = presetYear; }"
     :class="{'dark bg-gray-900': darkMode === true}"
   >
+    {% include "arabela_admin/partials/timeline_styles.html" %}
     <!-- ===== Preloader Start ===== -->
     <script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('admin-dark-boot');}catch(e){}</script>
     <div
@@ -1344,6 +1345,16 @@
                     class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
                     View Proof
                   </button>
+                  <button type="button"
+                    @click="openTimeline = (openTimeline === {{ item.id }} ? null : {{ item.id }})"
+                    class="mt-2 inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
+                    <span x-text="openTimeline === {{ item.id }} ? 'Hide Timeline' : 'Timeline'">Timeline</span>
+                  </button>
+                </td>
+              </tr>
+              <tr x-show="openTimeline === {{ item.id }} && ((monthFilter === 'All' || monthFilter === '{{ item.rental_date|date:"M" }}') && (yearFilter === '' || yearFilter === '{{ item.rental_date|date:"Y" }}') && (search === '' || '{{ r.display_customer_name|lower|escapejs }} {{ item.gown_name|lower|escapejs }}'.includes(search.toLowerCase())))" x-cloak>
+                <td class="px-5 py-4 sm:px-6" colspan="7">
+                  {% include "arabela_admin/partials/timeline_rows.html" with timeline=item.timeline %}
                 </td>
               </tr>
               {% endwith %}

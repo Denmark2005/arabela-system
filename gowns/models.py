@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 
@@ -72,27 +72,124 @@ class Gown(models.Model):
         from django.utils.text import slugify
         # Never collide with the placeholder catalog's 8 fixed demo slugs (valencia-lace,
         # archive-satin, ...) -- product_detail tries a real Gown first, so a collision
-        # would silently shadow one of the fake catalog's own product pages.
+        # would silently shadow one of the fake catalog's own product pages. These are a
+        # small, rarely-edited constant rather than DB rows, so they're checked directly
+        # here (skip_bare) instead of through GownSlugSequence.
         from gowns.context_processors import _SLUG_ORDER
         base = slugify(self.name) or slugify(self.gown_id) or 'gown'
-        candidate, n = base, 2
-        while candidate in _SLUG_ORDER or Gown.objects.filter(slug=candidate).exclude(pk=self.pk).exists():
-            candidate = f'{base}-{n}'
-            n += 1
-        return candidate
+        return GownSlugSequence.reserve(base, skip_bare=base in _SLUG_ORDER)
 
     @classmethod
     def next_tracking_number(cls, category, color_code):
         """Next 3-digit sequence within the same category+color group — automates the
-        seeding plan's manual 'check the sheet for the next available tracking number' step."""
-        last = (cls.objects.filter(category=category, color_code=color_code)
-                            .order_by('-id').first())
-        if not last:
-            return 1
-        try:
-            return int(last.gown_id.split('-')[2]) + 1
-        except (IndexError, ValueError):
-            return cls.objects.filter(category=category, color_code=color_code).count() + 1
+        seeding plan's manual 'check the sheet for the next available tracking number' step.
+
+        Delegates the actual number to GownSequence, which hands out each integer under
+        a row lock -- see that model's docstring. This used to read the highest existing
+        gown_id in the group and add one: the same shape of race that
+        reservations.models.ReservationSequence replaced for Reservation.reference_code,
+        after that approach was proven -- with real concurrent threads against live
+        Postgres -- to fail under load. Same problem here, same fix.
+        """
+        return GownSequence.next_value_for(category, color_code)
+
+
+class GownSequence(models.Model):
+    """One row per (category, color_code) group, holding the next tracking number to
+    hand out for it -- the same fix as reservations.models.ReservationSequence,
+    applied to Gown.gown_id instead of Reservation.reference_code. See that model's
+    docstring for the full reasoning; the short version:
+
+    "Read the highest existing gown_id in this group, add one" (the old approach)
+    reads, then separately writes, with nothing stopping two staff adding a gown to
+    the same category+color at the same moment from both reading the same "last" row
+    before either has written. `next_value_for()` closes that with a real Postgres row
+    lock (`select_for_update()`): a second request asking for the same group does not
+    race the first, it waits its turn and then reads the value the first one left
+    behind. No number of simultaneous requests can defeat that.
+
+    `get_or_create` covers the one thing a row lock cannot protect -- a row that does
+    not exist yet, for the very first gown ever added to a given category+color -- by
+    catching the unique-constraint violation from two requests both creating that row
+    for the first time and re-fetching the winner's row, which is standard, well-
+    tested Django behaviour, not something left to chance here.
+    """
+
+    category = models.CharField(max_length=20)
+    color_code = models.CharField(max_length=2)
+    next_value = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['category', 'color_code'], name='unique_gown_sequence_group'),
+        ]
+
+    def __str__(self):
+        return f'{self.category}-{self.color_code}: next is {self.next_value}'
+
+    @classmethod
+    def next_value_for(cls, category, color_code):
+        with transaction.atomic():
+            cls.objects.get_or_create(category=category, color_code=color_code)
+            # Locks THIS row until this transaction commits -- any other request
+            # asking for the same category+color group blocks here rather than racing.
+            row = cls.objects.select_for_update().get(category=category, color_code=color_code)
+            value = row.next_value
+            row.next_value = value + 1
+            row.save(update_fields=['next_value'])
+        return value
+
+
+class GownSlugSequence(models.Model):
+    """One row per base slug text (a gown's name, slugified, with any numeric suffix
+    already stripped off), holding the next numeric suffix to try if that exact base
+    is ever needed again -- the same row-locked-counter fix as GownSequence, applied
+    to Gown.slug instead of Gown.gown_id.
+
+    Slugs are derived from free-text (the gown's name) rather than a plain numeric
+    sequence, but the race is identical in shape: "does anything already use this
+    exact string?" is a check, then a separate write, with no lock -- two staff
+    adding two gowns with the exact same name at the exact same moment could both see
+    "no" and both try to save the same slug.
+
+    `reserve()`'s very first call for a brand new base returns the bare text with no
+    suffix at all -- that is what a human expects the first gown named "White Wedding
+    Gown" to be called ("white-wedding-gown", not "white-wedding-gown-1"). Everything
+    after that gets "-2", "-3", and so on. Postgres itself provides the safety for
+    that very first moment, with no extra locking needed: two concurrent callers
+    racing to INSERT the same brand-new `base` cannot both succeed -- the second
+    blocks until the first's transaction resolves, then either takes the locked
+    "not first" path below (if the first committed) or becomes "first" itself (if the
+    first rolled back) -- so only one caller in the world is ever told "you're first".
+    """
+
+    base = models.CharField(max_length=160, unique=True)
+    next_suffix = models.PositiveIntegerField(default=2)
+
+    def __str__(self):
+        return f'{self.base}: next is -{self.next_suffix}'
+
+    @classmethod
+    def reserve(cls, base, *, skip_bare=False):
+        """Returns a slug reserved for the caller alone -- no other concurrent caller
+        asking for this same base can ever receive the same string back.
+
+        `skip_bare=True` is for a base that is already permanently spoken for by
+        something this table doesn't track (the placeholder catalog's fixed demo
+        slugs): it forces straight past the "first ever caller gets the bare text"
+        shortcut and into the locked, always-suffixed path below.
+        """
+        with transaction.atomic():
+            _, created = cls.objects.get_or_create(base=base, defaults={'next_suffix': 2})
+            if created and not skip_bare:
+                return base
+            # Locks THIS row until this transaction commits -- any other request
+            # asking for the same base blocks here rather than racing.
+            row = cls.objects.select_for_update().get(base=base)
+            suffix = row.next_suffix
+            row.next_suffix = suffix + 1
+            row.save(update_fields=['next_suffix'])
+            return f'{base}-{suffix}'
 
 
 class GownUnavailability(models.Model):

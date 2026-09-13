@@ -1330,7 +1330,10 @@
                       </td>
                       {% if forloop.first %}
                       <td class="px-5 py-4 sm:px-6" rowspan="{{ item_count }}" style="vertical-align: top;"><p class="text-gray-500 text-theme-sm dark:text-gray-400">&#8369;{{ r.security_deposit|floatformat:0 }}</p></td>
-                      <td class="px-5 py-4 sm:px-6" rowspan="{{ item_count }}" style="vertical-align: top;"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ r.created_at|date:"M j, Y" }}</p></td>
+                      <td class="px-5 py-4 sm:px-6" rowspan="{{ item_count }}" style="vertical-align: top;">
+                        <p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ r.created_at|date:"M j, Y" }}</p>
+                        <p class="text-xs text-gray-400 dark:text-gray-500">{{ r.created_at|date:"g:i A" }}</p>
+                      </td>
                       <td class="px-5 py-4 sm:px-6" rowspan="{{ item_count }}" style="vertical-align: top;">
                         {% if r.all_items_returned %}
                         <p class="inline-flex rounded-full px-2 py-0.5 text-theme-xs font-medium bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500">Completed</p>
@@ -1351,7 +1354,7 @@
                             @click="viewingPayment = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"—"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:0 }}', date: '{{ r.created_at|date:"M j, Y"|escapejs }}', status: '{{ r.status|escapejs }}', proofUrl: '{{ r.payment_proof_url|escapejs }}' }; openReceiptModal = true"
                             class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View Payment</button>
                           {% if r.deposit_returned_at %}
-                          <p class="text-xs font-medium text-success-700 dark:text-success-500">Returned on {{ r.deposit_returned_at|date:"M j, Y" }}</p>
+                          <p class="text-xs font-medium text-success-700 dark:text-success-500">Returned on {{ r.deposit_returned_at|date:"M j, Y" }} at {{ r.deposit_returned_at|date:"g:i A" }}</p>
                           {% elif r.all_items_returned %}
                           <button type="button"
                             data-url="{% url 'arabela_admin:reservation_return_deposit' r.id %}"

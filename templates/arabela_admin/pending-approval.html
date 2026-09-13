@@ -19,7 +19,7 @@
   </style>
 </head>
   <body
-    x-data="{ page: 'pending', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, openCustomerModal: false, viewingCustomer: {}, search: '' }"
+    x-data="{ page: 'pending', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, openCustomerModal: false, viewingCustomer: {}, search: '', openTimeline: null }"
     x-init="
          darkMode = JSON.parse(localStorage.getItem('darkMode'));
          $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)));
@@ -28,6 +28,7 @@
          if (presetSearch) { search = presetSearch; }"
     :class="{'dark bg-gray-900': darkMode === true}"
   >
+    {% include "arabela_admin/partials/timeline_styles.html" %}
     <!-- ===== Preloader Start ===== -->
     <script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('admin-dark-boot');}catch(e){}</script>
     <div
@@ -1330,13 +1331,23 @@
                             <a href="{% url 'arabela_admin:payment_verification' %}?search={{ r.display_customer_name|urlencode }}"
                               class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View Payment</a>
                             <button type="button"
-                              @click="viewingCustomer = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reference: '{{ r.reference_code|escapejs }}', email: '{{ r.customer.email|default:"—"|escapejs }}', phone: '{{ r.phone|default:"—"|escapejs }}', address: '{{ r.address|escapejs }}', city: '{{ r.city|escapejs }}', postal: '{{ r.postal_code|escapejs }}', submitted: '{{ r.created_at|date:"M j, Y"|escapejs }}' }; openCustomerModal = true"
+                              @click="viewingCustomer = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reference: '{{ r.reference_code|escapejs }}', email: '{{ r.customer.email|default:"—"|escapejs }}', phone: '{{ r.phone|default:"—"|escapejs }}', address: '{{ r.address|escapejs }}', city: '{{ r.city|escapejs }}', postal: '{{ r.postal_code|escapejs }}', submitted: '{{ r.created_at|date:"M j, Y"|escapejs }} at {{ r.created_at|date:"g:i A"|escapejs }}' }; openCustomerModal = true"
                               class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View Customer</button>
+                            <button type="button"
+                              @click="openTimeline = (openTimeline === {{ r.id }} ? null : {{ r.id }})"
+                              class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
+                              <span x-text="openTimeline === {{ r.id }} ? 'Hide Timeline' : 'Timeline'">Timeline</span>
+                            </button>
                           </div>
                         </td>
                         {% endif %}
                       </tr>
                       {% endfor %}
+                      <tr x-show="openTimeline === {{ r.id }} && (search === '' || '{{ r.display_customer_name|lower|escapejs }} {{ r.reference_code|lower|escapejs }}'.includes(search.toLowerCase()))" x-cloak>
+                        <td class="px-5 py-4 sm:px-6" colspan="6">
+                          {% include "arabela_admin/partials/timeline_rows.html" with timeline=r.timeline %}
+                        </td>
+                      </tr>
                       {% endwith %}
                       {% empty %}
                       <tr>

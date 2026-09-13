@@ -12,7 +12,7 @@
     <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
   <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet"></head>
   <body
-    x-data="{ page: 'active', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, openCustomerModal: false, viewingCustomer: {}, search: '' }"
+    x-data="{ page: 'active', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, openCustomerModal: false, viewingCustomer: {}, search: '', openTimeline: null }"
     x-init="
          darkMode = JSON.parse(localStorage.getItem('darkMode'));
          $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)));
@@ -21,6 +21,8 @@
          if (presetSearch) { search = presetSearch; }"
     :class="{'dark bg-gray-900': darkMode === true}"
   >
+    {% include "arabela_admin/partials/timeline_styles.html" %}
+    {% include "arabela_admin/partials/dialog.html" %}
     <!-- ===== Preloader Start ===== -->
     <script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('admin-dark-boot');}catch(e){}</script>
     <div
@@ -1309,6 +1311,15 @@
                             <span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ forloop.counter }} of {{ item_count }}</span>
                             {% endif %}
                           </div>
+                          {% if item.stage != "Returned" %}
+                          <button type="button"
+                            class="resv-remind-btn mt-1.5 inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
+                            data-url="{% url 'arabela_admin:reservation_item_send_reminder' item.id %}"
+                            data-gown="{{ item.gown_name }}"
+                            data-customer="{{ r.display_customer_name }}"
+                            data-suggested="{{ item.suggested_reminder }}"
+                            onclick="sendReminder(this)">Remind</button>
+                          {% endif %}
                         </td>
                         <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ item.rental_date|date:"M j, Y" }}</p></td>
                         <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ item.return_date|date:"M j, Y" }}</p></td>
@@ -1328,13 +1339,23 @@
                             <a href="{% url 'arabela_admin:payment_verification' %}?search={{ r.display_customer_name|urlencode }}"
                               class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View</a>
                             <button type="button"
-                              @click="viewingCustomer = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reference: '{{ r.reference_code|escapejs }}', email: '{{ r.customer.email|default:"—"|escapejs }}', phone: '{{ r.phone|default:"—"|escapejs }}', address: '{{ r.address|escapejs }}', city: '{{ r.city|escapejs }}', postal: '{{ r.postal_code|escapejs }}', submitted: '{{ r.created_at|date:"M j, Y"|escapejs }}' }; openCustomerModal = true"
+                              @click="viewingCustomer = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reference: '{{ r.reference_code|escapejs }}', email: '{{ r.customer.email|default:"—"|escapejs }}', phone: '{{ r.phone|default:"—"|escapejs }}', address: '{{ r.address|escapejs }}', city: '{{ r.city|escapejs }}', postal: '{{ r.postal_code|escapejs }}', submitted: '{{ r.created_at|date:"M j, Y"|escapejs }} at {{ r.created_at|date:"g:i A"|escapejs }}' }; openCustomerModal = true"
                               class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View Customer</button>
+                            <button type="button"
+                              @click="openTimeline = (openTimeline === {{ r.id }} ? null : {{ r.id }})"
+                              class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
+                              <span x-text="openTimeline === {{ r.id }} ? 'Hide Timeline' : 'Timeline'">Timeline</span>
+                            </button>
                           </div>
                         </td>
                         {% endif %}
                       </tr>
                       {% endfor %}
+                      <tr x-show="openTimeline === {{ r.id }} && (search === '' || '{{ r.display_customer_name|lower|escapejs }} {{ r.reference_code|lower|escapejs }}'.includes(search.toLowerCase()))" x-cloak>
+                        <td class="px-5 py-4 sm:px-6" colspan="7">
+                          {% include "arabela_admin/partials/timeline_rows.html" with timeline=r.timeline %}
+                        </td>
+                      </tr>
                       {% endwith %}
                       {% empty %}
                       <tr>
@@ -1411,6 +1432,64 @@
       <!-- ===== Content Area End ===== -->
     </div>
     <!-- ===== Page Wrapper End ===== -->
+  <script>
+    function getCsrfToken() {
+      var el = document.querySelector('input[name="csrfmiddlewaretoken"]');
+      return el ? el.value : '';
+    }
+
+    // Staff-initiated reminder. The message arrives pre-written by the server (the same
+    // rules the automatic sweep uses) but stays editable, because the reason a staffer
+    // reaches for this button is usually something the schedule cannot know.
+    function sendReminder(btn) {
+      var url = btn.dataset.url;
+      var gown = btn.dataset.gown || 'this gown';
+      var customer = btn.dataset.customer || 'the customer';
+
+      adminPrompt({
+        title: 'Send reminder',
+        message: 'This goes straight to ' + customer + "'s Messages inbox about " + gown + '. Edit it if you need to.',
+        value: btn.dataset.suggested || '',
+        multiline: true,
+        confirmText: 'Send reminder',
+      }).then(function (body) {
+        if (body === null) return;            // dismissed
+        if (!body) {                           // cleared the box entirely
+          adminAlert({ title: 'Nothing to send', message: 'The reminder message cannot be empty.', danger: true });
+          return;
+        }
+
+        var original = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Sending...';
+
+        fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+          body: JSON.stringify({ body: body })
+        })
+          .then(function (res) {
+            return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+          })
+          .then(function (result) {
+            if (!result.ok || !result.data.success) {
+              throw new Error(result.data.error || 'Could not send this reminder.');
+            }
+            btn.disabled = false;
+            btn.textContent = 'Sent';
+            // Back to normal shortly: the button stays usable because staff legitimately
+            // send more than one reminder to the same customer over a rental.
+            window.setTimeout(function () { btn.textContent = original; }, 2500);
+            adminAlert({ title: 'Reminder sent', message: customer + ' will see it in their Messages, and it is now on the booking timeline.' });
+          })
+          .catch(function (err) {
+            btn.disabled = false;
+            btn.textContent = original;
+            adminAlert({ title: 'Could not send', message: err.message || 'Could not send this reminder.', danger: true });
+          });
+      });
+    }
+  </script>
   <script defer src="{% static 'arabela_admin/bundle.js' %}?v={{ admin_asset_version }}"></script>
   <script defer src="{% static 'arabela_admin/global-search.js' %}"></script>
 

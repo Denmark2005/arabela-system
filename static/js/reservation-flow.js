@@ -201,6 +201,7 @@
         try {
             localStorage.setItem(userCartKey, JSON.stringify(userCart));
             localStorage.removeItem(GUEST_CART_KEY);
+            if (typeof syncCartToServer === 'function') syncCartToServer(userCart);
         } catch (e4) {}
     }
 

@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.db import models
+from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
 
@@ -102,24 +102,97 @@ class Reservation(models.Model):
 
     @classmethod
     def next_reference_code(cls):
-        """RSV-{year}-{sequence:04d}, sequence restarting each year. Mirrors the
-        Gown.next_tracking_number pattern used in the inventory module."""
+        """RSV-{year}-{sequence:04d}, sequence restarting each year.
+
+        Delegates the actual number to ReservationSequence, which hands out each
+        integer under a row lock -- see that model's docstring for why "read the
+        last reservation, add one" (this method's old implementation) is not safe
+        enough here. gowns.models.Gown.next_tracking_number had the identical shape
+        of race for Gown.gown_id and now uses the same fix (gowns.models.GownSequence).
+        """
         year = timezone.now().year
-        prefix = f'RSV-{year}-'
-        last = (cls.objects.filter(reference_code__startswith=prefix)
-                            .order_by('-id').first())
-        if not last:
-            return f'{prefix}0001'
-        try:
-            nxt = int(last.reference_code.split('-')[2]) + 1
-        except (IndexError, ValueError):
-            nxt = cls.objects.filter(reference_code__startswith=prefix).count() + 1
-        return f'{prefix}{nxt:04d}'
+        n = ReservationSequence.next_value_for(year)
+        return f'RSV-{year}-{n:04d}'
 
     def save(self, *args, **kwargs):
-        if not self.reference_code:
+        if self.reference_code:
+            # Every later save (approve/reject, deposit release, staff editing dates on
+            # a sibling item, ...) already has a code from creation -- nothing below
+            # this line ever runs for those, exactly as before this fix.
+            super().save(*args, **kwargs)
+            return
+
+        # ReservationSequence.next_value_for() already guarantees each caller gets a
+        # distinct number -- no two requests can ever be handed the same one, at any
+        # level of concurrency (see that model's docstring). This retry is pure
+        # defense in depth for a scenario that shouldn't be reachable through normal
+        # use at all: a reference_code collision from data that didn't go through
+        # this method (a hand-edited row, a bad fixture, a restored backup). The
+        # inner transaction.atomic() is what makes even that retry safe: this save
+        # already runs inside reservation_submit's outer atomic() block, and in
+        # Postgres one failed INSERT poisons the entire transaction until it rolls
+        # back -- wrapping just this save opens a SAVEPOINT instead, so a collision
+        # unwinds only to here (the same reasoning ReservationStatusEvent.record()
+        # already relies on).
+        for _attempt in range(3):
             self.reference_code = self.next_reference_code()
-        super().save(*args, **kwargs)
+            try:
+                with transaction.atomic():
+                    super().save(*args, **kwargs)
+                return
+            except IntegrityError:
+                continue
+
+        raise IntegrityError(
+            "Could not generate a unique reservation reference code. Please try "
+            "submitting again, and let the shop know if this keeps happening."
+        )
+
+
+class ReservationSequence(models.Model):
+    """One row per year, holding the next reservation number to hand out for it.
+
+    Why this exists instead of "read the highest existing reference_code, add one"
+    (the old approach, and what Gown.next_tracking_number used to do too before it got
+    the same fix): that approach reads, then separately writes, with nothing stopping
+    two concurrent requests from both reading the same "last" value before either has
+    written -- a real race, confirmed in this project by racing 8 concurrent checkouts
+    against live Postgres. A bounded retry-on-collision (this model's own first draft)
+    narrows the failure window but does not close it: past some number of simultaneous
+    requests, retries run out and a customer sees a crash anyway.
+
+    `next_value_for()` closes it completely with `select_for_update()` -- a real
+    Postgres row lock. A second transaction asking for the same year's row does not
+    race the first: it simply waits its turn until the first commits, then reads the
+    value the first one left behind. There is no number of simultaneous requests that
+    can defeat this; they just queue up, which is exactly what should happen when two
+    people want consecutive numbers.
+
+    The one thing a row lock cannot protect is a row that does not exist yet (nothing
+    to lock for the very first reservation of a new year) -- `get_or_create` covers
+    exactly that gap: it is written to catch the unique-constraint violation from two
+    requests both trying to create year 2027's row for the first time, and re-fetch
+    the winner's row instead of erroring, which is a standard, well-tested part of
+    Django itself, not something this project is trusting to chance.
+    """
+
+    year = models.PositiveIntegerField(unique=True)
+    next_value = models.PositiveIntegerField(default=1)
+
+    def __str__(self):
+        return f'{self.year}: next is {self.next_value}'
+
+    @classmethod
+    def next_value_for(cls, year):
+        with transaction.atomic():
+            cls.objects.get_or_create(year=year)
+            # Locks THIS row until this transaction commits -- any other request
+            # asking for the same year blocks here rather than racing.
+            row = cls.objects.select_for_update().get(year=year)
+            value = row.next_value
+            row.next_value = value + 1
+            row.save(update_fields=['next_value'])
+        return value
 
 
 class ReservationItem(models.Model):
@@ -199,3 +272,108 @@ class ReservationItem(models.Model):
         ):
             return False
         return not self.reservation.items.exclude(stage=self.Stage.PICKUP).exists()
+
+
+class ReservationStatusEvent(models.Model):
+    """One row per real thing that happened to a reservation, in order, forever.
+
+    Reservation.status / ReservationItem.stage only ever hold the CURRENT state, and
+    the two timestamps that do exist (reviewed_at, deposit_returned_at) are each
+    overwritten on the next save -- so before this model there was no way to answer
+    "when was this approved?" or "what happened to this booking, in what order?".
+    Rows are only ever appended, never edited, which is what makes the customer's
+    order timeline (and any later dispute: "you approved it on the 5th") trustworthy.
+
+    item is null for things that happened to the whole reservation (submitted,
+    approved, rejected, cancelled, deposit returned) and set for things that happened
+    to one specific gown in it (marked returned, status moved on the schedule), so a
+    single item's timeline is its own events plus the reservation-wide ones.
+
+    label is written at the moment it happens rather than derived later, so a wording
+    change to Status/Stage never silently rewrites history that customers already saw.
+    """
+
+    class Actor(models.TextChoices):
+        CUSTOMER = 'Customer', 'Customer'
+        STAFF = 'Staff', 'Staff'
+        SYSTEM = 'System', 'System'
+
+    reservation = models.ForeignKey(
+        Reservation, on_delete=models.CASCADE, related_name='status_events'
+    )
+    item = models.ForeignKey(
+        ReservationItem, on_delete=models.CASCADE, related_name='status_events',
+        null=True, blank=True,
+    )
+    label = models.CharField(max_length=200)
+    # Optional second line under the label (rejection reason, return condition) --
+    # kept separate so the timeline can style it as secondary text.
+    detail = models.CharField(max_length=300, blank=True)
+    actor = models.CharField(max_length=20, choices=Actor.choices, default=Actor.SYSTEM)
+    occurred_at = models.DateTimeField(default=timezone.now)
+    # False only for events reconstructed by the backfill migration from pre-existing
+    # date-only columns (picked_up_on / returned_on), where the real time of day was
+    # never recorded. Those render as a date with no time rather than showing an
+    # invented "8:00 AM" -- a timeline people may rely on must never make a time up.
+    time_known = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['occurred_at', 'id']
+        indexes = [models.Index(fields=['reservation', 'occurred_at'])]
+
+    def __str__(self):
+        return f'{self.reservation.reference_code}: {self.label} @ {self.occurred_at}'
+
+    @classmethod
+    def record(cls, reservation, label, *, item=None, detail='', actor=Actor.SYSTEM):
+        """The one way events get written. Deliberately swallows its own errors: a
+        timeline is a record OF the action, never a reason the action itself fails --
+        an approval must still go through even if writing its history row somehow
+        can't.
+
+        The inner atomic() is what makes that swallow safe. Several callers already run
+        inside a transaction; a failed INSERT there marks the whole transaction broken,
+        so merely catching the exception would turn a missing history row into a
+        TransactionManagementError on the caller's very next query. The savepoint keeps
+        the failure contained to this INSERT and leaves the caller's work intact."""
+        try:
+            with transaction.atomic():
+                return cls.objects.create(
+                    reservation=reservation, item=item, label=label,
+                    detail=(detail or '')[:300], actor=actor,
+                )
+        except Exception:
+            return None
+
+
+class ReminderRun(models.Model):
+    """Singleton (always pk=1) recording the last day the due-date reminder sweep ran.
+
+    This project has no scheduler -- no cron, no Celery, nothing that runs on its own
+    clock -- so the sweep is triggered by staff opening the admin dashboard, and this
+    row is what stops it running again on every page load for the rest of the day.
+
+    `last_run_on` is a DATE, not a timestamp, on purpose: the question being asked is
+    "has the shop's reminder pass happened TODAY?", and a date compares cleanly against
+    timezone.localdate() without any window arithmetic. The timestamp beside it is for
+    humans wondering when it actually fired.
+    """
+
+    last_run_on = models.DateField(null=True, blank=True)
+    last_run_at = models.DateTimeField(null=True, blank=True)
+    # Purely observational -- how many reminders the most recent pass sent. Staff never
+    # see this today; it exists so a "why did nobody get reminded?" question has an
+    # answer that doesn't require re-running anything.
+    last_sent_count = models.PositiveIntegerField(default=0)
+
+    def __str__(self):
+        return f'Reminder sweep (last run {self.last_run_on or "never"})'
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj

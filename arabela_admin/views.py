@@ -23,7 +23,9 @@ import json
 from accounts.models import CustomerMessage, UserProfile
 from accounts.services import CANCELLATION_FLAG_THRESHOLD
 from gowns.models import Gown, GownUnavailability, SiteSettings
-from reservations.models import Reservation, ReservationItem
+from reservations import reminders as reservation_reminders
+from reservations import timeline as reservation_timeline
+from reservations.models import Reservation, ReservationItem, ReservationStatusEvent
 
 User = get_user_model()
 
@@ -78,6 +80,18 @@ def _require_owner(view_func):
 
 @_require_admin_staff
 def dashboard_view(request):
+    # The shop's stand-in for a nightly cron job. This project has no scheduler, so the
+    # once-a-day pick-up/return reminder sweep rides on the one page staff open every
+    # day anyway. ReminderRun claims the day atomically, so repeated loads (and two
+    # staff loading at once) cost nothing after the first.
+    #
+    # Wrapped because a reminder is a courtesy and the dashboard is the shop's control
+    # panel: if messaging customers ever fails, staff must still get their dashboard.
+    try:
+        reservation_reminders.run_daily_sweep_if_due()
+    except Exception:
+        pass
+
     quick_verify_reservations = (
         Reservation.objects.filter(status=Reservation.Status.PENDING)
         .select_related("customer__profile")
@@ -357,6 +371,8 @@ def rental_history_view(request):
         else:
             item.history_status = "Ongoing"
 
+    reservation_timeline.attach_to_items(items)
+
     # Mirrors the visible rows so the "Total Rentals" card can count what is actually
     # on screen. `q` is the same lowercase haystack the row filter searches, so the
     # card and the table can never disagree about what matches.
@@ -433,6 +449,11 @@ def reservation_return_deposit_view(request, pk):
 
     reservation.deposit_returned_at = timezone.now()
     reservation.save(update_fields=["deposit_returned_at", "updated_at"])
+    ReservationStatusEvent.record(
+        reservation, "Security deposit returned",
+        detail="Your deposit has been released. This reservation is complete.",
+        actor=ReservationStatusEvent.Actor.STAFF,
+    )
     return JsonResponse({
         "success": True,
         "deposit_returned_at": reservation.deposit_returned_at.isoformat(),
@@ -446,11 +467,20 @@ def receipt_records_view(request):
 
 @_require_admin_staff
 def active_reservations_view(request):
-    reservations = (
+    reservations = reservation_timeline.attach_to_reservations(
         Reservation.objects.filter(status__in=_SCHEDULED_STATUSES)
         .select_related("customer__profile")
         .prefetch_related("items")
     )
+
+    # The wording staff see pre-filled in the Send Reminder dialog. Computed here rather
+    # than in the browser so the manual message and the automatic one are produced by the
+    # exact same rules -- staff should never be offered text the system itself wouldn't send.
+    today = timezone.localdate()
+    for reservation in reservations:
+        for item in reservation.items.all():
+            item.suggested_reminder = reservation_reminders.suggested_message(item, today)
+
     return render(
         request,
         "arabela_admin/active-reservations.html",
@@ -460,7 +490,7 @@ def active_reservations_view(request):
 
 @_require_admin_staff
 def pending_approval_view(request):
-    reservations = (
+    reservations = reservation_timeline.attach_to_reservations(
         Reservation.objects.filter(status=Reservation.Status.PENDING)
         .select_related("customer__profile")
         .prefetch_related("items")
@@ -816,18 +846,17 @@ def gown_create_view(request):
                 status=502,
             )
 
-    # gown_id (category+color+sequence) and slug (from name) each carry a UNIQUE
-    # constraint, and next_tracking_number / Gown._generate_unique_slug are both
-    # check-then-insert with no lock -- two staff adding at the same moment can compute
-    # the same value. Retry on the resulting IntegrityError: each attempt re-reads, so
-    # it sees whatever the other request just committed and steps past it. The
-    # per-attempt transaction.atomic() keeps the connection usable after the failed
-    # INSERT. The + _attempt offset guarantees the sequence still advances even in the
-    # (manual-DB-tamper only) case where next_tracking_number's legacy-id fallback keeps
-    # handing back a number that is already taken.
+    # Neither gown_id nor slug can collide from a genuine race anymore:
+    # next_tracking_number() and Gown._generate_unique_slug() (via GownSequence /
+    # GownSlugSequence) each hand out their value under a real row lock, so no two
+    # requests can ever receive the same one -- see those models' docstrings. This
+    # retry now stays purely as defense-in-depth for hand-edited/corrupted data, not
+    # as the primary defense it used to be. Each attempt re-reads via a fresh
+    # transaction.atomic() (a savepoint), which keeps the connection usable after a
+    # failed INSERT instead of poisoning the whole request.
     gown = None
-    for _attempt in range(6):
-        tracking_number = Gown.next_tracking_number(category, color_code) + _attempt
+    for _attempt in range(3):
+        tracking_number = Gown.next_tracking_number(category, color_code)
         gown_id = f"{category}-{color_code}-{tracking_number:03d}"
         try:
             with transaction.atomic():
@@ -1103,6 +1132,11 @@ def reservation_approve_view(request, pk):
     reservation.status = Reservation.Status.CONFIRMED
     reservation.reviewed_at = timezone.now()
     reservation.save(update_fields=["status", "reviewed_at", "updated_at"])
+    ReservationStatusEvent.record(
+        reservation, "Reservation approved",
+        detail="Your payment was verified. Your booking is confirmed.",
+        actor=ReservationStatusEvent.Actor.STAFF,
+    )
 
     # Flip any linked inventory gowns to Reserved so the catalog reflects the booking.
     for item in reservation.items.all():
@@ -1135,6 +1169,11 @@ def reservation_reject_view(request, pk):
         reservation.notes = reason
         update_fields.append("notes")
     reservation.save(update_fields=update_fields)
+    ReservationStatusEvent.record(
+        reservation, "Reservation rejected",
+        detail=reason or "Please contact the shop for details.",
+        actor=ReservationStatusEvent.Actor.STAFF,
+    )
     return JsonResponse({"success": True, "status": reservation.status})
 
 
@@ -1143,7 +1182,7 @@ def reservation_item_mark_returned_view(request, item_id):
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
     try:
-        item = ReservationItem.objects.select_related("gown").get(id=item_id)
+        item = ReservationItem.objects.select_related("gown", "reservation").get(id=item_id)
     except ReservationItem.DoesNotExist:
         return JsonResponse({"error": "Item not found"}, status=404)
     try:
@@ -1159,6 +1198,11 @@ def reservation_item_mark_returned_view(request, item_id):
     item.returned_on = timezone.localdate()
     item.return_condition = condition
     item.save(update_fields=["stage", "returned_on", "return_condition", "updated_at"])
+    ReservationStatusEvent.record(
+        item.reservation, f"{item.gown_name} returned", item=item,
+        detail=f"Checked in by staff in {condition} condition.",
+        actor=ReservationStatusEvent.Actor.STAFF,
+    )
 
     if item.gown_id:
         item.gown.condition = condition
@@ -1178,11 +1222,61 @@ def reservation_item_mark_returned_view(request, item_id):
 
 
 @require_http_methods(["POST"])
+def reservation_item_send_reminder_view(request, item_id):
+    """Send a reminder a staff member wrote, to the customer holding this gown.
+
+    The counterpart to the automatic sweep in reservations/reminders.py. Staff can send
+    one on ANY active booking, whether or not a date is near: they can see things the
+    schedule cannot, and a button that refuses to work when the operator knows better is
+    worse than no button. Terminal bookings are refused, though -- messaging someone
+    about a gown they already returned, or a reservation that was cancelled, would be
+    the shop contradicting its own records.
+    """
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    try:
+        item = ReservationItem.objects.select_related("reservation__customer").get(id=item_id)
+    except ReservationItem.DoesNotExist:
+        return JsonResponse({"error": "Item not found"}, status=404)
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    if item.reservation.status not in _SCHEDULED_STATUSES:
+        return JsonResponse(
+            {"error": "Reminders can only be sent for confirmed or active bookings."},
+            status=400,
+        )
+    if item.stage == ReservationItem.Stage.RETURNED:
+        return JsonResponse(
+            {"error": "This gown has already been returned."}, status=400
+        )
+
+    body = (data.get("body") or "").strip()
+    if not body:
+        return JsonResponse({"error": "The reminder message cannot be empty."}, status=400)
+
+    try:
+        sent = reservation_reminders.send_manual_reminder(
+            item, body, sent_by=_staff_display_name(request.user)
+        )
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    except Exception:
+        return JsonResponse(
+            {"error": "Could not send this reminder. Please try again."}, status=500
+        )
+
+    return JsonResponse({"success": True, "body": sent})
+
+
+@require_http_methods(["POST"])
 def reservation_item_reschedule_view(request, item_id):
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
     try:
-        item = ReservationItem.objects.select_related("gown").get(id=item_id)
+        item = ReservationItem.objects.select_related("gown", "reservation").get(id=item_id)
     except ReservationItem.DoesNotExist:
         return JsonResponse({"error": "Item not found"}, status=404)
     try:
@@ -1215,6 +1309,14 @@ def reservation_item_reschedule_view(request, item_id):
     if stage not in settable:
         return JsonResponse({"error": "Invalid status"}, status=400)
 
+    # Snapshotted before the assignments below so the timeline can log what actually
+    # changed. Staff hit Save on this form constantly (often with nothing edited, or to
+    # nudge one date); logging every save unchanged would bury the real milestones in
+    # noise, so only genuine changes become events.
+    was_stage = item.stage
+    was_dates = (item.rental_date, item.event_date, item.return_date, item.overdue_date)
+    was_picked_up = bool(item.picked_up_on)
+
     item.rental_date = rental_date
     item.event_date = event_date
     item.return_date = return_date
@@ -1227,6 +1329,27 @@ def reservation_item_reschedule_view(request, item_id):
         item.picked_up_on = timezone.localdate()
         update_fields.append("picked_up_on")
     item.save(update_fields=update_fields)
+
+    # "Picked up" is the milestone a customer cares about, so it gets its own event and
+    # takes precedence over the generic status line that caused it.
+    if not was_picked_up and item.picked_up_on:
+        ReservationStatusEvent.record(
+            item.reservation, f"{item.gown_name} picked up", item=item,
+            detail="The gown is now with the customer.",
+            actor=ReservationStatusEvent.Actor.STAFF,
+        )
+    elif stage != was_stage:
+        ReservationStatusEvent.record(
+            item.reservation, f"{item.gown_name} status changed to {stage}", item=item,
+            actor=ReservationStatusEvent.Actor.STAFF,
+        )
+
+    if (rental_date, event_date, return_date, overdue_date) != was_dates:
+        ReservationStatusEvent.record(
+            item.reservation, f"{item.gown_name} rental dates updated", item=item,
+            detail=f"Pick-up {rental_date:%b %d, %Y} · Return {return_date:%b %d, %Y}",
+            actor=ReservationStatusEvent.Actor.STAFF,
+        )
 
     if (stage != ReservationItem.Stage.PICKUP and item.gown_id
             and item.gown.status == Gown.Status.AVAILABLE):

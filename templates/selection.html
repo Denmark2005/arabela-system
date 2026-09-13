@@ -152,6 +152,7 @@ function removeCartItem(idx) {
   let cart = JSON.parse(localStorage.getItem(CART_STORAGE_KEY) || '[]');
   cart.splice(idx, 1);
   localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+  if (typeof syncCartToServer === 'function') syncCartToServer(cart);
   renderCart();
 }
 function updateQty(idx, delta) {
@@ -159,6 +160,7 @@ function updateQty(idx, delta) {
   cart[idx].qty += delta;
   if (cart[idx].qty < 1) cart[idx].qty = 1;
   localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+  if (typeof syncCartToServer === 'function') syncCartToServer(cart);
   renderCart();
 }
 function proceedReservationFromSelection() {
@@ -238,6 +240,7 @@ function proceedReservationFromSelection() {
     // refresh. Same clearing the drawer's own Proceed button does.
     try {
       localStorage.setItem(CART_STORAGE_KEY, '[]');
+      if (typeof syncCartToServer === 'function') syncCartToServer([]);
       if (typeof renderCartDrawer === 'function') renderCartDrawer();
       if (typeof updateCartTotals === 'function') updateCartTotals();
     } catch (e) {}

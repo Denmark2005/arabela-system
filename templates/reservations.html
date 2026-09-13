@@ -431,7 +431,7 @@
                   {% else %}
                     <span class="res-chip bg-emerald-50 text-emerald-600"><span class="material-symbols-outlined">check_circle</span>Currently Rented</span>
                   {% endif %}
-                  <span class="shrink-0 text-[0.75rem] text-secondary/60">Booked {{ reservation.created_at|date:"M d, Y" }}</span>
+                  <span class="shrink-0 text-[0.75rem] text-secondary/60">Booked {{ reservation.created_at|date:"M d, Y" }} &middot; {{ reservation.created_at|date:"g:i A" }}</span>
                 </div>
 
                 <!-- Line 2: gown name + dates/price -->

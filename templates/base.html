@@ -320,7 +320,9 @@
       data-authenticated="{{ request.user.is_authenticated|yesno:'true,false' }}"
       data-user-key="{% if request.user.is_authenticated %}{{ request.user.id }}{% else %}guest{% endif %}"
       data-login-url="{% url 'accounts:login' %}"
-      data-hold-start-url="{% url 'gowns:reservation_hold_start' %}">
+      data-hold-start-url="{% url 'gowns:reservation_hold_start' %}"
+      data-cart-fetch-url="{% url 'gowns:cart_fetch' %}"
+      data-cart-save-url="{% url 'gowns:cart_save' %}">
 
 {% csrf_token %}
 <!-- Rendering the tag above (even outside a <form>) makes Django set the csrftoken
@@ -635,6 +637,8 @@
     const SECURITY_DEPOSIT_PESOS = 2000;
     const USER_STORAGE_KEY = document.body?.dataset?.userKey || 'guest';
     const DRAWER_STORAGE_KEY = `arabela_cart_${USER_STORAGE_KEY}`;
+    const CART_SAVE_URL = document.body?.dataset?.cartSaveUrl || '';
+    const CART_FETCH_URL = document.body?.dataset?.cartFetchUrl || '';
 
     function formatPeso(amount) {
       return '₱ ' + Number(amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -648,8 +652,76 @@
       }
     }
 
+    // Best-effort background mirror of the cart onto the customer's own account, so
+    // it can be picked back up on another device (cart_fetch_view/cart_save_view in
+    // gowns/views.py). Never blocks or alerts on failure -- this is a convenience,
+    // not something the actual shopping/checkout flow depends on. Debounced so rapid
+    // qty +/- clicks fire one request, not one per click (same clearTimeout/
+    // setTimeout idiom already used by the search overlay's debounce).
+    let cartSyncTimer = null;
+    function syncCartToServer(cart) {
+      if (USER_STORAGE_KEY === 'guest' || !CART_SAVE_URL) return;
+      if (cartSyncTimer) clearTimeout(cartSyncTimer);
+      cartSyncTimer = setTimeout(function () {
+        cartSyncTimer = null;
+        try {
+          fetch(CART_SAVE_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+            body: JSON.stringify({ cart: cart }),
+          }).catch(function () {});
+        } catch (err) {}
+      }, 800);
+    }
+
     function setDrawerCart(cart) {
       localStorage.setItem(DRAWER_STORAGE_KEY, JSON.stringify(cart));
+      syncCartToServer(cart);
+    }
+
+    // Identifies "the same cart line" the same way reservation-flow.js's own
+    // sameCartLine() does, for merging -- there's no unique per-line id, only this
+    // tuple, and cart lines are never deduplicated any other way in this codebase.
+    function _cartLineIdentity(item) {
+      return [item && item.id, item && item.name, item && item.collection, item && item.size, item && item.rental]
+        .map(function (v) { return v || ''; }).join('|');
+    }
+
+    // Runs once per browser tab session for a logged-in customer: pulls whatever
+    // was last synced from another device and merges it into this device's cart
+    // (union, not replace -- nothing already in THIS cart is ever dropped). A guard
+    // flag in sessionStorage keeps this from re-fetching on every page navigation.
+    function mergeServerCartIntoLocal() {
+      if (USER_STORAGE_KEY === 'guest' || !CART_FETCH_URL) return;
+      const mergedFlagKey = 'arabela_cart_merge_done_' + USER_STORAGE_KEY;
+      try {
+        if (sessionStorage.getItem(mergedFlagKey)) return;
+        sessionStorage.setItem(mergedFlagKey, '1');
+      } catch (err) { return; }
+      fetch(CART_FETCH_URL, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          const serverCart = (data && Array.isArray(data.cart)) ? data.cart : [];
+          if (!serverCart.length) return;
+          const localCart = getDrawerCart();
+          const seen = {};
+          localCart.forEach(function (item) { seen[_cartLineIdentity(item)] = true; });
+          let changed = false;
+          serverCart.forEach(function (item) {
+            const key = _cartLineIdentity(item);
+            if (!seen[key]) {
+              localCart.push(item);
+              seen[key] = true;
+              changed = true;
+            }
+          });
+          if (changed) {
+            setDrawerCart(localCart);
+            renderCartDrawer();
+            updateCartTotals();
+          }
+        })
+        .catch(function () {});
     }
 
     function getProductDetailUrl(item, index) {
@@ -1565,11 +1637,24 @@
       document.addEventListener('DOMContentLoaded', function () {
         renderCartDrawer();
         updateCartTotals();
+        mergeServerCartIntoLocal();
       });
     } else {
       renderCartDrawer();
       updateCartTotals();
+      mergeServerCartIntoLocal();
     }
+
+    // A page restored from the back/forward cache (bfcache) never re-fires
+    // DOMContentLoaded, so without this the drawer could keep showing whatever it
+    // looked like at the moment the browser cached it -- stale if the cart changed
+    // in another tab (or was just merged in from another device) since then.
+    window.addEventListener('pageshow', function (e) {
+      if (e.persisted) {
+        renderCartDrawer();
+        updateCartTotals();
+      }
+    });
   </script>
 
   {% if request.user.is_authenticated %}

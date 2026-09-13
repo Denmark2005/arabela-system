@@ -177,7 +177,17 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+# The shop, its staff and its customers are all in the Philippines, so "local" means
+# Manila -- this was only ever 'UTC' because that is Django's default.
+#
+# USE_TZ stays True, so nothing about how datetimes are STORED changes: Postgres keeps
+# them in UTC either way. What changes is what "local" resolves to. Templates render
+# datetimes in this zone, so a reservation submitted at 8:30 PM Manila now reads 8:30 PM
+# instead of 12:30 PM, and timezone.localdate() ("what day is it at the shop right now?"
+# -- used for overdue checks, blocked-date windows, picked_up_on/returned_on and the
+# dashboard's year) finally answers with the shop's actual day rather than UTC's, which
+# ran up to 8 hours behind and rolled over mid-morning Manila time.
+TIME_ZONE = 'Asia/Manila'
 
 USE_I18N = True
 

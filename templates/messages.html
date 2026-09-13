@@ -287,6 +287,10 @@
                   <span class="material-symbols-outlined bold-red">flag</span>
                 {% elif message.category == "Account Unflagged" %}
                   <span class="material-symbols-outlined vibrant-green">check_circle</span>
+                {% elif message.category == "Return Overdue" %}
+                  <span class="material-symbols-outlined bold-red">warning</span>
+                {% elif message.category == "Reservation Reminder" %}
+                  <span class="material-symbols-outlined text-amber-600">schedule</span>
                 {% else %}
                   <span class="material-symbols-outlined text-neutral-500">notifications</span>
                 {% endif %}
@@ -296,6 +300,10 @@
                       <span class="text-xs font-semibold uppercase tracking-wider bold-red">{{ message.category }}</span>
                     {% elif message.category == "Account Unflagged" %}
                       <span class="text-xs font-semibold uppercase tracking-wider vibrant-green">{{ message.category }}</span>
+                    {% elif message.category == "Return Overdue" %}
+                      <span class="text-xs font-semibold uppercase tracking-wider bold-red">{{ message.category }}</span>
+                    {% elif message.category == "Reservation Reminder" %}
+                      <span class="text-xs font-semibold uppercase tracking-wider text-amber-600">{{ message.category }}</span>
                     {% else %}
                       <span class="text-xs font-semibold uppercase tracking-wider text-neutral-500">{{ message.category }}</span>
                     {% endif %}
@@ -306,7 +314,7 @@
                   <p class="max-w-xl text-sm leading-relaxed text-secondary">{{ message.body }}</p>
                 </div>
               </div>
-              <p class="shrink-0 text-xs text-secondary/60 md:text-right">{{ message.created_at|date:"M d, Y" }}</p>
+              <p class="shrink-0 text-xs text-secondary/60 md:text-right">{{ message.created_at|date:"M d, Y" }}<span class="block text-secondary/40">{{ message.created_at|date:"g:i A" }}</span></p>
             </div>
           {% empty %}
             <div class="flex flex-col items-center gap-3 py-20 text-center">

@@ -8,7 +8,12 @@
    API (all return a Promise):
      adminConfirm({title, message, confirmText, cancelText, danger}) -> bool
      adminAlert({title, message, confirmText})                       -> true
-     adminPrompt({title, message, placeholder, confirmText})         -> string|null
+     adminPrompt({title, message, placeholder, confirmText, value, multiline})
+                                                                     -> string|null
+
+   `value` pre-fills the prompt; `multiline` swaps its single-line input for a
+   textarea (and makes Enter insert a newline instead of submitting). Both are
+   opt-in, so every existing caller behaves exactly as before.
 
    NOTE: must be {% comment %}, not {# #} -- Django's hash comment is single-line
    only, so a multi-line one renders as visible text on every page that includes
@@ -63,6 +68,7 @@
   }
   .adm-dlg__input:focus { border-color: #465fff; box-shadow: 0 0 0 3px rgba(70, 95, 255, 0.12); }
   .adm-dlg__input[hidden] { display: none; }
+  textarea.adm-dlg__input { resize: vertical; min-height: 7.5rem; line-height: 1.55; text-align: left; }
   .adm-dlg__actions { display: flex; gap: 0.6rem; margin-top: 1.5rem; }
   .adm-dlg__btn {
     flex: 1; padding: 0.7rem 1rem; border-radius: 8px; cursor: pointer;
@@ -104,6 +110,7 @@
     <h2 class="adm-dlg__title" id="adm-dlg-title"></h2>
     <p class="adm-dlg__msg" id="adm-dlg-msg"></p>
     <input type="text" class="adm-dlg__input" id="adm-dlg-input" hidden>
+    <textarea class="adm-dlg__input" id="adm-dlg-textarea" rows="5" hidden></textarea>
     <div class="adm-dlg__actions" id="adm-dlg-actions">
       <button type="button" class="adm-dlg__btn adm-dlg__btn--ghost" id="adm-dlg-cancel" data-dlg-dismiss>Cancel</button>
       <button type="button" class="adm-dlg__btn adm-dlg__btn--primary" id="adm-dlg-confirm">Confirm</button>
@@ -119,6 +126,7 @@
     const titleEl = document.getElementById('adm-dlg-title');
     const msgEl = document.getElementById('adm-dlg-msg');
     const inputEl = document.getElementById('adm-dlg-input');
+    const textareaEl = document.getElementById('adm-dlg-textarea');
     const actionsEl = document.getElementById('adm-dlg-actions');
     const cancelBtn = document.getElementById('adm-dlg-cancel');
     const confirmBtn = document.getElementById('adm-dlg-confirm');
@@ -132,6 +140,9 @@
     let settle = null;
     let lastFocused = null;
     let mode = 'confirm';
+    // Which field a prompt is currently using -- the single-line input by default,
+    // the textarea when the caller asked for multiline.
+    let field = inputEl;
 
     function finish(result) {
       if (!settle) return;
@@ -145,7 +156,7 @@
     }
 
     function onConfirm() {
-      if (mode === 'prompt') finish(inputEl.value.trim());
+      if (mode === 'prompt') finish(field.value.trim());
       else finish(true);
     }
 
@@ -160,7 +171,14 @@
     document.addEventListener('keydown', function (e) {
       if (!settle) return;
       if (e.key === 'Escape') { e.preventDefault(); onDismiss(); }
-      else if (e.key === 'Enter') { e.preventDefault(); onConfirm(); }
+      else if (e.key === 'Enter') {
+        // In a textarea Enter means "new line", not "send" -- otherwise a staff member
+        // writing a second sentence would fire the message off mid-thought. Ctrl/Cmd+Enter
+        // still submits, which is the convention people already expect from chat boxes.
+        if (mode === 'prompt' && field === textareaEl && !(e.ctrlKey || e.metaKey)) return;
+        e.preventDefault();
+        onConfirm();
+      }
     });
 
     function open(opts) {
@@ -178,12 +196,19 @@
         + '</svg>';
 
       if (mode === 'prompt') {
-        inputEl.hidden = false;
-        inputEl.value = opts.value || '';
-        inputEl.placeholder = opts.placeholder || '';
+        field = opts.multiline ? textareaEl : inputEl;
+        const unused = opts.multiline ? inputEl : textareaEl;
+        unused.hidden = true;
+        unused.value = '';
+        field.hidden = false;
+        field.value = opts.value || '';
+        field.placeholder = opts.placeholder || '';
       } else {
+        field = inputEl;
         inputEl.hidden = true;
         inputEl.value = '';
+        textareaEl.hidden = true;
+        textareaEl.value = '';
       }
 
       confirmBtn.textContent = opts.confirmText || (mode === 'alert' ? 'OK' : 'Confirm');
@@ -195,8 +220,15 @@
       document.body.style.overflow = 'hidden';
 
       window.setTimeout(function () {
-        if (mode === 'prompt') inputEl.focus();
-        else confirmBtn.focus();
+        if (mode === 'prompt') {
+          field.focus();
+          // Cursor at the end, not selecting everything: the pre-filled text is meant to
+          // be edited or sent, and select-all means one stray keypress wipes it.
+          const end = field.value.length;
+          try { field.setSelectionRange(end, end); } catch (err) { /* not all inputs support it */ }
+        } else {
+          confirmBtn.focus();
+        }
       }, 60);
 
       return new Promise(function (resolve) { settle = resolve; });
