@@ -6,7 +6,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from functools import wraps
 
 from django.conf import settings
-from django.contrib.auth import authenticate, login, logout, get_user_model
+from django.contrib.auth import authenticate, login, logout, get_user_model, update_session_auth_hash
 from django.core.cache import cache
 from django.core.files.storage import default_storage
 from django.db import DataError, IntegrityError, transaction
@@ -16,6 +16,7 @@ from django.shortcuts import redirect, render
 from django.http import Http404, JsonResponse
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.formats import date_format
 from django.utils.http import urlencode
 from django.views.decorators.http import require_http_methods
 import json
@@ -25,7 +26,7 @@ from accounts.services import CANCELLATION_FLAG_THRESHOLD
 from gowns.models import Gown, GownUnavailability, SiteSettings
 from reservations import reminders as reservation_reminders
 from reservations import timeline as reservation_timeline
-from reservations.models import Reservation, ReservationItem, ReservationStatusEvent
+from reservations.models import Reservation, ReceiptRecord, ReservationItem, ReservationStatusEvent
 
 User = get_user_model()
 
@@ -462,7 +463,98 @@ def reservation_return_deposit_view(request, pk):
 
 @_require_admin_staff
 def receipt_records_view(request):
-    return render(request, "arabela_admin/receipt-records.html", {"page": "receipt-records"})
+    today = timezone.localdate()
+    week_start = today - timedelta(days=today.weekday())
+
+    receipts = list(
+        ReceiptRecord.objects.select_related("reservation__customer__profile")
+    )
+    rows = [_receipt_row(r, today) for r in receipts]
+
+    return render(
+        request,
+        "arabela_admin/receipt-records.html",
+        {
+            "page": "receipt-records",
+            "receipt_rows": rows,
+            "total_receipts": len(rows),
+            "receipts_this_week": sum(1 for r in rows if r["isThisWeek"]),
+            "reservations_covered": len({r["reservation"] for r in rows}),
+        },
+    )
+
+
+@require_http_methods(["POST"])
+@_require_admin_staff
+def receipt_upload_view(request):
+    """Attach a photo of a manually-issued receipt to a real reservation.
+
+    The customer name is never typed by staff -- it's resolved from the reservation
+    the reference code points to (Reservation.display_customer_name, the same
+    always-current name every other admin screen shows), so a receipt can never end
+    up filed under a name that doesn't match its own booking.
+    """
+    reference_code = (request.POST.get("reference_code") or "").strip().upper()
+    if not reference_code:
+        return JsonResponse({"error": "Please enter the reservation's reference code."}, status=400)
+
+    try:
+        reservation = Reservation.objects.select_related("customer__profile").get(
+            reference_code=reference_code
+        )
+    except Reservation.DoesNotExist:
+        return JsonResponse(
+            {"error": f"No reservation found with reference code {reference_code}."}, status=404
+        )
+
+    photo_file = request.FILES.get("photo")
+    error = _validate_receipt_photo(photo_file)
+    if error:
+        return JsonResponse({"error": error}, status=400)
+
+    try:
+        photo_url = _save_receipt_photo(photo_file)
+    except Exception:
+        return JsonResponse(
+            {"error": "The receipt photo couldn't be uploaded just now. Please try again."},
+            status=502,
+        )
+
+    receipt = ReceiptRecord.objects.create(
+        reservation=reservation, photo_url=photo_url, uploaded_by=request.user,
+    )
+    return JsonResponse({"success": True, "receipt": _receipt_row(receipt)})
+
+
+@require_http_methods(["POST"])
+@_require_admin_staff
+def receipt_replace_view(request, receipt_id):
+    """Correct a mistake on an already-attached receipt photo -- the wrong file, a bad
+    scan, etc. Deliberately leaves uploaded_at/uploaded_by alone: this is fixing the
+    existing record, not creating a new one."""
+    try:
+        receipt = ReceiptRecord.objects.select_related("reservation__customer__profile").get(
+            id=receipt_id
+        )
+    except ReceiptRecord.DoesNotExist:
+        return JsonResponse({"error": "Receipt not found."}, status=404)
+
+    photo_file = request.FILES.get("photo")
+    error = _validate_receipt_photo(photo_file)
+    if error:
+        return JsonResponse({"error": error}, status=400)
+
+    try:
+        photo_url = _save_receipt_photo(photo_file)
+    except Exception:
+        return JsonResponse(
+            {"error": "The receipt photo couldn't be uploaded just now. Please try again."},
+            status=502,
+        )
+
+    receipt.photo_url = photo_url
+    receipt.save(update_fields=["photo_url"])
+    return JsonResponse({"success": True, "receipt": _receipt_row(receipt)})
 
 
 @_require_admin_staff
@@ -743,6 +835,64 @@ def _save_gown_photo(photo_file) -> str:
         f"gown_photos/{uuid.uuid4().hex}_{photo_file.name}", photo_file
     )
     return default_storage.url(saved_path)
+
+
+# Same allow-list as gown photos and (in gowns.views) customer payment-proof uploads --
+# mirrored here rather than shared, matching how this file already mirrors the gown
+# photo constants instead of importing them across apps.
+RECEIPT_PHOTO_ALLOWED_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.webp')
+RECEIPT_PHOTO_ALLOWED_CONTENT_TYPES = ('image/jpeg', 'image/png', 'image/webp')
+RECEIPT_PHOTO_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
+def _validate_receipt_photo(photo_file) -> str:
+    """Return '' when the upload is acceptable, else the message to show staff.
+    Unlike a gown photo, a receipt photo is never optional -- there is nothing to
+    attach without one."""
+    if not photo_file:
+        return "Please attach a photo of the receipt."
+    name = (getattr(photo_file, "name", "") or "").lower()
+    if not name.endswith(RECEIPT_PHOTO_ALLOWED_EXTENSIONS):
+        return "Receipt photo must be a JPG, PNG, or WEBP image."
+    content_type = (getattr(photo_file, "content_type", "") or "").lower()
+    if content_type and content_type not in RECEIPT_PHOTO_ALLOWED_CONTENT_TYPES:
+        return "Receipt photo must be a JPG, PNG, or WEBP image."
+    if photo_file.size > RECEIPT_PHOTO_MAX_BYTES:
+        return "Receipt photo must be 5MB or smaller."
+    return ""
+
+
+def _save_receipt_photo(photo_file) -> str:
+    saved_path = default_storage.save(
+        f"receipt_photos/{uuid.uuid4().hex}_{photo_file.name}", photo_file
+    )
+    return default_storage.url(saved_path)
+
+
+def _receipt_row(receipt, today=None):
+    """Serialize one ReceiptRecord for the Alpine table -- shape matches exactly what
+    the page's existing client-side search/filter code already expects
+    (customer/reservation/uploaded/photoUrl), plus year/isThisWeek so that filtering
+    can be done generically in the template instead of the page's old hardcoded
+    per-row 'yearFilter === "2026"'-style conditions (one meant literally for every
+    single row, real data can't be baked into the template like that)."""
+    today = today or timezone.localdate()
+    week_start = today - timedelta(days=today.weekday())
+    local_uploaded = timezone.localtime(receipt.uploaded_at)
+    # date_format, not strftime's platform-specific "no leading zero" flags (%-d is
+    # Linux-only; Windows needs %#d) -- this dev machine is Windows, the deploy target
+    # is Linux, and Django's own formatter (j/g are already "no leading zero" by
+    # definition) works identically on both.
+    uploaded_display = f"{date_format(local_uploaded, 'M j, Y')} · {date_format(local_uploaded, 'g:i A')}"
+    return {
+        "id": receipt.id,
+        "customer": receipt.reservation.display_customer_name,
+        "reservation": receipt.reservation.reference_code,
+        "uploaded": uploaded_display,
+        "photoUrl": receipt.photo_url,
+        "year": str(local_uploaded.year),
+        "isThisWeek": local_uploaded.date() >= week_start,
+    }
 
 
 def _validate_gown_fields(name, category, color_name, color_code, size, design_variant=""):
@@ -1384,8 +1534,9 @@ def categories_view(request):
             "page": "categories",
             "wedding_gown_count": counts_by_category.get(Gown.Category.WEDDING_GOWN, 0),
             "ball_gown_count": counts_by_category.get(Gown.Category.BALL_GOWN, 0),
-            "sexy_gown_count": counts_by_category.get(Gown.Category.SEXY_GOWN, 0),
-            "ninang_gown_count": counts_by_category.get(Gown.Category.NINANG_GOWN, 0),
+            "long_gown_count": counts_by_category.get(Gown.Category.LONG_GOWN, 0),
+            "luxury_gown_count": counts_by_category.get(Gown.Category.LUXURY_GOWN, 0),
+            "mother_gown_count": counts_by_category.get(Gown.Category.MOTHER_GOWN, 0),
             "suit_count": counts_by_category.get(Gown.Category.SUIT, 0),
             "filipiniana_count": counts_by_category.get(Gown.Category.FILIPINIANA, 0),
             "guest_gown_count": counts_by_category.get(Gown.Category.GUEST_GOWN, 0),
@@ -1647,6 +1798,51 @@ def staff_update_view(request, user_id):
 
 @require_http_methods(["POST"])
 @_require_owner
+def change_own_password_view(request):
+    """Let the currently signed-in OWNER change their own login password.
+
+    Deliberately owner-only, by the user's explicit request: staff accounts have no
+    self-service password change at all -- only the owner may change any password
+    (their own here, or a staff member's via staff_update_view above). @_require_owner
+    is the real enforcement; nothing about what the client sends can bypass it. This
+    also means a staff account can never even reach this endpoint, so there is no
+    "target user" to confuse with the caller -- it is always request.user.
+
+    Requires the CURRENT password first (staff_update_view resetting someone ELSE's
+    password doesn't need this -- the owner is already proven who they are by being
+    logged in as owner; here the owner is proving it's really them, not someone who
+    walked up to an unlocked session).
+    """
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid request."}, status=400)
+
+    current_password = data.get("current_password") or ""
+    new_password = data.get("new_password") or ""
+    confirm_password = data.get("confirm_password") or ""
+
+    if not request.user.check_password(current_password):
+        return JsonResponse({"error": "Your current password is incorrect."}, status=400)
+    if len(new_password) < 8:
+        return JsonResponse({"error": "New password must be at least 8 characters."}, status=400)
+    if new_password != confirm_password:
+        return JsonResponse({"error": "New passwords do not match."}, status=400)
+    if request.user.check_password(new_password):
+        return JsonResponse(
+            {"error": "That's your current password. Please choose a different one."}, status=400
+        )
+
+    request.user.set_password(new_password)
+    request.user.save(update_fields=["password"])
+    # Changing your own password rotates Django's session auth hash -- without this the
+    # owner would be silently signed out immediately after successfully changing it.
+    update_session_auth_hash(request, request.user)
+    return JsonResponse({"success": True})
+
+
+@require_http_methods(["POST"])
+@_require_owner
 def staff_toggle_status_view(request, user_id):
     """Activate / deactivate a staff account -- deactivating blocks their login without
     deleting their record."""
@@ -1770,6 +1966,7 @@ def page_view(request, page: str):
         "buttons",
         "form-elements",
         "profile",
+        "account-settings",
     }
     if page not in allowed_pages:
         raise Http404("Page not found")
@@ -1785,6 +1982,13 @@ def page_view(request, page: str):
             "last_name": request.user.last_name,
             "email": request.user.email,
             "bio": profile.display_name,
+        })
+
+    if page == "account-settings":
+        # admin_full_name/admin_role/admin_is_owner already come from the global admin
+        # context processor -- only the raw login username is specific to this page.
+        return render(request, "arabela_admin/account-settings.html", {
+            "admin_username": request.user.get_username(),
         })
 
     return render(request, f"arabela_admin/{page}.html")

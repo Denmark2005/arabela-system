@@ -1513,7 +1513,7 @@
             </li>
             <li>
               <a
-                href="messages.html"
+                href="{% url 'arabela_admin:page' page='account-settings' %}"
                 class="group text-theme-sm flex items-center gap-3 rounded-lg px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
               >
                 <svg
@@ -1670,8 +1670,9 @@
                     <option value="All">All Categories</option>
                 <option value="Wedding Gown">Wedding Gown</option>
                 <option value="Ball Gown">Ball Gown</option>
-                <option value="Sexy Gown">Sexy Gown</option>
-                <option value="Ninang Gown">Ninang Gown</option>
+                <option value="Long Gown">Long Gown</option>
+                <option value="Luxury Gown">Luxury Gown</option>
+                <option value="Mother Gown">Mother Gown</option>
                 <option value="Suit">Suit</option>
                 <option value="Filipiniana">Filipiniana</option>
                 <option value="Guest Gown">Guest Gown</option>
@@ -1839,8 +1840,9 @@
             <select x-model="newGownCategory" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
               <option value="Wedding Gown">Wedding Gown</option>
               <option value="Ball Gown">Ball Gown</option>
-              <option value="Sexy Gown">Sexy Gown</option>
-              <option value="Ninang Gown">Ninang Gown</option>
+              <option value="Long Gown">Long Gown</option>
+              <option value="Luxury Gown">Luxury Gown</option>
+              <option value="Mother Gown">Mother Gown</option>
               <option value="Suit">Suit</option>
               <option value="Filipiniana">Filipiniana</option>
               <option value="Guest Gown">Guest Gown</option>
@@ -2064,9 +2066,15 @@
       <p class="mb-6 text-sm text-gray-500 dark:text-gray-400" x-text="viewingGownImage.gownId + ' &middot; ' + viewingGownImage.details"></p>
     </div>
     <div class="px-2">
-      <div class="mb-6 flex h-[212px] items-center justify-center overflow-hidden rounded-2xl bg-gray-100 dark:bg-gray-800">
+      <!-- Full photo, never cropped: object-contain + natural aspect ratio instead of
+           the old fixed-height object-cover box, which sliced a whole gown down to a
+           thin horizontal strip for any tall portrait photo (most gown photos are
+           portrait). "View Full Image" opens the actual file directly, at its real
+           resolution, in a new tab -- the one thing this modal can never guarantee on
+           its own if the source photo is small or an unusual shape to begin with. -->
+      <div class="mb-3 flex max-h-[60vh] min-h-[160px] items-center justify-center overflow-hidden rounded-2xl bg-gray-100 dark:bg-gray-800">
         <template x-if="viewingGownImage.photoUrl">
-          <img :src="viewingGownImage.photoUrl" alt="Current gown photo" class="h-full w-full object-cover" />
+          <img :src="viewingGownImage.photoUrl" alt="Current gown photo" style="display: block; max-height: 60vh; max-width: 100%; width: auto; height: auto;" />
         </template>
         <template x-if="!viewingGownImage.photoUrl">
           <svg class="h-14 w-14 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -2074,6 +2082,16 @@
           </svg>
         </template>
       </div>
+      <a
+        x-show="viewingGownImage.photoUrl"
+        :href="viewingGownImage.photoUrl"
+        target="_blank"
+        rel="noopener"
+        class="mb-6 inline-flex items-center gap-1.5 text-theme-xs font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400"
+      >
+        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
+        View Full Image
+      </a>
       <p x-show="photoUpdateError" x-cloak class="mb-3 rounded-lg bg-error-50 px-4 py-2.5 text-sm text-error-700 dark:bg-error-500/15 dark:text-error-500" x-text="photoUpdateError"></p>
       <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Replace Photo</label>
       <input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" x-ref="replacePhotoInput" @change="updateGownPhoto($event.target.files[0]); $event.target.value = ''" />

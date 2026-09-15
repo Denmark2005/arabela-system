@@ -5,13 +5,14 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import Client, TestCase
 from django.urls import reverse
 
 from accounts.models import CustomerMessage, UserProfile
 from gowns.models import Gown, GownUnavailability
 from reservations import reminders
-from reservations.models import Reservation, ReservationItem, ReservationStatusEvent
+from reservations.models import ReceiptRecord, Reservation, ReservationItem, ReservationStatusEvent
 
 User = get_user_model()
 
@@ -1471,3 +1472,377 @@ class StaffSendReminderPageTests(TestCase):
         self.assertIn("adm-dlg__card", self.html)
         self.assertIn('id="adm-dlg-textarea"', self.html)
         self.assertIn('name="csrfmiddlewaretoken"', self.html)
+
+
+class AccountSettingsPageTests(TestCase):
+    """`page_view`'s "account-settings" branch. Everyone who can sign in to the admin
+    panel can see it; only the owner sees (and can use) the password form -- staff get
+    a plain explanation instead. Also verifies the "Account settings" link across the
+    panel actually points here now (it used to be a leftover `href="messages.html"`
+    from the original template pack, 404ing on every single admin page)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = User.objects.create_user(
+            username="acctpage_owner", password="OldPass123", is_staff=True,
+            first_name="Ana", last_name="Cruz")
+        UserProfile.objects.update_or_create(user=cls.owner, defaults={"role": UserProfile.Role.OWNER})
+        cls.staffer = User.objects.create_user(
+            username="acctpage_staff", password="StaffPass123", is_staff=True,
+            first_name="Bo", last_name="Reyes")
+        UserProfile.objects.update_or_create(user=cls.staffer, defaults={"role": UserProfile.Role.STAFF})
+
+    def setUp(self):
+        self.url = reverse("arabela_admin:page", args=["account-settings"])
+
+    def test_owner_sees_the_password_form(self):
+        self.client.force_login(self.owner)
+        html = self.client.get(self.url).content.decode()
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+        self.assertIn('x-model="currentPassword"', html)
+        self.assertIn("Ana Cruz", html)
+        self.assertIn("acctpage_owner", html)
+
+    def test_staff_does_not_see_the_password_form(self):
+        self.client.force_login(self.staffer)
+        html = self.client.get(self.url).content.decode()
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+        self.assertNotIn('x-model="currentPassword"', html)
+        self.assertIn("only the shop owner can change passwords", html.lower())
+        self.assertIn("Bo Reyes", html)
+
+    def test_a_signed_out_visitor_is_redirected_to_login(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("arabela_admin:admin_login"), response.url)
+
+    def test_no_unrendered_template_syntax_leaks_into_either_view(self):
+        for user in (self.owner, self.staffer):
+            self.client.force_login(user)
+            html = self.client.get(self.url).content.decode()
+            for leak in ("{%", "{{", "{#"):
+                self.assertNotIn(leak, html)
+
+    def test_the_account_settings_link_on_a_real_page_points_here_now(self):
+        """The link used to be a dead `href="messages.html"` leftover from the
+        original template pack -- 404ing on every admin page it appeared on."""
+        self.client.force_login(self.owner)
+        dashboard_html = self.client.get(reverse("arabela_admin:dashboard")).content.decode()
+        self.assertNotIn('href="messages.html"', dashboard_html)
+        self.assertIn(self.url, dashboard_html)
+
+
+class ChangeOwnPasswordTests(TestCase):
+    """`change_own_password_view` -- by explicit design, ONLY the owner may change any
+    password in this panel, including their own. Staff have no self-service password
+    change at all; if they need a new one, the owner sets it via Staff Management."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = User.objects.create_user(
+            username="chpw_owner", password="OldPass123", is_staff=True)
+        UserProfile.objects.update_or_create(user=cls.owner, defaults={"role": UserProfile.Role.OWNER})
+        cls.staffer = User.objects.create_user(
+            username="chpw_staff", password="StaffPass123", is_staff=True)
+        UserProfile.objects.update_or_create(user=cls.staffer, defaults={"role": UserProfile.Role.STAFF})
+
+    def setUp(self):
+        self.url = reverse("arabela_admin:change_own_password")
+
+    def _post(self, current="OldPass123", new="NewSecurePass456", confirm=None):
+        return self.client.post(self.url, data=json.dumps({
+            "current_password": current, "new_password": new,
+            "confirm_password": confirm if confirm is not None else new,
+        }), content_type="application/json")
+
+    def test_owner_can_change_their_own_password(self):
+        self.client.force_login(self.owner)
+        response = self._post()
+        self.assertEqual(response.status_code, 200, response.content)
+        self.owner.refresh_from_db()
+        self.assertTrue(self.owner.check_password("NewSecurePass456"))
+        self.assertFalse(self.owner.check_password("OldPass123"))
+
+    def test_owner_is_not_logged_out_by_changing_their_own_password(self):
+        """update_session_auth_hash is the whole reason this matters -- without it the
+        owner is silently signed out the instant their own change succeeds."""
+        self.client.force_login(self.owner)
+        self._post()
+        # A follow-up request on the SAME client must still be authenticated.
+        still_in = self.client.get(reverse("arabela_admin:dashboard"))
+        self.assertEqual(still_in.status_code, 200)
+
+    def test_new_password_actually_works_for_a_real_login_afterward(self):
+        self.client.force_login(self.owner)
+        self._post()
+        fresh = Client()
+        fresh.logout()
+        self.assertTrue(fresh.login(username="chpw_owner", password="NewSecurePass456"))
+
+    def test_old_password_stops_working_afterward(self):
+        self.client.force_login(self.owner)
+        self._post()
+        fresh = Client()
+        self.assertFalse(fresh.login(username="chpw_owner", password="OldPass123"))
+
+    def test_wrong_current_password_is_refused(self):
+        self.client.force_login(self.owner)
+        response = self._post(current="TotallyWrong")
+        self.assertEqual(response.status_code, 400)
+        self.owner.refresh_from_db()
+        self.assertTrue(self.owner.check_password("OldPass123"))
+
+    def test_a_too_short_new_password_is_refused(self):
+        self.client.force_login(self.owner)
+        response = self._post(new="short", confirm="short")
+        self.assertEqual(response.status_code, 400)
+
+    def test_mismatched_confirmation_is_refused(self):
+        self.client.force_login(self.owner)
+        response = self._post(new="FirstOption1", confirm="SecondOption2")
+        self.assertEqual(response.status_code, 400)
+
+    def test_reusing_the_current_password_is_refused(self):
+        self.client.force_login(self.owner)
+        response = self._post(new="OldPass123", confirm="OldPass123")
+        self.assertEqual(response.status_code, 400)
+
+    def test_staff_cannot_change_their_own_password_here(self):
+        """The explicit business rule this feature was built around: staff get NO
+        self-service password change, full stop -- not even for their own account."""
+        self.client.force_login(self.staffer)
+        response = self._post(current="StaffPass123", new="StaffWantsThis1")
+        self.assertEqual(response.status_code, 403)
+        self.staffer.refresh_from_db()
+        self.assertTrue(self.staffer.check_password("StaffPass123"))
+
+    def test_staff_cannot_change_the_owners_password_here_either(self):
+        self.client.force_login(self.staffer)
+        response = self._post(current="OldPass123", new="StaffWantsThis1")
+        self.assertEqual(response.status_code, 403)
+        self.owner.refresh_from_db()
+        self.assertTrue(self.owner.check_password("OldPass123"))
+
+    def test_a_signed_out_visitor_cannot_reach_it(self):
+        response = self._post()
+        self.assertIn(response.status_code, (302, 401, 403))
+
+    def test_malformed_json_is_refused_cleanly_not_a_500(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(self.url, data="not json", content_type="application/json")
+        self.assertEqual(response.status_code, 400)
+
+
+class ImageViewerFixTests(TestCase):
+    """Two real staff complaints, one shared fix: the Gown Photo modal was cropping
+    tall gown photos down to a thin horizontal strip (a fixed-height box +
+    object-cover), and the payment-proof modals had no way to see an upload any
+    bigger than its own (sometimes small/low-res) natural size. Both now show the
+    full image uncropped, and both now offer a "View Full Image" link that opens the
+    real uploaded file directly, at its true resolution, in a new tab."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(username="imgview_staff", password="x", is_staff=True)
+        UserProfile.objects.update_or_create(user=cls.staff, defaults={"role": UserProfile.Role.OWNER})
+        cls.customer = User.objects.create_user(username="imgview_customer", password="x")
+
+    def setUp(self):
+        self.client.force_login(self.staff)
+
+    def test_gown_photo_modal_no_longer_crops_with_object_cover(self):
+        _make_gown(photo_url="https://example.test/gowns/tall.jpg")
+        html = self.client.get(reverse("arabela_admin:gown_catalog")).content.decode()
+        self.assertNotIn('alt="Current gown photo" class="h-full w-full object-cover"', html)
+        self.assertIn("max-height: 60vh", html)
+
+    def test_gown_photo_modal_has_a_view_full_image_link_bound_to_the_real_url(self):
+        _make_gown(photo_url="https://example.test/gowns/tall.jpg")
+        html = self.client.get(reverse("arabela_admin:gown_catalog")).content.decode()
+        self.assertIn(':href="viewingGownImage.photoUrl"', html)
+        self.assertIn('target="_blank"', html)
+        self.assertIn('rel="noopener"', html)
+
+    def _make_reservation_with_proof(self, proof_url="https://example.test/proofs/small.jpg"):
+        today = date.today()
+        reservation = Reservation.objects.create(
+            customer=self.customer, customer_name="Image View Customer",
+            status=Reservation.Status.PENDING, payment_proof_url=proof_url,
+            payment_method="GCash", total_amount=Decimal("5000"))
+        ReservationItem.objects.create(
+            reservation=reservation, gown_name="Image View Item",
+            rental_date=today, return_date=today + timedelta(days=3))
+        return reservation
+
+    def test_payment_verification_has_a_view_full_image_link(self):
+        self._make_reservation_with_proof()
+        html = self.client.get(reverse("arabela_admin:payment_verification")).content.decode()
+        self.assertIn(':href="viewingPayment.proofUrl"', html)
+        self.assertIn('target="_blank"', html)
+
+    def test_security_deposits_has_a_view_full_image_link(self):
+        self._make_reservation_with_proof()
+        html = self.client.get(reverse("arabela_admin:security_deposits")).content.decode()
+        self.assertIn(':href="viewingPayment.proofUrl"', html)
+        self.assertIn('target="_blank"', html)
+
+    def test_no_unrendered_template_syntax_on_any_of_the_three_pages(self):
+        _make_gown(photo_url="https://example.test/gowns/tall.jpg")
+        self._make_reservation_with_proof()
+        for url_name in ("gown_catalog", "payment_verification", "security_deposits"):
+            with self.subTest(page=url_name):
+                html = self.client.get(reverse(f"arabela_admin:{url_name}")).content.decode()
+                for leak in ("{%", "{{", "{#"):
+                    self.assertNotIn(leak, html)
+
+
+def _make_jpeg(name="receipt.jpg"):
+    tiny_jpeg = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xff\xd9"
+    return SimpleUploadedFile(name, tiny_jpeg, content_type="image/jpeg")
+
+
+class ReceiptRecordsTests(TestCase):
+    """Receipt Records -- staff attach a photo of a manually-issued receipt (the shop's
+    own paper receipt) to a real reservation. Deliberately the opposite of
+    Reservation.payment_proof_url (the customer's own GCash screenshot, captured
+    automatically at checkout): this is produced by the shop, attached by staff,
+    afterward. _save_receipt_photo is mocked in every test -- this environment's
+    default storage is real Cloudinary, and these tests must never upload anything to
+    that live external account."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            username="receipt_test_staff", password="x", is_staff=True,
+            first_name="Ana", last_name="Cruz")
+        UserProfile.objects.update_or_create(user=cls.staff, defaults={"role": UserProfile.Role.OWNER})
+        cls.customer = User.objects.create_user(username="receipt_test_customer", password="x")
+
+    def setUp(self):
+        self.client.force_login(self.staff)
+        today = date.today()
+        self.reservation = Reservation.objects.create(
+            customer=self.customer, customer_name="Receipt Test Customer",
+            status=Reservation.Status.CONFIRMED, total_amount=Decimal("5000"))
+        ReservationItem.objects.create(
+            reservation=self.reservation, gown_name="Receipt Test Item",
+            rental_date=today, return_date=today + timedelta(days=3))
+        patcher = patch("arabela_admin.views._save_receipt_photo",
+                        side_effect=lambda f: f"https://example.test/receipts/{f.name}")
+        self.addCleanup(patcher.stop)
+        patcher.start()
+
+    def test_page_no_longer_shows_leftover_demo_data(self):
+        html = self.client.get(reverse("arabela_admin:receipt_records")).content.decode()
+        self.assertNotIn("RSV-0142", html)
+        self.assertNotIn("Maria Santos", html)
+        self.assertNotIn("Customer Name</label>", html)
+        self.assertIn("Reservation Reference Code", html)
+        for leak in ("{%", "{{", "{#"):
+            self.assertNotIn(leak, html)
+
+    def test_uploading_by_reference_code_resolves_the_real_customer_name(self):
+        """The whole point: staff never type a customer name -- it comes from the
+        reservation, so it can never drift from the booking it's actually attached to."""
+        response = self.client.post(reverse("arabela_admin:receipt_upload"), data={
+            "reference_code": self.reservation.reference_code.lower(),
+            "photo": _make_jpeg(),
+        })
+        self.assertEqual(response.status_code, 200, response.content)
+        data = response.json()["receipt"]
+        self.assertEqual(data["customer"], "Receipt Test Customer")
+        self.assertEqual(data["reservation"], self.reservation.reference_code)
+        self.assertTrue(data["photoUrl"])
+
+    def test_a_real_record_is_created_and_attributed_to_the_uploader(self):
+        self.client.post(reverse("arabela_admin:receipt_upload"), data={
+            "reference_code": self.reservation.reference_code, "photo": _make_jpeg(),
+        })
+        receipt = ReceiptRecord.objects.get(reservation=self.reservation)
+        self.assertEqual(receipt.uploaded_by_id, self.staff.id)
+        self.assertTrue(receipt.photo_url)
+
+    def test_unknown_reference_code_is_a_clean_404(self):
+        response = self.client.post(reverse("arabela_admin:receipt_upload"), data={
+            "reference_code": "RSV-2026-DOES-NOT-EXIST", "photo": _make_jpeg(),
+        })
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(ReceiptRecord.objects.count(), 0)
+
+    def test_a_blank_reference_code_is_refused(self):
+        response = self.client.post(reverse("arabela_admin:receipt_upload"),
+                                    data={"reference_code": "   "})
+        self.assertEqual(response.status_code, 400)
+
+    def test_a_missing_file_is_refused(self):
+        response = self.client.post(reverse("arabela_admin:receipt_upload"),
+                                    data={"reference_code": self.reservation.reference_code})
+        self.assertEqual(response.status_code, 400)
+
+    def test_a_disallowed_file_type_is_refused(self):
+        bad_file = SimpleUploadedFile("virus.exe", b"not an image",
+                                      content_type="application/octet-stream")
+        response = self.client.post(reverse("arabela_admin:receipt_upload"), data={
+            "reference_code": self.reservation.reference_code, "photo": bad_file,
+        })
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(ReceiptRecord.objects.count(), 0)
+
+    def test_replacing_the_photo_updates_the_record_but_not_the_upload_time(self):
+        self.client.post(reverse("arabela_admin:receipt_upload"), data={
+            "reference_code": self.reservation.reference_code, "photo": _make_jpeg("first.jpg"),
+        })
+        receipt = ReceiptRecord.objects.get(reservation=self.reservation)
+        original_uploaded_at = receipt.uploaded_at
+
+        response = self.client.post(
+            reverse("arabela_admin:receipt_replace", args=[receipt.id]),
+            data={"photo": _make_jpeg("second.jpg")})
+        self.assertEqual(response.status_code, 200, response.content)
+
+        receipt.refresh_from_db()
+        self.assertIn("second.jpg", receipt.photo_url)
+        self.assertEqual(receipt.uploaded_at, original_uploaded_at)
+
+    def test_replacing_a_nonexistent_receipt_is_a_clean_404(self):
+        response = self.client.post(
+            reverse("arabela_admin:receipt_replace", args=[999999]), data={"photo": _make_jpeg()})
+        self.assertEqual(response.status_code, 404)
+
+    def test_a_signed_out_visitor_cannot_upload(self):
+        self.client.logout()
+        response = self.client.post(reverse("arabela_admin:receipt_upload"), data={
+            "reference_code": self.reservation.reference_code, "photo": _make_jpeg(),
+        })
+        self.assertIn(response.status_code, (302, 401))
+        self.assertEqual(ReceiptRecord.objects.count(), 0)
+
+    def test_stat_cards_reflect_real_counts(self):
+        other = User.objects.create_user(username="receipt_test_other", password="x")
+        other_reservation = Reservation.objects.create(
+            customer=other, customer_name="Other Customer", status=Reservation.Status.CONFIRMED)
+        for reservation, name in ((self.reservation, "a.jpg"), (other_reservation, "b.jpg")):
+            self.client.post(reverse("arabela_admin:receipt_upload"), data={
+                "reference_code": reservation.reference_code, "photo": _make_jpeg(name),
+            })
+        html = self.client.get(reverse("arabela_admin:receipt_records")).content.decode()
+        self.assertIn(">2<", html)  # total receipts and reservations covered both == 2
+
+    def test_a_second_receipt_on_the_same_reservation_is_allowed(self):
+        """No one-per-booking constraint -- a redo or a second physical receipt for a
+        partial payment must not be blocked."""
+        for name in ("first.jpg", "second.jpg"):
+            response = self.client.post(reverse("arabela_admin:receipt_upload"), data={
+                "reference_code": self.reservation.reference_code, "photo": _make_jpeg(name),
+            })
+            self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(
+            ReceiptRecord.objects.filter(reservation=self.reservation).count(), 2)
+
+    def test_view_full_image_link_is_present_and_bound_to_the_real_url(self):
+        self.client.post(reverse("arabela_admin:receipt_upload"), data={
+            "reference_code": self.reservation.reference_code, "photo": _make_jpeg(),
+        })
+        html = self.client.get(reverse("arabela_admin:receipt_records")).content.decode()
+        self.assertIn(':href="viewingReceipt.photoUrl"', html)
+        self.assertIn('target="_blank"', html)

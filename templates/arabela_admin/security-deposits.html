@@ -1115,7 +1115,7 @@
             </li>
             <li>
               <a
-                href="messages.html"
+                href="{% url 'arabela_admin:page' page='account-settings' %}"
                 class="group text-theme-sm flex items-center gap-3 rounded-lg px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
               >
                 <svg
@@ -1401,9 +1401,27 @@
                   <p x-show="viewingPayment.bookedAs" class="-mt-4 mb-6 text-xs text-gray-400 dark:text-gray-500">Booked as: <span x-text="viewingPayment.bookedAs"></span></p>
                 </div>
                 <div class="px-2">
+                  <!-- Natural size, never cropped, capped at 75% of the viewport height
+                       so it never needs to spill past the modal -- but a genuinely small or
+                       low-resolution upload (a downscaled screenshot, a distant phone photo)
+                       still just renders small at that size; CSS can't invent detail that
+                       was never in the file. "View Full Image" opens the actual upload
+                       directly in a new tab, at its real resolution, where the browser's own
+                       zoom/pinch handles anything this modal can't. -->
                   <template x-if="viewingPayment.proofUrl">
-                    <div class="mb-6 flex w-full items-center justify-center overflow-hidden rounded-2xl bg-gray-100 dark:bg-gray-800">
-                      <img :src="viewingPayment.proofUrl" alt="Payment proof" style="display: block; max-height: 75vh; max-width: 100%; width: auto; height: auto;" />
+                    <div>
+                      <div class="mb-3 flex w-full items-center justify-center overflow-hidden rounded-2xl bg-gray-100 dark:bg-gray-800">
+                        <img :src="viewingPayment.proofUrl" alt="Payment proof" style="display: block; max-height: 75vh; max-width: 100%; width: auto; height: auto;" />
+                      </div>
+                      <a
+                        :href="viewingPayment.proofUrl"
+                        target="_blank"
+                        rel="noopener"
+                        class="mb-6 inline-flex items-center gap-1.5 text-theme-xs font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400"
+                      >
+                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
+                        View Full Image
+                      </a>
                     </div>
                   </template>
                   <template x-if="!viewingPayment.proofUrl">

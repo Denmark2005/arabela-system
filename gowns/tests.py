@@ -10,7 +10,7 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connections
 from django.test import TestCase
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 from django.utils import formats, timezone
 
 from gowns.models import Gown, GownSequence, GownSlugSequence, GownUnavailability
@@ -705,3 +705,138 @@ class GownSlugSequenceTests(TestCase):
         expected = {base} | {f"{base}-{n}" for n in range(2, n_threads + 1)}
         self.assertEqual(set(results), expected,
                          "the suffixes handed out must be exactly 2..N, no gaps or repeats")
+
+
+class CategorySwapTests(TestCase):
+    """Sexy Gown / Ninang Gown were removed and replaced with Long Gown / Luxury Gown /
+    Mother Gown, everywhere: the customer-facing placeholder catalog, the real-inventory
+    Gown model, and the admin panel. This is the one registry
+    (gowns.context_processors._CATEGORIES) that every one of these surfaces reads from,
+    so these tests cover that removing/adding a category there actually propagates
+    everywhere it needs to -- not just that the registry itself looks right."""
+
+    NEW_CATEGORIES = [
+        ("collection_long_gown", "Long Gown"),
+        ("collection_luxury_gown", "Luxury Gown"),
+        ("collection_mother_gown", "Mother Gown"),
+    ]
+
+    def test_each_new_category_page_renders_with_its_own_label(self):
+        for url_name, label in self.NEW_CATEGORIES:
+            with self.subTest(category=label):
+                html = self.client.get(reverse(f"gowns:{url_name}")).content.decode()
+                self.assertIn(f">{label}<", html)
+                self.assertIn(f"{label} Collection", html)  # <title>
+                for leak in ("{%", "{{", "{#"):
+                    self.assertNotIn(leak, html)
+
+    def test_each_new_category_still_gets_the_shared_8_item_placeholder_catalog(self):
+        """Category is irrelevant to the placeholder catalog by design -- the same 8
+        products/prices appear regardless of which of the 11 categories is showing."""
+        wedding_html = self.client.get(reverse("gowns:collection_wedding")).content.decode()
+        for url_name, _ in self.NEW_CATEGORIES:
+            with self.subTest(category=url_name):
+                html = self.client.get(reverse(f"gowns:{url_name}")).content.decode()
+                # ₱1,600 / ₱3,000 are the fixed low/high ends of the shared price table.
+                self.assertIn("1,600", html)
+                self.assertIn("3,000", html)
+
+    def test_the_old_category_url_names_no_longer_resolve(self):
+        for old_name in ("collection_sexy_gown", "collection_ninang_gown"):
+            with self.assertRaises(NoReverseMatch):
+                reverse(f"gowns:{old_name}")
+
+    def test_the_old_category_paths_404_cleanly_not_a_500(self):
+        for path in ("/collections/sexy-gown/", "/collections/ninang-gown/",
+                    "/sexy-gown/", "/ninang-gown/"):
+            with self.subTest(path=path):
+                self.assertEqual(self.client.get(path).status_code, 404)
+
+    def test_the_browse_all_grid_lists_the_new_categories_not_the_old(self):
+        html = self.client.get(reverse("gowns:collections")).content.decode()
+        for _, label in self.NEW_CATEGORIES:
+            self.assertIn(label, html)
+        self.assertNotIn("Sexy Gown", html)
+        self.assertNotIn("Ninang Gown", html)
+
+    def test_the_rent_all_cycle_through_view_includes_the_new_categories(self):
+        html = self.client.get(reverse("gowns:collection_all")).content.decode()
+        for _, label in self.NEW_CATEGORIES:
+            self.assertIn(label, html)
+        self.assertNotIn("Sexy Gown", html)
+        self.assertNotIn("Ninang Gown", html)
+
+    def test_the_homepage_showcase_no_longer_references_the_removed_categories(self):
+        html = self.client.get(reverse("gowns:homepage")).content.decode()
+        self.assertNotIn("Ninang", html)
+        self.assertNotIn("Sexy", html)
+        self.assertIn(reverse("gowns:collection_long_gown"), html)
+
+    def test_gown_model_accepts_the_new_categories(self):
+        for value in ("Long Gown", "Luxury Gown", "Mother Gown"):
+            self.assertIn(value, Gown.Category.values)
+        self.assertNotIn("Sexy Gown", Gown.Category.values)
+        self.assertNotIn("Ninang Gown", Gown.Category.values)
+
+    def test_a_real_gown_can_be_added_in_a_new_category_and_appears_live(self):
+        """The actual end-to-end proof: create through the real admin endpoint, then
+        confirm it is visible on the real customer-facing page -- not just that the
+        category string is accepted somewhere in isolation."""
+        staff = User.objects.create_user(username="catswap_admin", password="x", is_staff=True)
+        self.client.force_login(staff)
+        response = self.client.post(reverse("arabela_admin:gown_create"), data={
+            "name": "Mother Gown Test Piece", "category": "Mother Gown",
+            "color_name": "Ivory", "color_code": "IV",
+            "size": Gown.Size.MEDIUM, "rental_price": "3000",
+            "status": Gown.Status.AVAILABLE,
+        })
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["gown"]["gown_id"], "Mother Gown-IV-001")
+
+        self.client.logout()
+        html = self.client.get(reverse("gowns:collection_mother_gown")).content.decode()
+        self.assertIn("Mother Gown Test Piece", html)
+
+    def test_placeholder_checkout_still_works_for_the_new_categories(self):
+        """The server-side price-trust computation (gowns.views._authoritative_price)
+        is category-independent by design -- proving one new category proves all of
+        them, since nothing in that code path branches on category at all."""
+        customer = User.objects.create_user(username="catswap_checkout", password="x")
+        self.client.force_login(customer)
+        rental = date.today() + timedelta(days=10)
+        with patch("gowns.views._save_proof_file", return_value="https://example.test/fake-proof.jpg"):
+            response = self.client.post(reverse("gowns:reservation_submit"), data={
+                "items": json.dumps([{
+                    "gown_name": "Mother Gown Three", "gown_slug": "", "size": "M",
+                    "rental_price": "1",  # fabricated on purpose -- server must ignore it
+                    "rental_date": rental.isoformat(),
+                    "return_date": (rental + timedelta(days=4)).isoformat(),
+                }]),
+                "first_name": "Cat", "last_name": "Swap", "phone": "09171234567",
+                "address": "1 St", "city": "City", "postal_code": "1000",
+                "payment_method": "GCash", "proof_of_payment": _make_proof(),
+            })
+        self.assertEqual(response.status_code, 200, response.content)
+        item = Reservation.objects.get(
+            reference_code=response.json()["reference_code"]).items.get()
+        self.assertEqual(item.rental_price, Decimal("2000"))
+
+    def test_admin_categories_page_shows_new_categories_not_old(self):
+        staff = User.objects.create_user(username="catswap_cats", password="x", is_staff=True)
+        self.client.force_login(staff)
+        html = self.client.get(reverse("arabela_admin:categories")).content.decode()
+        for _, label in self.NEW_CATEGORIES:
+            self.assertIn(label, html)
+        self.assertNotIn("Sexy Gown", html)
+        self.assertNotIn("Ninang Gown", html)
+        for leak in ("{%", "{{", "{#"):
+            self.assertNotIn(leak, html)
+
+    def test_gown_catalog_dropdowns_offer_new_categories_not_old(self):
+        staff = User.objects.create_user(username="catswap_catalog", password="x", is_staff=True)
+        self.client.force_login(staff)
+        html = self.client.get(reverse("arabela_admin:gown_catalog")).content.decode()
+        for _, label in self.NEW_CATEGORIES:
+            self.assertIn(f'<option value="{label}">{label}</option>', html)
+        self.assertNotIn('value="Sexy Gown"', html)
+        self.assertNotIn('value="Ninang Gown"', html)

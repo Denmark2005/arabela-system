@@ -377,3 +377,39 @@ class ReminderRun(models.Model):
     def load(cls):
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+
+class ReceiptRecord(models.Model):
+    """A manual receipt -- a physical receipt the shop itself issued (printed, written,
+    or otherwise produced), photographed and attached here by staff after the fact.
+
+    Deliberately the OPPOSITE direction from Reservation.payment_proof_url: that field
+    is the CUSTOMER's own GCash screenshot, uploaded automatically at checkout, proving
+    the customer paid. This is the shop's OWN record of the transaction, for its own
+    bookkeeping -- staff produce it, staff attach it, and it exists independently of
+    whatever the customer uploaded (or didn't; a reservation can have a manual receipt
+    with no online proof at all, or the reverse).
+
+    One reservation can end up with more than one of these over time (a redo, a second
+    physical receipt for a partial payment) -- nothing here forces exactly one, matching
+    how the feature's own "Replace Photo" action already treats a mistake in ONE receipt
+    as something to fix in place, not a reason to enforce a stricter one-per-booking rule.
+    """
+
+    reservation = models.ForeignKey(
+        Reservation, on_delete=models.CASCADE, related_name='receipt_records'
+    )
+    photo_url = models.URLField()
+    # SET_NULL, not CASCADE: a staff account being removed later must never take a
+    # financial record down with it -- the receipt itself still matters.
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='+',
+    )
+    uploaded_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ['-uploaded_at']
+
+    def __str__(self):
+        return f'Receipt for {self.reservation.reference_code} ({self.uploaded_at:%Y-%m-%d})'

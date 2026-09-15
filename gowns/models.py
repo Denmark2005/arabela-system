@@ -6,8 +6,9 @@ class Gown(models.Model):
     class Category(models.TextChoices):
         WEDDING_GOWN = 'Wedding Gown', 'Wedding Gown'
         BALL_GOWN = 'Ball Gown', 'Ball Gown'
-        SEXY_GOWN = 'Sexy Gown', 'Sexy Gown'
-        NINANG_GOWN = 'Ninang Gown', 'Ninang Gown'
+        LONG_GOWN = 'Long Gown', 'Long Gown'
+        LUXURY_GOWN = 'Luxury Gown', 'Luxury Gown'
+        MOTHER_GOWN = 'Mother Gown', 'Mother Gown'
         SUIT = 'Suit', 'Suit'
         FILIPINIANA = 'Filipiniana', 'Filipiniana'
         GUEST_GOWN = 'Guest Gown', 'Guest Gown'

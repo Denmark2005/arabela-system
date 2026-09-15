@@ -145,12 +145,16 @@ def collection_ball_gown(request):
     return _render_collection(request, 'ball_gown.html', 'ball-gown')
 
 
-def collection_sexy_gown(request):
-    return _render_collection(request, 'sexy_gown.html', 'sexy-gown')
+def collection_long_gown(request):
+    return _render_collection(request, 'long_gown.html', 'long-gown')
 
 
-def collection_ninang_gown(request):
-    return _render_collection(request, 'ninang_gown.html', 'ninang-gown')
+def collection_luxury_gown(request):
+    return _render_collection(request, 'luxury_gown.html', 'luxury-gown')
+
+
+def collection_mother_gown(request):
+    return _render_collection(request, 'mother_gown.html', 'mother-gown')
 
 
 def collection_suit(request):

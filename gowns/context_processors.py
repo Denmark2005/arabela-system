@@ -39,8 +39,9 @@ _FALLBACK_IMG = (
 _CATEGORIES = (
     {"key": "wedding", "url_name": "collection_wedding", "label": "Wedding Gown"},
     {"key": "ball-gown", "url_name": "collection_ball_gown", "label": "Ball Gown"},
-    {"key": "sexy-gown", "url_name": "collection_sexy_gown", "label": "Sexy Gown"},
-    {"key": "ninang-gown", "url_name": "collection_ninang_gown", "label": "Ninang Gown"},
+    {"key": "long-gown", "url_name": "collection_long_gown", "label": "Long Gown"},
+    {"key": "luxury-gown", "url_name": "collection_luxury_gown", "label": "Luxury Gown"},
+    {"key": "mother-gown", "url_name": "collection_mother_gown", "label": "Mother Gown"},
     {"key": "suit", "url_name": "collection_suit", "label": "Suit"},
     {"key": "filipiniana", "url_name": "collection_filipiniana", "label": "Filipiniana"},
     {"key": "guest-gown", "url_name": "collection_guest_gown", "label": "Guest Gown"},

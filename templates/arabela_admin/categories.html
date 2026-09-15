@@ -1105,7 +1105,7 @@
             </li>
             <li>
               <a
-                href="messages.html"
+                href="{% url 'arabela_admin:page' page='account-settings' %}"
                 class="group text-theme-sm flex items-center gap-3 rounded-lg px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
               >
                 <svg
@@ -1275,12 +1275,12 @@
                     <div class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-brand-50 dark:bg-brand-500/15">
                       <svg class="h-5 w-5 text-brand-500" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 00-1.883 2.542l.857 6a2.25 2.25 0 002.227 1.932H19.05a2.25 2.25 0 002.227-1.932l.857-6a2.25 2.25 0 00-1.883-2.542m-16.5 0V6A2.25 2.25 0 015.25 3.75h4.5c.414 0 .81.164 1.103.457l1.19 1.19c.293.293.69.457 1.104.457h4.353A2.25 2.25 0 0119.5 8.75v1.026" /></svg>
                     </div>
-                    <span class="block font-medium text-gray-800 text-theme-sm dark:text-white/90">Sexy Gown</span>
+                    <span class="block font-medium text-gray-800 text-theme-sm dark:text-white/90">Long Gown</span>
                   </div>
                 </td>
-                <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ sexy_gown_count }} gown{{ sexy_gown_count|pluralize }} in stock</p></td>
+                <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ long_gown_count }} gown{{ long_gown_count|pluralize }} in stock</p></td>
                 <td class="px-5 py-4 sm:px-6">
-                  <a href="{% url 'arabela_admin:gown_catalog' %}?category=Sexy%20Gown" class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View Gowns</a>
+                  <a href="{% url 'arabela_admin:gown_catalog' %}?category=Long%20Gown" class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View Gowns</a>
                 </td>
               </tr>
               <tr>
@@ -1289,12 +1289,26 @@
                     <div class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-brand-50 dark:bg-brand-500/15">
                       <svg class="h-5 w-5 text-brand-500" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 00-1.883 2.542l.857 6a2.25 2.25 0 002.227 1.932H19.05a2.25 2.25 0 002.227-1.932l.857-6a2.25 2.25 0 00-1.883-2.542m-16.5 0V6A2.25 2.25 0 015.25 3.75h4.5c.414 0 .81.164 1.103.457l1.19 1.19c.293.293.69.457 1.104.457h4.353A2.25 2.25 0 0119.5 8.75v1.026" /></svg>
                     </div>
-                    <span class="block font-medium text-gray-800 text-theme-sm dark:text-white/90">Ninang Gown</span>
+                    <span class="block font-medium text-gray-800 text-theme-sm dark:text-white/90">Luxury Gown</span>
                   </div>
                 </td>
-                <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ ninang_gown_count }} gown{{ ninang_gown_count|pluralize }} in stock</p></td>
+                <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ luxury_gown_count }} gown{{ luxury_gown_count|pluralize }} in stock</p></td>
                 <td class="px-5 py-4 sm:px-6">
-                  <a href="{% url 'arabela_admin:gown_catalog' %}?category=Ninang%20Gown" class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View Gowns</a>
+                  <a href="{% url 'arabela_admin:gown_catalog' %}?category=Luxury%20Gown" class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View Gowns</a>
+                </td>
+              </tr>
+              <tr>
+                <td class="px-5 py-4 sm:px-6">
+                  <div class="flex items-center gap-3">
+                    <div class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-brand-50 dark:bg-brand-500/15">
+                      <svg class="h-5 w-5 text-brand-500" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 00-1.883 2.542l.857 6a2.25 2.25 0 002.227 1.932H19.05a2.25 2.25 0 002.227-1.932l.857-6a2.25 2.25 0 00-1.883-2.542m-16.5 0V6A2.25 2.25 0 015.25 3.75h4.5c.414 0 .81.164 1.103.457l1.19 1.19c.293.293.69.457 1.104.457h4.353A2.25 2.25 0 0119.5 8.75v1.026" /></svg>
+                    </div>
+                    <span class="block font-medium text-gray-800 text-theme-sm dark:text-white/90">Mother Gown</span>
+                  </div>
+                </td>
+                <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ mother_gown_count }} gown{{ mother_gown_count|pluralize }} in stock</p></td>
+                <td class="px-5 py-4 sm:px-6">
+                  <a href="{% url 'arabela_admin:gown_catalog' %}?category=Mother%20Gown" class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View Gowns</a>
                 </td>
               </tr>
               <tr>
