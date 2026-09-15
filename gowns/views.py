@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.core.files.storage import default_storage
+from django.core.paginator import Paginator
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
@@ -38,6 +39,11 @@ _COLLECTION_URL_NAME = {category["key"]: category["url_name"] for category in _C
 # How far ahead the product calendar computes availability. Four months is well past
 # any realistic booking lead time and keeps the per-day scan trivially cheap.
 _AVAILABILITY_HORIZON_DAYS = 120
+
+# Every collection grid (placeholder catalog or real inventory) shows this many
+# products per page -- the placeholder catalog is always exactly one page of 8, so
+# this only becomes visible once a category's real inventory grows past it.
+_COLLECTION_PAGE_SIZE = 8
 
 
 def _label_for(collection_key: str) -> str:
@@ -127,11 +133,16 @@ def collections(request):
 
 
 def _render_collection(request, template_name, collection_key):
+    paginator = Paginator(_products_for_category(collection_key), _COLLECTION_PAGE_SIZE)
+    # get_page() clamps a missing/non-numeric/out-of-range "page" to a valid page
+    # instead of raising, so a stale or hand-edited ?page= link can never 404/500.
+    page_obj = paginator.get_page(request.GET.get("page"))
     return render(
         request,
         template_name,
         {
-            "products": _products_for_category(collection_key),
+            "products": page_obj.object_list,
+            "page_obj": page_obj,
             "label": _label_for(collection_key),
         },
     )

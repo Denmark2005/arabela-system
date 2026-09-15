@@ -21,6 +21,20 @@
   </script>
   <noscript><style>html { visibility: visible; }</style></noscript>
 
+  <!-- Arms the collection-grid staggered reveal (static/js/collection-reveal.js) from
+       the very first paint, so the cards are never shown and then snapped away. The
+       rule it enables only matches inside [data-collection-sort-root], so every page
+       that isn't a collection grid is completely untouched by it. The timer is the
+       same safety valve as the font reveal above: if that script is blocked, 404s or
+       throws, the grid must never be left permanently invisible. -->
+  <script>
+    (function () {
+      var el = document.documentElement;
+      el.classList.add('arb-stagger');
+      setTimeout(function () { el.classList.remove('arb-stagger'); }, 3000);
+    })();
+  </script>
+
   <title>{% block title %}ARABELA{% endblock %}</title>
 
   <!-- Global assets (load only once) -->
@@ -131,6 +145,26 @@
       .ai-msg-in { animation: none; }
       .ai-typing-dot { animation: none; }
     }
+    /* Collection grid staggered reveal -- driven by static/js/collection-reveal.js.
+       `html.arb-stagger` is added by the inline head script above, so these cards are
+       already hidden at first paint; with JS disabled the class is never added and
+       every card simply renders normally. Only opacity/transform are animated, so the
+       wave costs no layout work and can't shift anything on the page. */
+    html.arb-stagger [data-collection-sort-root] .grid > a {
+      opacity: 0;
+      transform: translateY(18px);
+    }
+    html.arb-stagger [data-collection-sort-root] .grid > a.arb-in {
+      opacity: 1;
+      transform: none;
+      transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+                  transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html.arb-stagger [data-collection-sort-root] .grid > a { opacity: 1; transform: none; }
+      html.arb-stagger [data-collection-sort-root] .grid > a.arb-in { transition: none; }
+    }
+
     #search-overlay {
       transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
       transform: translateY(-16px);
@@ -632,6 +666,7 @@
   <script src="{% static 'js/reservation-flow.js' %}?v={{ site_asset_version }}"></script>
   {% if url_name == "collection_all" or url_name == "collection_wedding" or url_name == "collection_ball_gown" or url_name == "collection_long_gown" or url_name == "collection_luxury_gown" or url_name == "collection_mother_gown" or url_name == "collection_suit" or url_name == "collection_filipiniana" or url_name == "collection_guest_gown" or url_name == "collection_flower_girl" or url_name == "collection_belo" or url_name == "collection_thailand_gown" or url_name == "collection_dresses" %}
   <script src="{% static 'js/collection-sort.js' %}?v={{ site_asset_version }}"></script>
+  <script src="{% static 'js/collection-reveal.js' %}?v={{ site_asset_version }}"></script>
   {% endif %}
   <script>
     const SECURITY_DEPOSIT_PESOS = 2000;

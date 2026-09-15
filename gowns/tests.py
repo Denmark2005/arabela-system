@@ -1,5 +1,6 @@
 import json
 import random
+import re
 import string
 import threading
 from datetime import date, timedelta
@@ -840,3 +841,79 @@ class CategorySwapTests(TestCase):
             self.assertIn(f'<option value="{label}">{label}</option>', html)
         self.assertNotIn('value="Sexy Gown"', html)
         self.assertNotIn('value="Ninang Gown"', html)
+
+
+class CollectionPaginationTests(TestCase):
+    """Every collection grid (`_render_collection` in gowns/views.py) now paginates at
+    _COLLECTION_PAGE_SIZE (8) instead of dumping every real gown onto one page. The old
+    "Next" button in every collection template was pure decoration -- no href, no
+    onclick -- because a category's placeholder catalog is always exactly 8 items, so
+    it never had anything to page through until real inventory could exceed 8 (see
+    [[project_real_gowns_replace_placeholder_catalog]]). These tests use Belo (not
+    Wedding Gown) for the >8 cases so they never collide with real production data."""
+
+    def _make_gown(self, n, category=Gown.Category.BELO, color_code="PG"):
+        return Gown.objects.create(
+            gown_id=f"PAGETEST-{category}-{color_code}-{n:04d}",
+            name=f"Page Test Gown {n}", category=category,
+            color_name="Purple", color_code=color_code, size=Gown.Size.MEDIUM,
+            rental_price=Decimal("3000.00"), status=Gown.Status.AVAILABLE,
+        )
+
+    def test_a_category_still_at_the_8_item_placeholder_catalog_shows_no_pagination(self):
+        html = self.client.get(reverse("gowns:collection_wedding")).content.decode()
+        self.assertNotIn("Page 1 of", html)
+
+    def test_33_real_gowns_split_into_8_8_8_8_1_across_5_pages(self):
+        for n in range(1, 34):
+            self._make_gown(n)
+        url = reverse("gowns:collection_belo")
+        expected_counts = {1: 8, 2: 8, 3: 8, 4: 8, 5: 1}
+        for page, expected in expected_counts.items():
+            with self.subTest(page=page):
+                html = self.client.get(url, {"page": page}).content.decode()
+                # Each product card repeats its own name in more than one place (the
+                # visible <h3>, the image alt text, the "add to cart" JS payload) --
+                # scope the match to just the <h3> so each gown is counted once.
+                titles = re.findall(r"<h3[^>]*>(Page Test Gown \d+)</h3>", html)
+                self.assertEqual(len(titles), expected)
+                self.assertIn(f"Page {page} of 5", html)
+
+    def test_first_page_has_no_previous_link_but_has_next(self):
+        for n in range(1, 10):
+            self._make_gown(n)
+        html = self.client.get(reverse("gowns:collection_belo")).content.decode()
+        self.assertNotIn("Previous", html)
+        self.assertIn(">Next<", html)
+
+    def test_last_page_has_previous_link_but_no_next(self):
+        for n in range(1, 10):
+            self._make_gown(n)
+        html = self.client.get(reverse("gowns:collection_belo"), {"page": 2}).content.decode()
+        self.assertIn("Previous", html)
+        self.assertNotIn(">Next<", html)
+
+    def test_middle_page_has_both_previous_and_next(self):
+        for n in range(1, 25):
+            self._make_gown(n)
+        html = self.client.get(reverse("gowns:collection_belo"), {"page": 2}).content.decode()
+        self.assertIn("Previous", html)
+        self.assertIn(">Next<", html)
+
+    def test_out_of_range_or_garbage_page_number_never_errors(self):
+        for n in range(1, 10):
+            self._make_gown(n)
+        url = reverse("gowns:collection_belo")
+        for bad_page in ("999", "0", "-1", "not-a-number", ""):
+            with self.subTest(page=bad_page):
+                response = self.client.get(url, {"page": bad_page})
+                self.assertEqual(response.status_code, 200)
+                for leak in ("{%", "{{", "{#"):
+                    self.assertNotIn(leak, response.content.decode())
+
+    def test_next_and_previous_links_point_at_the_right_page_number(self):
+        for n in range(1, 25):
+            self._make_gown(n)
+        html = self.client.get(reverse("gowns:collection_belo"), {"page": 2}).content.decode()
+        self.assertIn('href="?page=1"', html)
+        self.assertIn('href="?page=3"', html)
