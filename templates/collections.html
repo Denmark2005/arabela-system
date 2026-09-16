@@ -2,7 +2,7 @@
 
 {% block title %}ARABELA | Rent{% endblock %}
 
-{% block main_class %}pt-24 pb-28 md:pb-20 px-6 sm:px-10 md:px-16 max-w-[1400px] mx-auto{% endblock %}
+{% block main_class %}pt-24 pb-20 px-6 sm:px-10 md:px-16 max-w-[1400px] mx-auto{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -67,25 +67,6 @@
         {% endif %}
         {% endfor %}
     </div>
-  <!-- Bottom Navigation (Mobile Only) -->
-  <nav class="mobile-bottom-nav md:hidden fixed bottom-0 left-0 w-full flex justify-around items-center px-6 pb-10 pt-4 bg-surface/95 backdrop-blur-md border-t border-black/5 z-50">
-    <a href="{% url 'gowns:homepage' %}" class="flex flex-col items-center justify-center text-secondary">
-      <span class="material-symbols-outlined scale-90" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
-      <span class="text-[9px] uppercase tracking-[0.15rem] font-semibold font-body mt-2">Discover</span>
-    </a>
-    <a href="{% url 'gowns:collections' %}" class="flex flex-col items-center justify-center text-primary">
-      <span class="material-symbols-outlined scale-90" style="font-variation-settings: 'FILL' 1;">checkroom</span>
-      <span class="text-[9px] uppercase tracking-[0.15rem] font-semibold font-body mt-2">Rentals</span>
-    </a>
-    <div class="flex flex-col items-center justify-center text-on-surface-variant/60">
-      <span class="material-symbols-outlined scale-90">favorite</span>
-      <span class="text-[9px] uppercase tracking-[0.15rem] font-semibold font-body mt-2">Wishlist</span>
-    </div>
-    <div class="flex flex-col items-center justify-center text-on-surface-variant/60">
-      <span class="material-symbols-outlined scale-90">chat_bubble</span>
-      <span class="text-[9px] uppercase tracking-[0.15rem] font-semibold font-body mt-2">Inbox</span>
-    </div>
-  </nav>
 {% endblock %}
 
 {% block extra_scripts %}
