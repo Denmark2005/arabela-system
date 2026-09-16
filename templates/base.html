@@ -20,6 +20,7 @@
     })();
   </script>
   <noscript><style>html { visibility: visible; }</style></noscript>
+  {% include "partials/mobile_fixes.html" %}
 
   <!-- Arms the collection-grid staggered reveal (static/js/collection-reveal.js) from
        the very first paint, so the cards are never shown and then snapped away. The
@@ -365,8 +366,8 @@
 
   <!-- TOP NAVBAR (pure white) -->
   <header id="site-header" class="fixed top-0 w-full z-[70] bg-white/80 dark:bg-[#222222]/80 backdrop-blur-md border-b border-black/5{% if url_name == "homepage" %} homepage-header{% endif %}">
-    <nav class="flex justify-between items-center w-full px-8 h-20">
-      <div class="flex items-center gap-12 h-full">
+    <nav class="flex justify-between items-center w-full px-5 sm:px-8 h-20">
+      <div class="flex items-center gap-4 md:gap-12 h-full">
         <div class="flex-shrink-0">
           <a href="{% url 'gowns:homepage' %}" class="block">
             <h1 class="text-2xl font-bold tracking-tighter text-[#222222] dark:text-[#FAF4EB]">ARABELA</h1>
@@ -405,7 +406,7 @@
         {% endif %}
       </div>
 
-      <div class="flex gap-6 items-center">
+      <div class="flex gap-4 sm:gap-6 items-center">
         {% if url_name != "reservation" and url_name != "confirmation" %}
           <button type="button" class="scale-95 active:scale-90 transition-all text-secondary dark:text-[#FAF4EB]" onclick="toggleSearch()" aria-label="Search">
             <span class="material-symbols-outlined" id="search-icon">search</span>

@@ -17,6 +17,7 @@
       })();
     </script>
     <noscript><style>html { visibility: visible; }</style></noscript>
+    {% include "partials/mobile_fixes.html" %}
     <link href="https://fonts.googleapis.com" rel="preconnect" />
     <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
     <link
@@ -219,7 +220,7 @@
       </div>
     </div>
 
-    <nav class="fixed top-0 z-50 mx-auto flex h-20 w-full max-w-full items-center justify-between border-b border-black/5 bg-white/80 px-8 backdrop-blur-md">
+    <nav class="fixed top-0 z-50 mx-auto flex h-20 w-full max-w-full items-center justify-between border-b border-black/5 bg-white/80 px-5 sm:px-8 backdrop-blur-md">
       <div class="flex-shrink-0">
         <a href="{% url 'gowns:homepage' %}" class="block no-underline">
           <h1 class="text-2xl font-bold tracking-tighter text-[#222222] dark:text-[#FAF4EB]">ARABELA</h1>

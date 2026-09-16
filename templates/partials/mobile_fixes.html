@@ -1,0 +1,44 @@
+{% comment %}
+  Site-wide mobile corrections. Included by base.html AND by every standalone page
+  that does not extend it (login, signup, verification, messages, reservations,
+  reservation_item_detail) -- keeping them in one file is the only way those six
+  pages can't silently drift back to the old broken behaviour.
+{% endcomment %}
+<style>
+  /* ---- Never let a too-wide row leave a blank strip down the edge ---------------
+     <body> already carries overflow-x-hidden, but on mobile the horizontal scroll
+     propagates up to <html>, which is exactly how an over-wide header still showed
+     empty space at the right edge. Guarding both elements is what actually stops it. */
+  html { overflow-x: hidden; }
+
+  /* ---- iOS: stop the page zooming when a field is tapped ------------------------
+     Safari on iPhone automatically zooms the whole page in whenever a focused
+     input's text is smaller than 16px, and it does NOT zoom back out -- the visitor
+     is left enlarged and scrolled sideways. This site's fields are 14px (text-sm),
+     which trips it on every login, signup and checkout form. Exactly 16px is the
+     documented threshold that stops it; desktop type is untouched because the rule
+     lives inside the media query. */
+  @media (max-width: 640px) {
+    input:not([type="checkbox"]):not([type="radio"]),
+    textarea,
+    select { font-size: 16px !important; }
+  }
+
+  /* ---- Touch devices: no stuck hover movement ----------------------------------
+     A phone has no real pointer, so it FAKES a hover on tap and then leaves it stuck
+     until you tap somewhere else. Every hover-driven transform therefore reads as a
+     button that jumped and stayed jumped: tap Next and the arrow slides away, tap a
+     gown and the photo stays zoomed.
+
+     Each rule resets only the ONE transform variable its hover sets, so the
+     element's own base transform survives -- which matters for anything *hidden* by
+     a base transform (the assistant button's sliding overlay): blanking the whole
+     `transform` would have made those permanently visible instead. */
+  @media (hover: none) {
+    .group:hover [class~="group-hover:scale-105"] { --tw-scale-x: 1 !important; --tw-scale-y: 1 !important; }
+    [class~="hover:scale-[1.01]"]:hover          { --tw-scale-x: 1 !important; --tw-scale-y: 1 !important; }
+    .group:hover [class~="group-hover:translate-x-2"],
+    .group:hover [class~="group-hover:-translate-x-2"] { --tw-translate-x: 0px !important; }
+    .group:hover [class~="group-hover:translate-y-0"]  { --tw-translate-y: 100% !important; }
+  }
+</style>
