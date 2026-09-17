@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.core import mail
+from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
@@ -151,6 +152,9 @@ class LoginTests(TestCase):
         cls.user = User.objects.create_user(username="logintest", email="login.test@gmail.com", password=cls.password)
         EmailAddress.objects.create(user=cls.user, email=cls.user.email, verified=True, primary=True)
 
+    def setUp(self):
+        cache.clear()  # the lockout below is stateful; start every test clean
+
     def _login(self, **overrides):
         data = dict(email="login.test@gmail.com", password=self.password)
         data.update(overrides)
@@ -193,6 +197,95 @@ class LoginTests(TestCase):
         response = self._login(email="not-an-email")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "valid email")
+
+
+class CustomerLoginLockoutTests(TestCase):
+    """`login_view`'s brute-force protection -- mirrors the admin login's existing
+    lockout exactly: 5 wrong passwords for the same email locks it out for 15
+    minutes. Only real wrong-password attempts against a valid, usable, verified
+    account count -- a mistyped email, a Google-only account, or an unverified
+    account never reach authenticate(), so none of those consume the budget."""
+
+    @classmethod
+    def setUpTestData(cls):
+        _ensure_google_social_app()
+        cls.password = "Password123"
+        cls.user = User.objects.create_user(username="locktest", email="lock.test@gmail.com", password=cls.password)
+        EmailAddress.objects.create(user=cls.user, email=cls.user.email, verified=True, primary=True)
+
+    def setUp(self):
+        cache.clear()
+
+    def _login(self, **overrides):
+        data = dict(email="lock.test@gmail.com", password=self.password)
+        data.update(overrides)
+        return self.client.post(reverse("accounts:login"), data=data)
+
+    def test_the_sixth_wrong_attempt_is_locked_out_even_with_the_wrong_password(self):
+        for _ in range(5):
+            self._login(password="wrongpassword")
+        response = self._login(password="wrongpassword")
+        self.assertContains(response, "Too many failed login attempts")
+
+    def test_a_locked_out_email_is_rejected_even_with_the_correct_password(self):
+        """The whole point of a lockout: once tripped, even the real password is
+        refused until the timer runs out -- otherwise it would not stop a script
+        that eventually guesses right."""
+        for _ in range(5):
+            self._login(password="wrongpassword")
+        response = self._login(password=self.password)
+        self.assertContains(response, "Too many failed login attempts")
+        session_check = self.client.get(reverse("gowns:homepage"))
+        self.assertTrue(session_check.wsgi_request.user.is_anonymous)
+
+    def test_remaining_attempts_count_down_correctly(self):
+        response = self._login(password="wrongpassword")
+        self.assertContains(response, "4 attempts remaining")
+        response = self._login(password="wrongpassword")
+        self.assertContains(response, "3 attempts remaining")
+
+    def test_a_successful_login_before_the_limit_clears_the_counter(self):
+        for _ in range(3):
+            self._login(password="wrongpassword")
+        response = self._login(password=self.password)
+        self.assertRedirects(response, reverse("gowns:homepage"))
+        # the counter reset -- 3 more wrong attempts afterward must not be an instant lockout
+        self.client.post(reverse("accounts:logout"))
+        for _ in range(3):
+            response = self._login(password="wrongpassword")
+        self.assertNotContains(response, "Too many failed login attempts")
+
+    def test_a_different_email_is_never_affected_by_someone_elses_lockout(self):
+        other = User.objects.create_user(username="othertest", email="other.test@gmail.com", password="Password123")
+        EmailAddress.objects.create(user=other, email=other.email, verified=True, primary=True)
+        for _ in range(5):
+            self._login(password="wrongpassword")
+        response = self._login(email="other.test@gmail.com", password="Password123")
+        self.assertRedirects(response, reverse("gowns:homepage"))
+
+    def test_a_nonexistent_email_never_counts_toward_lockout(self):
+        for _ in range(10):
+            self._login(email="nobody.here@gmail.com", password="whatever")
+        response = self._login(password=self.password)
+        self.assertRedirects(response, reverse("gowns:homepage"))
+
+    def test_a_google_only_account_never_counts_toward_lockout(self):
+        google_user = User.objects.create_user(username="lockgoogle", email="lock.google@gmail.com")
+        google_user.set_unusable_password()
+        google_user.save()
+        EmailAddress.objects.create(user=google_user, email=google_user.email, verified=True, primary=True)
+        for _ in range(10):
+            self._login(email="lock.google@gmail.com", password="anything123")
+        response = self._login(password=self.password)
+        self.assertRedirects(response, reverse("gowns:homepage"))
+
+    def test_an_unverified_account_never_counts_toward_lockout(self):
+        unverified = User.objects.create_user(username="lockunverified", email="lock.unverified@gmail.com", password="Password123")
+        EmailAddress.objects.create(user=unverified, email=unverified.email, verified=False, primary=True)
+        for _ in range(10):
+            self._login(email="lock.unverified@gmail.com", password="Password123")
+        response = self._login(password=self.password)
+        self.assertRedirects(response, reverse("gowns:homepage"))
 
 
 class LogoutTests(TestCase):

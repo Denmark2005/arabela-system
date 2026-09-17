@@ -1,6 +1,39 @@
 from django.db import models, transaction
 from django.utils import timezone
 
+# The one canonical list of "known" gown colors and their 2-letter codes -- read by
+# BOTH the Add/Edit Gown dropdown (rendered from this exact list, never hand-typed
+# into the template again) and _validate_gown_fields's collision check
+# (arabela_admin/views.py) that rejects a code already claimed by a different color.
+# Before this, the dropdown's list lived only in the page's own JavaScript, with no
+# server-side equivalent at all -- nothing stopped a bad pairing (Blue saved with
+# Blush's code) from being written directly, whether through a hand-typed "Other"
+# entry or a script bypassing the form entirely, and the one time that happened it
+# went undetected until a staff member noticed the Edit screen couldn't recognize its
+# own gown's color.
+#
+# `color_name`/`color_code` stay plain CharFields (not a choices enum) on purpose --
+# "Other" must always remain a real escape hatch for a color no one has thought to add
+# yet, so nothing here restricts what CAN be saved, only what's checked against once a
+# code from this list (or already used by a real gown) means something specific.
+#
+# Ordered by family (neutrals, reds, blues, greens, metallics/purples, warm tones,
+# neutrals-dark, multi) purely so the rendered dropdown reads sensibly top to bottom --
+# order has no effect on validation.
+GOWN_COLOR_PRESETS = (
+    ("White", "WH"), ("Ivory", "IV"), ("Off-White", "OW"), ("Champagne", "CH"),
+    ("Blush", "BL"), ("Nude", "ND"), ("Beige", "BG"), ("Black", "BK"),
+    ("Red", "RD"), ("Maroon", "MR"), ("Burgundy", "BD"),
+    ("Navy", "NV"), ("Blue", "BU"), ("Royal Blue", "RB"), ("Sky Blue", "SB"),
+    ("Green", "GN"), ("Sage Green", "SG"), ("Emerald", "EM"), ("Teal", "TL"),
+    ("Turquoise", "TQ"), ("Mint", "MT"),
+    ("Gold", "GD"), ("Silver", "SV"), ("Rose Gold", "RG"),
+    ("Purple", "PU"), ("Mauve", "MV"), ("Lavender", "LV"),
+    ("Pink", "PK"), ("Coral", "CO"), ("Peach", "PE"),
+    ("Yellow", "YL"), ("Orange", "OR"), ("Brown", "BR"), ("Charcoal", "CL"), ("Grey", "GY"),
+    ("Multicolor", "MC"),
+)
+
 
 class Gown(models.Model):
     class Category(models.TextChoices):

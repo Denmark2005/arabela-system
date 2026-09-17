@@ -2,6 +2,7 @@ import json
 
 import requests
 from django.conf import settings
+from django.core.cache import cache
 from django.http import JsonResponse
 from django.urls import reverse
 from django.views.decorators.http import require_POST
@@ -44,6 +45,75 @@ TIMEOUT_REPLY = (
     "Sorry, that one took me too long to think through. Please try asking again, "
     "or keep it a little shorter."
 )
+
+# Protects the Gemini quota/cost and the endpoint itself from a sudden flood of
+# requests. Two windows guard two different risks: the per-minute cap stops a
+# script hammering the endpoint in a burst, and the per-day cap stops the same
+# visitor staying just under that burst limit for hours and still running up real
+# API usage over a day.
+AI_CHAT_RATE_LIMIT_PER_MINUTE = 10
+AI_CHAT_RATE_LIMIT_WINDOW_SECONDS = 60
+AI_CHAT_DAILY_LIMIT = 40
+AI_CHAT_DAILY_WINDOW_SECONDS = 24 * 60 * 60
+
+DAILY_LIMIT_REPLY = (
+    "You've reached today's message limit for the AI stylist on this connection. "
+    "Please try again tomorrow, or message us on Facebook and our team will help you directly."
+)
+
+
+def _client_ip(request) -> str:
+    """The visitor's real IP address, correct behind Render's reverse proxy.
+
+    Render sits as the single hop between the internet and this app (see
+    SECURE_PROXY_SSL_HEADER in settings.py) and appends the real client IP as the
+    LAST entry of X-Forwarded-For. Trusting the FIRST entry instead -- a common
+    mistake -- would let any visitor fake a different IP just by sending their own
+    X-Forwarded-For header, defeating the rate limit below entirely. Falls back to
+    REMOTE_ADDR for local development, where there is no proxy and the header is
+    simply absent.
+    """
+    forwarded = request.META.get("HTTP_X_FORWARDED_FOR")
+    if forwarded:
+        return forwarded.split(",")[-1].strip()
+    return request.META.get("REMOTE_ADDR", "unknown")
+
+
+def _hit_fixed_window(cache_key: str, window_seconds: int) -> int:
+    """Counts one hit in a fixed time window and returns the count so far.
+
+    The window's expiry is set once, the first time this key is touched, and never
+    refreshed after that -- so a steady trickle of requests under the limit still
+    resets to zero once the window ends, instead of the window silently extending
+    itself forever and eventually trapping a slow, legitimate visitor.
+    """
+    if cache.add(cache_key, 1, window_seconds):
+        return 1
+    try:
+        return cache.incr(cache_key)
+    except ValueError:
+        # Key expired between add() and incr() -- an extremely narrow race.
+        # Treat this request as the first of a brand new window.
+        cache.set(cache_key, 1, window_seconds)
+        return 1
+
+
+def _ai_chat_rate_limit_reply(request):
+    """None if this visitor is clear to send a message; otherwise (reply_text,
+    error_code) to send back instead of ever calling Gemini, so a blocked message
+    never costs any API quota.
+    """
+    ip = _client_ip(request)
+
+    minute_count = _hit_fixed_window(f"ai_chat_rl_min:{ip}", AI_CHAT_RATE_LIMIT_WINDOW_SECONDS)
+    if minute_count > AI_CHAT_RATE_LIMIT_PER_MINUTE:
+        return BUSY_REPLY, "rate_limited_burst"
+
+    day_count = _hit_fixed_window(f"ai_chat_rl_day:{ip}", AI_CHAT_DAILY_WINDOW_SECONDS)
+    if day_count > AI_CHAT_DAILY_LIMIT:
+        return DAILY_LIMIT_REPLY, "rate_limited_daily"
+
+    return None
 
 
 def _system_prompt() -> str:
@@ -103,6 +173,11 @@ def _extract_reply(data: dict) -> str | None:
 
 @require_POST
 def chat(request):
+    limited = _ai_chat_rate_limit_reply(request)
+    if limited:
+        reply, error_code = limited
+        return JsonResponse({"reply": reply, "error": error_code}, status=429)
+
     if not settings.GEMINI_API_KEY:
         return JsonResponse({"reply": FALLBACK_REPLY, "error": "not_configured"})
 

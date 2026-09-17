@@ -773,12 +773,28 @@
       return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
     }
 
+    // Rows are written with `cart-reveal`, which sits at opacity 0 until the
+    // drawer's opening stagger adds `active`. A re-render while the drawer is
+    // ALREADY open (quantity change, remove, live sync) has no opening animation
+    // coming, so those fresh rows would stay invisible -- present in the DOM and
+    // still counted in the totals, but unseen until the drawer is reopened.
+    function activateCartLinesIfOpen() {
+      const drawer = document.getElementById('cart-drawer');
+      const lines = document.getElementById('cart-lines');
+      if (!drawer || !lines) return;
+      if (drawer.classList.contains('translate-x-full')) return;
+      lines.querySelectorAll('.cart-reveal').forEach(function (el) {
+        el.classList.add('active');
+      });
+    }
+
     function renderCartDrawer() {
       const lines = document.getElementById('cart-lines');
       if (!lines) return;
       const cart = getDrawerCart();
       if (!cart.length) {
         lines.innerHTML = '<p class="cart-reveal text-[0.6875rem] uppercase tracking-widest text-secondary py-4">No items in your selection.</p>';
+        activateCartLinesIfOpen();
         return;
       }
 
@@ -828,6 +844,7 @@
           </div>
         `;
       }).join('');
+      activateCartLinesIfOpen();
     }
 
     function updateCartTotals() {

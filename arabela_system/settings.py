@@ -76,6 +76,10 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # Retries a request if it only failed because the DB connection pool (capped by
+    # the hosting plan) was momentarily full during a traffic spike -- see the class
+    # docstring in arabela_system/middleware.py for why this is safe to retry.
+    'arabela_system.middleware.DatabaseRetryMiddleware',
     # Serves collected static files directly from the app process -- needed once
     # DEBUG=False, since Django's dev-server auto-serving of static files only
     # ever worked because DEBUG was True. No separate static file host required.

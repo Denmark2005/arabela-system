@@ -193,7 +193,7 @@ class GownCreateValidationTests(TestCase):
     def _create(self, **overrides):
         data = dict(
             name="New Test Gown", category=Gown.Category.BELO, color_name="Blue",
-            color_code="BL", size=Gown.Size.MEDIUM, rental_price="3500",
+            color_code="BU", size=Gown.Size.MEDIUM, rental_price="3500",
         )
         data.update(overrides)
         return self.client.post(self.url, data=data)
@@ -748,6 +748,134 @@ class AdminLoginLockoutTests(TestCase):
             self._attempt("lockout_test_user", "wrongpassword")
         response = self._attempt("other_lockout_user", "anotherpassword123")
         self.assertEqual(response.status_code, 302)
+
+
+
+class GownColorCodeConsistencyTests(TestCase):
+    """`_check_color_code_consistency` (arabela_admin/views.py), reached through both
+    gown_create_view and gown_update_view via _validate_gown_fields -- a 2-letter code
+    must always mean the same color everywhere in the catalog. This closes the exact
+    bug found in this project: a gown saved as Blue with Blush's own code (BL), which
+    then showed as an unrecognizable 'Other' color when reopened for editing."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(username="color_consistency_staff", password="x", is_staff=True)
+
+    def setUp(self):
+        self.client.force_login(self.staff)
+        self.create_url = reverse("arabela_admin:gown_create")
+
+    def _create(self, **overrides):
+        data = dict(
+            name="Color Test Gown", category=Gown.Category.BELO, color_name="Blue",
+            color_code="BU", size=Gown.Size.MEDIUM, rental_price="3500",
+        )
+        data.update(overrides)
+        return self.client.post(self.create_url, data=data)
+
+    # ---------------------------------------------------------------- preset codes
+    def test_a_preset_code_with_its_correct_name_is_accepted(self):
+        response = self._create(color_name="Blue", color_code="BU")
+        self.assertEqual(response.status_code, 200, response.content)
+
+    def test_the_exact_bug_this_closes_is_now_rejected(self):
+        """The real mistake this feature exists to prevent: BL is Blush's code, not
+        Blue's -- reproduces it exactly."""
+        response = self._create(color_name="Blue", color_code="BL")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Blush", response.json()["error"])
+        self.assertEqual(Gown.objects.filter(color_name="Blue", color_code="BL").count(), 0)
+
+    def test_the_error_names_both_the_code_and_what_it_already_means(self):
+        error = self._create(color_name="Black", color_code="BL").json()["error"]
+        self.assertIn("BL", error)
+        self.assertIn("Blush", error)
+
+    def test_preset_matching_is_case_insensitive(self):
+        response = self._create(color_name="blue", color_code="bu")
+        self.assertEqual(response.status_code, 200, response.content)
+
+    def test_a_different_preset_code_with_its_correct_name_is_also_fine(self):
+        response = self._create(color_name="Sage Green", color_code="SG")
+        self.assertEqual(response.status_code, 200, response.content)
+
+    # ------------------------------------------------------- custom "Other" colors
+    def test_a_brand_new_custom_color_not_colliding_with_anything_is_accepted(self):
+        response = self._create(color_name="Peacock Blue", color_code="PB")
+        self.assertEqual(response.status_code, 200, response.content)
+
+    def test_reusing_the_same_custom_color_on_a_second_gown_is_fine(self):
+        """Two real gowns legitimately sharing one custom color must never conflict
+        with each other -- only a DIFFERENT color trying to reuse the code should."""
+        first = self._create(name="First", color_name="Peacock Blue", color_code="PB")
+        second = self._create(name="Second", color_name="Peacock Blue", color_code="PB")
+        self.assertEqual(first.status_code, 200, first.content)
+        self.assertEqual(second.status_code, 200, second.content)
+
+    def test_a_custom_code_already_claimed_by_a_different_color_is_rejected(self):
+        self._create(name="First", color_name="Peacock Blue", color_code="PB")
+        response = self._create(name="Second", color_name="Pale Beige", color_code="PB")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Peacock Blue", response.json()["error"])
+
+    def test_custom_color_matching_is_also_case_insensitive(self):
+        self._create(name="First", color_name="Peacock Blue", color_code="PB")
+        response = self._create(name="Second", color_name="peacock blue", color_code="PB")
+        self.assertEqual(response.status_code, 200, response.content)
+
+
+class GownColorCodeConsistencyOnEditTests(TestCase):
+    """Same rule, on the edit path -- gown_update_view must exclude the gown being
+    edited from the collision check, or every edit would collide with its own
+    existing color."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(username="color_edit_staff", password="x", is_staff=True)
+
+    def setUp(self):
+        self.client.force_login(self.staff)
+
+    def _gown(self, **overrides):
+        return _make_gown(n=Gown.objects.count() + 1, **overrides)
+
+    def _update(self, gown, **overrides):
+        data = dict(
+            name=gown.name, category=gown.category, color_name=gown.color_name,
+            color_code=gown.color_code, size=gown.size, rental_price="4000",
+        )
+        data.update(overrides)
+        return self.client.post(reverse("arabela_admin:gown_update", args=[gown.id]), data=data)
+
+    def test_re_saving_a_gowns_own_unchanged_color_is_not_a_false_conflict(self):
+        gown = self._gown(color_name="Peacock Blue", color_code="PB")
+        response = self._update(gown)
+        self.assertEqual(response.status_code, 200, response.content)
+
+    def test_correcting_a_gowns_own_mismatched_color_succeeds(self):
+        """Simulates fixing exactly the mistake this whole feature was built for:
+        a gown wrongly saved as Blue/BL, corrected to Blue/BU."""
+        gown = self._gown(color_name="Blue", color_code="ZZ")  # ZZ: unclaimed placeholder
+        response = self._update(gown, color_name="Blue", color_code="BU")
+        self.assertEqual(response.status_code, 200, response.content)
+        gown.refresh_from_db()
+        self.assertEqual(gown.color_code, "BU")
+
+    def test_editing_into_a_DIFFERENT_gowns_established_color_is_rejected(self):
+        self._gown(color_name="Peacock Blue", color_code="PB")
+        other = self._gown(color_name="Pale Beige", color_code="XX")
+        response = self._update(other, color_name="Pale Beige", color_code="PB")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Peacock Blue", response.json()["error"])
+        other.refresh_from_db()
+        self.assertEqual(other.color_code, "XX")  # unchanged -- rejected before saving
+
+    def test_editing_into_a_preset_codes_wrong_name_is_rejected(self):
+        gown = self._gown(color_name="Something", color_code="ZZ")
+        response = self._update(gown, color_name="Black", color_code="BL")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Blush", response.json()["error"])
 
 
 class GownUpdateTests(TestCase):

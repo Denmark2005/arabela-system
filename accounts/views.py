@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.contrib.auth import get_user_model, login, logout
 from django.contrib.auth import authenticate
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.mail import EmailMultiAlternatives
 from django.core.validators import validate_email
@@ -20,6 +21,19 @@ PASSWORD_PATTERN = re.compile(r'^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,16}$')
 
 # Keeps ?next= (e.g. reservation) across signup + email verify when login page loses the query string.
 SESSION_LOGIN_NEXT = 'login_next_after_auth'
+
+# Brute-force protection for customer login, mirroring the admin login's lockout:
+# 5 failed attempts locks that email out for 15 minutes. Only wrong-password
+# attempts against a real, usable, verified account count -- mistyped emails,
+# Google-only accounts, and unverified accounts never reach authenticate(), so
+# they never consume the lockout budget, exactly like the admin login.
+_CUSTOMER_LOGIN_ATTEMPT_LIMIT = 5
+_CUSTOMER_LOGIN_LOCKOUT_SECONDS = 15 * 60
+_CUSTOMER_LOCKOUT_MESSAGE = "Too many failed login attempts. Please try again in 15 minutes."
+
+
+def _customer_login_attempts_cache_key(email: str) -> str:
+    return f"customer_login_attempts:{email.strip().lower()}"
 
 
 def _allowed_next_url(request, candidate) -> str:
@@ -94,6 +108,12 @@ def login_view(request):
             context.update({'error': 'Please enter a valid email address.', 'email': email})
             return render(request, 'login.html', context)
 
+        cache_key = _customer_login_attempts_cache_key(email)
+        failed_attempts = cache.get(cache_key, 0)
+        if failed_attempts >= _CUSTOMER_LOGIN_ATTEMPT_LIMIT:
+            context.update({'error': _CUSTOMER_LOCKOUT_MESSAGE, 'email': email})
+            return render(request, 'login.html', context)
+
         if not password:
             context.update({'error': 'Please enter your password.', 'email': email})
             return render(request, 'login.html', context)
@@ -114,9 +134,21 @@ def login_view(request):
 
         authenticated_user = authenticate(request, username=user.username, password=password)
         if not authenticated_user:
-            context.update({'error': 'Invalid email or password.', 'email': email})
+            failed_attempts += 1
+            cache.set(cache_key, failed_attempts, _CUSTOMER_LOGIN_LOCKOUT_SECONDS)
+            if failed_attempts >= _CUSTOMER_LOGIN_ATTEMPT_LIMIT:
+                error_message = _CUSTOMER_LOCKOUT_MESSAGE
+            else:
+                remaining = _CUSTOMER_LOGIN_ATTEMPT_LIMIT - failed_attempts
+                error_message = (
+                    f"Invalid email or password. {remaining} attempt"
+                    f"{'s' if remaining != 1 else ''} remaining before temporary lockout."
+                )
+            context.update({'error': error_message, 'email': email})
             return render(request, 'login.html', context)
 
+        # Successful login clears any accumulated failed-attempt count for this email.
+        cache.delete(cache_key)
         login(request, authenticated_user)
         remember_me = request.POST.get('remember_me') == 'on'
         request.session.set_expiry(settings.REMEMBER_ME_AGE if remember_me else 0)

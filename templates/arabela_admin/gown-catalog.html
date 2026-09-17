@@ -16,6 +16,14 @@
       gownApiBase: '{% url 'arabela_admin:gown_create' %}',
       isAddGownModal: false, isEditMode: false, editingGownId: null, editingGownSlug: '',
       newGownName: '', newGownCategory: 'Wedding Gown', newGownColorChoice: '', newGownColorName: '', newGownColorCode: '', newGownSize: 'Medium', newGownDesignVariant: '', newGownPrice: '', newGownStatus: 'Available', newGownCondition: 'Good', newGownNotes: '', addGownError: '', addGownBusy: false,
+      // Single source of truth for every preset gown color -- loaded from the SERVER
+      // (color-presets-data, populated by x-init below from GOWN_COLOR_PRESETS in
+      // gowns/models.py) rather than hand-typed here, so the dropdown's options, the
+      // live color-code warning, and the live suggestion can never disagree with each
+      // other OR with what the server itself checks on save. Each entry is
+      // {name, code}. Empty until x-init runs; the dropdown simply renders nothing
+      // for the instant before that, same as gownsMin below.
+      colorPresets: [],
       newGownPhotoFile: null, newGownPhotoPreview: '',
       isGownImageModal: false, viewingGownImage: {},
       isViewModal: false, viewingGown: {}, deleteError: '', deleteBusy: false,
@@ -56,10 +64,61 @@
       // fields, already pre-filled) for anything not on the preset list -- e.g. a
       // gown that was added through the 'Other' path in the first place.
       matchColorChoice(colorName, colorCode) {
-        const presets = ['White|WH','Ivory|IV','Champagne|CH','Blush|BL','Nude|ND','Beige|BG','Black|BK','Red|RD','Maroon|MR','Navy|NV','Blue|BU','Green|GN','Gold|GD','Silver|SV','Purple|PU','Lavender|LV','Pink|PK','Yellow|YL','Orange|OR','Brown|BR','Grey|GY','Multicolor|MC'];
-        const wanted = `${colorName}|${colorCode}`.toLowerCase();
-        const hit = presets.find(p => p.toLowerCase() === wanted);
-        return hit || 'OTHER';
+        const preset = this.colorPresets.find(p =>
+          p.name.toLowerCase() === String(colorName || '').toLowerCase() &&
+          p.code.toUpperCase() === String(colorCode || '').toUpperCase());
+        return preset ? `${preset.name}|${preset.code}` : 'OTHER';
+      },
+      // Whoever already owns `code` -- checked against the 36 presets first, then
+      // every REAL gown in the catalog (gownsMin, already loaded for the table, so
+      // this costs nothing extra) -- or null if the code is free. `excludeGownId`
+      // leaves out the gown currently being edited, so its own existing code is
+      // never reported as colliding with itself.
+      colorCodeOwner(code, excludeGownId) {
+        const upper = String(code || '').toUpperCase();
+        if (!upper) return null;
+        const preset = this.colorPresets.find(p => p.code.toUpperCase() === upper);
+        if (preset) return { name: preset.name, code: preset.code };
+        const owner = this.gownsMin.find(g =>
+          g.id !== excludeGownId && String(g.color_code || '').toUpperCase() === upper);
+        return owner ? { name: owner.color_name, code: owner.color_code } : null;
+      },
+      // Returns {name, code} of the color that actually blocks this pairing, or null
+      // if `code` is free or already correctly means `name`. This is the ONE check
+      // both the live warning and the final submit guard call -- there is no second
+      // copy of this comparison to drift out of step with the server's own version.
+      colorCodeConflict(code, name, excludeGownId) {
+        const owner = this.colorCodeOwner(code, excludeGownId);
+        if (!owner) return null;
+        if (owner.name.toLowerCase() === String(name || '').trim().toLowerCase()) return null;
+        return owner;
+      },
+      // Suggests a free 2-letter code for a newly-typed color name -- works for ANY
+      // name, not just the 36 presets, using the same "first two letters, then a
+      // distinctive later letter, then first-letter-of-each-word for a multi-word
+      // name" logic a person would use by hand. Returns '' if nothing free was found
+      // (staff can still type their own) or the incoming name is empty.
+      suggestColorCode(name, excludeGownId) {
+        const clean = String(name || '').trim();
+        if (!clean) return '';
+        const words = clean.split(/[\s-]+/).filter(Boolean);
+        const first = (words[0] || '').toUpperCase().replace(/[^A-Z]/g, '');
+        if (!first) return '';
+        const candidates = [];
+        if (words.length >= 2) {
+          const secondFirstLetter = (words[1].match(/[A-Za-z]/) || [''])[0].toUpperCase();
+          if (secondFirstLetter) candidates.push(first[0] + secondFirstLetter);
+        }
+        if (first.length >= 2) candidates.push(first.slice(0, 2));
+        [2, 3, 4, first.length - 1].forEach((idx) => {
+          if (idx >= 1 && idx < first.length) candidates.push(first[0] + first[idx]);
+        });
+        for (const candidate of candidates) {
+          if (candidate.length === 2 && !this.colorCodeOwner(candidate, excludeGownId)) {
+            return candidate;
+          }
+        }
+        return '';
       },
       // Opens the same Add Gown modal, pre-filled for editing an existing row. Status
       // and Photo are intentionally left out of this data -- editing doesn't touch
@@ -125,6 +184,19 @@
         if (this.newGownColorName.trim().length > 40) { this.addGownError = 'Color name must be 40 characters or fewer.'; return; }
         if (this.newGownName.trim().length > 150) { this.addGownError = 'Gown name must be 150 characters or fewer.'; return; }
         if (this.newGownDesignVariant.trim().length > 60) { this.addGownError = 'Design variant must be 60 characters or fewer.'; return; }
+        // Same rule the server enforces in _validate_gown_fields -- checked here too
+        // so a colliding code is refused instantly instead of round-tripping to the
+        // server first. Only reachable through "Other": every preset in the dropdown
+        // already pairs a correct name+code together, so this can't fire for those.
+        if (this.newGownColorChoice === 'OTHER') {
+          const conflict = this.colorCodeConflict(
+            this.newGownColorCode.trim(), this.newGownColorName.trim(),
+            this.isEditMode ? this.editingGownId : null);
+          if (conflict) {
+            this.addGownError = `"${this.newGownColorCode.trim().toUpperCase()}" already means ${conflict.name}. Please choose a different code.`;
+            return;
+          }
+        }
         const priceNum = Number(String(this.newGownPrice).replace(/[^0-9.]/g, ''));
         if (!priceNum || priceNum <= 0) { this.addGownError = 'Please enter a valid rental price.'; return; }
         if (priceNum > 999999.99) { this.addGownError = 'That rental price looks too high. Please check the amount.'; return; }
@@ -419,6 +491,8 @@
          if (blocksEl) { try { gownBlocks = JSON.parse(blocksEl.textContent || '{}'); } catch (e) { gownBlocks = {}; } }
          const minEl = document.getElementById('gowns-min-data');
          if (minEl) { try { gownsMin = JSON.parse(minEl.textContent || '[]'); } catch (e) { gownsMin = []; } }
+         const colorsEl = document.getElementById('color-presets-data');
+         if (colorsEl) { try { colorPresets = JSON.parse(colorsEl.textContent || '[]'); } catch (e) { colorPresets = []; } }
          const params = new URLSearchParams(window.location.search);
          const presetCategory = params.get('category');
          if (presetCategory) { category = presetCategory; }
@@ -1872,28 +1946,9 @@
                  "Other" reveals the manual fields below for anything not on this list. -->
             <select x-model="newGownColorChoice" @change="onColorChoiceChanged()" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
               <option value="">Select a color</option>
-              <option value="White|WH">White (WH)</option>
-              <option value="Ivory|IV">Ivory (IV)</option>
-              <option value="Champagne|CH">Champagne (CH)</option>
-              <option value="Blush|BL">Blush (BL)</option>
-              <option value="Nude|ND">Nude (ND)</option>
-              <option value="Beige|BG">Beige (BG)</option>
-              <option value="Black|BK">Black (BK)</option>
-              <option value="Red|RD">Red (RD)</option>
-              <option value="Maroon|MR">Maroon (MR)</option>
-              <option value="Navy|NV">Navy (NV)</option>
-              <option value="Blue|BU">Blue (BU)</option>
-              <option value="Green|GN">Green (GN)</option>
-              <option value="Gold|GD">Gold (GD)</option>
-              <option value="Silver|SV">Silver (SV)</option>
-              <option value="Purple|PU">Purple (PU)</option>
-              <option value="Lavender|LV">Lavender (LV)</option>
-              <option value="Pink|PK">Pink (PK)</option>
-              <option value="Yellow|YL">Yellow (YL)</option>
-              <option value="Orange|OR">Orange (OR)</option>
-              <option value="Brown|BR">Brown (BR)</option>
-              <option value="Grey|GY">Grey (GY)</option>
-              <option value="Multicolor|MC">Multicolor (MC)</option>
+              <template x-for="p in colorPresets" :key="p.code">
+                <option :value="p.name + '|' + p.code" x-text="p.name + ' (' + p.code + ')'"></option>
+              </template>
               <option value="OTHER">Other (type it in)</option>
             </select>
           </div>
@@ -1910,6 +1965,21 @@
               placeholder="e.g. Dusty Rose"
               class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
             />
+            <!-- Live suggestion for a brand new color name -- only while Color Code is
+                 still empty, so it never overwrites something staff already typed
+                 themselves. Works for ANY name (not just the 36 presets): the same
+                 first-two-letters / distinctive-letter / first-letter-per-word logic a
+                 person would use by hand, checked against every code already in use. -->
+            <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400"
+               x-show="newGownColorName.trim() && !newGownColorCode.trim() && suggestColorCode(newGownColorName, isEditMode ? editingGownId : null)"
+               x-cloak>
+              Suggested code:
+              <button type="button"
+                class="font-semibold text-brand-500 hover:text-brand-600 dark:text-brand-400"
+                @click="newGownColorCode = suggestColorCode(newGownColorName, isEditMode ? editingGownId : null)"
+                x-text="suggestColorCode(newGownColorName, isEditMode ? editingGownId : null)"></button>
+              <span class="text-gray-400">&mdash; click to use it</span>
+            </p>
           </div>
 
           <div class="col-span-2 lg:col-span-1" x-show="newGownColorChoice === 'OTHER'" x-cloak>
@@ -1921,6 +1991,17 @@
               placeholder="e.g. DR"
               class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm uppercase text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
             />
+            <!-- Live warning the instant a typed code already means a different color --
+                 checked against the 36 presets AND every real gown in the catalog
+                 (colorCodeConflict), so this is the exact bug that happened once
+                 already (Blue saved with Blush's code) now caught before Save is even
+                 clicked. This is a convenience, not the actual guarantee -- the server
+                 enforces the same rule regardless of what this warning shows. -->
+            <p class="mt-1.5 text-xs font-medium text-error-600 dark:text-error-500"
+               x-show="newGownColorCode.trim() && newGownColorName.trim() && colorCodeConflict(newGownColorCode, newGownColorName, isEditMode ? editingGownId : null)"
+               x-cloak
+               x-text="(() => { const c = colorCodeConflict(newGownColorCode, newGownColorName, isEditMode ? editingGownId : null); return c ? ('“' + newGownColorCode.trim().toUpperCase() + '” already means ' + c.name + '. Choose a different code.') : ''; })()">
+            </p>
           </div>
 
           <div class="col-span-2 lg:col-span-1">
@@ -2324,6 +2405,7 @@
 
 {{ gown_blocks|json_script:"gown-blocks-data" }}
 {{ gowns_min|json_script:"gowns-min-data" }}
+{{ color_presets|json_script:"color-presets-data" }}
 
 <!-- Bulk-select toolbar: appears when one or more catalog rows are ticked. -->
 <div

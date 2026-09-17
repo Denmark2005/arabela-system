@@ -23,7 +23,7 @@ import json
 
 from accounts.models import CustomerMessage, UserProfile
 from accounts.services import CANCELLATION_FLAG_THRESHOLD
-from gowns.models import Gown, GownUnavailability, SiteSettings
+from gowns.models import GOWN_COLOR_PRESETS, Gown, GownUnavailability, SiteSettings
 from reservations import reminders as reservation_reminders
 from reservations import timeline as reservation_timeline
 from reservations.models import Reservation, ReceiptRecord, ReservationItem, ReservationStatusEvent
@@ -609,6 +609,11 @@ def gown_catalog_view(request):
             "category": g.category,
             "status": g.status,
             "hay": f"{g.gown_id} {g.name} {g.category} {g.color_name} {g.size}".lower(),
+            # color_name/color_code: lets the Add/Edit modal warn about a code clash
+            # (and suggest a free one) against every REAL gown already in the catalog,
+            # not just the 36 presets, without a separate request for that check.
+            "color_name": g.color_name,
+            "color_code": g.color_code,
         }
         for g in gowns
     ]
@@ -640,6 +645,9 @@ def gown_catalog_view(request):
             "page": "gown",
             "gowns": gowns,
             "gowns_min": gowns_min,
+            # The one list the Add/Edit dropdown, the live color-code warning, and the
+            # live suggestion all read -- see GOWN_COLOR_PRESETS's own docstring.
+            "color_presets": [{"name": n, "code": c} for n, c in GOWN_COLOR_PRESETS],
             "gown_blocks": dict(blocks_by_gown),
             "block_reasons": GownUnavailability.Reason.values,
             "today_iso": today.isoformat(),
@@ -895,14 +903,19 @@ def _receipt_row(receipt, today=None):
     }
 
 
-def _validate_gown_fields(name, category, color_name, color_code, size, design_variant=""):
+def _validate_gown_fields(name, category, color_name, color_code, size, design_variant="",
+                          exclude_gown_id=None):
     """Shared field checks for Add Gown and Edit Gown, so a rule added to one can never
     silently miss the other. Returns an error message, or '' when everything is valid.
 
     Every length check here mirrors the model's max_length, so an over-long value is
     turned into a sentence staff can act on instead of a raw database DataError. The
     catalog's own dropdowns can't produce over-long values, but the "Other" free-text
-    fallbacks (and any caller that skips the page's JS) can."""
+    fallbacks (and any caller that skips the page's JS) can.
+
+    `exclude_gown_id` is the gown currently being edited (gown_update_view passes its
+    own id): without it, a gown that already correctly owns a code would collide with
+    itself on every single edit, even one that changes nothing about its color."""
     if not name:
         return "Please enter a gown name."
     if len(name) > 150:
@@ -921,6 +934,50 @@ def _validate_gown_fields(name, category, color_name, color_code, size, design_v
         return "Please choose a valid size."
     if len(design_variant) > 60:
         return "Design variant must be 60 characters or fewer."
+
+    # A 2-letter code must always mean the same color everywhere in the catalog --
+    # this is the actual guarantee behind the Add/Edit dropdown's live warning and
+    # suggestion (both client-side conveniences; this check is what makes either of
+    # them a promise rather than just a hint). Checked two ways, matching the two
+    # ways a color can be "known": a name on the preset list below, or a name some
+    # earlier gown already established for a code that isn't a preset at all (a
+    # custom color entered once through "Other").
+    error = _check_color_code_consistency(color_code, color_name, exclude_gown_id)
+    if error:
+        return error
+
+    return ""
+
+
+def _check_color_code_consistency(color_code, color_name, exclude_gown_id=None):
+    """Returns an error message if `color_code` already means a color other than
+    `color_name`, or '' if the pairing is fine (new, or already correct).
+
+    Comparison is case-insensitive so "white"/"White"/"WHITE" are the same color, but
+    whatever the caller submitted is what gets saved -- this never rewrites input.
+    """
+    preset_names_by_code = {code: name for name, code in GOWN_COLOR_PRESETS}
+    preset_name = preset_names_by_code.get(color_code)
+    if preset_name is not None:
+        if preset_name.casefold() != color_name.casefold():
+            return (
+                f'"{color_code}" already means {preset_name}. Please use a different '
+                f"code, or change the color name to {preset_name} if that's what this is."
+            )
+        return ""
+
+    # Not a preset code -- it may still already mean something, from an earlier "Other"
+    # entry. One indexed lookup; excludes the gown being edited so correcting (or simply
+    # re-saving) its own existing pairing never reads as a conflict with itself.
+    conflict = Gown.objects.filter(color_code=color_code).exclude(color_name__iexact=color_name)
+    if exclude_gown_id is not None:
+        conflict = conflict.exclude(id=exclude_gown_id)
+    existing = conflict.first()
+    if existing is not None:
+        return (
+            f'"{color_code}" already means {existing.color_name} '
+            f"(used on {existing.gown_id}). Please choose a different code."
+        )
     return ""
 
 
@@ -1086,7 +1143,10 @@ def gown_update_view(request, gown_id):
     condition = request.POST.get("condition") or gown.condition
     notes = (request.POST.get("notes") or "").strip()
 
-    error = _validate_gown_fields(name, category, color_name, color_code, size, design_variant)
+    error = _validate_gown_fields(
+        name, category, color_name, color_code, size, design_variant,
+        exclude_gown_id=gown.id,
+    )
     if error:
         return JsonResponse({"error": error}, status=400)
 

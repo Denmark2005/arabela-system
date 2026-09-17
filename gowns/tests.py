@@ -5,15 +5,18 @@ import string
 import threading
 from datetime import date, timedelta
 from decimal import Decimal
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connections
+from django.db.utils import IntegrityError, OperationalError
 from django.test import TestCase
 from django.urls import NoReverseMatch, reverse
 from django.utils import formats, timezone
+from django.utils.datastructures import MultiValueDict
 
+from arabela_system.middleware import DatabaseRetryMiddleware
 from gowns.models import Gown, GownSequence, GownSlugSequence, GownUnavailability
 from gowns.views import (
     _UNIT_ASSIGNED,
@@ -550,7 +553,11 @@ class GownSequenceTests(TestCase):
         for t in threads:
             t.start()
         for t in threads:
-            t.join(timeout=15)
+            # select_for_update() forces these 10 real transactions to queue up and
+            # commit one at a time rather than run concurrently, and each one is a
+            # real network round trip to Supabase -- generous so a slow moment for
+            # the shared dev database can't fail this correctness test on timing.
+            t.join(timeout=60)
         # Deliberately NOT closing the main thread's own connection here: that connection
         # is the one Django's TestCase has wrapped in an open, uncommitted atomic block/
         # savepoint stack for the whole test, and force-closing it leaves it unable to
@@ -689,7 +696,11 @@ class GownSlugSequenceTests(TestCase):
         for t in threads:
             t.start()
         for t in threads:
-            t.join(timeout=15)
+            # select_for_update() forces these 10 real transactions to queue up and
+            # commit one at a time rather than run concurrently, and each one is a
+            # real network round trip to Supabase -- generous so a slow moment for
+            # the shared dev database can't fail this correctness test on timing.
+            t.join(timeout=60)
         # Deliberately NOT closing the main thread's own connection here: that connection
         # is the one Django's TestCase has wrapped in an open, uncommitted atomic block/
         # savepoint stack for the whole test, and force-closing it leaves it unable to
@@ -917,3 +928,69 @@ class CollectionPaginationTests(TestCase):
         html = self.client.get(reverse("gowns:collection_belo"), {"page": 2}).content.decode()
         self.assertIn('href="?page=1"', html)
         self.assertIn('href="?page=3"', html)
+
+
+class DatabaseRetryMiddlewareTests(TestCase):
+    """`arabela_system.middleware.DatabaseRetryMiddleware` -- retries a request when
+    the database's connection pool (Supabase's free-tier plan caps this) briefly
+    rejects it during a traffic spike, instead of showing the visitor a raw error
+    screen. Lives here (not a standalone arabela_system test module) because
+    arabela_system is the project's settings package, not a registered Django app,
+    so `manage.py test` would never discover tests placed there."""
+
+    def _request(self, files=None):
+        request = MagicMock()
+        request.FILES = files if files is not None else MultiValueDict()
+        request.path = "/test/"
+        return request
+
+    def test_successful_request_passes_through_unaffected(self):
+        get_response = MagicMock(return_value="ok-response")
+        middleware = DatabaseRetryMiddleware(get_response)
+        response = middleware(self._request())
+        self.assertEqual(response, "ok-response")
+        get_response.assert_called_once()
+
+    @patch("arabela_system.middleware.time.sleep")
+    @patch("arabela_system.middleware.close_old_connections")
+    def test_retries_once_after_an_operational_error_then_succeeds(self, mock_close, mock_sleep):
+        get_response = MagicMock(side_effect=[OperationalError("pool exhausted"), "ok-response"])
+        middleware = DatabaseRetryMiddleware(get_response)
+        response = middleware(self._request())
+        self.assertEqual(response, "ok-response")
+        self.assertEqual(get_response.call_count, 2)
+        mock_close.assert_called_once()
+        mock_sleep.assert_called_once()
+
+    @patch("arabela_system.middleware.time.sleep")
+    @patch("arabela_system.middleware.close_old_connections")
+    def test_gives_up_after_max_attempts_with_a_friendly_503(self, mock_close, mock_sleep):
+        from arabela_system.middleware import _MAX_ATTEMPTS
+        get_response = MagicMock(side_effect=OperationalError("pool exhausted"))
+        middleware = DatabaseRetryMiddleware(get_response)
+        response = middleware(self._request())
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(get_response.call_count, _MAX_ATTEMPTS)
+        self.assertEqual(mock_close.call_count, _MAX_ATTEMPTS)
+
+    def test_non_operational_database_errors_are_never_retried(self):
+        """An IntegrityError means the code/data is wrong -- retrying would just
+        fail again identically, so it must propagate immediately, never be
+        swallowed as if it were a transient connection problem."""
+        get_response = MagicMock(side_effect=IntegrityError("duplicate key"))
+        middleware = DatabaseRetryMiddleware(get_response)
+        with self.assertRaises(IntegrityError):
+            middleware(self._request())
+        get_response.assert_called_once()
+
+    @patch("arabela_system.middleware.time.sleep")
+    @patch("arabela_system.middleware.close_old_connections")
+    def test_uploaded_files_are_rewound_before_a_retry(self, mock_close, mock_sleep):
+        proof = _make_proof()
+        proof.read()  # simulate the first (failed) attempt having already consumed it
+        files = MultiValueDict({"proof": [proof]})
+        get_response = MagicMock(side_effect=[OperationalError("pool exhausted"), "ok-response"])
+        middleware = DatabaseRetryMiddleware(get_response)
+        response = middleware(self._request(files=files))
+        self.assertEqual(response, "ok-response")
+        self.assertEqual(proof.tell(), 0)
