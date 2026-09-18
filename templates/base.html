@@ -42,6 +42,8 @@
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Epilogue:wght@300;400;700;800&family=Inter:wght@300;400;500;600&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+  <!-- Script face for the header wordmark, matching the Arabela shop signage. -->
+  <link href="https://fonts.googleapis.com/css2?family=Lobster+Two:ital,wght@1,700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
 
   <script id="tailwind-config">
@@ -370,7 +372,7 @@
       <div class="flex items-center gap-4 md:gap-12 h-full">
         <div class="flex-shrink-0">
           <a href="{% url 'gowns:homepage' %}" class="block">
-            <h1 class="text-2xl font-bold tracking-tighter text-[#222222] dark:text-[#FAF4EB]">ARABELA</h1>
+            <h1 class="text-[1.75rem] sm:text-[2rem] leading-[1.15] text-[#222222] dark:text-[#FAF4EB]" style="font-family: 'Lobster Two', cursive; font-weight: 700; font-style: italic;">Arabela</h1>
           </a>
         </div>
 
@@ -613,7 +615,7 @@
         <div class="w-full max-w-[1920px] mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 text-left">
           <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
             <div class="flex items-center gap-3 shrink-0">
-              <a href="{% url 'gowns:homepage' %}" class="text-lg font-bold text-[#222222] tracking-tighter font-body">ARABELA</a>
+              <a href="{% url 'gowns:homepage' %}" class="text-[1.35rem] leading-none text-[#222222]" style="font-family: 'Lobster Two', cursive; font-weight: 700; font-style: italic;">Arabela</a>
               <a href="{{ site_facebook_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex text-secondary scale-95 active:scale-90 transition-all hover:opacity-70" aria-label="Arabela on Facebook">
                 <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
               </a>
@@ -633,7 +635,7 @@
           <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-y-10 text-left">
             <div class="flex flex-col sm:flex-row sm:flex-wrap items-start gap-x-8 sm:gap-x-10 md:gap-x-12 lg:gap-x-16 gap-y-8">
               <div class="flex items-center gap-3 shrink-0">
-                <a href="{% url 'gowns:homepage' %}" class="text-lg font-bold text-[#222222] tracking-tighter font-body">ARABELA</a>
+                <a href="{% url 'gowns:homepage' %}" class="text-[1.35rem] leading-none text-[#222222]" style="font-family: 'Lobster Two', cursive; font-weight: 700; font-style: italic;">Arabela</a>
                 <a href="{{ site_facebook_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex text-secondary scale-95 active:scale-90 transition-all hover:opacity-70" aria-label="Arabela on Facebook">
                   <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
                 </a>

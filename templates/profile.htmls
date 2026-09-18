@@ -7,6 +7,8 @@
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <link href="https://fonts.googleapis.com" rel="preconnect" />
     <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <!-- Script face for the header wordmark, matching the Arabela shop signage. -->
+    <link href="https://fonts.googleapis.com/css2?family=Lobster+Two:ital,wght@1,700&display=swap" rel="stylesheet" />
     <link
       href="https://fonts.googleapis.com/css2?family=Epilogue:wght@300;400;700;800&family=Inter:wght@300;400;500;600;700&family=Poppins:wght@300;400;500;600;700&display=swap"
       rel="stylesheet"
@@ -264,7 +266,7 @@
     <nav class="mx-auto flex h-20 w-full max-w-full items-center justify-between border-b border-black/5 bg-white/80 px-8 backdrop-blur-md">
       <div class="flex-shrink-0">
         <a href="{% url 'gowns:homepage' %}" class="block no-underline">
-          <h1 class="text-2xl font-bold tracking-tighter text-[#222222]">ARABELA</h1>
+          <h1 class="text-[1.75rem] sm:text-[2rem] leading-[1.15] text-[#222222]" style="font-family: 'Lobster Two', cursive; font-weight: 700; font-style: italic;">Arabela</h1>
         </a>
       </div>
       <div class="flex items-center gap-8">

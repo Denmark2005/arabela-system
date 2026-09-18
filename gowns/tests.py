@@ -134,28 +134,31 @@ class ReservationSubmitPriceTrustTests(TestCase):
         }])
         self.assertEqual(response.status_code, 400)
 
-    # ---------------------------------------------------------------- placeholder catalog
+    # ------------------------------------------------- retired placeholder catalog
 
-    def test_placeholder_item_priced_via_slug(self):
-        # index 2 -> slug "florence-organza", price 2000 (gowns/context_processors.py)
+    def test_stale_placeholder_item_in_the_bag_is_refused(self):
+        """The 8-per-category placeholder catalog is retired, so nothing prices it any
+        more. A bag saved in the browser BEFORE that change can still submit one of
+        those items -- it must be refused, never booked as a gown the shop does not own."""
+        before = Reservation.objects.count()
         response = self._submit([{
             "gown_name": "Suit Three", "gown_slug": "florence-organza", "size": "",
             "rental_price": "1", "rental_date": "2027-03-01", "return_date": "2027-03-04",
         }])
-        self.assertEqual(response.status_code, 200, response.content)
-        item = ReservationItem.objects.get(reservation__reference_code=response.json()["reference_code"])
-        self.assertEqual(item.rental_price, Decimal("2000"))
-        self.assertIsNone(item.gown_id)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("could not be verified", response.json()["error"])
+        self.assertEqual(Reservation.objects.count(), before)
 
-    def test_placeholder_item_priced_via_name_when_slug_is_blank(self):
-        # Reproduces the real cart-drawer checkout path, which never sends a slug at all.
+    def test_stale_placeholder_item_is_refused_when_slug_is_blank_too(self):
+        """Same, via the real cart-drawer path, which never sends a slug at all -- the
+        old name-suffix fallback ("... Three") must not resurrect a price either."""
+        before = Reservation.objects.count()
         response = self._submit([{
             "gown_name": "Wedding Gown Three", "gown_slug": "", "size": "",
             "rental_price": "1", "rental_date": "2027-03-10", "return_date": "2027-03-13",
         }])
-        self.assertEqual(response.status_code, 200, response.content)
-        item = ReservationItem.objects.get(reservation__reference_code=response.json()["reference_code"])
-        self.assertEqual(item.rental_price, Decimal("2000"))
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Reservation.objects.count(), before)
 
     def test_completely_fabricated_gown_is_rejected(self):
         before = Reservation.objects.count()
@@ -167,10 +170,14 @@ class ReservationSubmitPriceTrustTests(TestCase):
         self.assertEqual(Reservation.objects.count(), before)
 
     def test_multi_item_cart_totals(self):
+        """Two real gowns at different prices: every peso is recomputed server-side,
+        so the fabricated "1"s below never reach the database."""
+        cheap = self._make_real_gown(rental_price=Decimal("1600.00"), name="Multi Cart Cheap")
+        dear = self._make_real_gown(rental_price=Decimal("3000.00"), name="Multi Cart Dear")
         response = self._submit([
-            {"gown_name": "Ball Gown One", "gown_slug": "valencia-lace", "size": "",
+            {"gown_name": cheap.name, "gown_slug": cheap.slug, "size": "Medium",
              "rental_price": "1", "rental_date": "2027-05-01", "return_date": "2027-05-04"},
-            {"gown_name": "Ball Gown Eight", "gown_slug": "lumiere-silk", "size": "",
+            {"gown_name": dear.name, "gown_slug": dear.slug, "size": "Medium",
              "rental_price": "1", "rental_date": "2027-05-10", "return_date": "2027-05-13"},
         ])
         self.assertEqual(response.status_code, 200, response.content)
@@ -333,6 +340,14 @@ class CustomerStatusEventTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.customer = User.objects.create_user(username="cust_evt", password="x")
+        # A real gown: the placeholder catalog is retired, so only real inventory
+        # can be checked out at all.
+        cls.gown = Gown.objects.create(
+            gown_id="CUSTEVT-0001", name="Cust Event Test Gown",
+            category=Gown.Category.BELO, color_name="Purple", color_code="PG",
+            size=Gown.Size.MEDIUM, rental_price=Decimal("2000.00"),
+            status=Gown.Status.AVAILABLE,
+        )
 
     def setUp(self):
         self.client.force_login(self.customer)
@@ -345,7 +360,7 @@ class CustomerStatusEventTests(TestCase):
         rental = self.today + timedelta(days=10)
         return self.client.post(reverse("gowns:reservation_submit"), data={
             "items": json.dumps([{
-                "name": "Wedding Gown Three", "slug": "", "size": "M",
+                "name": self.gown.name, "slug": self.gown.slug, "size": "M",
                 "rental_date": rental.isoformat(),
                 "return_date": (rental + timedelta(days=4)).isoformat(),
             }]),
@@ -742,16 +757,16 @@ class CategorySwapTests(TestCase):
                 for leak in ("{%", "{{", "{#"):
                     self.assertNotIn(leak, html)
 
-    def test_each_new_category_still_gets_the_shared_8_item_placeholder_catalog(self):
-        """Category is irrelevant to the placeholder catalog by design -- the same 8
-        products/prices appear regardless of which of the 11 categories is showing."""
-        wedding_html = self.client.get(reverse("gowns:collection_wedding")).content.decode()
+    def test_each_new_category_with_no_real_stock_shows_the_empty_state(self):
+        """The placeholder catalog is retired, so a category with no real Gown rows now
+        shows its {% empty %} state instead of 8 invented products nobody could rent."""
         for url_name, _ in self.NEW_CATEGORIES:
             with self.subTest(category=url_name):
                 html = self.client.get(reverse(f"gowns:{url_name}")).content.decode()
-                # ₱1,600 / ₱3,000 are the fixed low/high ends of the shared price table.
-                self.assertIn("1,600", html)
-                self.assertIn("3,000", html)
+                self.assertIn("No gowns available in this collection", html)
+                # the old shared price table must not appear anywhere
+                self.assertNotIn("1,600", html)
+                self.assertNotIn("3,000", html)
 
     def test_the_old_category_url_names_no_longer_resolve(self):
         for old_name in ("collection_sexy_gown", "collection_ninang_gown"):
@@ -809,18 +824,19 @@ class CategorySwapTests(TestCase):
         html = self.client.get(reverse("gowns:collection_mother_gown")).content.decode()
         self.assertIn("Mother Gown Test Piece", html)
 
-    def test_placeholder_checkout_still_works_for_the_new_categories(self):
-        """The server-side price-trust computation (gowns.views._authoritative_price)
-        is category-independent by design -- proving one new category proves all of
-        them, since nothing in that code path branches on category at all."""
+    def test_placeholder_checkout_is_refused_for_the_new_categories(self):
+        """Nothing prices the retired placeholder catalog any more, so a placeholder
+        item is refused rather than booked. Category-independent by design, so proving
+        one category proves them all."""
         customer = User.objects.create_user(username="catswap_checkout", password="x")
         self.client.force_login(customer)
         rental = date.today() + timedelta(days=10)
+        before = Reservation.objects.count()
         with patch("gowns.views._save_proof_file", return_value="https://example.test/fake-proof.jpg"):
             response = self.client.post(reverse("gowns:reservation_submit"), data={
                 "items": json.dumps([{
                     "gown_name": "Mother Gown Three", "gown_slug": "", "size": "M",
-                    "rental_price": "1",  # fabricated on purpose -- server must ignore it
+                    "rental_price": "1",
                     "rental_date": rental.isoformat(),
                     "return_date": (rental + timedelta(days=4)).isoformat(),
                 }]),
@@ -828,10 +844,8 @@ class CategorySwapTests(TestCase):
                 "address": "1 St", "city": "City", "postal_code": "1000",
                 "payment_method": "GCash", "proof_of_payment": _make_proof(),
             })
-        self.assertEqual(response.status_code, 200, response.content)
-        item = Reservation.objects.get(
-            reference_code=response.json()["reference_code"]).items.get()
-        self.assertEqual(item.rental_price, Decimal("2000"))
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Reservation.objects.count(), before)
 
     def test_admin_categories_page_shows_new_categories_not_old(self):
         staff = User.objects.create_user(username="catswap_cats", password="x", is_staff=True)
@@ -871,8 +885,9 @@ class CollectionPaginationTests(TestCase):
             rental_price=Decimal("3000.00"), status=Gown.Status.AVAILABLE,
         )
 
-    def test_a_category_still_at_the_8_item_placeholder_catalog_shows_no_pagination(self):
+    def test_a_category_with_no_real_stock_shows_the_empty_state_and_no_pagination(self):
         html = self.client.get(reverse("gowns:collection_wedding")).content.decode()
+        self.assertIn("No gowns available in this collection", html)
         self.assertNotIn("Page 1 of", html)
 
     def test_33_real_gowns_split_into_8_8_8_8_1_across_5_pages(self):
@@ -994,3 +1009,86 @@ class DatabaseRetryMiddlewareTests(TestCase):
         response = middleware(self._request(files=files))
         self.assertEqual(response, "ok-response")
         self.assertEqual(proof.tell(), 0)
+
+
+class RetiredPlaceholderCatalogTests(TestCase):
+    """The 8-per-category placeholder catalog is gone: customers only ever see, search
+    and book real Gown rows. These lock in the three surfaces it used to leak through --
+    the collection grid, the product page, and the search overlay."""
+
+    def _gown(self, n, category=Gown.Category.BELO, name=None):
+        return Gown.objects.create(
+            gown_id=f"RETIRED-{category}-{n:04d}",
+            name=name or f"Retired Test Gown {n}",
+            category=category, color_name="Purple", color_code="PG",
+            size=Gown.Size.MEDIUM, rental_price=Decimal("3000.00"),
+            status=Gown.Status.AVAILABLE,
+        )
+
+    def test_old_placeholder_product_urls_are_404_not_a_bookable_page(self):
+        """Stale links and bookmarks to the 8 fixed demo slugs must 404 rather than
+        render a page for something the shop does not own."""
+        for slug in ("valencia-lace", "archive-satin", "florence-organza"):
+            for collection in ("wedding", "belo"):
+                with self.subTest(slug=slug, collection=collection):
+                    response = self.client.get(
+                        reverse("gowns:product_detail",
+                                kwargs={"collection": collection, "slug": slug})
+                    )
+                    self.assertEqual(response.status_code, 404)
+
+    def test_a_category_with_no_real_gowns_renders_no_products(self):
+        from gowns.views import _products_for_category
+        self.assertEqual(_products_for_category("belo"), [])
+
+    def test_search_catalog_holds_only_real_bookable_gowns(self):
+        from gowns.context_processors import _build_search_catalog
+        available = self._gown(1)
+        withdrawn = self._gown(2)
+        withdrawn.status = Gown.Status.OUT_OF_STOCK
+        withdrawn.save(update_fields=["status", "updated_at"])
+
+        slugs = [row["slug"] for row in _build_search_catalog()]
+        self.assertIn(available.slug, slugs)
+        self.assertNotIn(withdrawn.slug, slugs, "Out-of-Stock gowns are not bookable")
+        for dead in ("valencia-lace", "archive-satin", "florence-organza"):
+            self.assertNotIn(dead, slugs)
+
+
+class RelatedGownsTests(TestCase):
+    """"You may also like" -- real gowns, same collection only, never the one open."""
+
+    def _gown(self, n, category=Gown.Category.BELO, status=Gown.Status.AVAILABLE):
+        return Gown.objects.create(
+            gown_id=f"RELATED-{category}-{n:04d}",
+            name=f"Related Test Gown {n}", category=category,
+            color_name="Purple", color_code="PG", size=Gown.Size.MEDIUM,
+            rental_price=Decimal("3000.00"), status=status,
+        )
+
+    def test_suggestions_never_include_the_gown_being_viewed(self):
+        from gowns.views import _related_gowns
+        gowns = [self._gown(n) for n in range(1, 6)]
+        for g in gowns:
+            with self.subTest(viewing=g.slug):
+                slugs = [r["slug"] for r in _related_gowns("Belo", g.slug)]
+                self.assertNotIn(g.slug, slugs)
+
+    def test_suggestions_stay_inside_the_same_collection(self):
+        from gowns.views import _related_gowns
+        belo = [self._gown(n, category=Gown.Category.BELO) for n in range(1, 4)]
+        suit = self._gown(9, category=Gown.Category.SUIT)
+        slugs = [r["slug"] for r in _related_gowns("Belo", belo[0].slug)]
+        self.assertNotIn(suit.slug, slugs, "a Belo page must never suggest a Suit")
+
+    def test_out_of_stock_gowns_are_never_suggested(self):
+        from gowns.views import _related_gowns
+        keep = self._gown(1)
+        gone = self._gown(2, status=Gown.Status.OUT_OF_STOCK)
+        slugs = [r["slug"] for r in _related_gowns("Belo", keep.slug)]
+        self.assertNotIn(gone.slug, slugs)
+
+    def test_returns_nothing_when_the_collection_has_no_other_gowns(self):
+        from gowns.views import _related_gowns
+        only = self._gown(1)
+        self.assertEqual(_related_gowns("Belo", only.slug), [])

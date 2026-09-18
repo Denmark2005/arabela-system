@@ -20,9 +20,6 @@ from accounts.services import record_abandoned_hold, sync_cancellation_flag
 from gowns.context_processors import (
     _CATEGORIES,
     _FALLBACK_IMG,
-    _NUMERIC,
-    _SEARCH_PRICES,
-    _SLUG_ORDER,
     clear_reservation_hold,
     get_reservation_hold_deadline,
     start_reservation_hold,
@@ -40,9 +37,7 @@ _COLLECTION_URL_NAME = {category["key"]: category["url_name"] for category in _C
 # any realistic booking lead time and keeps the per-day scan trivially cheap.
 _AVAILABILITY_HORIZON_DAYS = 120
 
-# Every collection grid (placeholder catalog or real inventory) shows this many
-# products per page -- the placeholder catalog is always exactly one page of 8, so
-# this only becomes visible once a category's real inventory grows past it.
+# Every collection grid shows this many products per page.
 _COLLECTION_PAGE_SIZE = 8
 
 
@@ -53,55 +48,30 @@ def _label_for(collection_key: str) -> str:
     return "Wedding Gown"
 
 
-def _title_and_label(collection_key: str, slug: str) -> tuple[str, str]:
-    idx = _SLUG_ORDER.index(slug) if slug in _SLUG_ORDER else 0
-    n = _NUMERIC[idx]
-    label = _label_for(collection_key)
-    return (f"{label} {n}", label)
-
-
 def _products_for_category(collection_key: str) -> list[dict]:
-    """Real Gown rows for this category once ANY real gown exists for it -- from that
-    point customers browse actual inventory, never the placeholder catalog again.
-    Out-of-Stock gowns are hidden from the grid, so a category whose real gowns are
-    ALL Out-of-Stock shows an empty grid (the templates' {% empty %} clause), NOT a
-    fallback to the 8 fake "X One".."X Eight" products. A category still at zero real
-    inventory keeps the placeholder catalog untouched."""
-    label = _label_for(collection_key)
-    category_gowns = list(
-        Gown.objects.filter(category=label).order_by("color_code", "gown_id")
-    )
-    if category_gowns:
-        return [
-            {
-                "slug": g.slug,
-                "title": g.name,
-                # "price" stays a bare number -- the grid's onclick handler embeds it
-                # unquoted as a JS literal; "price_display" is the text shown on the card.
-                "price": int(g.rental_price),
-                "price_display": f"₱{g.rental_price:,.0f}",
-                "image": g.photo_url or _FALLBACK_IMG,
-                "collection_key": collection_key,
-                "reserved": g.status == Gown.Status.RESERVED,
-            }
-            for g in category_gowns
-            if g.status != Gown.Status.OUT_OF_STOCK
-        ]
+    """Real Gown rows for this category -- customers only ever browse actual inventory.
 
-    products = []
-    for i, slug in enumerate(_SLUG_ORDER):
-        products.append(
-            {
-                "slug": slug,
-                "title": f"{label} {_NUMERIC[i]}",
-                "price": _SEARCH_PRICES[i],
-                "price_display": f"₱{_SEARCH_PRICES[i]:,}",
-                "image": _FALLBACK_IMG,
-                "collection_key": collection_key,
-                "reserved": i == 1,
-            }
-        )
-    return products
+    The old 8-item "X One".."X Eight" placeholder catalog is gone: a category with no
+    real gowns now shows the templates' {% empty %} state ("No gowns available in this
+    collection right now") instead of fake products that could never be fulfilled.
+    Out-of-Stock gowns are hidden too, so a category whose stock is all withdrawn
+    reads the same as one that has none yet."""
+    label = _label_for(collection_key)
+    return [
+        {
+            "slug": g.slug,
+            "title": g.name,
+            # "price" stays a bare number -- the grid's onclick handler embeds it
+            # unquoted as a JS literal; "price_display" is the text shown on the card.
+            "price": int(g.rental_price),
+            "price_display": f"₱{g.rental_price:,.0f}",
+            "image": g.photo_url or _FALLBACK_IMG,
+            "collection_key": collection_key,
+            "reserved": g.status == Gown.Status.RESERVED,
+        }
+        for g in Gown.objects.filter(category=label).order_by("color_code", "gown_id")
+        if g.status != Gown.Status.OUT_OF_STOCK
+    ]
 
 
 def homepage(request):
@@ -225,25 +195,6 @@ def legacy_wedding_product_url(request, slug: str):
     if request.GET:
         target += "?" + request.GET.urlencode()
     return redirect(target)
-
-
-# Built from the same _SLUG_ORDER/_NUMERIC/_SEARCH_PRICES/_FALLBACK_IMG this file
-# already imports from gowns.context_processors -- previously each of these 8 entries
-# was hand-typed with its own copy of the price and image, a second (this dict) and
-# third (the module-level _SEARCH_PRICES that used to live here) independent copy of
-# numbers _products_for_category() below already derives from the exact same source.
-# One source of truth now: change a price in context_processors.py and every one of
-# these follows automatically instead of needing the same edit repeated three times.
-_WEDDING_PRODUCTS = {
-    slug: {
-        "title": f"Wedding {_NUMERIC[i]}",
-        "price": f"₱{_SEARCH_PRICES[i]:,}",
-        "image": _FALLBACK_IMG,
-        "availability": "Available Now",
-        "collection": "Wedding",
-    }
-    for i, slug in enumerate(_SLUG_ORDER)
-}
 
 
 _FALLBACK_IMG = (
@@ -488,21 +439,55 @@ def _authoritative_price(gown_name, gown_slug, matched_gown):
     """The ONLY trusted source for what a cart item costs -- the client's submitted
     price is never used, anywhere. Returns a Decimal, or None if the item can't be
     verified (caller must then reject the whole reservation, never guess)."""
+    # Only real inventory has a price now that the placeholder catalog is retired. A
+    # bag still holding an old "X One".."X Eight" item (saved in the browser before the
+    # change) therefore fails verification and is refused at checkout with a clear
+    # message, instead of quietly booking a gown the shop does not own.
     if matched_gown is not None:
         return matched_gown.rental_price  # real inventory: staff-maintained price
-
-    if gown_slug in _SLUG_ORDER:
-        return Decimal(_SEARCH_PRICES[_SLUG_ORDER.index(gown_slug)])
-
-    # Slug is frequently blank (the cart-drawer checkout path never sends one) -- fall
-    # back to the same trailing "One".."Eight" word _products_for_category used to
-    # build this exact name in the first place. Category-independent by design: every
-    # collection reuses the same 8 prices, so the name suffix alone is enough.
-    last_word = gown_name.rsplit(" ", 1)[-1] if gown_name else ""
-    if last_word in _NUMERIC:
-        return Decimal(_SEARCH_PRICES[_NUMERIC.index(last_word)])
-
     return None
+
+
+def _related_gowns(category_label: str, current_slug: str, limit: int = 4) -> list[dict]:
+    """"You may also like" cards -- other REAL gowns from the same collection only, so a
+    wedding page never suggests a suit. The gown being viewed is always excluded.
+
+    The starting point rotates by the current gown's own position in the category, so
+    two different products suggest two different sets instead of every page in the
+    collection showing the same first four. Out-of-Stock gowns are skipped: suggesting
+    something that can't be booked only wastes the customer's click.
+    """
+    gowns = [
+        g
+        for g in Gown.objects.filter(category=category_label).order_by("color_code", "gown_id")
+        if g.status != Gown.Status.OUT_OF_STOCK and g.slug != current_slug
+    ]
+    if not gowns:
+        return []
+
+    all_slugs = list(
+        Gown.objects.filter(category=category_label)
+        .order_by("color_code", "gown_id")
+        .values_list("slug", flat=True)
+    )
+    start = 0
+    if current_slug in all_slugs:
+        after = all_slugs[all_slugs.index(current_slug) + 1:]
+        for s in after:
+            if any(g.slug == s for g in gowns):
+                start = next(i for i, g in enumerate(gowns) if g.slug == s)
+                break
+
+    ordered = gowns[start:] + gowns[:start]
+    return [
+        {
+            "slug": g.slug,
+            "title": g.name,
+            "price_display": f"₱{g.rental_price:,.0f}",
+            "image": g.photo_url or _FALLBACK_IMG,
+        }
+        for g in ordered[:limit]
+    ]
 
 
 def product_detail(request, collection: str, slug: str):
@@ -535,22 +520,11 @@ def product_detail(request, collection: str, slug: str):
             "unavailable": is_out_of_stock,
         }
     else:
-        base = dict(_WEDDING_PRODUCTS[slug]) if slug in _WEDDING_PRODUCTS else None
-        if base is None:
-            # Not a real gown and not one of the 8 fixed placeholder slugs -- not a
-            # real product. 404 rather than fabricate a ₱0 "Available Now" page.
-            raise Http404("No such product.")
-
-        # Availability is computed per CATEGORY, not per catalog slug: a real Gown row has
-        # a category but no link to the placeholder catalog's per-product slugs, so every
-        # product in a collection draws on that category's shared pool of physical units.
-        blocked_dates = _blocked_dates_for_category(_label_for(col))
-
-        title, lbl = _title_and_label(col, slug)
-        base["title"] = title
-        base["collection"] = lbl
-        base["availability"] = "Limited Availability" if blocked_dates else "Available Now"
-        product = base
+        # The placeholder catalog is retired, so a slug with no Gown row behind it is
+        # not a product at all -- including the 8 old fixed slugs, which stale links
+        # and bookmarks may still point at. 404 rather than render a bookable page for
+        # something the shop does not own.
+        raise Http404("No such product.")
 
     return render(
         request,
@@ -561,6 +535,9 @@ def product_detail(request, collection: str, slug: str):
             "collection": col,
             "collection_url": collection_url,
             "blocked_dates_json": json.dumps(blocked_dates),
+            # product["collection"] holds the category LABEL on both the real-gown and
+            # placeholder paths, so this suggests within the right collection either way.
+            "related_products": _related_gowns(product["collection"], slug),
         },
     )
 

@@ -16,13 +16,22 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.75rem;
-    height: 1.75rem;
+    width: 2.125rem;
+    height: 2.125rem;
     margin: 0 auto;
     border-radius: 9999px;
     position: relative;
+    transition: background-color 140ms ease-out, color 140ms ease-out, box-shadow 140ms ease-out;
   }
-  .product-calendar-day:not([aria-disabled="true"]):hover .cal-day-mark { background: rgba(11,12,12,0.06); }
+
+  /* Two deliberately different visual languages, because the old palette made four
+     separate states (hover 6%, preview-range 8%, in-range 10%, the +/-2 buffer 14%)
+     all read as the same flat grey -- hovering a free day looked identical to a day
+     you cannot pick. Now: an OUTLINE always means "provisional" (hovering, previewing
+     -- nothing committed yet) and a FILL always means "committed" (actually chosen). */
+  .product-calendar-day:not([aria-disabled="true"]):hover .cal-day-mark {
+    box-shadow: inset 0 0 0 1.5px rgba(11,12,12,0.45);
+  }
 
   /* Unavailable day: greyed out and unclickable, but NOT pointer-events:none --
      the tooltip needs hover/tap to still reach it. The click handler itself
@@ -30,19 +39,33 @@
   .product-calendar-day[aria-disabled="true"] { color: rgba(27,28,28,0.25); cursor: not-allowed; }
 
   .product-calendar-day[data-selected="start"] .cal-day-mark,
-  .product-calendar-day[data-selected="end"] .cal-day-mark { background: #0b0c0c; color: #ffffff; font-weight: 700; }
+  .product-calendar-day[data-selected="end"] .cal-day-mark {
+    background: #0b0c0c;
+    color: #ffffff;
+    font-weight: 700;
+    box-shadow: 0 2px 8px rgba(11,12,12,0.28);
+  }
   .product-calendar-day[data-selected="in-range"] .cal-day-mark { background: rgba(11,12,12,0.10); color: #0b0c0c; }
   .product-calendar-day[data-selected="adjacent"] .cal-day-mark {
-    background: rgba(11,12,12,0.14);
+    background: rgba(11,12,12,0.11);
     color: #0b0c0c;
+    font-weight: 600;
   }
 
-  /* Live hover preview of the would-be rental window -- same visual language as an
-     actual selection but lighter, and a real selection elsewhere on the grid is
-     never overridden by a preview (the :not([data-selected]) guard). */
-  .product-calendar-day[data-preview] .cal-day-mark { transition: background-color 120ms ease-out, color 120ms ease-out; }
-  .product-calendar-day[data-preview="start"]:not([data-selected]) .cal-day-mark { background: rgba(11,12,12,0.85); color: #ffffff; }
-  .product-calendar-day[data-preview="range"]:not([data-selected]) .cal-day-mark { background: rgba(11,12,12,0.08); }
+  /* Live hover preview of the would-be rental window. Outlined, never filled, so a
+     day you are merely hovering can't be mistaken for one you already picked --
+     and a real selection elsewhere is never overridden (the :not([data-selected])
+     guard). */
+  .product-calendar-day[data-preview="start"]:not([data-selected]) .cal-day-mark {
+    background: transparent;
+    color: #0b0c0c;
+    font-weight: 700;
+    box-shadow: inset 0 0 0 2px #0b0c0c;
+  }
+  .product-calendar-day[data-preview="range"]:not([data-selected]) .cal-day-mark {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px rgba(11,12,12,0.30);
+  }
 
   /* Today: a small dot under the number -- the same restrained accent language as the
      thin dividers used elsewhere on the site, not a new color, just an orientation cue. */
@@ -99,18 +122,95 @@
     transform: translate(-50%, calc(-100% - 4px));
   }
 
-  /* Selection snap animation: fade + subtle scale, on the marker so the circle
-     itself pops rather than the whole grid cell. */
-  .product-calendar-day[data-selected="start"] .cal-day-mark,
+  /* Selection snap: a spring with a little overshoot, so picking a date reads as a
+     deliberate action rather than a silent recolour. The +/-2 buffer days follow a
+     beat later, which makes the rental window visibly grow outward from the day
+     that was actually clicked. */
+  .product-calendar-day[data-selected="start"] .cal-day-mark {
+    transform-origin: center;
+    animation: product-cal-snap 280ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
   .product-calendar-day[data-selected="adjacent"] .cal-day-mark {
     transform-origin: center;
-    animation: product-cal-snap 200ms cubic-bezier(0.4, 0, 0.2, 1) both;
+    animation: product-cal-snap 260ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    animation-delay: 55ms;
   }
 
   @keyframes product-cal-snap {
-    from { opacity: 0; transform: scale(0.95); }
+    from { opacity: 0; transform: scale(0.78); }
     to { opacity: 1; transform: scale(1); }
   }
+
+  /* One-shot ripple on the picked day. Uses ::before because ::after is already the
+     "today" dot, and fades to nothing so it never lingers as decoration. */
+  .product-calendar-day[data-selected="start"] .cal-day-mark::before {
+    content: '';
+    position: absolute;
+    inset: -5px;
+    border-radius: 9999px;
+    border: 1.5px solid rgba(11,12,12,0.4);
+    pointer-events: none;
+    animation: product-cal-halo 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @keyframes product-cal-halo {
+    from { opacity: 0.85; transform: scale(0.7); }
+    to { opacity: 0; transform: scale(1.25); }
+  }
+
+  /* First-run rental-window explainer. Springs in beneath the grid, and its five
+     dots animate left to right so the window is demonstrated rather than only
+     described -- the sequence itself is the explanation. */
+  .product-cal-tip {
+    margin-top: 1.25rem;
+    padding: 0.875rem 1rem 1rem;
+    border: 1px solid rgba(11,12,12,0.10);
+    border-radius: 8px;
+    background: #fbfaf9;
+  }
+  .product-cal-tip[hidden] { display: none; }
+  .product-cal-tip.is-open { animation: product-cal-tip-in 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+  @keyframes product-cal-tip-in {
+    from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .product-cal-tip-diagram {
+    margin: 0.875rem auto 0;
+    max-width: 17rem;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.4rem 0.25rem;
+    justify-items: center;
+    align-items: center;
+  }
+  .product-cal-tip-dot {
+    width: 1.375rem;
+    height: 1.375rem;
+    border-radius: 9999px;
+    background: rgba(11,12,12,0.11);
+  }
+  .product-cal-tip-dot.is-event {
+    background: #0b0c0c;
+    box-shadow: 0 2px 6px rgba(11,12,12,0.25);
+  }
+  .product-cal-tip.is-open .product-cal-tip-dot {
+    animation: product-cal-tip-dot-in 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    animation-delay: calc(140ms + var(--tip-i, 0) * 70ms);
+  }
+  @keyframes product-cal-tip-dot-in {
+    from { opacity: 0; transform: scale(0.4); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  .product-cal-tip-cap {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: rgba(27,28,28,0.55);
+    white-space: nowrap;
+  }
+  .product-cal-tip-cap.is-event { color: #0b0c0c; font-weight: 600; }
 
   /* Rental period reveal: springy height expand (pushes button smoothly) */
   #product-cal-dates {
@@ -203,9 +303,12 @@
 
   @media (prefers-reduced-motion: reduce) {
     .product-calendar-day { transition: none; }
+    .cal-day-mark { transition: none; }
     .product-calendar-day[data-selected="start"] .cal-day-mark,
     .product-calendar-day[data-selected="adjacent"] .cal-day-mark { animation: none; }
-    .product-calendar-day[data-preview] .cal-day-mark { transition: none; }
+    .product-calendar-day[data-selected="start"] .cal-day-mark::before { animation: none; opacity: 0; }
+    .product-cal-tip.is-open { animation: none; }
+    .product-cal-tip.is-open .product-cal-tip-dot { animation: none; }
     #product-cal-grid.is-month-in { animation: none; }
     #product-cal-dates { transition: none; transform: none; }
     #product-cal-dates .product-cal-line { transition: none; transform: none; }
@@ -274,27 +377,71 @@
 
     <!-- Rental Date Picker (with JS logic) -->
     <div class="space-y-4">
-      <label class="font-label text-[0.6875rem] tracking-widest uppercase font-bold">Select Rental Dates</label>
+      <div>
+        <label class="font-label text-[0.6875rem] tracking-widest uppercase font-bold">Select Rental Dates</label>
+        <!-- Sets the expectation BEFORE the tap, so the extra highlighted days are
+             never a surprise in the first place. "up to 2 days" because a pick-up
+             that would land in the past is clamped to today (see clampedPickup). -->
+        <p class="mt-1.5 text-[0.75rem] leading-relaxed text-secondary">
+          Pick your <span class="font-semibold text-on-surface">event date</span> — pick-up is up to 2 days before, return 2 days after.
+        </p>
+      </div>
       <div class="relative bg-white p-6 rounded-lg border border-outline-variant/15 shadow-none">
         <div class="flex justify-between items-center mb-6">
-          <span id="product-cal-title" class="font-headline font-bold text-sm uppercase tracking-widest">October 2024</span>
+          <span id="product-cal-title" class="font-headline font-bold text-[0.9375rem] uppercase tracking-widest">October 2024</span>
           <div class="flex gap-1">
-            <button type="button" class="w-7 h-7 flex items-center justify-center rounded-full text-secondary hover:bg-[#f4f3f1] hover:text-on-surface active:scale-95 transition-all cursor-pointer" id="product-cal-prev" aria-label="Previous month"><span class="material-symbols-outlined text-sm">chevron_left</span></button>
-            <button type="button" class="w-7 h-7 flex items-center justify-center rounded-full text-secondary hover:bg-[#f4f3f1] hover:text-on-surface active:scale-95 transition-all cursor-pointer" id="product-cal-next" aria-label="Next month"><span class="material-symbols-outlined text-sm">chevron_right</span></button>
+            <button type="button" class="w-9 h-9 flex items-center justify-center rounded-full text-secondary hover:bg-[#f4f3f1] hover:text-on-surface active:scale-95 transition-all cursor-pointer" id="product-cal-prev" aria-label="Previous month"><span class="material-symbols-outlined text-base">chevron_left</span></button>
+            <button type="button" class="w-9 h-9 flex items-center justify-center rounded-full text-secondary hover:bg-[#f4f3f1] hover:text-on-surface active:scale-95 transition-all cursor-pointer" id="product-cal-next" aria-label="Next month"><span class="material-symbols-outlined text-base">chevron_right</span></button>
           </div>
         </div>
 
-        <div class="grid grid-cols-7 gap-2 text-center mb-2">
-          <span class="font-label text-[0.5rem] text-secondary">M</span>
-          <span class="font-label text-[0.5rem] text-secondary">T</span>
-          <span class="font-label text-[0.5rem] text-secondary">W</span>
-          <span class="font-label text-[0.5rem] text-secondary">T</span>
-          <span class="font-label text-[0.5rem] text-secondary">F</span>
-          <span class="font-label text-[0.5rem] text-secondary">S</span>
-          <span class="font-label text-[0.5rem] text-secondary">S</span>
+        <div class="grid grid-cols-7 gap-2 text-center mb-3">
+          <span class="font-label text-[0.6875rem] font-semibold tracking-[0.1em] text-secondary">M</span>
+          <span class="font-label text-[0.6875rem] font-semibold tracking-[0.1em] text-secondary">T</span>
+          <span class="font-label text-[0.6875rem] font-semibold tracking-[0.1em] text-secondary">W</span>
+          <span class="font-label text-[0.6875rem] font-semibold tracking-[0.1em] text-secondary">T</span>
+          <span class="font-label text-[0.6875rem] font-semibold tracking-[0.1em] text-secondary">F</span>
+          <span class="font-label text-[0.6875rem] font-semibold tracking-[0.1em] text-secondary">S</span>
+          <span class="font-label text-[0.6875rem] font-semibold tracking-[0.1em] text-secondary">S</span>
         </div>
 
-        <div id="product-cal-grid" class="grid grid-cols-7 gap-y-2 text-center text-[0.75rem] font-medium" data-blocked-dates="{{ blocked_dates_json }}"></div>
+        <div id="product-cal-grid" class="grid grid-cols-7 gap-y-1 text-center text-[0.8125rem] font-semibold" data-blocked-dates="{{ blocked_dates_json }}"></div>
+
+        <!-- First-run explainer for the rental window. Deliberately an inline panel
+             directly beneath the grid rather than a blocking modal: it appears where
+             the customer is already looking, never covers the calendar it describes
+             (which a full-screen dialog would, especially on a phone), and doesn't
+             interrupt the moment they just committed to a date. -->
+        <div id="product-cal-tip" class="product-cal-tip" role="note" hidden>
+          <p class="font-label text-[0.625rem] uppercase tracking-widest text-secondary">Why the extra days?</p>
+          <p class="mt-1.5 text-[0.8125rem] leading-relaxed text-on-surface">
+            The day you picked is your <span class="font-semibold">event date</span>. The gown is reserved around it, so the shaded days beside your pick are part of your rental — not dates someone else has taken.
+          </p>
+
+          <div class="product-cal-tip-diagram" aria-hidden="true">
+            <span class="product-cal-tip-dot" style="--tip-i: 0"></span>
+            <span class="product-cal-tip-dot" style="--tip-i: 1"></span>
+            <span class="product-cal-tip-dot is-event" style="--tip-i: 2"></span>
+            <span class="product-cal-tip-dot" style="--tip-i: 3"></span>
+            <span class="product-cal-tip-dot" style="--tip-i: 4"></span>
+            <span class="product-cal-tip-cap">Pick-up</span>
+            <span></span>
+            <span class="product-cal-tip-cap is-event">Event</span>
+            <span></span>
+            <span class="product-cal-tip-cap">Return</span>
+          </div>
+
+          <div class="mt-4 flex items-center justify-between gap-3 flex-wrap">
+            <label class="inline-flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" id="product-cal-tip-hide" class="w-3.5 h-3.5 rounded-[3px] border-outline-variant/40 cursor-pointer" style="accent-color:#0b0c0c" />
+              <span class="text-[0.6875rem] text-secondary">Don't show this again</span>
+            </label>
+            <button type="button" id="product-cal-tip-ok"
+              class="px-4 py-2 rounded-[6px] bg-[#0b0c0c] text-white text-[0.6875rem] font-bold uppercase tracking-[0.12em] hover:opacity-90 active:scale-95 transition-all cursor-pointer">
+              Got it
+            </button>
+          </div>
+        </div>
 
         <!-- Shared tooltip for unavailable days -- one element, repositioned by JS
              rather than one per day, so it stays lightweight and consistent. -->
@@ -302,7 +449,16 @@
 
         <div class="mt-6 pt-4 border-t border-outline-variant/15 flex justify-between items-center">
           <div>
-            <p class="font-label text-[0.625rem] text-secondary uppercase tracking-widest">Rental Period</p>
+            <div class="flex items-center gap-1.5">
+              <p class="font-label text-[0.625rem] text-secondary uppercase tracking-widest">Rental Period</p>
+              <!-- Keeps "Don't show this again" reversible -- without this, dismissing
+                   the explainer would hide it permanently with no way back. -->
+              <button type="button" id="product-cal-tip-open"
+                class="w-4 h-4 flex items-center justify-center rounded-full text-secondary hover:text-on-surface transition-colors cursor-pointer"
+                aria-label="What do the shaded days mean?">
+                <span class="material-symbols-outlined" style="font-size: 0.875rem;">info</span>
+              </button>
+            </div>
             <p id="product-cal-range" class="text-sm font-bold">Select dates</p>
             <div id="product-cal-dates" class="mt-1 space-y-1" aria-hidden="true">
               <p class="product-cal-line product-cal-line--start text-sm font-bold">
@@ -350,50 +506,29 @@
   </div>
 </div>
 
-<!-- You May Also Like Section (kept) -->
+<!-- You May Also Like: real gowns from this same collection (see _related_gowns in
+     gowns/views.py). The whole section is dropped when there is nothing to suggest,
+     rather than rendering a heading above an empty grid. -->
+{% if related_products %}
 <section class="mt-40 max-w-[1440px] mx-auto px-8">
   <div class="text-center mb-20">
     <h3 class="font-headline text-3xl font-bold tracking-[0.3em] uppercase">You May Also Like</h3>
   </div>
   <div class="grid grid-cols-2 md:grid-cols-4 gap-12">
-    <a href="{% url 'gowns:product_detail' collection=collection slug='valencia-lace' %}" class="group cursor-pointer block">
+    {% for item in related_products %}
+    <a href="{% url 'gowns:product_detail' collection=collection slug=item.slug %}" class="group cursor-pointer block">
       <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
-        <img alt="Wedding One" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
+        <img alt="{{ item.title }}" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="{{ item.image }}"/>
       </div>
       <div class="text-center">
-        <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-secondary">Wedding One</h3>
-        <p class="text-[0.9rem] font-body font-medium text-secondary">₱1,600</p>
+        <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-secondary">{{ item.title }}</h3>
+        <p class="text-[0.9rem] font-body font-medium text-secondary">{{ item.price_display }}</p>
       </div>
     </a>
-    <a href="{% url 'gowns:product_detail' collection=collection slug='archive-satin' %}" class="group cursor-pointer block">
-      <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
-        <img alt="Wedding Two" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-      </div>
-      <div class="text-center">
-        <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-secondary">Wedding Two</h3>
-        <p class="text-[0.9rem] font-body font-medium text-secondary">₱1,800</p>
-      </div>
-    </a>
-    <a href="{% url 'gowns:product_detail' collection=collection slug='florence-organza' %}" class="group cursor-pointer block">
-      <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
-        <img alt="Wedding Three" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-      </div>
-      <div class="text-center">
-        <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-secondary">Wedding Three</h3>
-        <p class="text-[0.9rem] font-body font-medium text-secondary">₱2,000</p>
-      </div>
-    </a>
-    <a href="{% url 'gowns:product_detail' collection=collection slug='opulence-pearl' %}" class="group cursor-pointer block">
-      <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
-        <img alt="Wedding Five" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWwrpy8uS-dW3ZxUAzQRBag3p7bHigf95fvt9Qjq3GKrti53LrtFjCIU8hTk7NSu9Rcb56irXvF6VDm6k3QIv3PuwuatCEzUgKwt7OHD3rZc-Zlb7Ulhq3t6_MksIn2empBq_1O7rGoADAHQKDmz6jjTC-tJshsyApRfU_GsEP-b9g1RrBtelVWDnun2znYC7jER7ZFsCROeSDV_720shVeiCzDRohzWaPR-xAqaZJmFH_3ixXmZFbhQF0kUWvPu61-8C9RIKmXiA"/>
-      </div>
-      <div class="text-center">
-        <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-secondary">Wedding Five</h3>
-        <p class="text-[0.9rem] font-body font-medium text-secondary">₱2,400</p>
-      </div>
-    </a>
+    {% endfor %}
   </div>
 </section>
+{% endif %}
 
 <!-- FAQ Section (kept) -->
 <section class="mt-40 max-w-[800px] mx-auto px-8 pb-32">
@@ -536,6 +671,10 @@
     const returnDateEl = document.getElementById('product-cal-return-date');
     const prevBtn = document.getElementById('product-cal-prev');
     const nextBtn = document.getElementById('product-cal-next');
+    const tipEl = document.getElementById('product-cal-tip');
+    const tipOkBtn = document.getElementById('product-cal-tip-ok');
+    const tipHideBox = document.getElementById('product-cal-tip-hide');
+    const tipOpenBtn = document.getElementById('product-cal-tip-open');
     const bookNowBtn = document.getElementById('product-book-now');
     const sizeButtons = Array.from(document.querySelectorAll('[data-product-size]'));
     const productTitleEl = document.getElementById('product-title');
@@ -837,6 +976,60 @@
       crossDissolve(returnDateEl, fmtMDY(b));
     }
 
+    // First-run explainer for the rental window. Shown after the customer's FIRST
+    // pick rather than on page load -- at that point they have just seen the shaded
+    // days appear, so it answers a question they actually have instead of
+    // front-loading a rule nobody asked about yet.
+    const RENTAL_TIP_KEY = 'arabela_rental_window_tip_hidden';
+    let tipDismissedThisVisit = false;
+
+    function rentalTipMuted() {
+      // localStorage throws in some privacy modes -- a tip is never worth an
+      // exception, so a failure just means "not muted" and it shows this visit.
+      try { return localStorage.getItem(RENTAL_TIP_KEY) === '1'; } catch (e) { return false; }
+    }
+
+    function openRentalTip() {
+      if (!tipEl) return;
+      if (tipHideBox) tipHideBox.checked = rentalTipMuted();
+      tipEl.hidden = false;
+      // Restart the entrance so reopening from the info button animates again.
+      tipEl.classList.remove('is-open');
+      void tipEl.offsetWidth;
+      tipEl.classList.add('is-open');
+    }
+
+    function closeRentalTip() {
+      if (!tipEl) return;
+      tipEl.classList.remove('is-open');
+      tipEl.hidden = true;
+    }
+
+    function maybeShowRentalTip() {
+      if (!tipEl || tipDismissedThisVisit || rentalTipMuted()) return;
+      openRentalTip();
+    }
+
+    if (tipOkBtn) {
+      tipOkBtn.addEventListener('click', function () {
+        // The checkbox is the single source of truth both ways, so unticking it and
+        // confirming genuinely un-mutes the tip again.
+        try {
+          if (tipHideBox && tipHideBox.checked) localStorage.setItem(RENTAL_TIP_KEY, '1');
+          else localStorage.removeItem(RENTAL_TIP_KEY);
+        } catch (e) { /* non-fatal: preference just won't persist */ }
+        tipDismissedThisVisit = true;
+        closeRentalTip();
+      });
+    }
+
+    if (tipOpenBtn) {
+      tipOpenBtn.addEventListener('click', function () {
+        tipDismissedThisVisit = false;
+        openRentalTip();
+      });
+    }
+
     function isAdjacentToStart(d) {
       if (!center) return false;
       const a = new Date(center.getFullYear(), center.getMonth(), center.getDate());
@@ -968,6 +1161,7 @@
             center = clicked;
             setRangeText();
             render();
+            maybeShowRentalTip();
             const liveStart = clampedPickup(clicked);
             const liveReturn = new Date(clicked.getFullYear(), clicked.getMonth(), clicked.getDate() + 2);
             liveSyncEditableCartRow({ rental: fmtMDY(liveStart) + ' - ' + fmtMDY(liveReturn) });

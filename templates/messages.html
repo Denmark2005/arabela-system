@@ -20,6 +20,8 @@
     {% include "partials/mobile_fixes.html" %}
     <link href="https://fonts.googleapis.com" rel="preconnect" />
     <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <!-- Script face for the header wordmark, matching the Arabela shop signage. -->
+    <link href="https://fonts.googleapis.com/css2?family=Lobster+Two:ital,wght@1,700&amp;display=swap" rel="stylesheet" />
     <link
       href="https://fonts.googleapis.com/css2?family=Epilogue:wght@300;400;700;800&amp;family=Inter:wght@300;400;500;600;700&amp;family=Poppins:wght@300;400;500;600;700&amp;display=swap"
       rel="stylesheet"
@@ -223,7 +225,7 @@
     <nav class="fixed top-0 z-50 mx-auto flex h-20 w-full max-w-full items-center justify-between border-b border-black/5 bg-white/80 px-5 sm:px-8 backdrop-blur-md">
       <div class="flex-shrink-0">
         <a href="{% url 'gowns:homepage' %}" class="block no-underline">
-          <h1 class="text-2xl font-bold tracking-tighter text-[#222222] dark:text-[#FAF4EB]">ARABELA</h1>
+          <h1 class="text-[1.75rem] sm:text-[2rem] leading-[1.15] text-[#222222] dark:text-[#FAF4EB]" style="font-family: 'Lobster Two', cursive; font-weight: 700; font-style: italic;">Arabela</h1>
         </a>
       </div>
       <div class="flex items-center gap-8">
@@ -331,7 +333,7 @@
       <div class="mx-auto w-full max-w-[1920px]">
         <div class="flex flex-col flex-wrap items-start gap-x-8 gap-y-8 text-left sm:flex-row sm:gap-x-10 md:gap-x-12 lg:gap-x-16">
           <div class="flex shrink-0 items-center gap-3">
-            <a href="{% url 'gowns:homepage' %}" class="font-body text-lg font-bold tracking-tighter text-[#222222]">ARABELA</a>
+            <a href="{% url 'gowns:homepage' %}" class="text-[1.35rem] leading-none text-[#222222]" style="font-family: 'Lobster Two', cursive; font-weight: 700; font-style: italic;">Arabela</a>
             <a href="{{ site_facebook_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex scale-95 text-secondary transition-all hover:opacity-70 active:scale-90" aria-label="Arabela on Facebook">
               <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12S0 5.446 0 12.073c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
             </a>

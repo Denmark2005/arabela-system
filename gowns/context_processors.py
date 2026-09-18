@@ -8,11 +8,15 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from accounts.models import CustomerMessage, UserProfile
-from gowns.models import SiteSettings
+from gowns.models import Gown, SiteSettings
 from reservations.models import Reservation, ReservationItem
 
 _PRICE_RE = re.compile(r"[^\d]")
 
+# The retired placeholder catalog's 8 demo slugs. The catalog itself is gone -- these
+# survive ONLY so Gown.save() can keep refusing to hand a real gown one of these exact
+# slugs (gowns/models.py), which would otherwise change the URL of any gown whose name
+# happens to slugify to one of them.
 _SLUG_ORDER = (
     "valencia-lace",
     "archive-satin",
@@ -23,8 +27,6 @@ _SLUG_ORDER = (
     "city-reception",
     "lumiere-silk",
 )
-_NUMERIC = ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight"]
-_SEARCH_PRICES = (1600, 1800, 2000, 2200, 2400, 2600, 2800, 3000)
 
 _FALLBACK_IMG = (
     "https://lh3.googleusercontent.com/aida-public/"
@@ -34,8 +36,8 @@ _FALLBACK_IMG = (
 # Canonical list of real rental categories, in the same order as
 # gowns.models.Gown.Category -- the single source of truth for every
 # collection list on the customer side (nav dropdown, mobile drawer, search
-# sidebar, explore drawer, collections grid, and the fake product catalog
-# below). Adding/renaming a category only ever needs to happen here.
+# sidebar, explore drawer, collections grid). Adding/renaming a category only
+# ever needs to happen here.
 _CATEGORIES = (
     {"key": "wedding", "url_name": "collection_wedding", "label": "Wedding Gown"},
     {"key": "ball-gown", "url_name": "collection_ball_gown", "label": "Ball Gown"},
@@ -68,38 +70,39 @@ def _peso_to_number(value: str) -> int:
         return 0
 
 
-def _title_for_collection(collection_key: str, slug: str) -> str:
-    idx = _SLUG_ORDER.index(slug) if slug in _SLUG_ORDER else 0
-    n = _NUMERIC[idx]
-    for category in _CATEGORIES:
-        if category["key"] == collection_key:
-            return f"{category['label']} {n}"
-    return f"Wedding Gown {n}"
-
-
 def _build_search_catalog() -> list[dict]:
+    """Every real, bookable gown -- the only thing search is allowed to offer.
+
+    Previously this was 11 categories x 8 fixed placeholder products, so search could
+    return items that did not exist and were not orderable. It is now driven entirely
+    by Gown rows. Out-of-Stock gowns are left out for the same reason the collection
+    grid hides them: they cannot be booked, so offering them wastes a click."""
+    label_to_key = {category["label"]: category["key"] for category in _CATEGORIES}
     items: list[dict] = []
-    for category in _CATEGORIES:
-        collection_key = category["key"]
-        for i, slug in enumerate(_SLUG_ORDER):
-            price = _SEARCH_PRICES[i]
-            title = _title_for_collection(collection_key, slug)
-            price_label = f"₱{price:,}"
-            items.append(
-                {
-                    "collection_key": collection_key,
-                    "collection_label": category["label"],
-                    "slug": slug,
-                    "title": title,
-                    "price_label": price_label,
-                    "price": price,
-                    "image": _FALLBACK_IMG,
-                    "url": reverse(
-                        "gowns:product_detail",
-                        kwargs={"collection": collection_key, "slug": slug},
-                    ),
-                }
-            )
+    for gown in (
+        Gown.objects.exclude(status=Gown.Status.OUT_OF_STOCK)
+        .order_by("category", "color_code", "gown_id")
+    ):
+        collection_key = label_to_key.get(gown.category)
+        if collection_key is None:
+            # A gown whose category is no longer in the registry has no collection
+            # page to link to -- skip it rather than build a URL that would 404.
+            continue
+        items.append(
+            {
+                "collection_key": collection_key,
+                "collection_label": gown.category,
+                "slug": gown.slug,
+                "title": gown.name,
+                "price_label": f"₱{gown.rental_price:,.0f}",
+                "price": int(gown.rental_price),
+                "image": gown.photo_url or _FALLBACK_IMG,
+                "url": reverse(
+                    "gowns:product_detail",
+                    kwargs={"collection": collection_key, "slug": gown.slug},
+                ),
+            }
+        )
     return items
 
 
@@ -124,21 +127,10 @@ def featured_search_items(request):
       using a (collection, slug) URL, not a database-backed Product model.
     - We keep this list small and stable to avoid altering UI layout.
     """
-    featured_prices = (1600, 1800, 2000, 2200)
-    featured = [
-        {
-            "collection_key": category["key"],
-            "collection_label": category["label"],
-            "slug": "valencia-lace",
-            "title": f"{category['label']} One",
-            "price_label": f"₱{price:,}",
-            "price": price,
-            "image": _FALLBACK_IMG,
-        }
-        for category, price in zip(_CATEGORIES[:4], featured_prices)
-    ]
-
     catalog = _build_search_catalog()
+    # "Featured" is simply the first few real gowns -- it used to be four invented
+    # "<Category> One" entries that led to products nobody could actually rent.
+    featured = catalog[:4]
     collections_meta = _collections_meta()
 
     return {
