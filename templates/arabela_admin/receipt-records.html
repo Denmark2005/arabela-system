@@ -10,7 +10,9 @@
     <meta http-equiv="X-UA-Compatible" content="ie=edge" />
     <title>Receipt Records | Arabela System Admin Panel</title>
     <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
-  <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet"></head>
+  <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet">
+  {% include "arabela_admin/partials/photo_viewer_styles.html" %}
+</head>
   <body
     x-data="{ page: 'receipt-records', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', receiptFilter: 'All', yearFilter: '', showYearToast: false, yearToastTimeout: null, filtering: false, filterTimeout: null, openPreview: false, viewingReceipt: {},
       receipts: JSON.parse(document.getElementById('receipt-records-data').textContent),
@@ -1504,8 +1506,10 @@
                        modals, so every image viewer in the admin panel behaves the same way. -->
                   <template x-if="viewingReceipt.photoUrl">
                     <div>
-                      <div class="mb-3 flex w-full items-center justify-center overflow-hidden rounded-2xl bg-gray-100 dark:bg-gray-800">
-                        <img :src="viewingReceipt.photoUrl" alt="Receipt photo" style="display: block; max-height: 75vh; max-width: 100%; width: auto; height: auto;" />
+                      <div class="mb-3 flex w-full justify-center">
+                        <div class="admin-photo-frame overflow-hidden rounded-2xl bg-gray-100 dark:bg-gray-800">
+                          <img :src="viewingReceipt.photoUrl" alt="Receipt photo" style="display: block; max-height: 75vh; max-width: 100%; width: auto; height: auto;" />
+                        </div>
                       </div>
                       <a
                         :href="viewingReceipt.photoUrl"

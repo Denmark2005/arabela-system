@@ -10,7 +10,9 @@
     <meta http-equiv="X-UA-Compatible" content="ie=edge" />
     <title>Gown Catalog | Arabela System Admin Panel</title>
     <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
-  <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet"></head>
+  <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet">
+  {% include "arabela_admin/partials/photo_viewer_styles.html" %}
+</head>
   <body
     x-data="{ page: 'gown', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', category: 'All', status: 'All', filtering: false, filterTimeout: null,
       gownApiBase: '{% url 'arabela_admin:gown_create' %}',
@@ -94,9 +96,9 @@
         return owner;
       },
       // Suggests a free 2-letter code for a newly-typed color name -- works for ANY
-      // name, not just the 36 presets, using the same "first two letters, then a
+      // name, not just the 36 presets, using the same 'first two letters, then a
       // distinctive later letter, then first-letter-of-each-word for a multi-word
-      // name" logic a person would use by hand. Returns '' if nothing free was found
+      // name' logic a person would use by hand. Returns '' if nothing free was found
       // (staff can still type their own) or the incoming name is empty.
       suggestColorCode(name, excludeGownId) {
         const clean = String(name || '').trim();
@@ -186,14 +188,14 @@
         if (this.newGownDesignVariant.trim().length > 60) { this.addGownError = 'Design variant must be 60 characters or fewer.'; return; }
         // Same rule the server enforces in _validate_gown_fields -- checked here too
         // so a colliding code is refused instantly instead of round-tripping to the
-        // server first. Only reachable through "Other": every preset in the dropdown
+        // server first. Only reachable through 'Other': every preset in the dropdown
         // already pairs a correct name+code together, so this can't fire for those.
         if (this.newGownColorChoice === 'OTHER') {
           const conflict = this.colorCodeConflict(
             this.newGownColorCode.trim(), this.newGownColorName.trim(),
             this.isEditMode ? this.editingGownId : null);
           if (conflict) {
-            this.addGownError = `"${this.newGownColorCode.trim().toUpperCase()}" already means ${conflict.name}. Please choose a different code.`;
+            this.addGownError = `'${this.newGownColorCode.trim().toUpperCase()}' already means ${conflict.name}. Please choose a different code.`;
             return;
           }
         }
@@ -1825,7 +1827,15 @@
                             <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></svg>
                             {% endif %}
                           </button>
-                          <span class="block font-medium text-gray-800 text-theme-sm dark:text-white/90">{{ gown.gown_id }}</span>
+                          <div>
+                            <span class="block font-medium text-gray-800 text-theme-sm dark:text-white/90">{{ gown.gown_id }}</span>
+                            <div class="mt-0.5 flex items-center gap-1.5">
+                              <span class="text-gray-500 text-theme-xs dark:text-gray-400">{{ gown.name }}</span>
+                              {% if gown.design_variant %}
+                              <span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ gown.design_variant }}</span>
+                              {% endif %}
+                            </div>
+                          </div>
                         </div>
                       </td>
                       <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ gown.category }} &middot; {{ gown.color_name }} &middot; {{ gown.size }}</p></td>
@@ -2096,6 +2106,21 @@
               </template>
               <p class="text-center text-sm font-medium text-gray-700 dark:text-gray-400" x-text="newGownPhotoFile ? newGownPhotoFile.name : 'Drag and drop a photo here or browse'"></p>
             </div>
+            <!-- Same "View Full Image" link as the Gown Photo modal (existing gowns) --
+                 here it opens the chosen file itself, straight from the browser, since
+                 nothing has been uploaded yet at Add-Gown time. Placed outside the
+                 dropzone (not inside it) so clicking it can never also open the file
+                 picker underneath. -->
+            <a
+              x-show="newGownPhotoPreview"
+              :href="newGownPhotoPreview"
+              target="_blank"
+              rel="noopener"
+              class="mt-3 inline-flex items-center gap-1.5 text-theme-xs font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400"
+            >
+              <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
+              View Full Image
+            </a>
             <p class="mt-2 text-xs text-gray-400">Portrait photo works best (3:4) -- other shapes will be cropped to fit on the customer site.</p>
           </div>
         </div>
@@ -2153,14 +2178,21 @@
            portrait). "View Full Image" opens the actual file directly, at its real
            resolution, in a new tab -- the one thing this modal can never guarantee on
            its own if the source photo is small or an unusual shape to begin with. -->
-      <div class="mb-3 flex max-h-[60vh] min-h-[160px] items-center justify-center overflow-hidden rounded-2xl bg-gray-100 dark:bg-gray-800">
+      <div class="mb-3 flex w-full justify-center">
+        <!-- With a photo: the frame shrinks to the photo itself (see
+             partials/photo_viewer_styles.html), so no grey panels sit beside it.
+             Without one: keep a full-width box, which the placeholder icon needs. -->
         <template x-if="viewingGownImage.photoUrl">
-          <img :src="viewingGownImage.photoUrl" alt="Current gown photo" style="display: block; max-height: 60vh; max-width: 100%; width: auto; height: auto;" />
+          <div class="admin-photo-frame overflow-hidden rounded-2xl bg-gray-100 dark:bg-gray-800">
+            <img :src="viewingGownImage.photoUrl" alt="Current gown photo" style="display: block; max-height: 60vh; max-width: 100%; width: auto; height: auto;" />
+          </div>
         </template>
         <template x-if="!viewingGownImage.photoUrl">
-          <svg class="h-14 w-14 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-          </svg>
+          <div class="flex min-h-[160px] w-full items-center justify-center rounded-2xl bg-gray-100 dark:bg-gray-800">
+            <svg class="h-14 w-14 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+            </svg>
+          </div>
         </template>
       </div>
       <a

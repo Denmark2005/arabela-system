@@ -41,4 +41,35 @@
     .group:hover [class~="group-hover:-translate-x-2"] { --tw-translate-x: 0px !important; }
     .group:hover [class~="group-hover:translate-y-0"]  { --tw-translate-y: 100% !important; }
   }
+  /* ---- Icon fonts: never paint the ligature NAME instead of the glyph -----------
+     Material Symbols icons are ligatures -- the markup literally contains the words
+     "search", "shopping_bag", "close". Until that font arrives the browser has
+     nothing to substitute, so it paints those words in the header and inside
+     buttons, which is exactly what showed up on a slow mobile connection.
+
+     The font request now asks for `display=block` (invisible during load rather
+     than fallback text), and this covers the rest: past that block window the
+     browser WOULD start showing the words again, so keep them hidden until the font
+     is confirmed loaded. visibility (not display) so the icon keeps its box and
+     nothing shifts when the glyphs arrive. */
+  html:not(.icons-ready) .material-symbols-outlined { visibility: hidden; }
 </style>
+
+<script>
+  (function () {
+    var el = document.documentElement;
+    function ready() { el.classList.add('icons-ready'); }
+    // A font that never arrives must not leave the UI permanently iconless -- this
+    // releases the guard regardless, at which point showing the words is the lesser
+    // evil versus invisible controls.
+    var safety = setTimeout(ready, 6000);
+    function done() { clearTimeout(safety); ready(); }
+    if (document.fonts && document.fonts.load) {
+      // Resolves on failure too (the `done, done` pair), so a blocked font request
+      // releases the guard immediately instead of waiting out the timeout.
+      document.fonts.load("24px 'Material Symbols Outlined'").then(done, done);
+    } else {
+      done();
+    }
+  })();
+</script>

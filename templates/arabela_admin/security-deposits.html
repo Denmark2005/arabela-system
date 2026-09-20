@@ -10,7 +10,9 @@
     <meta http-equiv="X-UA-Compatible" content="ie=edge" />
     <title>Security Deposits | Arabela System Admin Panel</title>
     <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
-  <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet"></head>
+  <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet">
+  {% include "arabela_admin/partials/photo_viewer_styles.html" %}
+</head>
   <body
     x-data="{ page: 'security-deposits', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', statusFilter: 'All', yearFilter: '', showYearToast: false, yearToastTimeout: null, filtering: false, filterTimeout: null, openReceiptModal: false, viewingPayment: {} }"
     x-init="
@@ -1410,8 +1412,10 @@
                        zoom/pinch handles anything this modal can't. -->
                   <template x-if="viewingPayment.proofUrl">
                     <div>
-                      <div class="mb-3 flex w-full items-center justify-center overflow-hidden rounded-2xl bg-gray-100 dark:bg-gray-800">
-                        <img :src="viewingPayment.proofUrl" alt="Payment proof" style="display: block; max-height: 75vh; max-width: 100%; width: auto; height: auto;" />
+                      <div class="mb-3 flex w-full justify-center">
+                        <div class="admin-photo-frame overflow-hidden rounded-2xl bg-gray-100 dark:bg-gray-800">
+                          <img :src="viewingPayment.proofUrl" alt="Payment proof" style="display: block; max-height: 75vh; max-width: 100%; width: auto; height: auto;" />
+                        </div>
                       </div>
                       <a
                         :href="viewingPayment.proofUrl"

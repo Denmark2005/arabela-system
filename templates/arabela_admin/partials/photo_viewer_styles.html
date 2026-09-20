@@ -1,0 +1,40 @@
+{% comment %}
+  Shared styles for every admin image viewer (Gown Photo in Inventory Management,
+  and the payment-proof / receipt viewers in Financial Report). Included by all four
+  templates that open a photo modal, so the behaviour can't drift between them.
+
+  The problem this fixes: the viewer used to be a full-width box with a grey
+  background, and the photo was centred inside it. A portrait gown photo (most of
+  them) therefore sat in the middle with wide empty grey panels down both sides.
+  The frame below is inline-block instead, so it shrinks to the exact size of
+  whatever was uploaded -- the background is simply never visible beside the photo,
+  at any aspect ratio.
+{% endcomment %}
+<style>
+  /* Hugs its image: inline-block takes the image's own width rather than the row's.
+     line-height: 0 removes the few stray pixels an inline image leaves beneath
+     itself for the text baseline, which would otherwise show as a thin grey strip
+     along the bottom edge. */
+  .admin-photo-frame {
+    display: inline-block;
+    line-height: 0;
+    max-width: 100%;
+  }
+
+  /* Settles the photo in once it has been laid out at its real aspect ratio, so the
+     frame resizing to fit reads as deliberate rather than as a jump. Runs on
+     insertion (no JS), and `both` leaves it fully visible at the end -- a photo can
+     never get stuck invisible if anything about the load is unusual. */
+  .admin-photo-frame > img {
+    animation: admin-photo-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @keyframes admin-photo-in {
+    from { opacity: 0; transform: scale(0.97); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .admin-photo-frame > img { animation: none; }
+  }
+</style>
