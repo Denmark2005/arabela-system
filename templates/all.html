@@ -23,13 +23,18 @@
       <a href="{% url 'gowns:product_detail' collection=item.collection_key slug=item.slug %}" class="group cursor-pointer block">
         <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
           <img alt="{{ item.title }}" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="{{ item.image }}" />
-          <button type="button" class="absolute bottom-3 right-3 w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 text-secondary flex items-center justify-center text-base border-none shadow-none transition-all active:scale-95" onclick="event.preventDefault(); event.stopPropagation(); addCollectionItem({ collection: '{{ item.collection_key|escapejs }}', id: '{{ item.slug|escapejs }}', name: '{{ item.title|escapejs }}', price: {{ item.price }}, img: '{{ item.image|escapejs }}' });">
+          <button type="button" class="absolute bottom-3 right-3 w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 text-secondary flex items-center justify-center text-base border-none shadow-none transition-all active:scale-95" onclick="event.preventDefault(); event.stopPropagation(); addCollectionItem({ collection: '{{ item.collection_key|escapejs }}', id: '{{ item.slug|escapejs }}', name: '{{ item.title|escapejs }}', price: {{ item.price }}, img: '{{ item.image|escapejs }}', maxQty: {{ item.available_count }} });">
             <span class="material-symbols-outlined text-base">add</span>
           </button>
         </div>
         <div class="space-y-2">
           <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-secondary">{{ item.title }}</h3>
-          <p class="text-[0.9rem] font-body font-medium text-secondary">{{ item.price_display }}</p>
+          <div class="flex items-center justify-between gap-2">
+            <p class="text-[0.9rem] font-body font-medium text-secondary">{{ item.price_display }}</p>
+            {% if item.available_count > 1 %}
+            <p class="text-[0.7rem] font-label tracking-wide text-secondary/60">{{ item.available_count }} available</p>
+            {% endif %}
+          </div>
         </div>
       </a>
       {% empty %}

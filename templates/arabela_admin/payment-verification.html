@@ -27,7 +27,30 @@
          });
          const presetSearchParams = new URLSearchParams(window.location.search);
          const presetSearch = presetSearchParams.get('search');
-         if (presetSearch) { search = presetSearch; }"
+         if (presetSearch) { search = presetSearch; }
+         const presetStatus = presetSearchParams.get('status');
+         if (presetStatus) { statusFilter = presetStatus; }
+         const presetMonth = presetSearchParams.get('month');
+         if (presetMonth) { monthFilter = presetMonth; }
+         // Keeps the address bar in sync with whatever is actually on screen, so a
+         // reload (Verify/Reject's own refresh, or the browser's) lands back on what
+         // the admin was just looking at instead of snapping back to the URL that
+         // was true only when the page first opened -- e.g. arriving here from a
+         // notification with ?search=RSV-2026-0017, then clearing the search and
+         // picking Pending, then Verifying: without this, that reload re-read the
+         // stale ?search= and undid both changes at once.
+         function syncFilterParamsToUrl() {
+           const params = new URLSearchParams(window.location.search);
+           search ? params.set('search', search) : params.delete('search');
+           (statusFilter && statusFilter !== 'All') ? params.set('status', statusFilter) : params.delete('status');
+           (monthFilter && monthFilter !== 'All') ? params.set('month', monthFilter) : params.delete('month');
+           const query = params.toString();
+           const next = window.location.pathname + (query ? '?' + query : '');
+           history.replaceState(null, '', next);
+         }
+         $watch('search', syncFilterParamsToUrl);
+         $watch('statusFilter', syncFilterParamsToUrl);
+         $watch('monthFilter', syncFilterParamsToUrl);"
     :class="{'dark bg-gray-900': darkMode === true}"
   >
     <!-- ===== Preloader Start ===== -->

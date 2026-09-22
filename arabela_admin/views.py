@@ -1646,6 +1646,13 @@ def clients_view(request):
         # selections held and walked away from.
         c.cancellation_count = c.submitted_cancellations + c.abandoned_holds
         c.at_cancellation_limit = c.cancellation_count >= CANCELLATION_FLAG_THRESHOLD
+        # The two lighter tiers below the flag (see accounts.services). Only
+        # meaningful while cancel_lockout_until is still in the future -- it's
+        # left in place (not cleared) once it passes, so this is what actually
+        # tells "currently locked" apart from "was locked once, a while ago".
+        lockout_until = profile.cancel_lockout_until if profile else None
+        c.cancel_lockout_until = lockout_until
+        c.cancel_locked_now = bool(lockout_until and lockout_until > now)
         c.display_name = UserProfile.customer_display_name(c)
         c.is_new_this_month = (
             c.date_joined.year == now.year and c.date_joined.month == now.month

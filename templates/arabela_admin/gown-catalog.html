@@ -423,6 +423,17 @@
         this.filtering = true;
         clearTimeout(this.filterTimeout);
         this.filterTimeout = setTimeout(() => this.filtering = false, 500);
+        // Keeps the address bar in sync with search/category/status, so this page's
+        // own post-action reloads (Add/Edit Gown, status change, delete, block
+        // dates -- all of which call window.location.reload()) land back on what
+        // the admin was just filtering by, instead of snapping back to whatever URL
+        // was true only when the page first opened.
+        const params = new URLSearchParams(window.location.search);
+        this.search ? params.set('search', this.search) : params.delete('search');
+        (this.category && this.category !== 'All') ? params.set('category', this.category) : params.delete('category');
+        (this.status && this.status !== 'All') ? params.set('status', this.status) : params.delete('status');
+        const query = params.toString();
+        history.replaceState(null, '', window.location.pathname + (query ? '?' + query : ''));
       },
       sortGowns(key) {
         if (this.sortKey === key) { this.sortDir = -this.sortDir; }
@@ -498,6 +509,8 @@
          const params = new URLSearchParams(window.location.search);
          const presetCategory = params.get('category');
          if (presetCategory) { category = presetCategory; }
+         const presetStatus = params.get('status');
+         if (presetStatus) { status = presetStatus; }
          const presetSearch = params.get('search');
          if (presetSearch) { search = presetSearch; }"
     :class="{'dark bg-gray-900': darkMode === true}"

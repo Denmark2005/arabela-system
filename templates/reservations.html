@@ -739,7 +739,7 @@
             '</div>';
         }
 
-        function applyFilter(filter) {
+        function applyFilter(filter, options) {
           var shown = 0;
           cards.forEach(function (card) {
             var match = filter === 'all' || card.getAttribute('data-status-group') === filter;
@@ -755,6 +755,16 @@
           } else {
             emptyMsg.classList.add('hidden');
           }
+          // Keep the URL in step with whichever tab is active, so that a reload
+          // triggered by cancelling a reservation or uploading proof of payment
+          // (both call window.location.reload()) lands back on this same tab
+          // instead of silently snapping back to "All".
+          if (!options || !options.skipUrlSync) {
+            var params = new URLSearchParams(window.location.search);
+            filter && filter !== 'all' ? params.set('tab', filter) : params.delete('tab');
+            var query = params.toString();
+            history.replaceState(null, '', window.location.pathname + (query ? '?' + query : ''));
+          }
         }
 
         tabs.forEach(function (tab) {
@@ -763,7 +773,10 @@
           });
         });
 
-        applyFilter('all');
+        var validFilters = tabs.map(function (t) { return t.getAttribute('data-filter'); });
+        var presetTab = new URLSearchParams(window.location.search).get('tab');
+        var initialFilter = (presetTab && validFilters.indexOf(presetTab) !== -1) ? presetTab : 'all';
+        applyFilter(initialFilter, { skipUrlSync: true });
       })();
 
       function getCsrfToken() {

@@ -294,6 +294,8 @@
                   <span class="material-symbols-outlined bold-red">warning</span>
                 {% elif message.category == "Reservation Reminder" %}
                   <span class="material-symbols-outlined text-amber-600">schedule</span>
+                {% elif message.category == "Cancellation Lockout" %}
+                  <span class="material-symbols-outlined text-amber-600">lock_clock</span>
                 {% else %}
                   <span class="material-symbols-outlined text-neutral-500">notifications</span>
                 {% endif %}
@@ -306,6 +308,8 @@
                     {% elif message.category == "Return Overdue" %}
                       <span class="text-xs font-semibold uppercase tracking-wider bold-red">{{ message.category }}</span>
                     {% elif message.category == "Reservation Reminder" %}
+                      <span class="text-xs font-semibold uppercase tracking-wider text-amber-600">{{ message.category }}</span>
+                    {% elif message.category == "Cancellation Lockout" %}
                       <span class="text-xs font-semibold uppercase tracking-wider text-amber-600">{{ message.category }}</span>
                     {% else %}
                       <span class="text-xs font-semibold uppercase tracking-wider text-neutral-500">{{ message.category }}</span>

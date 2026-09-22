@@ -106,7 +106,7 @@ function renderCart() {
     subtotal += itemTotal;
     itemCount += qty;
     cartItemsDiv.innerHTML += `
-    <div class="grid grid-cols-1 sm:grid-cols-12 items-center gap-4 mb-6 pb-6 border-b border-outline-variant/10 sm:border-0 sm:pb-0">
+    <div class="grid grid-cols-1 sm:grid-cols-12 items-center gap-4 mb-6 pb-6 border-b border-outline-variant/10 sm:border-0 sm:pb-0" data-cart-index="${idx}">
       <div class="sm:col-span-6 flex gap-4 sm:gap-8 items-center">
         <a href="${getProductDetailUrl(item, idx)}" class="w-24 sm:w-32 aspect-[3/4] bg-surface-container-low overflow-hidden block shrink-0">
           <img alt="${item.name}" class="w-full h-full object-cover" src="${item.img}"/>
@@ -130,10 +130,13 @@ function renderCart() {
       </div>
       <div class="sm:col-span-2 flex items-center justify-between sm:justify-center">
         <span class="sm:hidden font-label text-[0.625rem] tracking-[0.2em] uppercase font-bold text-secondary">Qty</span>
-        <div class="flex items-center border border-outline-variant/30 px-3 py-2 gap-4 h-12 self-center">
-          <span class="material-symbols-outlined text-[1rem] cursor-pointer" onclick="updateQty(${idx},-1)">remove</span>
-          <span class="font-body text-sm px-2">${qty}</span>
-          <span class="material-symbols-outlined text-[1rem] cursor-pointer" onclick="updateQty(${idx},1)">add</span>
+        <div class="flex flex-col items-center gap-1.5">
+          <div class="flex items-center border border-outline-variant/30 px-3 py-2 gap-4 h-12 self-center">
+            <span class="material-symbols-outlined text-[1rem] cursor-pointer" onclick="updateQty(${idx},-1)">remove</span>
+            <span class="font-body text-sm px-2">${qty}</span>
+            <span class="material-symbols-outlined text-[1rem] cursor-pointer" onclick="updateQty(${idx},1)">add</span>
+          </div>
+          <p class="cart-qty-limit-hint text-[0.6875rem] text-error text-center"></p>
         </div>
       </div>
       <div class="sm:col-span-2 flex items-center justify-between sm:block sm:text-right">
@@ -157,8 +160,19 @@ function removeCartItem(idx) {
 }
 function updateQty(idx, delta) {
   let cart = JSON.parse(localStorage.getItem(CART_STORAGE_KEY) || '[]');
-  cart[idx].qty += delta;
-  if (cart[idx].qty < 1) cart[idx].qty = 1;
+  if (!cart[idx]) return;
+  // Reuses base.html's own cap (this page extends base.html, so both are already
+  // loaded together) rather than a second copy of the same rule -- the exact bug
+  // this fixes was two DIFFERENT quantity steppers enforcing two different rules,
+  // because this one never had the cap at all.
+  const max = (typeof cartLineMaxQty === 'function') ? cartLineMaxQty(cart[idx]) : Infinity;
+  const wanted = (Number(cart[idx].qty) || 1) + delta;
+  if (delta > 0 && wanted > max) {
+    const row = document.querySelector('[data-cart-index="' + idx + '"]');
+    if (row && typeof showCartQtyLimitHint === 'function') showCartQtyLimitHint(row, max);
+    return;
+  }
+  cart[idx].qty = Math.max(1, wanted);
   localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
   if (typeof syncCartToServer === 'function') syncCartToServer(cart);
   renderCart();
@@ -218,23 +232,25 @@ function proceedReservationFromSelection() {
     total: subtotal + deposit
   };
 
-  try {
-    sessionStorage.setItem(RESERVATION_STORAGE_KEY, JSON.stringify(payload));
-  } catch (e) {}
-
   if (!IS_AUTHENTICATED) {
+    // Not signed in yet -- stash the bag so it survives the round trip through
+    // login, same as before. No hold to start (or lockout to check) until
+    // there's an actual account to attach either to.
+    try { sessionStorage.setItem(RESERVATION_STORAGE_KEY, JSON.stringify(payload)); } catch (e) {}
     const nextParam = encodeURIComponent(RESERVATION_URL);
     window.location.href = `${LOGIN_URL}?next=${nextParam}`;
     return;
   }
 
-  // Start the 20-minute hold before navigating, so the countdown is already
-  // running when the reservation page renders. Only reached once the cart has
-  // been confirmed non-empty above.
-  const holdStarted = window.startReservationHold
-    ? window.startReservationHold()
-    : Promise.resolve();
-  holdStarted.then(() => {
+  // Starts the 20-minute hold (or confirms replacing an already-running one --
+  // see reservation-flow.js's beginReservationHold) before navigating, so the
+  // countdown is already running when the reservation page renders, and only
+  // writes `payload` into sessionStorage once that's actually settled.
+  const holdBegun = window.beginReservationHold
+    ? window.beginReservationHold(RESERVATION_STORAGE_KEY, payload)
+    : Promise.resolve(true);
+  holdBegun.then((proceed) => {
+    if (!proceed) return;
     // These items are committed to the pending reservation now, so the shop cart
     // must let go of them -- otherwise the badge keeps counting them after a
     // refresh. Same clearing the drawer's own Proceed button does.

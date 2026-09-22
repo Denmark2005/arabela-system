@@ -346,6 +346,9 @@
         <span id="product-price" class="font-headline text-2xl">{{ product.price }}</span>
         <span class="font-label text-[0.6875rem] tracking-widest text-secondary uppercase">/ Day</span>
       </div>
+      {% if product.available_count > 1 %}
+      <p id="product-available-count" class="font-label text-[0.6875rem] tracking-wide text-secondary/70">{{ product.available_count }} available</p>
+      {% endif %}
     </div>
 
     <div class="space-y-4">
@@ -640,7 +643,7 @@
       </div>
       <div class="max-h-0 overflow-hidden transition-[max-height] duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]" data-faq-panel>
         <p class="pt-6 text-[0.95rem] leading-7 text-on-surface-variant font-body">
-          Cancellation attempts are recorded on your account &mdash; both cancelling a reservation you already submitted, and holding a selection then leaving without submitting it (cancelling the countdown or letting it run out). Once you reach fifteen (15), your account is automatically flagged for review by our staff. A flagged account can still browse and reserve, but staff will review it before confirming further bookings. An admin can lift the flag.
+          Cancellation attempts are recorded on your account &mdash; both cancelling a reservation you already submitted (even one already confirmed and paid for, as long as it hasn't been picked up yet), and holding a selection then leaving without submitting it (cancelling the countdown or letting it run out). At five (5) attempts your account is temporarily locked from starting a new reservation for 30 minutes; at ten (10), for 2 hours; at fifteen (15) or more, your account is automatically flagged for review by our staff. A flagged account can still browse and reserve, but staff will review it before confirming further bookings. An admin can lift the flag.
         </p>
       </div>
     </div>
@@ -651,7 +654,7 @@
       </div>
       <div class="max-h-0 overflow-hidden transition-[max-height] duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]" data-faq-panel>
         <p class="pt-6 text-[0.95rem] leading-7 text-on-surface-variant font-body">
-          Yes, you can make as many reservations as you wish. Just keep in mind that cancellation attempts are recorded &mdash; including selections you hold and abandon &mdash; and fifteen (15) or more will automatically flag your account for staff review. Completing the deposit payment for each reservation keeps your account in good standing.
+          Yes, you can make as many reservations as you wish. Just keep in mind that cancellation attempts are recorded &mdash; including selections you hold and abandon &mdash; with temporary lockouts at five (5) and ten (10) attempts, and fifteen (15) or more will automatically flag your account for staff review. Completing the deposit payment for each reservation keeps your account in good standing.
         </p>
       </div>
     </div>
@@ -1279,6 +1282,9 @@
           collection: resolvedColl || 'wedding',
           price: cartContextItem && Number(cartContextItem.price) ? Number(cartContextItem.price) : parsePesoToNumber('{{ product.price|escapejs }}'),
           qty: 1,
+          // Always this page's OWN fresh count, not carried over from cartContextItem --
+          // stock can change between when a line was first added and when it's edited.
+          maxQty: {{ product.available_count|default:1 }},
           size: selectedSize,
           img: cartContextItem && cartContextItem.img ? cartContextItem.img : '{{ product.image|escapejs }}',
           rental: fmtMDY(startDate) + ' - ' + fmtMDY(returnDate),

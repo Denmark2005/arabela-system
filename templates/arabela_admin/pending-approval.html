@@ -25,7 +25,19 @@
          $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)));
          const presetSearchParams = new URLSearchParams(window.location.search);
          const presetSearch = presetSearchParams.get('search');
-         if (presetSearch) { search = presetSearch; }"
+         if (presetSearch) { search = presetSearch; }
+         // Keeps the address bar in sync with the search box, so Approve/Reject's own
+         // reload (or the browser's) lands back on what the admin was just looking at
+         // instead of snapping back to the URL that was only true when the page first
+         // opened -- e.g. arriving here from a notification with ?search=..., then
+         // clearing it to see the full list, then approving one: without this, that
+         // reload re-read the stale ?search= and narrowed the list right back down.
+         $watch('search', value => {
+           const params = new URLSearchParams(window.location.search);
+           value ? params.set('search', value) : params.delete('search');
+           const query = params.toString();
+           history.replaceState(null, '', window.location.pathname + (query ? '?' + query : ''));
+         });"
     :class="{'dark bg-gray-900': darkMode === true}"
   >
     {% include "arabela_admin/partials/timeline_styles.html" %}

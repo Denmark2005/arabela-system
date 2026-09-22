@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from accounts.models import CustomerMessage, UserProfile
-from gowns.models import Gown, SiteSettings
+from gowns.models import Gown, SiteSettings, group_gowns_by_name, pick_representative_gown
 from reservations.models import Reservation, ReservationItem
 
 _PRICE_RE = re.compile(r"[^\d]")
@@ -71,38 +71,47 @@ def _peso_to_number(value: str) -> int:
 
 
 def _build_search_catalog() -> list[dict]:
-    """Every real, bookable gown -- the only thing search is allowed to offer.
+    """Every real, bookable PRODUCT -- the only thing search is allowed to offer.
+    Grouped by name (gowns.models.group_gowns_by_name), so a product with several
+    physical units appears once, not once per unit -- the same rule the collection
+    grid and "You may also like" already follow.
 
     Previously this was 11 categories x 8 fixed placeholder products, so search could
     return items that did not exist and were not orderable. It is now driven entirely
     by Gown rows. Out-of-Stock gowns are left out for the same reason the collection
     grid hides them: they cannot be booked, so offering them wastes a click."""
     label_to_key = {category["label"]: category["key"] for category in _CATEGORIES}
-    items: list[dict] = []
+    by_category: dict[str, list] = {}
     for gown in (
         Gown.objects.exclude(status=Gown.Status.OUT_OF_STOCK)
         .order_by("category", "color_code", "gown_id")
     ):
-        collection_key = label_to_key.get(gown.category)
+        by_category.setdefault(gown.category, []).append(gown)
+
+    items: list[dict] = []
+    for category_label, units in by_category.items():
+        collection_key = label_to_key.get(category_label)
         if collection_key is None:
-            # A gown whose category is no longer in the registry has no collection
-            # page to link to -- skip it rather than build a URL that would 404.
+            # A category no longer in the registry has no collection page to link
+            # to -- skip its gowns rather than build a URL that would 404.
             continue
-        items.append(
-            {
-                "collection_key": collection_key,
-                "collection_label": gown.category,
-                "slug": gown.slug,
-                "title": gown.name,
-                "price_label": f"₱{gown.rental_price:,.0f}",
-                "price": int(gown.rental_price),
-                "image": gown.photo_url or _FALLBACK_IMG,
-                "url": reverse(
-                    "gowns:product_detail",
-                    kwargs={"collection": collection_key, "slug": gown.slug},
-                ),
-            }
-        )
+        for group in group_gowns_by_name(units):
+            rep = pick_representative_gown(group)
+            items.append(
+                {
+                    "collection_key": collection_key,
+                    "collection_label": category_label,
+                    "slug": rep.slug,
+                    "title": rep.name,
+                    "price_label": f"₱{rep.rental_price:,.0f}",
+                    "price": int(rep.rental_price),
+                    "image": rep.photo_url or _FALLBACK_IMG,
+                    "url": reverse(
+                        "gowns:product_detail",
+                        kwargs={"collection": collection_key, "slug": rep.slug},
+                    ),
+                }
+            )
     return items
 
 

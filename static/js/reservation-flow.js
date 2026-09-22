@@ -193,7 +193,14 @@
                 }
             }
             if (existing) {
-                existing.qty = (Number(existing.qty) || 1) + (Number(gitem.qty) || 1);
+                // Capped the same way base.html's own +/- stepper is: a guest cart
+                // merging into an already-populated account cart must never combine
+                // past what the product actually has in stock. Computed inline
+                // (not calling base.html's cartLineMaxQty) since this file loads
+                // before that script defines it.
+                var mergedMax = Number(existing.maxQty) > 0 ? Number(existing.maxQty) : Infinity;
+                var mergedWanted = (Number(existing.qty) || 1) + (Number(gitem.qty) || 1);
+                existing.qty = Math.min(mergedWanted, mergedMax);
             } else {
                 userCart.push(gitem);
             }
@@ -205,25 +212,130 @@
         } catch (e4) {}
     }
 
-    // Starts the 20-minute checkout hold, then hands back a promise so the
-    // caller can navigate once the server knows about it -- that way the
-    // countdown banner is already there when the reservation page renders.
-    // Only ever called after the caller has confirmed there are real items, so
-    // a customer who merely opens the page never sees a phantom countdown.
+    function csrfToken() {
+        var match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+        return match ? decodeURIComponent(match[1]) : '';
+    }
+
+    function postJson(url) {
+        return fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken() },
+            body: '{}'
+        }).then(function (res) {
+            return res.json().then(function (data) {
+                return Object.assign({ httpStatus: res.status }, data);
+            });
+        });
+    }
+
+    // Starts the 20-minute checkout hold and resolves with the server's JSON
+    // response ({success, already_active, seconds_remaining} or {success:false,
+    // locked, error} when the account is temporarily locked out -- see
+    // gowns.views.reservation_hold_start). Never rejects: a network hiccup must
+    // not block checkout, so it resolves success:true as a fail-open default.
     window.startReservationHold = function () {
         var body = document && document.body;
         var url = body && body.dataset ? body.dataset.holdStartUrl : '';
-        if (!url) return Promise.resolve();
-        var match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
-        return fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': match ? decodeURIComponent(match[1]) : ''
-            },
-            body: '{}'
-        }).catch(function () {
-            /* never block checkout on this -- the page still works without it */
+        if (!url) return Promise.resolve({ success: true });
+        return postJson(url).catch(function () {
+            return { success: true };
+        });
+    };
+
+    function alertMessage(title, message) {
+        if (window.arabelaAlert) {
+            window.arabelaAlert({ title: title, message: message });
+        } else {
+            window.alert(message);
+        }
+    }
+
+    function describeHeldItems(items) {
+        var names = (items || []).map(function (it) { return (it && it.name) || 'a gown'; });
+        if (!names.length) return 'your previous selection';
+        return names.length === 1
+            ? names[0]
+            : names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1];
+    }
+
+    // Same items, ignoring array order -- used to tell "you're re-confirming the
+    // exact thing you already have held" apart from "you picked something else",
+    // so re-clicking Proceed on an unchanged cart never nags with the swap dialog.
+    function sameSelection(itemsA, itemsB) {
+        if (!Array.isArray(itemsA) || !Array.isArray(itemsB) || itemsA.length !== itemsB.length) return false;
+        function keyOf(it) { return [it.id, it.name, it.size, it.rental, it.qty].join('|'); }
+        var a = itemsA.map(keyOf).sort();
+        var b = itemsB.map(keyOf).sort();
+        for (var i = 0; i < a.length; i++) {
+            if (a[i] !== b[i]) return false;
+        }
+        return true;
+    }
+
+    // Orchestrates starting a hold for a freshly-built checkout `payload`
+    // (see saveCartAndProceedToReservation / selection.html's proceedReservationFromSelection),
+    // and only writes it into sessionStorage[storageKey] once it's actually safe to
+    // proceed. Resolves true when the caller should clear the cart and navigate,
+    // false when the attempt was refused or the customer backed out (nothing is
+    // changed in either case -- any existing hold is left exactly as it was).
+    //
+    // Handles two things a plain startReservationHold() call can't on its own:
+    //   - a temporary cancellation lockout (accounts.services.sync_cancellation_flag)
+    //     refuses outright, shown as a plain alert;
+    //   - an already-running hold for a DIFFERENT selection would otherwise be
+    //     silently replaced under the SAME countdown (start_reservation_hold never
+    //     restarts an existing clock) -- confirmed with the customer instead, and
+    //     only released + restarted (a fresh 20:00, counted as one abandoned hold,
+    //     same as pressing Cancel on the banner) if they agree.
+    window.beginReservationHold = function (storageKey, payload) {
+        var oldPayload = null;
+        try {
+            var parsed = JSON.parse(sessionStorage.getItem(storageKey) || 'null');
+            if (parsed && Array.isArray(parsed.items)) oldPayload = parsed;
+        } catch (err) {}
+
+        function commit() {
+            try { sessionStorage.setItem(storageKey, JSON.stringify(payload)); } catch (err) {}
+            return true;
+        }
+
+        function releaseThenRestart() {
+            var body = document && document.body;
+            var releaseUrl = body && body.dataset ? body.dataset.holdReleaseUrl : '';
+            var releasePromise = releaseUrl ? postJson(releaseUrl).catch(function () {}) : Promise.resolve();
+            return releasePromise.then(window.startReservationHold).then(function (fresh) {
+                if (!fresh.success) {
+                    alertMessage('Please wait before trying again', fresh.error || 'Please try again later.');
+                    return false;
+                }
+                return commit();
+            });
+        }
+
+        return window.startReservationHold().then(function (result) {
+            if (!result.success) {
+                alertMessage('Please wait before trying again', result.error || 'Too many cancelled or abandoned reservations. Please try again later.');
+                return false;
+            }
+
+            if (!result.already_active || !oldPayload || sameSelection(oldPayload.items, payload.items)) {
+                return commit();
+            }
+
+            var secondsLeft = Math.max(0, result.seconds_remaining || 0);
+            var clock = String(Math.floor(secondsLeft / 60)).padStart(2, '0') + ':' + String(secondsLeft % 60).padStart(2, '0');
+
+            return window.arabelaConfirm({
+                title: 'You already have a selection held',
+                message: 'You still have ' + describeHeldItems(oldPayload.items) + ' held with ' + clock + ' left. '
+                    + 'Picking a new gown will release that hold -- counted the same as cancelling it -- '
+                    + 'and start a fresh 20-minute window for your new selection instead. Continue?',
+                confirmText: 'Start fresh',
+                cancelText: 'Keep my current hold'
+            }).then(function (ok) {
+                return ok ? releaseThenRestart() : false;
+            });
         });
     };
 
@@ -309,21 +421,24 @@
             total: sub + deposit,
             savedAt: Date.now()
         };
-        try {
-            sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-        } catch (err) {}
         var a = e && e.currentTarget;
         var href = (a && a.href) ? a.href : '';
         var body = document && document.body;
         var isAuthenticated = body && body.dataset ? body.dataset.authenticated : '';
         var loginUrl = body && body.dataset ? body.dataset.loginUrl : '';
         if (isAuthenticated === 'false' && loginUrl) {
+            // Not signed in yet -- stash the bag so it survives the round trip
+            // through login, same as before. No hold to start (or lockout to
+            // check) until there is an actual account to attach either to.
+            try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); } catch (err) {}
             var nextParam = encodeURIComponent(href || '/');
             window.location.href = loginUrl + '?next=' + nextParam;
             return false;
         }
-        // Start the hold first so the countdown is live when the page loads.
-        window.startReservationHold().then(function () {
+        // Starts the hold (or confirms replacing an existing one) and only writes
+        // `payload` into sessionStorage once that's actually settled.
+        window.beginReservationHold(STORAGE_KEY, payload).then(function (proceed) {
+            if (!proceed) return;
             // These items are now committed to the pending reservation, not sitting
             // in the shop cart anymore -- clear the drawer so its badge/contents
             // don't keep showing them (e.g. after a refresh) while the hold is live.

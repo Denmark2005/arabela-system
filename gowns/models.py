@@ -128,6 +128,36 @@ class Gown(models.Model):
         return GownSequence.next_value_for(category, color_code)
 
 
+def pick_representative_gown(units):
+    """The one unit whose photo/price stand in for a product with several physical
+    units sharing a name. Lowest price wins (ties broken by id, for a stable pick) --
+    a customer can never be shown a lower price than any real unit actually costs, or
+    be quoted one thing and charged another.
+
+    `units` must be non-empty; every caller has already filtered to bookable
+    (non-Out-of-Stock) units before calling this."""
+    return min(units, key=lambda g: (g.rental_price, g.id))
+
+
+def group_gowns_by_name(units):
+    """Groups Gown rows into one list per distinct name (case-insensitive, matching
+    the same identity `gowns.views._find_available_unit` already books against),
+    preserving the order names first appear in `units`. This is what turns "3
+    physical dresses" into "1 product with 3 units" everywhere customers browse: the
+    collection grid, the search overlay, the product page's sibling count, and "You
+    may also like" -- shared here (not duplicated per caller) so a future fix to how
+    grouping works only ever needs to happen once."""
+    groups: dict[str, list] = {}
+    order: list[str] = []
+    for g in units:
+        key = g.name.strip().lower()
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(g)
+    return [groups[key] for key in order]
+
+
 class GownSequence(models.Model):
     """One row per (category, color_code) group, holding the next tracking number to
     hand out for it -- the same fix as reservations.models.ReservationSequence,

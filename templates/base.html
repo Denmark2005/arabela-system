@@ -347,6 +347,26 @@
       #cart-toggle-btn.cart-icon-pulse .material-symbols-outlined { animation: none; }
       .cart-line-synced { animation: none; }
     }
+
+    /* Cart quantity limit reminder: a quiet, self-dismissing line under the +/-
+       stepper, shown only for the couple of seconds it takes to register -- never a
+       popup, since hitting a stock limit is routine, not an error the customer must
+       acknowledge. Hidden via max-height (not display:none), so it reserves no
+       space normally but doesn't jump the layout when it appears. */
+    .cart-qty-limit-hint {
+      max-height: 0;
+      opacity: 0;
+      overflow: hidden;
+      transition: opacity 180ms ease-out, max-height 180ms ease-out;
+    }
+    .cart-qty-limit-hint.is-visible {
+      max-height: 1.5rem;
+      opacity: 1;
+      transition: opacity 120ms ease-out, max-height 120ms ease-out;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .cart-qty-limit-hint { transition: none; }
+    }
   </style>
 
   {% block extra_head %}{% endblock %}
@@ -358,6 +378,7 @@
       data-user-key="{% if request.user.is_authenticated %}{{ request.user.id }}{% else %}guest{% endif %}"
       data-login-url="{% url 'accounts:login' %}"
       data-hold-start-url="{% url 'gowns:reservation_hold_start' %}"
+      data-hold-release-url="{% url 'gowns:reservation_hold_release' %}"
       data-cart-fetch-url="{% url 'gowns:cart_fetch' %}"
       data-cart-save-url="{% url 'gowns:cart_save' %}">
 
@@ -842,6 +863,7 @@
                 </div>
                 <p class="cart-line-total font-['Inter',sans-serif] text-sm font-semibold text-secondary tracking-wide tabular-nums shrink-0">${formatPeso(lineTotal)}</p>
               </div>
+              <p class="cart-qty-limit-hint text-[0.6875rem] text-error mt-1"></p>
             </div>
           </div>
         `;
@@ -917,15 +939,43 @@
       flashCartRow(index);
     };
 
+    // A cart item without a maxQty (an older row saved before this cap existed, or
+    // one whose stock genuinely wasn't reported) is never capped -- Infinity, not 0
+    // or 1, so nothing that used to work silently starts blocking valid adds.
+    function cartLineMaxQty(item) {
+      const n = Number(item && item.maxQty);
+      return n > 0 ? n : Infinity;
+    }
+
+    // Quiet, self-dismissing reminder under one cart row's stepper -- see
+    // .cart-qty-limit-hint's comment for why this is a fading line, not a popup.
+    function showCartQtyLimitHint(row, max) {
+      const hint = row.querySelector('.cart-qty-limit-hint');
+      if (!hint) return;
+      hint.textContent = max === 1 ? 'Only 1 of this gown available' : 'Only ' + max + ' of this gown available';
+      hint.classList.add('is-visible');
+      window.clearTimeout(hint._hideTimer);
+      hint._hideTimer = window.setTimeout(function () {
+        hint.classList.remove('is-visible');
+      }, 2600);
+    }
+
     function cartAdjustQty(btn, delta) {
       const row = btn.closest('.cart-line');
       if (!row || row.classList.contains('hidden')) return;
       const cart = getDrawerCart();
       const idx = Number(row.dataset.index);
       if (!Number.isInteger(idx) || !cart[idx]) return;
-      let q = parseInt(cart[idx].qty, 10) || 1;
-      q = Math.max(1, q + delta);
-      cart[idx].qty = q;
+      const q = parseInt(cart[idx].qty, 10) || 1;
+      const max = cartLineMaxQty(cart[idx]);
+      const wanted = q + delta;
+      // Only the increase direction can ever hit a stock ceiling -- decreasing
+      // always has somewhere to go until the floor of 1 further down.
+      if (delta > 0 && wanted > max) {
+        showCartQtyLimitHint(row, max);
+        return;
+      }
+      cart[idx].qty = Math.max(1, wanted);
       setDrawerCart(cart);
       renderCartDrawer();
       updateCartTotals();
@@ -962,13 +1012,15 @@
         );
       });
       if (incomplete) {
-        incomplete.qty = (Number(incomplete.qty) || 1) + 1;
+        const wanted = (Number(incomplete.qty) || 1) + 1;
+        incomplete.qty = Math.min(wanted, cartLineMaxQty(incomplete));
       } else {
         cart.push({
           id: item.id,
           name: wantName,
           price: Number(item.price) || 0,
           qty: 1,
+          maxQty: Number(item.maxQty) || undefined,
           size: item.size || '-',
           img: item.img || '',
           rental: item.rental || '',

@@ -4,6 +4,7 @@ from django.core import mail
 from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from allauth.account.models import EmailAddress
 from allauth.socialaccount.models import SocialApp
@@ -321,18 +322,76 @@ class CancellationAutoFlagTests(TestCase):
         UserProfile.objects.create(user=self.user, hold_abandon_count=3)
         self.assertEqual(count_cancellation_attempts(self.user), 5)
 
-    def test_below_threshold_does_not_flag_the_account(self):
-        # Below threshold, sync_cancellation_flag returns early and never touches
-        # UserProfile at all (efficient -- no row to create/update yet) -- so a
-        # real, pre-existing profile (as a signed-up customer already has) is what
-        # this test needs, not one created by the function under test.
+    def test_below_every_threshold_does_not_flag_or_lock_the_account(self):
+        # Below even the first (5-attempt) tier, sync_cancellation_flag must not
+        # touch UserProfile at all -- so a real, pre-existing profile (as a
+        # signed-up customer already has) is what this test needs, not one
+        # created by the function under test.
         from accounts.services import sync_cancellation_flag
         from reservations.models import Reservation
         UserProfile.objects.create(user=self.user)
-        for _ in range(14):
+        for _ in range(4):
             Reservation.objects.create(customer=self.user, customer_name="X", status=Reservation.Status.CANCELLED)
         sync_cancellation_flag(self.user)
-        self.assertFalse(UserProfile.objects.get(user=self.user).is_flagged)
+        profile = UserProfile.objects.get(user=self.user)
+        self.assertFalse(profile.is_flagged)
+        self.assertIsNone(profile.cancel_lockout_until)
+
+    def test_five_attempts_triggers_a_30_minute_lockout_and_sends_a_message(self):
+        from accounts.services import (
+            sync_cancellation_flag,
+            CANCELLATION_LOCKOUT_TIER_1,
+            CANCELLATION_LOCKOUT_TIER_1_MINUTES,
+        )
+        from accounts.models import CustomerMessage
+        from reservations.models import Reservation
+        for _ in range(CANCELLATION_LOCKOUT_TIER_1):
+            Reservation.objects.create(customer=self.user, customer_name="X", status=Reservation.Status.CANCELLED)
+        count = sync_cancellation_flag(self.user)
+        self.assertEqual(count, CANCELLATION_LOCKOUT_TIER_1)
+        profile = UserProfile.objects.get(user=self.user)
+        self.assertFalse(profile.is_flagged)
+        self.assertIsNotNone(profile.cancel_lockout_until)
+        remaining_minutes = (profile.cancel_lockout_until - timezone.now()).total_seconds() / 60
+        self.assertAlmostEqual(remaining_minutes, CANCELLATION_LOCKOUT_TIER_1_MINUTES, delta=1)
+        self.assertTrue(
+            CustomerMessage.objects.filter(recipient=self.user, category=CustomerMessage.Category.CANCELLATION_LOCKOUT).exists()
+        )
+
+    def test_ten_attempts_triggers_a_2_hour_lockout(self):
+        from accounts.services import (
+            sync_cancellation_flag,
+            CANCELLATION_LOCKOUT_TIER_2,
+            CANCELLATION_LOCKOUT_TIER_2_HOURS,
+        )
+        from reservations.models import Reservation
+        for _ in range(CANCELLATION_LOCKOUT_TIER_2):
+            Reservation.objects.create(customer=self.user, customer_name="X", status=Reservation.Status.CANCELLED)
+        sync_cancellation_flag(self.user)
+        profile = UserProfile.objects.get(user=self.user)
+        self.assertFalse(profile.is_flagged)
+        remaining_hours = (profile.cancel_lockout_until - timezone.now()).total_seconds() / 3600
+        self.assertAlmostEqual(remaining_hours, CANCELLATION_LOCKOUT_TIER_2_HOURS, delta=0.02)
+
+    def test_each_lockout_tier_only_fires_once(self):
+        # Cancelling a 6th, 7th, 8th... time must not keep re-extending the
+        # 30-minute lockout that already fired at 5 -- otherwise an account
+        # could never climb past tier 1 towards the 10/15 checkpoints.
+        from accounts.services import sync_cancellation_flag, CANCELLATION_LOCKOUT_TIER_1
+        from accounts.models import CustomerMessage
+        from reservations.models import Reservation
+        for _ in range(CANCELLATION_LOCKOUT_TIER_1):
+            Reservation.objects.create(customer=self.user, customer_name="X", status=Reservation.Status.CANCELLED)
+        sync_cancellation_flag(self.user)
+        first_deadline = UserProfile.objects.get(user=self.user).cancel_lockout_until
+
+        Reservation.objects.create(customer=self.user, customer_name="X", status=Reservation.Status.CANCELLED)
+        sync_cancellation_flag(self.user)
+        profile = UserProfile.objects.get(user=self.user)
+        self.assertEqual(profile.cancel_lockout_until, first_deadline)
+        self.assertEqual(
+            CustomerMessage.objects.filter(recipient=self.user, category=CustomerMessage.Category.CANCELLATION_LOCKOUT).count(), 1
+        )
 
     def test_reaching_the_threshold_flags_the_account_and_sends_a_message(self):
         from accounts.services import sync_cancellation_flag, CANCELLATION_FLAG_THRESHOLD

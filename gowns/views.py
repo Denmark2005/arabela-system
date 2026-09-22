@@ -16,7 +16,11 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import CustomerMessage, UserProfile
-from accounts.services import record_abandoned_hold, sync_cancellation_flag
+from accounts.services import (
+    get_cancel_lockout_remaining_seconds,
+    record_abandoned_hold,
+    sync_cancellation_flag,
+)
 from gowns.context_processors import (
     _CATEGORIES,
     _FALLBACK_IMG,
@@ -24,7 +28,7 @@ from gowns.context_processors import (
     get_reservation_hold_deadline,
     start_reservation_hold,
 )
-from gowns.models import Gown, GownUnavailability
+from gowns.models import Gown, GownUnavailability, group_gowns_by_name, pick_representative_gown
 from reservations import timeline
 from reservations.models import Reservation, ReservationItem, ReservationStatusEvent
 
@@ -49,29 +53,41 @@ def _label_for(collection_key: str) -> str:
 
 
 def _products_for_category(collection_key: str) -> list[dict]:
-    """Real Gown rows for this category -- customers only ever browse actual inventory.
+    """One card per PRODUCT (distinct gown name) in this category, not one per
+    physical unit -- customers only ever browse actual inventory, but 3 identical
+    dresses must never render as 3 identical cards. `available_count` is how many
+    bookable units back that one card, shown to the customer as "3 available" so
+    seeing one card never hides that more than one can be rented for the same dates.
 
-    The old 8-item "X One".."X Eight" placeholder catalog is gone: a category with no
-    real gowns now shows the templates' {% empty %} state ("No gowns available in this
-    collection right now") instead of fake products that could never be fulfilled.
-    Out-of-Stock gowns are hidden too, so a category whose stock is all withdrawn
-    reads the same as one that has none yet."""
+    A category with no real gowns shows the templates' {% empty %} state ("No gowns
+    available in this collection right now"). Out-of-Stock units are excluded before
+    grouping, so a product whose units are all withdrawn disappears entirely rather
+    than showing a 0-available card, and a product with some withdrawn and some not
+    just shows a smaller count."""
     label = _label_for(collection_key)
-    return [
-        {
-            "slug": g.slug,
-            "title": g.name,
+    units = list(
+        Gown.objects.filter(category=label)
+        .exclude(status=Gown.Status.OUT_OF_STOCK)
+        .order_by("color_code", "gown_id")
+    )
+    cards = []
+    for group in group_gowns_by_name(units):
+        rep = pick_representative_gown(group)
+        cards.append({
+            "slug": rep.slug,
+            "title": rep.name,
             # "price" stays a bare number -- the grid's onclick handler embeds it
             # unquoted as a JS literal; "price_display" is the text shown on the card.
-            "price": int(g.rental_price),
-            "price_display": f"₱{g.rental_price:,.0f}",
-            "image": g.photo_url or _FALLBACK_IMG,
+            "price": int(rep.rental_price),
+            "price_display": f"₱{rep.rental_price:,.0f}",
+            "image": rep.photo_url or _FALLBACK_IMG,
             "collection_key": collection_key,
-            "reserved": g.status == Gown.Status.RESERVED,
-        }
-        for g in Gown.objects.filter(category=label).order_by("color_code", "gown_id")
-        if g.status != Gown.Status.OUT_OF_STOCK
-    ]
+            # Only true once EVERY unit of this product is currently checked out --
+            # if even one sibling is free right now, quick-add can still hand it out.
+            "reserved": all(g.status == Gown.Status.RESERVED for g in group),
+            "available_count": len(group),
+        })
+    return cards
 
 
 def homepage(request):
@@ -203,9 +219,17 @@ _FALLBACK_IMG = (
 )
 
 
-def _blocked_dates_for_category(label: str) -> list[str]:
-    """Dates in the next _AVAILABILITY_HORIZON_DAYS where EVERY physical gown unit in
-    this category is already spoken for, so the customer calendar must grey them out.
+def _blocked_dates_for_category(label: str, name: str) -> list[str]:
+    """Dates in the next _AVAILABILITY_HORIZON_DAYS where EVERY physical unit of THIS
+    PRODUCT (same name, same category) is already spoken for, so that product's own
+    calendar must grey them out.
+
+    Scoped to one product's units, not the whole category -- pooling the WHOLE
+    category here was a real, proven bug: a category with many different-named gowns
+    almost never looks "full" as a whole, so a specific gown's own calendar kept
+    showing a date as open even after ITS one unit was booked for it, only for
+    checkout to then refuse it. Matching this to `_find_available_unit`'s own
+    name-scoped pool (gowns/views.py) is what makes the calendar and checkout agree.
 
     Reads the same reservations.ReservationItem rows that drive the admin panel's
     Bookings & Schedule calendar (arabela_admin.views._calendar_events) -- one source of
@@ -219,21 +243,22 @@ def _blocked_dates_for_category(label: str) -> list[str]:
       * an admin-declared GownUnavailability block -- the post-return cleaning/repair gap.
 
     It's quantity-aware: units are counted individually, so a date only becomes
-    unavailable once the number of distinct spoken-for units reaches the category's
+    unavailable once the number of distinct spoken-for units reaches this product's
     total. Booking the same dates as someone else is fine while spare units remain.
 
     Tracking a SET of unit ids per day (rather than adding up counts) means a unit that
     is both booked and blocked on the same day is still just one unit off the pool.
     """
     unit_ids = set(
-        Gown.objects.filter(category=label)
+        Gown.objects.filter(category=label, name__iexact=name)
         .exclude(status=Gown.Status.OUT_OF_STOCK)
         .values_list("id", flat=True)
     )
     total_units = len(unit_ids)
-    # No real inventory recorded for this category yet (the public catalog is still a
-    # placeholder), so there is nothing to be full -- never block anything. Without this
-    # guard the "spoken for >= total" test would be 0 >= 0 and black out every date.
+    # No bookable units of this product right now -- nothing to be full, never block
+    # anything. Without this guard the "spoken for >= total" test would be 0 >= 0 and
+    # black out every date. (product_detail() already sends unavailable products down
+    # a separate "Currently Unavailable" path that never calls this at all.)
     if total_units == 0:
         return []
 
@@ -254,6 +279,7 @@ def _blocked_dates_for_category(label: str) -> list[str]:
         ReservationItem.objects.filter(
             gown__isnull=False,
             gown__category=label,
+            gown__name__iexact=name,
             return_date__gte=today,
             rental_date__lte=horizon,
         )
@@ -271,6 +297,7 @@ def _blocked_dates_for_category(label: str) -> list[str]:
 
     blocks = GownUnavailability.objects.filter(
         gown__category=label,
+        gown__name__iexact=name,
         end_date__gte=today,
         start_date__lte=horizon,
     ).values_list("gown_id", "start_date", "end_date")
@@ -449,21 +476,30 @@ def _authoritative_price(gown_name, gown_slug, matched_gown):
 
 
 def _related_gowns(category_label: str, current_slug: str, limit: int = 4) -> list[dict]:
-    """"You may also like" cards -- other REAL gowns from the same collection only, so a
-    wedding page never suggests a suit. The gown being viewed is always excluded.
+    """"You may also like" cards -- other REAL PRODUCTS from the same collection only
+    (grouped by name, exactly like the collection grid), so a wedding page never
+    suggests a suit, and a product with several physical units never ends up
+    suggesting a SIBLING of itself -- the same dress the customer is already looking
+    at, under a different unit's slug.
 
     The starting point rotates by the current gown's own position in the category, so
     two different products suggest two different sets instead of every page in the
     collection showing the same first four. Out-of-Stock gowns are skipped: suggesting
     something that can't be booked only wastes the customer's click.
     """
-    gowns = [
+    current_name = (
+        Gown.objects.filter(slug=current_slug).values_list("name", flat=True).first() or ""
+    ).strip().lower()
+
+    units = [
         g
         for g in Gown.objects.filter(category=category_label).order_by("color_code", "gown_id")
-        if g.status != Gown.Status.OUT_OF_STOCK and g.slug != current_slug
+        if g.status != Gown.Status.OUT_OF_STOCK and g.name.strip().lower() != current_name
     ]
-    if not gowns:
+    if not units:
         return []
+
+    groups = group_gowns_by_name(units)
 
     all_slugs = list(
         Gown.objects.filter(category=category_label)
@@ -472,22 +508,23 @@ def _related_gowns(category_label: str, current_slug: str, limit: int = 4) -> li
     )
     start = 0
     if current_slug in all_slugs:
-        after = all_slugs[all_slugs.index(current_slug) + 1:]
-        for s in after:
-            if any(g.slug == s for g in gowns):
-                start = next(i for i, g in enumerate(gowns) if g.slug == s)
+        after = set(all_slugs[all_slugs.index(current_slug) + 1:])
+        for i, group in enumerate(groups):
+            if any(g.slug in after for g in group):
+                start = i
                 break
 
-    ordered = gowns[start:] + gowns[:start]
-    return [
-        {
-            "slug": g.slug,
-            "title": g.name,
-            "price_display": f"₱{g.rental_price:,.0f}",
-            "image": g.photo_url or _FALLBACK_IMG,
-        }
-        for g in ordered[:limit]
-    ]
+    ordered = groups[start:] + groups[:start]
+    suggestions = []
+    for group in ordered[:limit]:
+        rep = pick_representative_gown(group)
+        suggestions.append({
+            "slug": rep.slug,
+            "title": rep.name,
+            "price_display": f"₱{rep.rental_price:,.0f}",
+            "image": rep.photo_url or _FALLBACK_IMG,
+        })
+    return suggestions
 
 
 def product_detail(request, collection: str, slug: str):
@@ -496,35 +533,51 @@ def product_detail(request, collection: str, slug: str):
         col = "wedding"
     collection_url = reverse("gowns:" + _COLLECTION_URL_NAME[col])
 
-    # A real gown, if this slug belongs to one, wins over the placeholder catalog --
-    # slugs are auto-generated unique per gown (Gown.save()) and never collide with the
-    # 8 fixed placeholder slugs. Looked up WITHOUT the Out-of-Stock filter: a withdrawn
-    # gown's URL (bookmark / back button / stale link) must render an explicit
-    # "unavailable" page, never fall through to the placeholder catalog and become a
-    # bookable ₱0 "Available Now" phantom.
+    # Slugs are auto-generated unique per gown (Gown.save()), so this always resolves
+    # to at most one physical unit. Looked up WITHOUT the Out-of-Stock filter: a
+    # withdrawn gown's URL (bookmark / back button / stale link) must still resolve,
+    # so its product can render an explicit "unavailable" page rather than 404.
     real_gown = Gown.objects.filter(slug=slug).first()
-
-    if real_gown is not None:
-        is_out_of_stock = real_gown.status == Gown.Status.OUT_OF_STOCK
-        blocked_dates = [] if is_out_of_stock else _blocked_dates_for_category(real_gown.category)
-        product = {
-            "title": real_gown.name,
-            "price": f"₱{real_gown.rental_price:,.0f}",
-            "image": real_gown.photo_url or _FALLBACK_IMG,
-            "availability": (
-                "Currently Unavailable"
-                if is_out_of_stock
-                else ("Limited Availability" if blocked_dates else "Available Now")
-            ),
-            "collection": real_gown.category,
-            "unavailable": is_out_of_stock,
-        }
-    else:
-        # The placeholder catalog is retired, so a slug with no Gown row behind it is
-        # not a product at all -- including the 8 old fixed slugs, which stale links
-        # and bookmarks may still point at. 404 rather than render a bookable page for
-        # something the shop does not own.
+    if real_gown is None:
+        # No Gown row behind this slug at all -- including the 8 old fixed placeholder
+        # slugs, which stale links and bookmarks may still point at now that catalog
+        # is retired. 404 rather than render a bookable page for something the shop
+        # does not own.
         raise Http404("No such product.")
+
+    # The slug only picked an ENTRY POINT into this product -- every unit sharing its
+    # name (same product, multiple physical dresses) is the real pool. Visiting any
+    # sibling's own slug renders this exact same page: same title, price, photo and
+    # calendar, so a bookmark to any one of them never goes stale just because a
+    # different sibling happens to be the one currently on display elsewhere.
+    siblings = list(Gown.objects.filter(category=real_gown.category, name__iexact=real_gown.name))
+    bookable_siblings = [g for g in siblings if g.status != Gown.Status.OUT_OF_STOCK]
+    is_out_of_stock = not bookable_siblings
+    # Withdrawn products have nothing bookable to represent them with -- fall back to
+    # the specific unit this URL named, so an "unavailable" page still shows a real
+    # photo and price instead of blowing up on an empty list.
+    display_unit = pick_representative_gown(bookable_siblings) if bookable_siblings else real_gown
+
+    blocked_dates = (
+        [] if is_out_of_stock
+        else _blocked_dates_for_category(real_gown.category, real_gown.name)
+    )
+    product = {
+        "title": display_unit.name,
+        "price": f"₱{display_unit.rental_price:,.0f}",
+        "image": display_unit.photo_url or _FALLBACK_IMG,
+        "availability": (
+            "Currently Unavailable"
+            if is_out_of_stock
+            else ("Limited Availability" if blocked_dates else "Available Now")
+        ),
+        "collection": real_gown.category,
+        "unavailable": is_out_of_stock,
+        # How many physical units back this product right now -- shown to the
+        # customer as "X available" so one card/page never hides that more than one
+        # can be rented for the same dates.
+        "available_count": len(bookable_siblings),
+    }
 
     return render(
         request,
@@ -535,8 +588,6 @@ def product_detail(request, collection: str, slug: str):
             "collection": col,
             "collection_url": collection_url,
             "blocked_dates_json": json.dumps(blocked_dates),
-            # product["collection"] holds the category LABEL on both the real-gown and
-            # placeholder paths, so this suggests within the right collection either way.
             "related_products": _related_gowns(product["collection"], slug),
         },
     )
@@ -961,10 +1012,32 @@ def reservation_hold_start(request):
     Called by the "Proceed to Reservation" buttons, which only fire once they've
     confirmed the customer actually has items -- the bag lives in the browser, so
     this is the earliest point the server can know a real selection exists. An
-    already-running hold is left alone so refreshing never extends the clock."""
+    already-running hold is left alone so refreshing never extends the clock.
+
+    Two things the caller needs beyond the deadline: `locked` -- a temporary
+    cancellation-lockout (see accounts.services.sync_cancellation_flag) refuses
+    the hold outright -- and `already_active`, which tells the caller whether a
+    hold was already running BEFORE this call. The client uses that to detect
+    "you're about to silently replace an existing held selection" and confirm
+    with the customer before swapping it, rather than the countdown quietly
+    outliving whatever it was originally holding."""
+    remaining_lockout = get_cancel_lockout_remaining_seconds(request.user)
+    if remaining_lockout > 0:
+        minutes = (remaining_lockout + 59) // 60
+        return JsonResponse({
+            "success": False,
+            "locked": True,
+            "error": (
+                f"Too many cancelled or abandoned reservations. Please try again in "
+                f"{minutes} minute{'s' if minutes != 1 else ''}."
+            ),
+        }, status=403)
+
+    was_already_active = get_reservation_hold_deadline(request) is not None
     deadline = start_reservation_hold(request)
     return JsonResponse({
         "success": True,
+        "already_active": was_already_active,
         "seconds_remaining": max(int((deadline - timezone.now()).total_seconds()), 0) if deadline else 0,
     })
 

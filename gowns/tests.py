@@ -1092,3 +1092,205 @@ class RelatedGownsTests(TestCase):
         from gowns.views import _related_gowns
         only = self._gown(1)
         self.assertEqual(_related_gowns("Belo", only.slug), [])
+
+
+class MultiUnitProductGroupingTests(TestCase):
+    """Several physical Gown rows sharing one name must behave as ONE product on
+    every customer-facing surface -- the collection grid, search, "You may also
+    like", and the product detail page -- never as duplicate cards of the same
+    dress. Covers gowns/models.py's group_gowns_by_name/pick_representative_gown
+    and every view/context-processor built on top of them."""
+
+    def _gown(self, name, price="3000.00", status=Gown.Status.AVAILABLE,
+              category=Gown.Category.BELO, gown_id=None):
+        n = Gown.objects.count() + 1
+        return Gown.objects.create(
+            gown_id=gown_id or f"MUNIT-{n:04d}", name=name, category=category,
+            color_name="Purple", color_code="PG", size=Gown.Size.MEDIUM,
+            rental_price=Decimal(price), status=status,
+        )
+
+    # ---------------------------------------------------------- collection grid
+
+    def test_three_units_of_the_same_name_become_one_card(self):
+        for _ in range(3):
+            self._gown("Grouped Gown")
+        from gowns.views import _products_for_category
+        cards = [c for c in _products_for_category("belo") if c["title"] == "Grouped Gown"]
+        self.assertEqual(len(cards), 1)
+        self.assertEqual(cards[0]["available_count"], 3)
+
+    def test_the_card_shows_the_lowest_price_among_its_units(self):
+        self._gown("Mismatched Price Gown", price="5000.00")
+        self._gown("Mismatched Price Gown", price="3500.00")
+        self._gown("Mismatched Price Gown", price="4200.00")
+        from gowns.views import _products_for_category
+        card = next(c for c in _products_for_category("belo") if c["title"] == "Mismatched Price Gown")
+        self.assertEqual(card["price"], 3500)
+
+    def test_card_is_reserved_only_when_every_unit_is_reserved(self):
+        self._gown("Half Reserved Gown", status=Gown.Status.RESERVED)
+        self._gown("Half Reserved Gown", status=Gown.Status.AVAILABLE)
+        from gowns.views import _products_for_category
+        card = next(c for c in _products_for_category("belo") if c["title"] == "Half Reserved Gown")
+        self.assertFalse(card["reserved"], "one free sibling means quick-add must still work")
+
+    def test_card_is_reserved_when_every_single_unit_is_reserved(self):
+        self._gown("Fully Reserved Gown", status=Gown.Status.RESERVED)
+        self._gown("Fully Reserved Gown", status=Gown.Status.RESERVED)
+        from gowns.views import _products_for_category
+        card = next(c for c in _products_for_category("belo") if c["title"] == "Fully Reserved Gown")
+        self.assertTrue(card["reserved"])
+
+    def test_a_product_with_some_but_not_all_units_out_of_stock_shows_the_smaller_count(self):
+        self._gown("Partially Withdrawn Gown", status=Gown.Status.OUT_OF_STOCK)
+        self._gown("Partially Withdrawn Gown", status=Gown.Status.AVAILABLE)
+        from gowns.views import _products_for_category
+        card = next(c for c in _products_for_category("belo") if c["title"] == "Partially Withdrawn Gown")
+        self.assertEqual(card["available_count"], 1)
+
+    def test_a_product_with_every_unit_out_of_stock_has_no_card_at_all(self):
+        self._gown("Fully Withdrawn Gown", status=Gown.Status.OUT_OF_STOCK)
+        self._gown("Fully Withdrawn Gown", status=Gown.Status.OUT_OF_STOCK)
+        from gowns.views import _products_for_category
+        titles = [c["title"] for c in _products_for_category("belo")]
+        self.assertNotIn("Fully Withdrawn Gown", titles)
+
+    # ---------------------------------------------------------- product detail page
+
+    def test_any_siblings_own_slug_renders_the_same_product(self):
+        units = [self._gown("Same Product Gown") for _ in range(3)]
+        client = self.client
+        client.force_login(User.objects.create_user(username="munit_pdp", password="x"))
+        for unit in units:
+            with self.subTest(slug=unit.slug):
+                response = client.get(
+                    reverse("gowns:product_detail", args=["belo", unit.slug])
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, "Same Product Gown")
+                self.assertContains(response, "3 available")
+
+    def test_product_page_is_out_of_stock_only_once_every_sibling_is(self):
+        withdrawn = self._gown("Product OOS Test Gown", status=Gown.Status.OUT_OF_STOCK)
+        self._gown("Product OOS Test Gown", status=Gown.Status.AVAILABLE)
+        response = self.client.get(
+            reverse("gowns:product_detail", args=["belo", withdrawn.slug])
+        )
+        self.assertNotContains(response, "Currently Unavailable")
+
+    def test_product_page_is_out_of_stock_when_every_sibling_is(self):
+        withdrawn = self._gown("All Gone Test Gown", status=Gown.Status.OUT_OF_STOCK)
+        self._gown("All Gone Test Gown", status=Gown.Status.OUT_OF_STOCK)
+        response = self.client.get(
+            reverse("gowns:product_detail", args=["belo", withdrawn.slug])
+        )
+        self.assertContains(response, "Currently Unavailable")
+
+    def test_single_unit_product_never_shows_the_available_count_line(self):
+        # "1 available" would be noise on the overwhelming majority of products
+        # that only ever have one unit -- the line is reserved for when it's useful.
+        unit = self._gown("Lonely Gown")
+        response = self.client.get(
+            reverse("gowns:product_detail", args=["belo", unit.slug])
+        )
+        self.assertNotContains(response, "available</p>")
+
+    # ---------------------------------------------------------- search catalog
+
+    def test_search_catalog_lists_a_multi_unit_product_exactly_once(self):
+        from gowns.context_processors import _build_search_catalog
+        for _ in range(3):
+            self._gown("Searched Grouped Gown")
+        matches = [row for row in _build_search_catalog() if row["title"] == "Searched Grouped Gown"]
+        self.assertEqual(len(matches), 1)
+
+    # ---------------------------------------------------------- you may also like
+
+    def test_related_gowns_never_suggests_a_sibling_of_the_product_being_viewed(self):
+        from gowns.views import _related_gowns
+        units = [self._gown("Sibling Suggest Gown") for _ in range(3)]
+        other = self._gown("Other Product Gown")
+        for unit in units:
+            with self.subTest(viewing=unit.slug):
+                slugs = [r["slug"] for r in _related_gowns("Belo", unit.slug)]
+                for sibling in units:
+                    self.assertNotIn(sibling.slug, slugs)
+                self.assertIn(other.slug, slugs)
+
+    def test_related_gowns_suggests_a_multi_unit_product_only_once(self):
+        from gowns.views import _related_gowns
+        for _ in range(3):
+            self._gown("Suggested Grouped Gown")
+        viewer = self._gown("Viewer Gown")
+        titles = [r["title"] for r in _related_gowns("Belo", viewer.slug)]
+        self.assertEqual(titles.count("Suggested Grouped Gown"), 1)
+
+
+class MultiUnitCalendarScopeTests(TestCase):
+    """The customer calendar must grey out a date only once every unit of THIS
+    product is taken -- never based on the whole category's combined stock. This is
+    the exact live bug found and fixed 2026-09-22: a category with many different
+    products almost never looks "full" as a whole, so a specific product's own
+    calendar kept showing a date as open even after its one unit was booked for it."""
+
+    def _gown(self, name, category=Gown.Category.WEDDING_GOWN, gown_id=None):
+        n = Gown.objects.count() + 1
+        return Gown.objects.create(
+            gown_id=gown_id or f"CALSCOPE-{n:04d}", name=name, category=category,
+            color_name="Purple", color_code="PG", size=Gown.Size.MEDIUM,
+            rental_price=Decimal("3000.00"), status=Gown.Status.AVAILABLE,
+        )
+
+    def _book(self, gown, rental_date, return_date):
+        suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        customer = User.objects.create_user(username=f"calscope_cust_{suffix}", password="x")
+        reservation = Reservation.objects.create(
+            customer=customer, customer_name="T", address="a", city="c", postal_code="1",
+            phone="0900", payment_method="GCash", payment_proof_url="https://x.test/p.jpg",
+            rental_subtotal=0, security_deposit=0, total_amount=0,
+            status=Reservation.Status.CONFIRMED,
+        )
+        ReservationItem.objects.create(
+            reservation=reservation, gown=gown, gown_name=gown.name, size=gown.size,
+            rental_price=gown.rental_price, rental_date=rental_date, return_date=return_date,
+            stage=ReservationItem.Stage.RESERVED,
+        )
+
+    def test_booking_one_product_never_blocks_a_different_products_calendar(self):
+        from gowns.views import _blocked_dates_for_category
+        booked = self._gown("Booked Product")
+        other = self._gown("Untouched Product")
+        rental = date.today() + timedelta(days=50)
+        self._book(booked, rental, rental + timedelta(days=2))
+
+        self.assertIn(
+            rental.isoformat(),
+            _blocked_dates_for_category(booked.category, booked.name),
+            "the booked product's OWN calendar must show this date as taken",
+        )
+        self.assertNotIn(
+            rental.isoformat(),
+            _blocked_dates_for_category(other.category, other.name),
+            "a different product in the same category must be unaffected",
+        )
+
+    def test_a_single_free_sibling_keeps_the_date_open_for_that_product(self):
+        from gowns.views import _blocked_dates_for_category
+        one = self._gown("Two Unit Product")
+        two = self._gown("Two Unit Product", gown_id="CALSCOPE-PAIR-2")
+        rental = date.today() + timedelta(days=55)
+        self._book(one, rental, rental + timedelta(days=2))
+        blocked = _blocked_dates_for_category(one.category, one.name)
+        self.assertNotIn(rental.isoformat(), blocked, "one of two units is still free")
+
+    def test_the_date_greys_out_once_every_unit_of_that_product_is_booked(self):
+        from gowns.views import _blocked_dates_for_category
+        one = self._gown("Fully Booked Product")
+        two = self._gown("Fully Booked Product", gown_id="CALSCOPE-FULL-2")
+        rental = date.today() + timedelta(days=60)
+        return_date = rental + timedelta(days=2)
+        self._book(one, rental, return_date)
+        self._book(two, rental, return_date)
+        blocked = _blocked_dates_for_category(one.category, one.name)
+        self.assertIn(rental.isoformat(), blocked)

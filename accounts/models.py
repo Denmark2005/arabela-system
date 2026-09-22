@@ -30,6 +30,16 @@ class UserProfile(models.Model):
     # Stored because a hold lives only in the session and leaves no other trace,
     # unlike cancelled reservations which are counted from the Reservation rows.
     hold_abandon_count = models.PositiveIntegerField(default=0)
+    # Graduated response to repeated cancellations/abandoned holds, below the
+    # permanent is_flagged tier. cancel_lockout_until is the live enforcement
+    # value (checked by reservation_hold_start); the two "sent" flags make each
+    # tier fire exactly once per account rather than re-arming every time the
+    # customer cancels again past that count. See accounts.services for the
+    # thresholds and accounts.services.sync_cancellation_flag for where these
+    # are set.
+    cancel_lockout_until = models.DateTimeField(null=True, blank=True)
+    cancel_tier1_lockout_sent = models.BooleanField(default=False)
+    cancel_tier2_lockout_sent = models.BooleanField(default=False)
     # A mirror of the customer's shopping cart, so it survives switching devices
     # or clearing browser data -- the cart itself still lives in localStorage for
     # instant reads/writes (see base.html's setDrawerCart); this is a best-effort
@@ -71,6 +81,9 @@ class CustomerMessage(models.Model):
         # glance without reading the body.
         RESERVATION_REMINDER = 'Reservation Reminder', 'Reservation Reminder'
         RETURN_OVERDUE = 'Return Overdue', 'Return Overdue'
+        # Written by accounts.services.sync_cancellation_flag when a customer crosses
+        # the 5- or 10-attempt cancellation/abandoned-hold checkpoint.
+        CANCELLATION_LOCKOUT = 'Cancellation Lockout', 'Cancellation Lockout'
         GENERAL = 'General', 'General'
 
     recipient = models.ForeignKey(
