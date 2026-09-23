@@ -334,6 +334,13 @@ def rental_schedule_view(request):
         {
             "page": "rental",
             "calendar_events": _calendar_events(reservations) + _unavailability_events(blocks),
+            # Greys out the Booking Details modal's Event Date box for staff, matching
+            # the rule reservation_item_reschedule_view enforces. Deliberately _is_owner
+            # rather than the admin_is_owner context processor: that one treats an admin
+            # with no UserProfile row as the owner, this one doesn't, and a box that
+            # looks editable but is refused on save is worse than one that never
+            # pretended. Same function on both sides means they can't drift apart.
+            "can_edit_event_date": _is_owner(request),
         },
     )
 
@@ -1598,9 +1605,23 @@ def reservation_item_reschedule_view(request, item_id):
     # backdating something new.
     if not _is_owner(request):
         today = timezone.localdate()
+
+        # The event day is the customer's own, fixed when they booked -- the shop
+        # schedules its pick-up/return around it, never the other way round. Staff
+        # adjust those operational dates all day long, but moving the event itself
+        # would rewrite a fact that belongs to the customer (and shift the anchor
+        # every early/late day count is measured from). Only a real change is
+        # refused: the calendar modal, Active Reservations' Mark Picked Up and the
+        # undo endpoint all resend _event_date(item) untouched on every save, which
+        # has to keep working. The Event date is therefore absent from the
+        # back-dating table below -- any change at all, forward or back, stops here.
+        if event_date != _event_date(item):
+            return JsonResponse({
+                "error": "Only the owner can change the Event date -- it's the day the customer booked.",
+            }, status=403)
+
         effective_current = {
             "Pick-up": (rental_date, item.rental_date),
-            "Event": (event_date, _event_date(item)),
             "Return": (return_date, item.return_date),
             "Overdue": (overdue_date, _overdue_date(item)),
         }

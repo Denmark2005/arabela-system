@@ -99,6 +99,12 @@
       .booking-date-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
 
+    /* The event day belongs to the customer, so staff get it read-only -- this is only
+       the visible half of the rule reservation_item_reschedule_view enforces server-side.
+       Styled here rather than with a disabled: utility because the precompiled stylesheet
+       carries no such variant. */
+    .booking-date-locked { opacity: 0.55; cursor: not-allowed; }
+
     /* Status picker chips -- same 4 colours as the calendar events/legend, so choosing a
        status previews the exact colour the booking will show once saved. */
     .booking-status-chip {
@@ -1436,8 +1442,8 @@
                         <input id="bookingModalRentalDate" type="date" class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" onclick="this.showPicker()" />
                       </div>
                       <div>
-                        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Event Date</label>
-                        <input id="bookingModalEventDate" type="date" class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" onclick="this.showPicker()" />
+                        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Event Date{% if not can_edit_event_date %} <span class="text-xs text-gray-500 dark:text-gray-400">(owner only)</span>{% endif %}</label>
+                        <input id="bookingModalEventDate" type="date" class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800{% if not can_edit_event_date %} booking-date-locked{% endif %}"{% if not can_edit_event_date %} disabled{% endif %} onclick="this.showPicker()" />
                       </div>
                       <div>
                         <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Return Date</label>

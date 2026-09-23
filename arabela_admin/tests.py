@@ -505,11 +505,15 @@ class ReservationItemLifecycleTests(TestCase):
     def test_reschedule_valid_dates_succeeds(self):
         item, gown = self._make_item(gown_status=Gown.Status.AVAILABLE)
         today = date.today()
+        # The event day is owner-only now, so a staff save has to send it back exactly
+        # as the modal received it -- _event_date's rental_date + 2 fallback, since
+        # _make_item leaves event_date null. Only the operational dates move here,
+        # which is what a staff reschedule actually looks like.
         response = self.client.post(
             reverse("arabela_admin:reservation_item_reschedule", args=[item.id]),
             data=json.dumps({
                 "rental_date": today.isoformat(),
-                "event_date": (today + timedelta(days=1)).isoformat(),
+                "event_date": (today + timedelta(days=2)).isoformat(),
                 "return_date": (today + timedelta(days=4)).isoformat(),
                 "overdue_date": (today + timedelta(days=6)).isoformat(),
                 "stage": "Reserved",
@@ -542,11 +546,17 @@ class ReservationItemLifecycleTests(TestCase):
         # "Returned" is only reachable via Mark Returned, never via Reschedule.
         item, _ = self._make_item()
         today = date.today()
+        # Every date is sent exactly as it already stands (event_date via _event_date's
+        # rental_date + 2 fallback), so the stage really is the only thing wrong here --
+        # otherwise this would pass on the owner-only Event date rule instead and stop
+        # proving anything about the stage.
         response = self.client.post(
             reverse("arabela_admin:reservation_item_reschedule", args=[item.id]),
             data=json.dumps({
-                "rental_date": today.isoformat(), "event_date": today.isoformat(),
-                "return_date": today.isoformat(), "overdue_date": today.isoformat(),
+                "rental_date": today.isoformat(),
+                "event_date": (today + timedelta(days=2)).isoformat(),
+                "return_date": (today + timedelta(days=3)).isoformat(),
+                "overdue_date": (today + timedelta(days=3)).isoformat(),
                 "stage": "Returned",
             }),
             content_type="application/json",
