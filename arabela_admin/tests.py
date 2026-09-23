@@ -1301,7 +1301,24 @@ class StatusEventHookTests(TestCase):
 
     def test_a_later_stage_change_records_the_new_status(self):
         self._reschedule()
-        self._reschedule(stage="Overdue")
+        # Overdue now requires the return date to have actually passed, and staff may
+        # not back-date the schedule (both in reservation_item_reschedule_view) -- so
+        # the past window is put on the item directly first, as if it had been booked
+        # that way all along, then resubmitted UNCHANGED with only the stage flipped,
+        # exactly like a normal Booking Details resave. That's a genuinely valid
+        # Overdue transition, not staff rewriting history mid-request.
+        self.item.rental_date = self.today - timedelta(days=10)
+        self.item.event_date = self.today - timedelta(days=8)
+        self.item.return_date = self.today - timedelta(days=4)
+        self.item.overdue_date = self.today - timedelta(days=3)
+        self.item.save(update_fields=["rental_date", "event_date", "return_date", "overdue_date"])
+        self._reschedule(
+            stage="Overdue",
+            rental_date=str(self.item.rental_date),
+            event_date=str(self.item.event_date),
+            return_date=str(self.item.return_date),
+            overdue_date=str(self.item.overdue_date),
+        )
         self.assertIn("Hook Gown status changed to Overdue", self._labels())
 
     def test_a_rejected_request_records_nothing(self):

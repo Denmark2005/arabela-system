@@ -160,6 +160,30 @@ _SCHEDULED_STATUSES = [
 ]
 
 
+def _schedule_diff_label(actual_date, scheduled_date, *, late_grace_days=0):
+    """"3 days early" / "1 day late" / None -- a plain description of how an actual
+    pickup or return date compares to what was originally scheduled, for staff to
+    see at a glance on Active Reservations. Deliberately just the day count, no
+    peso figure: the Php 200/day deposit deduction stays a manual staff call.
+
+    late_grace_days forgives that many days on the LATE side only. Pickup needs
+    this: the customer's promised pickup day is deliberately the START of the
+    2-day pre-event window products.html itself advertises ("pick-up is up to 2
+    days before" the event) -- picking up a day later still leaves a full day
+    before the event, so it isn't actually late yet. Return's promised day is
+    already the END of its own 2-day-after window (the real deadline), and being
+    early is never forgiven either, so both stay ungraced by default."""
+    if not actual_date:
+        return None
+    diff = (actual_date - scheduled_date).days
+    if diff > 0:
+        diff = max(0, diff - late_grace_days)
+    if diff == 0:
+        return None
+    n = abs(diff)
+    return f"{n} day{'s' if n != 1 else ''} {'late' if diff > 0 else 'early'}"
+
+
 # Bookings that never became an actual rental, so they must not be counted as one.
 # Everything else (Pending/Confirmed/Active/Returned/Overdue) is a real booking that
 # occupies a gown. Deliberately the same rule gowns.views._blocked_dates_for_category
@@ -326,12 +350,26 @@ def payment_verification_view(request):
         Reservation.Status.CONFIRMED, Reservation.Status.ACTIVE,
         Reservation.Status.RETURNED, Reservation.Status.OVERDUE,
     ]
+    # "Verified Today" -- a same-day follow-up list so a payment that gets
+    # verified doesn't just vanish from Pending with nothing left to check.
+    # Deliberately scoped to today only (not the whole month, unlike the stat
+    # tile above): this is meant to be glanced at and cleared the same day,
+    # not accumulate into a second, bigger backlog of its own.
+    verified_today = list(
+        reservations.filter(
+            status__in=verified_statuses,
+            reviewed_at__date=timezone.localdate(),
+        )
+        .prefetch_related("items")
+        .order_by("-reviewed_at")
+    )
     return render(
         request,
         "arabela_admin/payment-verification.html",
         {
             "page": "payment-verification",
             "reservations": reservations,
+            "verified_today": verified_today,
             "pending_review_count": reservations.filter(status=Reservation.Status.PENDING).count(),
             "verified_this_month_count": reservations.filter(
                 status__in=verified_statuses,
@@ -572,6 +610,45 @@ def active_reservations_view(request):
     for reservation in reservations:
         for item in reservation.items.all():
             item.suggested_reminder = reservation_reminders.suggested_message(item, today)
+            # How many days off-schedule the ACTUAL pickup/return was, versus what was
+            # first promised at submission (original_rental_date/original_return_date --
+            # never touched by a later reschedule, see the model). Positive = late,
+            # negative = early, None = not recorded yet. Deliberately just the day count,
+            # no peso amount: the Php 200/day deposit deduction stays a manual staff
+            # decision, this is only the record they'd base it on.
+            scheduled_pickup = item.original_rental_date or item.rental_date
+            scheduled_return = item.original_return_date or item.return_date
+            item.scheduled_pickup = scheduled_pickup
+            item.scheduled_return = scheduled_return
+            item.pickup_diff_label = _schedule_diff_label(item.picked_up_on, scheduled_pickup, late_grace_days=1)
+            item.return_diff_label = _schedule_diff_label(item.returned_on, scheduled_return)
+            # A lasting reminder for a future actual date -- reservation_item_set_actual_date_view
+            # never blocks entering one (staff and owner both keep the whole calendar,
+            # the frontend just confirms first), so this is what keeps it from going
+            # unnoticed afterward.
+            item.pickup_is_future = bool(item.picked_up_on and item.picked_up_on > today)
+            item.return_is_future = bool(item.returned_on and item.returned_on > today)
+            # Needed so the quick "Mark Picked Up" action here can call the SAME
+            # reservation_item_reschedule_view the calendar uses, passing dates it
+            # already validates (rental_date <= event_date <= return_date <=
+            # overdue_date). event_date/overdue_date are frequently still null on a
+            # freshly-confirmed item that has never been opened on the calendar, so
+            # this reuses the calendar's own fallback helpers -- never a second,
+            # separately-maintained copy of that default (2 days before/after event).
+            item.effective_event_date = _event_date(item)
+            item.effective_overdue_date = _overdue_date(item)
+
+        # The Status column shows this, not the raw reservation.status: a stage
+        # change made on the Rental Schedule calendar (item.stage) is otherwise
+        # invisible here, since nothing ever writes it back onto the reservation
+        # itself -- reservation.status only ever becomes Overdue if something
+        # explicitly sets it, which nothing in this codebase does. Computed fresh
+        # on every load instead of stored, so it can never go stale, and reused
+        # by Payment Verification, Security Deposits, the reminder sweep, etc.
+        # exactly as before -- only what THIS page displays changes.
+        reservation.has_overdue_item = any(
+            item.stage == ReservationItem.Stage.OVERDUE for item in reservation.items.all()
+        )
 
     return render(
         request,
@@ -1508,6 +1585,34 @@ def reservation_item_reschedule_view(request, item_id):
             {"error": "Dates must run Pick-up ≤ Event ≤ Return ≤ Overdue."}, status=400
         )
 
+    # Only the owner may back-date the official schedule. A customer's booking
+    # window is what they actually chose at checkout -- rewriting it to a day
+    # that has already happened has no honest use (an early/late pickup or
+    # return is recorded via picked_up_on/returned_on instead, see
+    # reservation_item_set_actual_date_view below), and it directly feeds the
+    # early/late-day figures staff use to justify a deposit deduction. Compared
+    # against the EFFECTIVE current value (via _event_date/_overdue_date), not
+    # the raw possibly-null field, so re-saving a booking's already-past dates
+    # unchanged (e.g. Active Reservations' "Mark Picked Up", or an old overdue
+    # item that has never been opened here before) is never mistaken for staff
+    # backdating something new.
+    if not _is_owner(request):
+        today = timezone.localdate()
+        effective_current = {
+            "Pick-up": (rental_date, item.rental_date),
+            "Event": (event_date, _event_date(item)),
+            "Return": (return_date, item.return_date),
+            "Overdue": (overdue_date, _overdue_date(item)),
+        }
+        for label, (new_value, current_value) in effective_current.items():
+            if new_value != current_value and new_value < today:
+                return JsonResponse({
+                    "error": (
+                        f"Only the owner can set the {label} date to something "
+                        f"that's already passed."
+                    ),
+                }, status=403)
+
     # Status is chosen by staff -- Pick-up, Reserved, or Overdue. "Return" is no longer
     # picked directly; it now shows automatically alongside Reserved (and Overdue), see
     # _stage_segments.
@@ -1518,6 +1623,20 @@ def reservation_item_reschedule_view(request, item_id):
     }
     if stage not in settable:
         return JsonResponse({"error": "Invalid status"}, status=400)
+
+    # A gown can't be overdue before its own return date has actually passed --
+    # matches the one other place this project already decides what counts as
+    # overdue (reservations.reminders._due_kind, keyed on return_date, not the
+    # separate overdue_date marker which is only where the calendar's red segment
+    # starts). Without this, staff could flag something overdue today for a
+    # return date days in the future, which would be actively false.
+    if stage == ReservationItem.Stage.OVERDUE and timezone.localdate() <= return_date:
+        return JsonResponse({
+            "error": (
+                f"This item's return date ({return_date:%b %d, %Y}) hasn't passed "
+                f"yet, so it can't be marked Overdue."
+            ),
+        }, status=400)
 
     # Snapshotted before the assignments below so the timeline can log what actually
     # changed. Staff hit Save on this form constantly (often with nothing edited, or to
@@ -1573,6 +1692,130 @@ def reservation_item_reschedule_view(request, item_id):
         "event_date": item.event_date.isoformat(),
         "return_date": item.return_date.isoformat(),
         "overdue_date": item.overdue_date.isoformat(),
+        "picked_up_on": item.picked_up_on.isoformat() if item.picked_up_on else None,
+    })
+
+
+@require_http_methods(["POST"])
+def reservation_item_set_actual_date_view(request, item_id):
+    """Records (or corrects) the day a gown actually left/came back -- separate
+    from reservation_item_reschedule_view above, which manages the *planned*
+    Pick-up/Reserved/Overdue schedule shown on the calendar.
+
+    Deliberately does not touch stage or compute any fee: this is a record of
+    fact for staff (see original_rental_date/original_return_date on the
+    model) -- what, if anything, gets deducted from the deposit for an early
+    pickup or late return stays a manual decision made off this record."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    try:
+        item = ReservationItem.objects.select_related("reservation").get(id=item_id)
+    except ReservationItem.DoesNotExist:
+        return JsonResponse({"error": "Item not found"}, status=404)
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    field = data.get("field")
+    if field not in ("picked_up_on", "returned_on"):
+        return JsonResponse({"error": "Invalid field"}, status=400)
+
+    raw_value = (data.get("value") or "").strip()
+    if raw_value:
+        try:
+            new_value = datetime.strptime(raw_value, "%Y-%m-%d").date()
+        except ValueError:
+            return JsonResponse({"error": "Invalid date"}, status=400)
+    else:
+        new_value = None  # clearing a mistaken entry is allowed
+
+    if getattr(item, field) == new_value:
+        return JsonResponse({"success": True, "value": new_value.isoformat() if new_value else None})
+
+    # Same protection as reservation_item_reschedule_view's schedule dates, with
+    # one deliberate difference: staff get a one-day grace window here, because
+    # "I forgot to click the button yesterday" is a real, everyday, honest
+    # correction for THIS field specifically -- unlike the official schedule
+    # dates, which have no legitimate reason to ever move backward. Clearing a
+    # date (new_value is None) is never restricted: it only removes a record,
+    # it can't be used to fabricate one.
+    #
+    # A future date is never blocked here, on purpose: staff and owner both keep
+    # full access to every date on the picker, past or future. The frontend
+    # confirms before saving one ("this hasn't happened yet -- save anyway?") and
+    # active_reservations_view flags it with a lasting badge afterward -- a
+    # reminder, not a wall, since this is a plain data-entry nudge, not a trust
+    # boundary like the check below.
+    if new_value and not _is_owner(request):
+        grace_cutoff = timezone.localdate() - timedelta(days=1)
+        if new_value < grace_cutoff:
+            noun = "picked up" if field == "picked_up_on" else "returned"
+            return JsonResponse({
+                "error": (
+                    f"Only the owner can record this item as {noun} more than a day "
+                    f"in the past."
+                ),
+            }, status=403)
+
+    setattr(item, field, new_value)
+    item.save(update_fields=[field, "updated_at"])
+
+    label = "picked-up" if field == "picked_up_on" else "return"
+    detail = (
+        f"Actual {label} date recorded as {new_value:%b %d, %Y} by staff."
+        if new_value else
+        f"Actual {label} date cleared by staff."
+    )
+    ReservationStatusEvent.record(
+        item.reservation, f"{item.gown_name} actual {label} date updated", item=item,
+        detail=detail,
+        actor=ReservationStatusEvent.Actor.STAFF,
+    )
+
+    return JsonResponse({"success": True, "value": new_value.isoformat() if new_value else None})
+
+
+@require_http_methods(["POST"])
+def reservation_item_undo_pickup_view(request, item_id):
+    """Reverses an accidental "Mark Picked Up" click: clears picked_up_on and puts
+    the item back at the Pick-up stage, exactly as if it was never clicked. Not
+    owner-gated -- like clearing an actual date above, this only erases a record
+    (logged all the same, below) rather than fabricating one; re-marking it
+    afterwards still goes through Mark Picked Up (stamps today) or
+    reservation_item_set_actual_date_view's own grace-window check above, so
+    nothing here reopens the backdating problem those already close."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    try:
+        item = ReservationItem.objects.select_related("reservation").get(id=item_id)
+    except ReservationItem.DoesNotExist:
+        return JsonResponse({"error": "Item not found"}, status=404)
+
+    if not item.picked_up_on:
+        return JsonResponse({"error": "This item hasn't been marked picked up."}, status=400)
+    if item.returned_on or item.stage == ReservationItem.Stage.RETURNED:
+        return JsonResponse({
+            "error": "This item has already been marked returned, so its pickup can't be undone here.",
+        }, status=400)
+
+    item.picked_up_on = None
+    item.stage = ReservationItem.Stage.PICKUP
+    item.save(update_fields=["picked_up_on", "stage", "updated_at"])
+
+    ReservationStatusEvent.record(
+        item.reservation, f"{item.gown_name} pickup undone", item=item,
+        detail="Mark Picked Up was undone -- reverted to Pick-up.",
+        actor=ReservationStatusEvent.Actor.STAFF,
+    )
+
+    return JsonResponse({
+        "success": True,
+        "stage": item.stage,
+        "rental_date": item.rental_date.isoformat(),
+        "event_date": _event_date(item).isoformat(),
+        "return_date": item.return_date.isoformat(),
+        "overdue_date": _overdue_date(item).isoformat(),
     })
 
 

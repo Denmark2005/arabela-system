@@ -844,6 +844,8 @@ def reservation_submit(request):
                 rental_price=item["rental_price"],
                 rental_date=item["rental_date"],
                 return_date=item["return_date"],
+                original_rental_date=item["rental_date"],
+                original_return_date=item["return_date"],
             )
 
         # Recorded inside the same atomic block as the rows it describes: if the

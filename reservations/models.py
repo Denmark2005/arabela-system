@@ -234,12 +234,27 @@ class ReservationItem(models.Model):
     event_date = models.DateField(null=True, blank=True)  # the customer's event/reserved day
     return_date = models.DateField()   # end of the rental window (default: 2 days after event)
     overdue_date = models.DateField(null=True, blank=True)  # the day the Overdue status marks
+    # The shop's first-ever scheduled window, set once at submission and never touched again --
+    # not even by a later staff reschedule (see reservation_item_reschedule_view), which is free
+    # to adjust rental_date/return_date above for legitimate reasons (a correction, a genuine
+    # change of plan) without erasing what was originally promised. This is what "2 days before/
+    # after the event" is compared against when a customer picks up early or returns late, so
+    # staff always have a record of the original alongside whatever actually happened
+    # (picked_up_on/returned_on below) -- without the system doing that Php 200/day math itself.
+    original_rental_date = models.DateField(null=True, blank=True)
+    original_return_date = models.DateField(null=True, blank=True)
     # The Rental Schedule shows ONE status at a time, chosen by staff (item.stage). Each
     # status maps to its own dates: Pick-up = rental_date..event_date-1, Reserved = the
     # event day, Return = event_date+1..return_date, Overdue = the overdue_date. All four
     # dates are editable by staff (event_date defaults to rental_date + 2, overdue_date to
     # return_date). Ranges are derived in arabela_admin.views._stage_segment.
     stage = models.CharField(max_length=20, choices=Stage.choices, default=Stage.PICKUP)
+    # The day the gown actually left/came back, as staff record it -- may differ from
+    # rental_date/return_date (see original_rental_date/original_return_date above).
+    # Auto-stamped to today the first time reservation_item_reschedule_view moves the
+    # stage off Pick-up (or reservation_item_mark_returned_view runs), but also directly
+    # editable by staff afterward (reservation_item_set_actual_date_view) in case the
+    # paperwork was done a day later than the real handoff.
     picked_up_on = models.DateField(null=True, blank=True)
     returned_on = models.DateField(null=True, blank=True)
     return_condition = models.CharField(

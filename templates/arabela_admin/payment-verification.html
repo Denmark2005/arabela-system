@@ -1292,6 +1292,50 @@
               </button>
             </div>
 
+            {% if verified_today %}
+            <!-- Same-day follow-up: a payment that just got verified must not simply
+                 vanish from Pending with nothing left to double-check. This clears
+                 itself tomorrow (scoped to reviewed_at__date == today), so there is
+                 nothing here to manually dismiss or forget about. -->
+            <div class="mt-5 rounded-2xl border border-success-500 bg-success-50 p-4 dark:border-success-500 dark:bg-white/[0.03]">
+              <div class="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <h3 class="text-sm font-semibold text-gray-800 dark:text-white/90">Verified Today</h3>
+                  <p class="mt-0.5 text-theme-xs text-gray-500 dark:text-gray-400">Double-check these are correctly scheduled before you move on.</p>
+                </div>
+                <span class="shrink-0 rounded-full bg-success-50 px-2.5 py-1 text-theme-xs font-semibold text-success-700 dark:bg-success-500/15 dark:text-success-500">{{ verified_today|length }}</span>
+              </div>
+              <div class="flex flex-col gap-3">
+                {% for r in verified_today %}
+                <div class="flex flex-col gap-3 rounded-xl border border-gray-100 bg-white p-4 dark:border-gray-800 dark:bg-gray-900 sm:flex-row sm:items-center sm:justify-between">
+                  <div style="min-width: 0;">
+                    <p class="font-medium text-gray-800 text-theme-sm dark:text-white/90">
+                      {{ r.display_customer_name }}
+                      <span class="font-normal text-gray-400 dark:text-gray-400">&middot; {{ r.reference_code }}</span>
+                    </p>
+                    <p class="mt-1 text-theme-xs text-gray-500 dark:text-gray-400">Verified {{ r.reviewed_at|date:"g:i A" }}</p>
+                    <div class="mt-2 flex flex-wrap gap-1.5">
+                      {% for item in r.items.all %}
+                      <span class="inline-flex items-center rounded-full px-2.5 py-1 text-theme-xs font-medium
+                        {% if item.stage == 'Pick-up' %}bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400
+                        {% elif item.stage == 'Reserved' %}bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500
+                        {% elif item.stage == 'Overdue' %}bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500
+                        {% else %}bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400{% endif %}">
+                        {{ item.gown_name }} &middot; {{ item.stage }} {{ item.rental_date|date:"M j" }}
+                      </span>
+                      {% endfor %}
+                    </div>
+                  </div>
+                  <a href="{% url 'arabela_admin:active_reservations' %}?search={{ r.reference_code|urlencode }}"
+                     class="inline-flex shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
+                    View Schedule
+                  </a>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            {% endif %}
+
             <div class="mt-5 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03] sm:p-5">
               <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div class="sm:flex-1">

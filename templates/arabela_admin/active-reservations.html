@@ -18,11 +18,26 @@
          $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)));
          const presetSearchParams = new URLSearchParams(window.location.search);
          const presetSearch = presetSearchParams.get('search');
-         if (presetSearch) { search = presetSearch; }"
+         if (presetSearch) { search = presetSearch; }
+         $watch('search', value => {
+           const params = new URLSearchParams(window.location.search);
+           value ? params.set('search', value) : params.delete('search');
+           const query = params.toString();
+           history.replaceState(null, '', window.location.pathname + (query ? '?' + query : ''));
+         });"
     :class="{'dark bg-gray-900': darkMode === true}"
   >
     {% include "arabela_admin/partials/timeline_styles.html" %}
     {% include "arabela_admin/partials/dialog.html" %}
+    <!-- One shared floating popover, reused for both the pickup/return date "Edit"
+         form and the "Mark Returned" condition choice -- position: fixed so it
+         overlays the table instead of growing a row's height (which used to push
+         every row below it down the page on every click). Lives once at the page
+         level, filled in per click by openRowPopover(), never inside the table's
+         own scrolling containers so it can never be clipped by them. -->
+    <div id="row-popover" style="display: none; position: fixed; z-index: 9998;">
+      <div id="row-popover-content" class="shadow-theme-lg dark:bg-gray-dark rounded-2xl border border-gray-200 bg-white p-3 dark:border-gray-800"></div>
+    </div>
     <!-- ===== Preloader Start ===== -->
     <script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('admin-dark-boot');}catch(e){}</script>
     <div
@@ -1250,6 +1265,16 @@
                 Overdue
               </span>
             </div>
+
+            <div class="mb-5 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03] sm:p-5">
+              <input
+                type="text"
+                x-model="search"
+                placeholder="Search by customer or reference..."
+                class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
+              />
+            </div>
+
             <div
               class="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]"
             >
@@ -1289,7 +1314,7 @@
                       {% for r in reservations %}
                       {% with item_count=r.items.all|length %}
                       {% for item in r.items.all %}
-                      <tr class="bg-gray-50 dark:bg-white/5" x-show="search === '' || '{{ r.display_customer_name|lower|escapejs }} {{ r.reference_code|lower|escapejs }}'.includes(search.toLowerCase())">
+                      <tr x-show="search === '' || '{{ r.display_customer_name|lower|escapejs }} {{ r.reference_code|lower|escapejs }}'.includes(search.toLowerCase())">
                         {% if forloop.first %}
                         <td class="px-5 py-4 sm:px-6" rowspan="{{ item_count }}" style="vertical-align: top;">
                           <div class="flex items-center gap-3">
@@ -1312,21 +1337,78 @@
                             {% endif %}
                           </div>
                           {% if item.stage != "Returned" %}
-                          <button type="button"
-                            class="resv-remind-btn mt-1.5 inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
-                            data-url="{% url 'arabela_admin:reservation_item_send_reminder' item.id %}"
-                            data-gown="{{ item.gown_name }}"
-                            data-customer="{{ r.display_customer_name }}"
-                            data-suggested="{{ item.suggested_reminder }}"
-                            onclick="sendReminder(this)">Remind</button>
+                          <div class="mt-1.5 flex flex-wrap items-center gap-2" data-item-actions="{{ item.id }}">
+                            <button type="button"
+                              class="resv-remind-btn inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
+                              data-url="{% url 'arabela_admin:reservation_item_send_reminder' item.id %}"
+                              data-gown="{{ item.gown_name }}"
+                              data-customer="{{ r.display_customer_name }}"
+                              data-suggested="{{ item.suggested_reminder }}"
+                              onclick="sendReminder(this)">Remind</button>
+
+                            {% if item.stage == "Pick-up" %}
+                            <!-- Same action the Rental Schedule calendar's Booking Details modal
+                                 performs (reservation_item_reschedule_view, stage -> Reserved) --
+                                 a second, faster front door to it for staff who already know which
+                                 customer they're looking for, without hunting the calendar grid.
+                                 event_date/overdue_date are the calendar's own computed fallbacks
+                                 (see _event_date/_overdue_date) so this validates the same way the
+                                 calendar's own save does, even for an item never opened there. -->
+                            <button type="button"
+                              class="resv-mark-pickedup-btn inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
+                              data-item-id="{{ item.id }}"
+                              data-rental-date="{{ item.rental_date|date:'Y-m-d' }}"
+                              data-event-date="{{ item.effective_event_date|date:'Y-m-d' }}"
+                              data-return-date="{{ item.return_date|date:'Y-m-d' }}"
+                              data-overdue-date="{{ item.effective_overdue_date|date:'Y-m-d' }}">Mark Picked Up</button>
+                            {% elif item.stage == "Reserved" or item.stage == "Overdue" %}
+                            <!-- Condition choices open in a floating popover (see #row-popover near
+                                 the end of <body>), not inline here: revealing them in the row itself
+                                 would grow this row's height and visibly push every row below it down
+                                 the page on every click -- exactly the "unnecessary movement" this was
+                                 built to avoid. -->
+                            <button type="button" class="resv-mark-returned-btn inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200" data-item-id="{{ item.id }}">Mark Returned</button>
+                            {% endif %}
+                          </div>
                           {% endif %}
                         </td>
-                        <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ item.rental_date|date:"M j, Y" }}</p></td>
-                        <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ item.return_date|date:"M j, Y" }}</p></td>
+                        <td class="px-5 py-4 sm:px-6">
+                          <p class="text-gray-500 text-theme-sm dark:text-gray-400">
+                            {{ item.rental_date|date:"M j, Y" }}
+                            {% if item.rental_date != item.scheduled_pickup %}<span class="text-theme-xs text-gray-400 dark:text-gray-400">(originally {{ item.scheduled_pickup|date:"M j" }})</span>{% endif %}
+                          </p>
+                          <div class="mt-1.5" data-actual-date-field="picked_up_on" data-item-id="{{ item.id }}" data-scheduled="{{ item.scheduled_pickup|date:'Y-m-d' }}">
+                            <div class="resv-actual-display flex flex-wrap items-center gap-1.5">
+                              <span class="resv-actual-text text-theme-xs text-gray-400 dark:text-gray-400">{% if item.picked_up_on %}Picked up {{ item.picked_up_on|date:"M j" }}{% else %}Not picked up yet{% endif %}</span>
+                              <span class="resv-actual-diff rounded-full bg-warning-50 px-2 py-0.5 text-theme-xs font-medium text-warning-700 dark:bg-warning-500/15 dark:text-warning-400" style="{% if not item.pickup_diff_label %}display: none;{% endif %}">{{ item.pickup_diff_label }}</span>
+                              <span class="resv-actual-future rounded-full bg-error-50 px-2 py-0.5 text-theme-xs font-medium text-error-700 dark:bg-error-500/15 dark:text-error-500" style="{% if not item.pickup_is_future %}display: none;{% endif %}">Not yet happened</span>
+                              <button type="button" class="resv-actual-date-edit-btn text-theme-xs text-brand-500 underline" data-value="{{ item.picked_up_on|date:'Y-m-d' }}">Edit</button>
+                            </div>
+                          </div>
+                        </td>
+                        <td class="px-5 py-4 sm:px-6">
+                          <p class="text-gray-500 text-theme-sm dark:text-gray-400">
+                            {{ item.return_date|date:"M j, Y" }}
+                            {% if item.return_date != item.scheduled_return %}<span class="text-theme-xs text-gray-400 dark:text-gray-400">(originally {{ item.scheduled_return|date:"M j" }})</span>{% endif %}
+                          </p>
+                          <div class="mt-1.5" data-actual-date-field="returned_on" data-item-id="{{ item.id }}" data-scheduled="{{ item.scheduled_return|date:'Y-m-d' }}">
+                            <div class="resv-actual-display flex flex-wrap items-center gap-1.5">
+                              <span class="resv-actual-text text-theme-xs text-gray-400 dark:text-gray-400">{% if item.returned_on %}Returned {{ item.returned_on|date:"M j" }}{% else %}Not returned yet{% endif %}</span>
+                              <span class="resv-actual-diff rounded-full bg-warning-50 px-2 py-0.5 text-theme-xs font-medium text-warning-700 dark:bg-warning-500/15 dark:text-warning-400" style="{% if not item.return_diff_label %}display: none;{% endif %}">{{ item.return_diff_label }}</span>
+                              <span class="resv-actual-future rounded-full bg-error-50 px-2 py-0.5 text-theme-xs font-medium text-error-700 dark:bg-error-500/15 dark:text-error-500" style="{% if not item.return_is_future %}display: none;{% endif %}">Not yet happened</span>
+                              <button type="button" class="resv-actual-date-edit-btn text-theme-xs text-brand-500 underline" data-value="{{ item.returned_on|date:'Y-m-d' }}">Edit</button>
+                            </div>
+                          </div>
+                        </td>
                         <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">&#8369; {{ item.rental_price|floatformat:0 }}</p></td>
                         {% if forloop.first %}
                         <td class="px-5 py-4 sm:px-6" rowspan="{{ item_count }}" style="vertical-align: top;">
-                          {% if r.status == 'Confirmed' %}
+                          {% if r.has_overdue_item %}
+                          <!-- Overrides the raw reservation status: a stage change made on the
+                               Rental Schedule calendar (item.stage -> Overdue) has to be visible
+                               here too, not just on the calendar itself. -->
+                          <p class="inline-flex rounded-full bg-error-50 px-2 py-0.5 text-theme-xs font-medium text-error-700 dark:bg-error-500/15 dark:text-error-500" title="At least one item in this booking is overdue">Overdue</p>
+                          {% elif r.status == 'Confirmed' %}
                           <p class="inline-flex rounded-full bg-success-50 px-2 py-0.5 text-theme-xs font-medium text-success-700 dark:bg-success-500/15 dark:text-success-500">Confirmed</p>
                           {% elif r.status == 'Active' %}
                           <p class="inline-flex rounded-full bg-brand-50 px-2 py-0.5 text-theme-xs font-medium text-brand-500 dark:bg-brand-500/15 dark:text-brand-400">Active</p>
@@ -1438,6 +1520,15 @@
       return el ? el.value : '';
     }
 
+    // This admin build's own .hidden class is defined as visibility:hidden rather
+    // than display:none (a pre-existing quirk of the compiled CSS, not something
+    // introduced here), so a "hidden" element still occupies its full layout box --
+    // toggling it via classList alone leaves phantom blank space sitting in every
+    // row, and reveals as an abrupt shift rather than a clean appear. Plain inline
+    // display styling sidesteps that entirely.
+    function hideEl(el) { if (el) el.style.display = 'none'; }
+    function showEl(el) { if (el) el.style.display = ''; }
+
     // Staff-initiated reminder. The message arrives pre-written by the server (the same
     // rules the automatic sweep uses) but stays editable, because the reason a staffer
     // reaches for this button is usually something the schedule cannot know.
@@ -1488,6 +1579,352 @@
             adminAlert({ title: 'Could not send', message: err.message || 'Could not send this reminder.', danger: true });
           });
       });
+    }
+
+    // Records the day a gown actually left/came back, separate from the PLANNED
+    // schedule (which the Rental Schedule calendar manages). Updates the row in
+    // place on success -- this page never reloads, so a search someone typed but
+    // hasn't submitted yet is never silently lost.
+    // Mirrors arabela_admin/views.py's _schedule_diff_label exactly, including its
+    // 1-day late-side grace for picked_up_on (see that function's own comment for
+    // why pickup gets one and return doesn't) -- this runs client-side so an inline
+    // Edit-and-Save reflects the same wording without a page reload.
+    function scheduleDiffLabel(actualIso, scheduledIso, field) {
+      if (!actualIso || !scheduledIso) return '';
+      var actual = new Date(actualIso + 'T00:00:00');
+      var scheduled = new Date(scheduledIso + 'T00:00:00');
+      var diffDays = Math.round((actual - scheduled) / 86400000);
+      if (diffDays > 0 && field === 'picked_up_on') diffDays = Math.max(0, diffDays - 1);
+      if (diffDays === 0) return '';
+      var n = Math.abs(diffDays);
+      return n + ' day' + (n !== 1 ? 's' : '') + ' ' + (diffDays > 0 ? 'late' : 'early');
+    }
+
+    // ---- Shared floating popover (Edit date / Mark Returned condition) --------
+    // position: fixed anchored to whichever button opened it, computed from its
+    // real on-screen position -- so it can never be clipped by the table's own
+    // scroll containers (overflow-x-auto / overflow-y-auto), unlike a plain CSS
+    // absolute-positioned dropdown would be.
+    var rowPopoverAnchor = null;
+
+    function openRowPopover(anchorEl, html) {
+      var popover = document.getElementById('row-popover');
+      var content = document.getElementById('row-popover-content');
+      content.innerHTML = html;
+      popover.style.display = 'block';
+      rowPopoverAnchor = anchorEl;
+
+      var anchorRect = anchorEl.getBoundingClientRect();
+      var popRect = popover.getBoundingClientRect();
+      var margin = 8;
+
+      var top = anchorRect.bottom + 6;
+      if (top + popRect.height > window.innerHeight - margin) {
+        top = anchorRect.top - popRect.height - 6; // no room below -- open upward instead
+      }
+      top = Math.max(margin, top);
+
+      var left = anchorRect.left;
+      if (left + popRect.width > window.innerWidth - margin) {
+        left = window.innerWidth - popRect.width - margin;
+      }
+      left = Math.max(margin, left);
+
+      popover.style.top = top + 'px';
+      popover.style.left = left + 'px';
+
+      var firstInput = content.querySelector('input, button');
+      if (firstInput) firstInput.focus();
+    }
+
+    function closeRowPopover() {
+      var popover = document.getElementById('row-popover');
+      popover.style.display = 'none';
+      document.getElementById('row-popover-content').innerHTML = '';
+      rowPopoverAnchor = null;
+    }
+
+    function dateEditPopoverHtml(field, itemId, currentValue, scheduled) {
+      // Undo is only offered for an already-set pickup date -- it reverts the stage
+      // back to Pick-up too (see reservation_item_undo_pickup_view), which only makes
+      // sense for picked_up_on, not returned_on (Returned is a terminal stage handled
+      // by its own Mark Returned flow).
+      var undoBtn = (field === 'picked_up_on' && currentValue)
+        ? '<button type="button" class="resv-undo-pickup-btn text-theme-xs text-error-500 underline" data-item-id="' + itemId + '">Undo pickup</button>'
+        : '';
+      return '<div class="flex flex-wrap items-center gap-1.5" data-item-id="' + itemId + '" data-field="' + field + '" data-scheduled="' + scheduled + '">'
+        + '<input type="date" class="resv-actual-date-input admin-date-input h-8 w-40 rounded-md border border-gray-300 bg-transparent px-2 text-theme-xs text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90" value="' + currentValue + '" onclick="this.showPicker()" />'
+        + '<button type="button" class="resv-actual-date-save-btn rounded-md bg-success-500 px-2 py-1 text-theme-xs font-medium text-white">Save</button>'
+        + '<button type="button" class="resv-popover-cancel-btn text-theme-xs text-gray-400 dark:text-gray-400">Cancel</button>'
+        + undoBtn
+        + '</div>';
+    }
+
+    function conditionPopoverHtml(itemId) {
+      return '<div class="flex flex-wrap items-center gap-1.5" data-item-id="' + itemId + '">'
+        + '<span class="text-theme-xs text-gray-400 dark:text-gray-400">Condition:</span>'
+        + '<button type="button" class="resv-condition-btn rounded-md bg-success-500 px-2 py-1 text-theme-xs font-medium text-white" data-condition="Good">Good</button>'
+        + '<button type="button" class="resv-condition-btn rounded-md bg-warning-500 px-2 py-1 text-theme-xs font-medium text-white" data-condition="Fair">Fair</button>'
+        + '<button type="button" class="resv-condition-btn rounded-md bg-error-500 px-2 py-1 text-theme-xs font-medium text-white" data-condition="Needs Repair">Needs Repair</button>'
+        + '<button type="button" class="resv-popover-cancel-btn text-theme-xs text-gray-400 dark:text-gray-400">Cancel</button>'
+        + '</div>';
+    }
+
+    document.addEventListener('click', function (e) {
+      var editBtn = e.target.closest('.resv-actual-date-edit-btn');
+      if (editBtn) {
+        var wrap = editBtn.closest('[data-actual-date-field]');
+        if (!wrap) return;
+        openRowPopover(editBtn, dateEditPopoverHtml(wrap.dataset.actualDateField, wrap.dataset.itemId, editBtn.dataset.value || '', wrap.dataset.scheduled));
+        return;
+      }
+
+      var markReturnedBtn = e.target.closest('.resv-mark-returned-btn');
+      if (markReturnedBtn) {
+        openRowPopover(markReturnedBtn, conditionPopoverHtml(markReturnedBtn.dataset.itemId));
+        return;
+      }
+
+      var popoverCancelBtn = e.target.closest('.resv-popover-cancel-btn');
+      if (popoverCancelBtn) { closeRowPopover(); return; }
+
+      var saveBtn = e.target.closest('.resv-actual-date-save-btn');
+      if (saveBtn) {
+        var swrap = saveBtn.closest('[data-item-id]');
+        if (!swrap) return;
+        var itemId = swrap.dataset.itemId;
+        var field = swrap.dataset.field;
+        var scheduled = swrap.dataset.scheduled;
+        var input = swrap.querySelector('.resv-actual-date-input');
+        var value = input ? input.value : '';
+
+        // Never blocked server-side (reservation_item_set_actual_date_view lets both
+        // roles save any date) -- this is just a moment to catch a mistake before it's
+        // recorded. Confirming still leaves a lasting badge on the row afterward (see
+        // reflectActualDate), so this is a nudge, not a wall. Framed as a reschedule
+        // question, not a raw date-sanity complaint, because that's the realistic
+        // reason staff would ever enter a future date here: the customer called and
+        // moved their pickup/return day.
+        var proceed = (value && value > todayIso())
+          ? adminConfirm({
+              title: "Did the customer adjust their " + (field === 'picked_up_on' ? 'pickup' : 'return') + " date?",
+              message: "You're recording this " + (field === 'picked_up_on' ? 'pickup' : 'return') + " for "
+                + new Date(value + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                + ", which hasn't happened yet.",
+              confirmText: 'Save Anyway',
+              danger: true
+            })
+          : Promise.resolve(true);
+
+        proceed.then(function (ok) {
+          if (!ok) return;
+          saveBtn.disabled = true;
+          fetch('/admin-panel/api/reservation-items/' + itemId + '/set-actual-date/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+            body: JSON.stringify({ field: field, value: value })
+          })
+            .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+            .then(function (result) {
+              if (!result.ok || !result.data.success) throw new Error(result.data.error || 'Could not save this date.');
+              reflectActualDate(itemId, field, result.data.value);
+              closeRowPopover();
+            })
+            .catch(function (err) {
+              saveBtn.disabled = false;
+              adminAlert({ title: 'Something went wrong', message: err.message || 'Could not save this date.', danger: true });
+            });
+        });
+        return;
+      }
+
+      var undoPickupBtn = e.target.closest('.resv-undo-pickup-btn');
+      if (undoPickupBtn) {
+        var undoItemId = undoPickupBtn.dataset.itemId;
+        closeRowPopover();
+        adminConfirm({
+          title: 'Undo Mark Picked Up?',
+          message: 'This clears the picked-up date and puts this item back at Pick-up, as if Mark Picked Up was never clicked.',
+          confirmText: 'Undo it',
+          danger: true
+        }).then(function (ok) {
+          if (!ok) return;
+          fetch('/admin-panel/api/reservation-items/' + undoItemId + '/undo-pickup/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCsrfToken() }
+          })
+            .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+            .then(function (result) {
+              if (!result.ok || !result.data.success) throw new Error(result.data.error || 'Could not undo this.');
+              reflectActualDate(undoItemId, 'picked_up_on', null);
+              var actionsWrap = document.querySelector('[data-item-actions="' + undoItemId + '"]');
+              var markReturnedBtnEl = actionsWrap && actionsWrap.querySelector('.resv-mark-returned-btn');
+              if (markReturnedBtnEl) {
+                markReturnedBtnEl.outerHTML = markPickedUpControlHtml(
+                  undoItemId, result.data.rental_date, result.data.event_date,
+                  result.data.return_date, result.data.overdue_date
+                );
+              }
+              adminAlert({ title: 'Undone', message: 'This item is back at Pick-up.' });
+            })
+            .catch(function (err) {
+              adminAlert({ title: 'Something went wrong', message: err.message || 'Could not undo this.', danger: true });
+            });
+        });
+        return;
+      }
+
+      // Second, faster front door to the exact same actions the Rental Schedule
+      // calendar's Booking Details modal performs -- for staff who already know
+      // which customer they're looking for and would rather search a list than
+      // hunt a crowded month grid. Both write the same fields, so the calendar
+      // reflects whatever happens here automatically, next time it loads.
+      var pickedUpBtn = e.target.closest('.resv-mark-pickedup-btn');
+      if (pickedUpBtn) { markPickedUp(pickedUpBtn); return; }
+
+      var conditionBtn = e.target.closest('.resv-condition-btn');
+      if (conditionBtn) {
+        var cwrap = conditionBtn.closest('[data-item-id]');
+        markReturned(cwrap.dataset.itemId, conditionBtn.dataset.condition, conditionBtn.closest('div').querySelectorAll('button'));
+        return;
+      }
+
+      // Click landed outside the popover (and wasn't one of the triggers/actions
+      // above) -- close it, same as any other dropdown.
+      var popover = document.getElementById('row-popover');
+      if (popover.style.display !== 'none' && !popover.contains(e.target)) {
+        closeRowPopover();
+      }
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeRowPopover();
+    });
+    // A resize (or the sidebar collapsing) can leave the popover pointing at a
+    // stale position -- simplest correct behaviour is to just close it.
+    window.addEventListener('resize', closeRowPopover);
+
+    // Mirrors reservation_item_reschedule_view's own contract: send back the
+    // CURRENT rental/return dates unchanged, plus the calendar's own computed
+    // event/overdue fallbacks (from the server, via data attributes) so this
+    // validates and saves exactly like the calendar's own Save Changes would --
+    // even for an item that has never been opened there before.
+    function markPickedUp(btn) {
+      btn.disabled = true;
+      var itemId = btn.dataset.itemId;
+      fetch('/admin-panel/api/reservation-items/' + itemId + '/reschedule/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+        body: JSON.stringify({
+          stage: 'Reserved',
+          rental_date: btn.dataset.rentalDate,
+          event_date: btn.dataset.eventDate,
+          return_date: btn.dataset.returnDate,
+          overdue_date: btn.dataset.overdueDate
+        })
+      })
+        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+        .then(function (result) {
+          if (!result.ok || !result.data.success) throw new Error(result.data.error || 'Could not mark this picked up.');
+
+          reflectActualDate(itemId, 'picked_up_on', result.data.picked_up_on || todayIso());
+
+          // The item is now Reserved, not Pick-up -- swap this button for the
+          // Mark Returned trigger, matching what a fresh page load would show.
+          btn.outerHTML = markReturnedControlHtml(itemId);
+          adminAlert({ title: 'Marked as picked up', message: 'The gown is now recorded as out with the customer.' });
+        })
+        .catch(function (err) {
+          btn.disabled = false;
+          adminAlert({ title: 'Something went wrong', message: err.message || 'Could not mark this picked up.', danger: true });
+        });
+    }
+
+    function markReturned(itemId, condition, popoverButtons) {
+      popoverButtons.forEach(function (b) { b.disabled = true; });
+
+      fetch('/admin-panel/api/reservation-items/' + itemId + '/mark-returned/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+        body: JSON.stringify({ condition: condition })
+      })
+        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+        .then(function (result) {
+          if (!result.ok || !result.data.success) throw new Error(result.data.error || 'Could not mark this returned.');
+
+          reflectActualDate(itemId, 'returned_on', result.data.returned_on || todayIso());
+          closeRowPopover();
+
+          // Returned is terminal -- nothing left to do on this item, so the whole
+          // action area (Remind + Mark Returned) goes away, same as a fresh page
+          // load already does for any item at the Returned stage.
+          var actionsWrap = document.querySelector('[data-item-actions="' + itemId + '"]');
+          if (actionsWrap) actionsWrap.remove();
+          adminAlert({ title: 'Marked as returned', message: 'Logged as ' + condition + ' condition. The deposit can now be released from Security Deposits.' });
+        })
+        .catch(function (err) {
+          popoverButtons.forEach(function (b) { b.disabled = false; });
+          adminAlert({ title: 'Something went wrong', message: err.message || 'Could not mark this returned.', danger: true });
+        });
+    }
+
+    function todayIso() {
+      var d = new Date();
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+
+    // Updates the row's own "Picked up ..." / "Returned ..." text and early/late
+    // badge -- shared here so every path to the same fact (an Edit correction, or
+    // a Mark Picked Up / Mark Returned action) leaves the row looking identical
+    // afterward. Never touches row height/layout, only text and a badge's
+    // visibility, so this alone was never what caused the reflow -- opening the
+    // editor inline was.
+    function reflectActualDate(itemId, field, isoValue) {
+      var wrap = document.querySelector('[data-actual-date-field="' + field + '"][data-item-id="' + itemId + '"]');
+      if (!wrap) return;
+      var textEl = wrap.querySelector('.resv-actual-text');
+      var diffEl = wrap.querySelector('.resv-actual-diff');
+      var futureEl = wrap.querySelector('.resv-actual-future');
+      var editBtn = wrap.querySelector('.resv-actual-date-edit-btn');
+      var noun = field === 'picked_up_on' ? 'Picked up' : 'Returned';
+      if (isoValue) {
+        var d = new Date(isoValue + 'T00:00:00');
+        textEl.textContent = noun + ' ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        var label = scheduleDiffLabel(isoValue, wrap.dataset.scheduled, field);
+        if (label) {
+          diffEl.textContent = label;
+          showEl(diffEl);
+        } else {
+          hideEl(diffEl);
+        }
+        // Never blocked at save time (see reservation_item_set_actual_date_view) --
+        // this is the lasting reminder that stays on the row afterward.
+        if (futureEl) {
+          if (isoValue > todayIso()) showEl(futureEl); else hideEl(futureEl);
+        }
+      } else {
+        textEl.textContent = field === 'picked_up_on' ? 'Not picked up yet' : 'Not returned yet';
+        hideEl(diffEl);
+        if (futureEl) hideEl(futureEl);
+      }
+      if (editBtn) editBtn.dataset.value = isoValue || '';
+    }
+
+    function markReturnedControlHtml(itemId) {
+      return '<button type="button" class="resv-mark-returned-btn inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200" data-item-id="' + itemId + '">Mark Returned</button>';
+    }
+
+    // Mirrors the server-rendered Mark Picked Up button (the block shown when an
+    // item's stage is Pick-up) exactly, including its data-* attributes -- Undo
+    // pickup needs to put this control back the way a fresh page load would show
+    // it, without a full reload.
+    function markPickedUpControlHtml(itemId, rentalDate, eventDate, returnDate, overdueDate) {
+      return '<button type="button" class="resv-mark-pickedup-btn inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"'
+        + ' data-item-id="' + itemId + '"'
+        + ' data-rental-date="' + rentalDate + '"'
+        + ' data-event-date="' + eventDate + '"'
+        + ' data-return-date="' + returnDate + '"'
+        + ' data-overdue-date="' + overdueDate + '">Mark Picked Up</button>';
     }
   </script>
   <script defer src="{% static 'arabela_admin/bundle.js' %}?v={{ admin_asset_version }}"></script>
