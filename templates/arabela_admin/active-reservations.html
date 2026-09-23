@@ -1780,7 +1780,34 @@
       // hunt a crowded month grid. Both write the same fields, so the calendar
       // reflects whatever happens here automatically, next time it loads.
       var pickedUpBtn = e.target.closest('.resv-mark-pickedup-btn');
-      if (pickedUpBtn) { markPickedUp(pickedUpBtn); return; }
+      if (pickedUpBtn) {
+        // One click here immediately locks in a real pickup date, and in a long list
+        // the wrong row is easy to hit -- so confirm first whenever today isn't the
+        // day this customer was actually scheduled to collect, and stay silent when
+        // it is (the on-time case keeps working in a single click). The day count is
+        // asked of scheduleDiffLabel, the same function that paints the row's badge
+        // a moment later, rather than repeating the date maths here: whatever number
+        // staff agree to in this dialog is exactly the number the row will show,
+        // grace window included. The scheduled day comes off the row's own
+        // picked_up_on wrapper (never re-rendered by JS, so this keeps working for a
+        // button rebuilt by Undo pickup); if it is somehow missing, the label comes
+        // back empty and this falls through to the original one-click behaviour.
+        var pickupWrap = document.querySelector('[data-actual-date-field="picked_up_on"][data-item-id="' + pickedUpBtn.dataset.itemId + '"]');
+        var scheduledPickup = pickupWrap ? pickupWrap.dataset.scheduled : '';
+        var offScheduleLabel = scheduleDiffLabel(todayIso(), scheduledPickup, 'picked_up_on');
+        if (!offScheduleLabel) { markPickedUp(pickedUpBtn); return; }
+        adminConfirm({
+          title: 'Mark picked up ' + offScheduleLabel + '?',
+          message: "This customer's scheduled pickup is "
+            + new Date(scheduledPickup + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+            + '.',
+          confirmText: 'Yes, mark picked up',
+          danger: true
+        }).then(function (ok) {
+          if (ok) markPickedUp(pickedUpBtn);
+        });
+        return;
+      }
 
       var conditionBtn = e.target.closest('.resv-condition-btn');
       if (conditionBtn) {
