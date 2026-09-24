@@ -12,6 +12,35 @@
     <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
   <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet">
   {% include "arabela_admin/partials/photo_viewer_styles.html" %}
+  <style>
+    /* Verified Today: capped-height scroll instead of growing the page taller with
+       every verification (mirrors the notification bell's own "All Notifications"
+       list -- same custom-scrollbar class, same 420px cap -- so this behaves like
+       something already native to the panel, not a one-off addition). */
+    #verified-today-list {
+      max-height: 420px;
+      overflow-y: auto;
+      scroll-behavior: smooth;
+      padding-right: 0.375rem;
+      padding-bottom: 0.25rem;
+    }
+
+    /* A gentle one-time reveal on page load -- this list is server-rendered fresh on
+       every load (never reordered by client JS afterward), so a plain per-card CSS
+       delay is enough; no JS/observer needed the way the customer-side collection
+       grid's stagger reveal requires for its own, different (client-sorted) case. */
+    @keyframes verified-today-card-in {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .verified-today-card {
+      animation: verified-today-card-in 0.35s ease-out both;
+      animation-delay: calc(var(--i, 0) * 60ms);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .verified-today-card { animation: none; }
+    }
+  </style>
 </head>
   <body
     x-data="{ page: 'payment-verification', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', statusFilter: 'All', monthFilter: 'All', yearFilter: '', showYearToast: false, yearToastTimeout: null, filtering: false, filterTimeout: null, openReceiptModal: false, viewingPayment: {} }"
@@ -1305,9 +1334,9 @@
                 </div>
                 <span class="shrink-0 rounded-full bg-success-50 px-2.5 py-1 text-theme-xs font-semibold text-success-700 dark:bg-success-500/15 dark:text-success-500">{{ verified_today|length }}</span>
               </div>
-              <div class="flex flex-col gap-3">
+              <div id="verified-today-list" class="custom-scrollbar flex flex-col gap-3">
                 {% for r in verified_today %}
-                <div class="flex flex-col gap-3 rounded-xl border border-gray-100 bg-white p-4 dark:border-gray-800 dark:bg-gray-900 sm:flex-row sm:items-center sm:justify-between">
+                <div class="verified-today-card flex flex-col gap-3 rounded-xl border border-gray-100 bg-white p-4 dark:border-gray-800 dark:bg-gray-900 sm:flex-row sm:items-center sm:justify-between" style="--i: {{ forloop.counter0 }};">
                   <div style="min-width: 0;">
                     <p class="font-medium text-gray-800 text-theme-sm dark:text-white/90">
                       {{ r.display_customer_name }}
