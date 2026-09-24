@@ -23,6 +23,9 @@ to inspect label text.
             {% if event.is_latest %}
               <span class="arb-tl-pill{% if event.is_negative %} is-negative{% endif %}">Latest</span>
             {% endif %}
+            {% if event.staff_only %}
+              <span class="arb-tl-pill is-staff" title="Only the shop sees this — it's left off the customer's own order page.">Staff only</span>
+            {% endif %}
           </div>
           <p class="arb-tl-meta">
             {% if event.time_known %}

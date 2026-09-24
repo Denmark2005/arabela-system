@@ -1381,7 +1381,6 @@
                             <div class="resv-actual-display flex flex-wrap items-center gap-1.5">
                               <span class="resv-actual-text text-theme-xs text-gray-400 dark:text-gray-400">{% if item.picked_up_on %}Picked up {{ item.picked_up_on|date:"M j" }}{% else %}Not picked up yet{% endif %}</span>
                               <span class="resv-actual-diff rounded-full bg-warning-50 px-2 py-0.5 text-theme-xs font-medium text-warning-700 dark:bg-warning-500/15 dark:text-warning-400" style="{% if not item.pickup_diff_label %}display: none;{% endif %}">{{ item.pickup_diff_label }}</span>
-                              <span class="resv-actual-future rounded-full bg-error-50 px-2 py-0.5 text-theme-xs font-medium text-error-700 dark:bg-error-500/15 dark:text-error-500" style="{% if not item.pickup_is_future %}display: none;{% endif %}">Not yet happened</span>
                               <button type="button" class="resv-actual-date-edit-btn text-theme-xs text-brand-500 underline" data-value="{{ item.picked_up_on|date:'Y-m-d' }}">Edit</button>
                             </div>
                           </div>
@@ -1395,7 +1394,6 @@
                             <div class="resv-actual-display flex flex-wrap items-center gap-1.5">
                               <span class="resv-actual-text text-theme-xs text-gray-400 dark:text-gray-400">{% if item.returned_on %}Returned {{ item.returned_on|date:"M j" }}{% else %}Not returned yet{% endif %}</span>
                               <span class="resv-actual-diff rounded-full bg-warning-50 px-2 py-0.5 text-theme-xs font-medium text-warning-700 dark:bg-warning-500/15 dark:text-warning-400" style="{% if not item.return_diff_label %}display: none;{% endif %}">{{ item.return_diff_label }}</span>
-                              <span class="resv-actual-future rounded-full bg-error-50 px-2 py-0.5 text-theme-xs font-medium text-error-700 dark:bg-error-500/15 dark:text-error-500" style="{% if not item.return_is_future %}display: none;{% endif %}">Not yet happened</span>
                               <button type="button" class="resv-actual-date-edit-btn text-theme-xs text-brand-500 underline" data-value="{{ item.returned_on|date:'Y-m-d' }}">Edit</button>
                             </div>
                           </div>
@@ -1660,12 +1658,14 @@
         + '</div>';
     }
 
+    // Two ways to check a gown back in (see reservation_item_mark_returned_view):
+    // "Returned" puts it straight back on the website; "needs repair" keeps it off
+    // until it's set back to Available in Gown Catalog. data-condition carries the
+    // stored value; the wording is what staff actually decide at the counter.
     function conditionPopoverHtml(itemId) {
       return '<div class="flex flex-wrap items-center gap-1.5" data-item-id="' + itemId + '">'
-        + '<span class="text-theme-xs text-gray-400 dark:text-gray-400">Condition:</span>'
-        + '<button type="button" class="resv-condition-btn rounded-md bg-success-500 px-2 py-1 text-theme-xs font-medium text-white" data-condition="Good">Good</button>'
-        + '<button type="button" class="resv-condition-btn rounded-md bg-warning-500 px-2 py-1 text-theme-xs font-medium text-white" data-condition="Fair">Fair</button>'
-        + '<button type="button" class="resv-condition-btn rounded-md bg-error-500 px-2 py-1 text-theme-xs font-medium text-white" data-condition="Needs Repair">Needs Repair</button>'
+        + '<button type="button" class="resv-condition-btn rounded-md bg-success-500 px-2 py-1 text-theme-xs font-medium text-white" data-condition="Good">Returned</button>'
+        + '<button type="button" class="resv-condition-btn rounded-md bg-error-500 px-2 py-1 text-theme-xs font-medium text-white" data-condition="Needs Repair">Returned — needs repair</button>'
         + '<button type="button" class="resv-popover-cancel-btn text-theme-xs text-gray-400 dark:text-gray-400">Cancel</button>'
         + '</div>';
     }
@@ -1698,43 +1698,27 @@
         var input = swrap.querySelector('.resv-actual-date-input');
         var value = input ? input.value : '';
 
-        // Never blocked server-side (reservation_item_set_actual_date_view lets both
-        // roles save any date) -- this is just a moment to catch a mistake before it's
-        // recorded. Confirming still leaves a lasting badge on the row afterward (see
-        // reflectActualDate), so this is a nudge, not a wall. Framed as a reschedule
-        // question, not a raw date-sanity complaint, because that's the realistic
-        // reason staff would ever enter a future date here: the customer called and
-        // moved their pickup/return day.
-        var proceed = (value && value > todayIso())
-          ? adminConfirm({
-              title: "Did the customer adjust their " + (field === 'picked_up_on' ? 'pickup' : 'return') + " date?",
-              message: "You're recording this " + (field === 'picked_up_on' ? 'pickup' : 'return') + " for "
-                + new Date(value + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                + ", which hasn't happened yet.",
-              confirmText: 'Save Anyway',
-              danger: true
-            })
-          : Promise.resolve(true);
-
-        proceed.then(function (ok) {
-          if (!ok) return;
-          saveBtn.disabled = true;
-          fetch('/admin-panel/api/reservation-items/' + itemId + '/set-actual-date/', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-            body: JSON.stringify({ field: field, value: value })
+        // The rules for this field (never a day that hasn't come yet; returned never
+        // before picked up; staff back-dating limit) live only in
+        // reservation_item_set_actual_date_view, and its refusal message says exactly
+        // what to do instead -- shown as-is here rather than re-checked in the browser,
+        // so the two can never drift apart.
+        saveBtn.disabled = true;
+        fetch('/admin-panel/api/reservation-items/' + itemId + '/set-actual-date/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+          body: JSON.stringify({ field: field, value: value })
+        })
+          .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+          .then(function (result) {
+            if (!result.ok || !result.data.success) throw new Error(result.data.error || 'Could not save this date.');
+            reflectActualDate(itemId, field, result.data.value);
+            closeRowPopover();
           })
-            .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
-            .then(function (result) {
-              if (!result.ok || !result.data.success) throw new Error(result.data.error || 'Could not save this date.');
-              reflectActualDate(itemId, field, result.data.value);
-              closeRowPopover();
-            })
-            .catch(function (err) {
-              saveBtn.disabled = false;
-              adminAlert({ title: 'Something went wrong', message: err.message || 'Could not save this date.', danger: true });
-            });
-        });
+          .catch(function (err) {
+            saveBtn.disabled = false;
+            adminAlert({ title: "Can't save this date", message: err.message || 'Could not save this date.', danger: true });
+          });
         return;
       }
 
@@ -1792,15 +1776,29 @@
         // picked_up_on wrapper (never re-rendered by JS, so this keeps working for a
         // button rebuilt by Undo pickup); if it is somehow missing, the label comes
         // back empty and this falls through to the original one-click behaviour.
+        //
+        // Separately, if the booking's CURRENT Pick-up Date (the plan, which staff may
+        // have moved since booking -- the button's own data-rental-date) is still in the
+        // future, say so too: marking it now means the gown leaves before the day the
+        // schedule says, which is either a wrong-row click or a customer who came early
+        // after all. The early/late wording above is still measured against the
+        // original day, so it keeps matching the row's badge exactly.
         var pickupWrap = document.querySelector('[data-actual-date-field="picked_up_on"][data-item-id="' + pickedUpBtn.dataset.itemId + '"]');
         var scheduledPickup = pickupWrap ? pickupWrap.dataset.scheduled : '';
         var offScheduleLabel = scheduleDiffLabel(todayIso(), scheduledPickup, 'picked_up_on');
-        if (!offScheduleLabel) { markPickedUp(pickedUpBtn); return; }
+        var plannedPickup = pickedUpBtn.dataset.rentalDate || '';
+        var planNotYet = !!plannedPickup && plannedPickup > todayIso();
+        if (!offScheduleLabel && !planNotYet) { markPickedUp(pickedUpBtn); return; }
+
+        var longDate = function (iso) {
+          return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        };
+        var messageParts = [];
+        if (planNotYet) messageParts.push('The Pick-up Date is ' + longDate(plannedPickup) + ', which hasn\'t come yet.');
+        if (offScheduleLabel && scheduledPickup) messageParts.push("This customer's original pickup was " + longDate(scheduledPickup) + '.');
         adminConfirm({
-          title: 'Mark picked up ' + offScheduleLabel + '?',
-          message: "This customer's scheduled pickup is "
-            + new Date(scheduledPickup + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-            + '.',
+          title: offScheduleLabel ? 'Mark picked up ' + offScheduleLabel + '?' : "Pick-up date hasn't come yet",
+          message: messageParts.join(' ') + (offScheduleLabel ? '' : ' Mark it picked up today anyway?'),
           confirmText: 'Yes, mark picked up',
           danger: true
         }).then(function (ok) {
@@ -1887,7 +1885,13 @@
           // load already does for any item at the Returned stage.
           var actionsWrap = document.querySelector('[data-item-actions="' + itemId + '"]');
           if (actionsWrap) actionsWrap.remove();
-          adminAlert({ title: 'Marked as returned', message: 'Logged as ' + condition + ' condition. The deposit can now be released from Security Deposits.' });
+          adminAlert({
+            title: 'Marked as returned',
+            message: (condition === 'Needs Repair'
+              ? "It's off the website until it's set back to Available in Gown Catalog."
+              : "It's back on the website and can be booked again.")
+              + ' The deposit can now be released from Security Deposits.'
+          });
         })
         .catch(function (err) {
           popoverButtons.forEach(function (b) { b.disabled = false; });
@@ -1911,7 +1915,6 @@
       if (!wrap) return;
       var textEl = wrap.querySelector('.resv-actual-text');
       var diffEl = wrap.querySelector('.resv-actual-diff');
-      var futureEl = wrap.querySelector('.resv-actual-future');
       var editBtn = wrap.querySelector('.resv-actual-date-edit-btn');
       var noun = field === 'picked_up_on' ? 'Picked up' : 'Returned';
       if (isoValue) {
@@ -1924,15 +1927,9 @@
         } else {
           hideEl(diffEl);
         }
-        // Never blocked at save time (see reservation_item_set_actual_date_view) --
-        // this is the lasting reminder that stays on the row afterward.
-        if (futureEl) {
-          if (isoValue > todayIso()) showEl(futureEl); else hideEl(futureEl);
-        }
       } else {
         textEl.textContent = field === 'picked_up_on' ? 'Not picked up yet' : 'Not returned yet';
         hideEl(diffEl);
-        if (futureEl) hideEl(futureEl);
       }
       if (editBtn) editBtn.dataset.value = isoValue || '';
     }

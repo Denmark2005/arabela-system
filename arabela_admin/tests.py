@@ -505,15 +505,15 @@ class ReservationItemLifecycleTests(TestCase):
     def test_reschedule_valid_dates_succeeds(self):
         item, gown = self._make_item(gown_status=Gown.Status.AVAILABLE)
         today = date.today()
-        # The event day is owner-only now, so a staff save has to send it back exactly
-        # as the modal received it -- _event_date's rental_date + 2 fallback, since
-        # _make_item leaves event_date null. Only the operational dates move here,
-        # which is what a staff reschedule actually looks like.
+        # _make_item leaves event_date null, so the modal would show the computed
+        # event day (return - 2 = today + 1, see ReservationItem.effective_event_date)
+        # -- sent back here exactly as a real Save Changes would, since this test
+        # isn't about the Event date at all.
         response = self.client.post(
             reverse("arabela_admin:reservation_item_reschedule", args=[item.id]),
             data=json.dumps({
                 "rental_date": today.isoformat(),
-                "event_date": (today + timedelta(days=2)).isoformat(),
+                "event_date": (today + timedelta(days=1)).isoformat(),
                 "return_date": (today + timedelta(days=4)).isoformat(),
                 "overdue_date": (today + timedelta(days=6)).isoformat(),
                 "stage": "Reserved",
@@ -546,15 +546,15 @@ class ReservationItemLifecycleTests(TestCase):
         # "Returned" is only reachable via Mark Returned, never via Reschedule.
         item, _ = self._make_item()
         today = date.today()
-        # Every date is sent exactly as it already stands (event_date via _event_date's
-        # rental_date + 2 fallback), so the stage really is the only thing wrong here --
-        # otherwise this would pass on the owner-only Event date rule instead and stop
-        # proving anything about the stage.
+        # Every date is sent exactly as it already stands (event_date as the computed
+        # return - 2 = today + 1), so the stage really is the only thing wrong here --
+        # otherwise this could trip one of the four dates' own back-dating checks instead
+        # and stop proving anything about the stage.
         response = self.client.post(
             reverse("arabela_admin:reservation_item_reschedule", args=[item.id]),
             data=json.dumps({
                 "rental_date": today.isoformat(),
-                "event_date": (today + timedelta(days=2)).isoformat(),
+                "event_date": (today + timedelta(days=1)).isoformat(),
                 "return_date": (today + timedelta(days=3)).isoformat(),
                 "overdue_date": (today + timedelta(days=3)).isoformat(),
                 "stage": "Returned",
@@ -1272,14 +1272,47 @@ class StatusEventHookTests(TestCase):
         event = self.reservation.status_events.get(label="Reservation rejected")
         self.assertEqual(event.detail, "Receipt is unreadable")
 
-    def test_marking_returned_records_the_condition_against_that_gown(self):
+    def test_marking_returned_records_an_event_against_that_gown(self):
         self.client.post(
             reverse("arabela_admin:reservation_item_mark_returned", args=[self.item.id]),
-            data=json.dumps({"condition": "Fair"}), content_type="application/json",
+            data=json.dumps({"condition": "Good"}), content_type="application/json",
         )
         event = self.reservation.status_events.get(label="Hook Gown returned")
         self.assertEqual(event.item_id, self.item.id)
-        self.assertIn("Fair", event.detail)
+        # The customer sees this entry, so it says nothing about the gown's condition.
+        self.assertEqual(event.detail, "Checked in by staff.")
+        self.assertFalse(event.staff_only)
+        self.assertFalse(self.reservation.status_events.filter(label="Hook Gown needs repair").exists())
+
+    def test_needs_repair_adds_a_staff_only_note_the_customer_never_sees(self):
+        from reservations import timeline
+
+        self.client.post(
+            reverse("arabela_admin:reservation_item_mark_returned", args=[self.item.id]),
+            data=json.dumps({"condition": "Needs Repair"}), content_type="application/json",
+        )
+        returned = self.reservation.status_events.get(label="Hook Gown returned")
+        note = self.reservation.status_events.get(label="Hook Gown needs repair")
+        self.assertFalse(returned.staff_only)
+        self.assertTrue(note.staff_only)
+        self.assertEqual(note.item_id, self.item.id)
+
+        customer_labels = [e.label for e in timeline.for_item(self.item)]
+        self.assertIn("Hook Gown returned", customer_labels)
+        self.assertNotIn("Hook Gown needs repair", customer_labels)
+
+        admin_labels = [e.label for e in timeline.attach_to_items([self.item])[0].timeline]
+        self.assertIn("Hook Gown needs repair", admin_labels)
+
+    def test_fair_is_no_longer_a_return_choice(self):
+        response = self.client.post(
+            reverse("arabela_admin:reservation_item_mark_returned", args=[self.item.id]),
+            data=json.dumps({"condition": "Fair"}), content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.item.refresh_from_db()
+        self.assertNotEqual(self.item.stage, "Returned")
+        self.assertEqual(self.reservation.status_events.count(), 0)
 
     def test_releasing_the_deposit_records_an_event(self):
         self.client.post(

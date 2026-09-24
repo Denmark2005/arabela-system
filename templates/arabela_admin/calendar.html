@@ -99,11 +99,33 @@
       .booking-date-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
 
-    /* The event day belongs to the customer, so staff get it read-only -- this is only
-       the visible half of the rule reservation_item_reschedule_view enforces server-side.
-       Styled here rather than with a disabled: utility because the precompiled stylesheet
-       carries no such variant. */
-    .booking-date-locked { opacity: 0.55; cursor: not-allowed; }
+    /* "This gown is also booked" box + live clash warning in Booking Details -- same
+       palette as the status/condition chips below, defined here since the precompiled
+       stylesheet can't be extended. */
+    .booking-holds {
+      border: 1px solid #E5E7EB;
+      border-radius: 0.75rem;
+      background: #F9FAFB;
+      padding: 0.75rem 0.875rem;
+    }
+    .dark .booking-holds { border-color: #374151; background: rgba(255, 255, 255, 0.03); }
+    .booking-holds-title { font-size: 0.75rem; font-weight: 600; color: #374151; margin: 0 0 0.375rem; }
+    .dark .booking-holds-title { color: #D1D5DB; }
+    .booking-holds-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.25rem; }
+    .booking-holds-list li {
+      display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.375rem;
+      font-size: 0.75rem; color: #667085; border-radius: 0.375rem; padding: 0.125rem 0.375rem;
+      transition: background-color .15s ease, color .15s ease;
+    }
+    .dark .booking-holds-list li { color: #98A2B3; }
+    .booking-holds-list .booking-hold-dates { font-weight: 600; color: #374151; font-variant-numeric: tabular-nums; }
+    .dark .booking-holds-list .booking-hold-dates { color: #D1D5DB; }
+    .booking-holds-list li.is-clash { background: #FEF3F2; color: #B42318; }
+    .booking-holds-list li.is-clash .booking-hold-dates { color: #B42318; }
+    .dark .booking-holds-list li.is-clash { background: rgba(240, 68, 56, 0.12); color: #F97066; }
+    .dark .booking-holds-list li.is-clash .booking-hold-dates { color: #F97066; }
+    .booking-hold-warning { font-size: 0.8125rem; font-weight: 500; color: #D92D20; margin: 0; }
+    .dark .booking-hold-warning { color: #F97066; }
 
     /* Status picker chips -- same 4 colours as the calendar events/legend, so choosing a
        status previews the exact colour the booking will show once saved. */
@@ -140,7 +162,6 @@
     .dark .booking-condition-chip { border-color: #374151; color: #D1D5DB; background: #1F2937; }
     .booking-condition-chip:hover { opacity: 0.85; }
     .booking-condition-chip[data-condition="Good"].is-selected { background: #16A34A; border-color: #16A34A; color: #FFFFFF; }
-    .booking-condition-chip[data-condition="Fair"].is-selected { background: #F59E0B; border-color: #F59E0B; color: #78350F; }
     .booking-condition-chip[data-condition="Needs Repair"].is-selected { background: #DC2626; border-color: #DC2626; color: #FFFFFF; }
   </style>
   </head>
@@ -1442,8 +1463,9 @@
                         <input id="bookingModalRentalDate" type="date" class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" onclick="this.showPicker()" />
                       </div>
                       <div>
-                        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Event Date{% if not can_edit_event_date %} <span class="text-xs text-gray-500 dark:text-gray-400">(owner only)</span>{% endif %}</label>
-                        <input id="bookingModalEventDate" type="date" class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800{% if not can_edit_event_date %} booking-date-locked{% endif %}"{% if not can_edit_event_date %} disabled{% endif %} onclick="this.showPicker()" />
+                        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Event Date</label>
+                        <input id="bookingModalEventDate" type="date" class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" onclick="this.showPicker()" />
+                        <p id="bookingModalEventOriginalNote" class="mt-1.5 text-xs text-gray-500 dark:text-gray-400" style="display: none;"></p>
                       </div>
                       <div>
                         <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Return Date</label>
@@ -1456,14 +1478,27 @@
                     </div>
                     <p class="text-xs text-gray-500 dark:text-gray-400">Pick-up = pick-up date to the day before the event · Return date shows automatically once Reserved is picked · Overdue = the overdue date.</p>
 
+                    <!-- Everything else holding this same physical gown, filled in by the
+                         bookingModalHolds script at the bottom of the page, plus a live
+                         warning when a moved Pick-up/Return date runs into one of them.
+                         The server refuses such a save regardless
+                         (reservation_item_reschedule_view). -->
+                    <div id="bookingModalHolds" class="booking-holds" style="display: none;">
+                      <p class="booking-holds-title">This gown is also booked:</p>
+                      <ul id="bookingModalHoldsList" class="booking-holds-list"></ul>
+                    </div>
+                    <p id="bookingModalHoldWarning" class="booking-hold-warning" role="alert" style="display: none;"></p>
+
+                    <!-- Same two choices as Active Reservations' Mark Returned popover
+                         (reservation_item_mark_returned_view). data-condition is the stored
+                         value bundle.js posts; only the wording is what staff see. -->
                     <div id="bookingModalConditionSection">
-                      <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-400">Return Condition</label>
+                      <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-400">Mark Returned As</label>
                       <div class="flex flex-wrap gap-2" id="bookingModalConditionGroup">
-                        <button type="button" data-condition="Good" class="booking-condition-chip">Good</button>
-                        <button type="button" data-condition="Fair" class="booking-condition-chip">Fair</button>
-                        <button type="button" data-condition="Needs Repair" class="booking-condition-chip">Needs Repair</button>
+                        <button type="button" data-condition="Good" class="booking-condition-chip">Returned</button>
+                        <button type="button" data-condition="Needs Repair" class="booking-condition-chip">Returned — needs repair</button>
                       </div>
-                      <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">Checked in by staff before the deposit is released. The customer sees this on their Orders page.</p>
+                      <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">Pick one, then Mark Returned. "Needs repair" keeps this gown off the website until it's set back to Available in Gown Catalog.</p>
                     </div>
 
                     <p id="bookingModalError" class="hidden text-sm text-error-500"></p>
@@ -1493,6 +1528,185 @@
     <!-- ===== Page Wrapper End ===== -->
   <script defer src="{% static 'arabela_admin/bundle.js' %}?v={{ admin_asset_version }}"></script>
   <script defer src="{% static 'arabela_admin/global-search.js' %}"></script>
+
+  <script defer>
+    // Shows "Customer chose <date>" under the Event Date box whenever a reschedule has
+    // moved it away from what the customer actually picked -- added here rather than in
+    // bundle.js, which is a committed, non-rebuildable asset (see
+    // feedback_admin_bundlejs_not_rebuildable). bundle.js keeps activeItemId in its own
+    // closure with nothing exposed on window, so there's no direct hook for "the modal
+    // just opened for item X" -- instead this watches bookingModalSubtitle, which
+    // bundle.js's eventClick handler sets synchronously (customer — gownName · reference)
+    // from the exact same calendar-events-data JSON this script also reads, so the two
+    // can never read it differently.
+    document.addEventListener('DOMContentLoaded', function () {
+      var subtitleEl = document.getElementById('bookingModalSubtitle');
+      var noteEl = document.getElementById('bookingModalEventOriginalNote');
+      var dataEl = document.getElementById('calendar-events-data');
+      if (!subtitleEl || !noteEl || !dataEl) return;
+
+      // Keyed by that exact subtitle string. A booking can render 1-3 markers (see
+      // _stage_segments), all sharing the same customer/gown/reference/bookedEventDate,
+      // so re-visiting the same key here is expected and harmless -- confirmed against
+      // this project's real reservation data that no two DIFFERENT items ever produce
+      // the same key (reference is unique per reservation; the one way to collide would
+      // be two items in the same reservation sharing a gown name, which does not occur).
+      var byLabel = {};
+      try {
+        JSON.parse(dataEl.textContent).forEach(function (ev) {
+          var props = (ev && ev.extendedProps) || {};
+          if (!props.itemId || !props.bookedEventDate) return; // e.g. a Blocked-dates marker
+          var label = (props.customer || '') + ' — ' + (props.gownName || '')
+            + (props.reference ? ' · ' + props.reference : '');
+          byLabel[label] = {
+            bookedEventDate: props.bookedEventDate, eventDate: props.eventDate,
+            rentalDate: props.rentalDate, returnDate: props.returnDate,
+            otherHolds: Array.isArray(props.otherHolds) ? props.otherHolds : []
+          };
+        });
+      } catch (e) {
+        return; // malformed/empty JSON -- fail quiet, the modal itself still works fine
+      }
+
+      function formatLong(iso) {
+        var d = new Date(iso + 'T00:00:00');
+        return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+      }
+      function formatShort(iso) {
+        var d = new Date(iso + 'T00:00:00');
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      }
+
+      // "This gown is also booked" + live clash warning. Only warns once Pick-up or
+      // Return has actually been moved away from what the booking already had --
+      // the same rule the server's own check (reservation_item_reschedule_view)
+      // uses, so an older overlap the modal merely displays never looks like
+      // something the save will refuse. Names come from customer data, so the list
+      // is built with textContent only, never innerHTML.
+      var holdsEl = document.getElementById('bookingModalHolds');
+      var holdsListEl = document.getElementById('bookingModalHoldsList');
+      var holdWarningEl = document.getElementById('bookingModalHoldWarning');
+      var rentalInputEl = document.getElementById('bookingModalRentalDate');
+      var returnInputEl = document.getElementById('bookingModalReturnDate');
+      var currentEntry = null;
+
+      function renderHolds() {
+        if (!holdsEl || !holdsListEl) return;
+        while (holdsListEl.firstChild) holdsListEl.removeChild(holdsListEl.firstChild);
+        var holds = currentEntry ? currentEntry.otherHolds : [];
+        holds.forEach(function (hold) {
+          var li = document.createElement('li');
+          li.dataset.start = hold.start;
+          li.dataset.end = hold.end;
+          var dates = document.createElement('span');
+          dates.className = 'booking-hold-dates';
+          dates.textContent = hold.start === hold.end
+            ? formatShort(hold.start)
+            : formatShort(hold.start) + ' – ' + formatShort(hold.end);
+          var who = document.createElement('span');
+          who.textContent = hold.label;
+          li.appendChild(dates);
+          li.appendChild(who);
+          holdsListEl.appendChild(li);
+        });
+        holdsEl.style.display = holds.length ? '' : 'none';
+      }
+
+      function checkHoldClash() {
+        if (!holdWarningEl) return;
+        var start = rentalInputEl ? rentalInputEl.value : '';
+        var end = returnInputEl ? returnInputEl.value : '';
+        var moved = !!currentEntry && (start !== currentEntry.rentalDate || end !== currentEntry.returnDate);
+        var clash = null;
+        if (holdsListEl) {
+          Array.prototype.forEach.call(holdsListEl.children, function (li) {
+            var hits = moved && !!start && !!end && start <= end
+              && li.dataset.start <= end && li.dataset.end >= start;
+            li.classList.toggle('is-clash', hits);
+            if (hits && !clash) clash = li;
+          });
+        }
+        if (clash) {
+          var hold = currentEntry.otherHolds[Array.prototype.indexOf.call(holdsListEl.children, clash)];
+          holdWarningEl.textContent = 'These dates run into ' + hold.label + ' ('
+            + formatLong(hold.start) + (hold.start === hold.end ? '' : ' – ' + formatLong(hold.end))
+            + '). Pick dates that don\'t overlap — this can\'t be saved.';
+          holdWarningEl.style.display = '';
+        } else {
+          holdWarningEl.textContent = '';
+          holdWarningEl.style.display = 'none';
+        }
+      }
+
+      function refreshNote() {
+        var entry = byLabel[subtitleEl.textContent];
+        if (entry && entry.bookedEventDate !== entry.eventDate) {
+          noteEl.textContent = 'Customer chose ' + formatLong(entry.bookedEventDate);
+          noteEl.style.display = '';
+        } else {
+          noteEl.style.display = 'none';
+        }
+        currentEntry = entry || null;
+        renderHolds();
+        checkHoldClash();
+      }
+
+      [rentalInputEl, returnInputEl].forEach(function (input) {
+        if (!input) return;
+        input.addEventListener('input', checkHoldClash);
+        input.addEventListener('change', checkHoldClash);
+      });
+
+      new MutationObserver(refreshNote).observe(subtitleEl, {
+        childList: true, characterData: true, subtree: true
+      });
+    });
+
+    // The "+N more" list (FullCalendar's own .fc-popover, for a day with too many
+    // bookings to show inline) tries to stay on screen, but only checks its LEFT/RIGHT
+    // edges against the viewport, never its bottom, and for a day right at the edge of
+    // the grid its own left-edge correction can still leave it hanging off-screen --
+    // confirmed by comparing two real days with the same kind of content: one with
+    // room to spare renders and scrolls perfectly, one at the edge doesn't reposition
+    // at all. Fixed here rather than in bundle.js (a committed, non-rebuildable asset --
+    // see feedback_admin_bundlejs_not_rebuildable): once the popover lands in the DOM,
+    // measure where it actually ended up and nudge it back on screen if any edge
+    // overshoots, using the same min-then-max clamp FullCalendar's own code already
+    // uses for its left edge, just also applied to top/bottom. This never touches how
+    // the list scrolls (that part already works, untouched) -- only where it sits.
+    document.addEventListener('DOMContentLoaded', function () {
+      var VIEWPORT_MARGIN = 8;
+
+      function keepOnScreen(popoverEl) {
+        var rect = popoverEl.getBoundingClientRect();
+        var currentLeft = parseFloat(popoverEl.style.left) || 0;
+        var currentTop = parseFloat(popoverEl.style.top) || 0;
+
+        var idealLeft = Math.min(rect.left, window.innerWidth - VIEWPORT_MARGIN - rect.width);
+        idealLeft = Math.max(idealLeft, VIEWPORT_MARGIN);
+
+        var idealTop = Math.min(rect.top, window.innerHeight - VIEWPORT_MARGIN - rect.height);
+        idealTop = Math.max(idealTop, VIEWPORT_MARGIN);
+
+        popoverEl.style.left = (currentLeft + (idealLeft - rect.left)) + 'px';
+        popoverEl.style.top = (currentTop + (idealTop - rect.top)) + 'px';
+      }
+
+      new MutationObserver(function (mutations) {
+        mutations.forEach(function (mutation) {
+          mutation.addedNodes.forEach(function (node) {
+            if (node.nodeType !== 1) return;
+            if (node.classList && node.classList.contains('fc-popover')) {
+              keepOnScreen(node);
+            } else if (node.querySelector) {
+              var nested = node.querySelector('.fc-popover');
+              if (nested) keepOnScreen(nested);
+            }
+          });
+        });
+      }).observe(document.body, { childList: true, subtree: true });
+    });
+  </script>
 
 {% include "arabela_admin/partials/dialog.html" %}
 </body>

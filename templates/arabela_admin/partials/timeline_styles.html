@@ -46,6 +46,9 @@ still matches the panel exactly, in light and dark.
     background: var(--color-success-50, #ecfdf3); color: var(--color-success-700, #027a48);
   }
   .arb-tl-pill.is-negative { background: var(--color-error-50, #fef3f2); color: var(--color-error-700, #b42318); }
+  /* Staff-only notes (see ReservationStatusEvent.staff_only) -- neutral, so it reads as
+     "who can see this", not as good/bad news like the two pills above. */
+  .arb-tl-pill.is-staff { background: var(--color-gray-100, #f2f4f7); color: var(--color-gray-600, #475467); }
 
   .arb-tl-meta {
     margin: 0.25rem 0 0;
@@ -80,6 +83,7 @@ still matches the panel exactly, in light and dark.
   .dark .arb-tl-row:first-child .arb-tl-label { color: rgba(255, 255, 255, 0.9); }
   .dark .arb-tl-pill { background: rgba(18, 183, 106, 0.15); color: #32d583; }
   .dark .arb-tl-pill.is-negative { background: rgba(240, 68, 56, 0.15); color: #fda29b; }
+  .dark .arb-tl-pill.is-staff { background: rgba(255, 255, 255, 0.06); color: #98a2b3; }
   .dark .arb-tl-meta { color: #667085; }
   .dark .arb-tl-detail { color: #98a2b3; }
   .dark .arb-tl-panel { border-color: #1d2939; background: rgba(255, 255, 255, 0.03); }

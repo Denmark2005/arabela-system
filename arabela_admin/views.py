@@ -210,15 +210,29 @@ _STAGE_COLOR = {
 
 
 def _event_date(item):
-    """The customer's event/reserved day. Falls back to 2 days after pick-up (the default
-    2-before / event / 2-after window) for any legacy row that has no explicit event date."""
-    return item.event_date or (item.rental_date + timedelta(days=2))
+    """The customer's event/reserved day -- see ReservationItem.effective_event_date,
+    the one shared definition (the customer's own order page reads it too)."""
+    return item.effective_event_date
 
 
 def _overdue_date(item):
     """The day the Overdue status marks. Defaults to the return date for any legacy row
     that has no explicit overdue date."""
     return item.overdue_date or item.return_date
+
+
+def _original_event_date(item):
+    """The event day the customer actually chose at checkout, recovered rather than
+    stored directly -- nothing freezes it the way original_rental_date/original_return_date
+    freeze the pick-up/return window (see reservations/models.py). Recovered from
+    original_return_date - 2, mirroring products.html's own restoreSelectionFrom, which
+    recovers the same day the same way for the exact reason given there: return is always
+    exactly event + 2, whereas pick-up sometimes gets clamped to today for a booking made
+    less than 2 days out (see clampedPickup), so only return round-trips reliably. Falls
+    back to the current effective event date for the rare legacy row missing that field."""
+    if item.original_return_date:
+        return item.original_return_date - timedelta(days=2)
+    return _event_date(item)
 
 
 def _pickup_span(item):
@@ -263,7 +277,80 @@ def _stage_segments(item):
     return []  # RETURNED (or anything unexpected) -- nothing shown
 
 
-def _calendar_events(reservations):
+def _holding_items(gown_ids):
+    """Bookings that really hold these physical gowns -- the same rule checkout's
+    _find_available_unit and the customer calendar use: every booking except one
+    already Returned, or whose reservation was Rejected/Cancelled (those never held
+    stock). Pending ones count: they're awaiting payment approval, not released."""
+    return (
+        ReservationItem.objects.filter(gown_id__in=gown_ids)
+        .exclude(stage=ReservationItem.Stage.RETURNED)
+        .exclude(reservation__status__in=_NON_RENTAL_STATUSES)
+    )
+
+
+def _schedule_conflict(item, rental_date, return_date):
+    """What (if anything) already holds THIS physical gown on any day of
+    rental_date..return_date, besides the booking being moved -- as a message naming
+    it, or None. Inclusive on both ends, like checkout: a booking ending on the 12th
+    collides with one starting on the 12th."""
+    clash = (
+        _holding_items([item.gown_id])
+        .filter(rental_date__lte=return_date, return_date__gte=rental_date)
+        .exclude(id=item.id)
+        .select_related("reservation__customer__profile")
+        .order_by("rental_date")
+        .first()
+    )
+    if clash:
+        return (
+            f"{item.gown_name} is already booked {clash.rental_date:%b %d} – "
+            f"{clash.return_date:%b %d, %Y} for {clash.reservation.display_customer_name} "
+            f"({clash.reservation.reference_code}). Pick dates that don't overlap."
+        )
+    block = (
+        GownUnavailability.objects.filter(
+            gown_id=item.gown_id, start_date__lte=return_date, end_date__gte=rental_date,
+        ).order_by("start_date").first()
+    )
+    if block:
+        return (
+            f"{item.gown_name} is blocked for {block.get_reason_display().lower()} "
+            f"{block.start_date:%b %d} – {block.end_date:%b %d, %Y}. Pick dates that "
+            f"don't overlap."
+        )
+    return None
+
+
+def _other_holds_by_gown(gown_ids):
+    """Every upcoming booking and block per physical gown, oldest first -- shown in the
+    Booking Details modal as "This gown is also booked", so staff moving a date can see
+    what's in the way without leaving the page. Only windows that haven't fully ended
+    yet; the server-side check (_schedule_conflict) still covers everything."""
+    today = timezone.localdate()
+    holds = defaultdict(list)
+    for it in (
+        _holding_items(gown_ids).filter(return_date__gte=today)
+        .select_related("reservation__customer__profile")
+    ):
+        label = f"{it.reservation.display_customer_name} ({it.reservation.reference_code})"
+        if it.reservation.status == Reservation.Status.PENDING:
+            label += " · awaiting payment approval"
+        holds[it.gown_id].append({
+            "itemId": it.id, "start": it.rental_date.isoformat(),
+            "end": it.return_date.isoformat(), "label": label,
+        })
+    for block in GownUnavailability.objects.filter(gown_id__in=gown_ids, end_date__gte=today):
+        holds[block.gown_id].append({
+            "itemId": None, "start": block.start_date.isoformat(),
+            "end": block.end_date.isoformat(), "label": f"Blocked · {block.get_reason_display()}",
+        })
+    for gown_holds in holds.values():
+        gown_holds.sort(key=lambda h: h["start"])
+    return holds
+
+
+def _calendar_events(reservations, holds_by_gown=None):
     """Each active booking renders as one or more markers depending on its current status
     (see _stage_segments) -- Reserved and Overdue build UP on what came before instead of
     replacing it, so the calendar always shows the whole story for that booking so far.
@@ -283,6 +370,18 @@ def _calendar_events(reservations):
                 "eventDate": _event_date(item).isoformat(),
                 "returnDate": item.return_date.isoformat(),
                 "overdueDate": _overdue_date(item).isoformat(),
+                # What the customer actually picked, so the Booking Details modal can
+                # show it whenever a reschedule has since moved eventDate away from it --
+                # see calendar.html's own subtitle-note script, which reads this straight
+                # out of this same JSON (calendar-init/bundle.js never touches it).
+                "bookedEventDate": _original_event_date(item).isoformat(),
+                # Everything else holding this same physical gown (see
+                # _other_holds_by_gown) -- the modal lists it and warns live when a
+                # moved date runs into one; reservation_item_reschedule_view refuses it.
+                "otherHolds": [
+                    h for h in (holds_by_gown or {}).get(item.gown_id, [])
+                    if h["itemId"] != item.id
+                ] if item.gown_id else [],
             }
             for marker_label, span_fn in _stage_segments(item):
                 start, end_incl = span_fn(item)
@@ -320,7 +419,7 @@ def _unavailability_events(blocks):
 
 @_require_admin_staff
 def rental_schedule_view(request):
-    reservations = (
+    reservations = list(
         Reservation.objects.filter(status__in=_SCHEDULED_STATUSES)
         .select_related("customer__profile")
         .prefetch_related("items")
@@ -328,19 +427,14 @@ def rental_schedule_view(request):
     blocks = GownUnavailability.objects.filter(
         end_date__gte=timezone.localdate()
     ).select_related("gown")
+    gown_ids = {item.gown_id for r in reservations for item in r.items.all() if item.gown_id}
+    holds_by_gown = _other_holds_by_gown(gown_ids)
     return render(
         request,
         "arabela_admin/calendar.html",
         {
             "page": "rental",
-            "calendar_events": _calendar_events(reservations) + _unavailability_events(blocks),
-            # Greys out the Booking Details modal's Event Date box for staff, matching
-            # the rule reservation_item_reschedule_view enforces. Deliberately _is_owner
-            # rather than the admin_is_owner context processor: that one treats an admin
-            # with no UserProfile row as the owner, this one doesn't, and a box that
-            # looks editable but is refused on save is worse than one that never
-            # pretended. Same function on both sides means they can't drift apart.
-            "can_edit_event_date": _is_owner(request),
+            "calendar_events": _calendar_events(reservations, holds_by_gown) + _unavailability_events(blocks),
         },
     )
 
@@ -629,20 +723,14 @@ def active_reservations_view(request):
             item.scheduled_return = scheduled_return
             item.pickup_diff_label = _schedule_diff_label(item.picked_up_on, scheduled_pickup, late_grace_days=1)
             item.return_diff_label = _schedule_diff_label(item.returned_on, scheduled_return)
-            # A lasting reminder for a future actual date -- reservation_item_set_actual_date_view
-            # never blocks entering one (staff and owner both keep the whole calendar,
-            # the frontend just confirms first), so this is what keeps it from going
-            # unnoticed afterward.
-            item.pickup_is_future = bool(item.picked_up_on and item.picked_up_on > today)
-            item.return_is_future = bool(item.returned_on and item.returned_on > today)
             # Needed so the quick "Mark Picked Up" action here can call the SAME
             # reservation_item_reschedule_view the calendar uses, passing dates it
             # already validates (rental_date <= event_date <= return_date <=
             # overdue_date). event_date/overdue_date are frequently still null on a
             # freshly-confirmed item that has never been opened on the calendar, so
             # this reuses the calendar's own fallback helpers -- never a second,
-            # separately-maintained copy of that default (2 days before/after event).
-            item.effective_event_date = _event_date(item)
+            # separately-maintained copy of that default. (The event date needs no
+            # line here: ReservationItem.effective_event_date is already a property.)
             item.effective_overdue_date = _overdue_date(item)
 
         # The Status column shows this, not the raw reservation.status: a stage
@@ -1484,9 +1572,17 @@ def reservation_item_mark_returned_view(request, item_id):
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
 
+    # Only two ways to check a gown back in: "Returned" (sent as Good -- straight back
+    # on the website) or "Returned -- needs repair" (Needs Repair -- kept off it until
+    # staff set it back to Available in Gown Catalog). "Fair" used to be a third choice
+    # but did exactly what Good does, so it's no longer offered; older bookings that
+    # recorded it keep it. What the gown's condition was is the shop's business, not
+    # the customer's: the customer-facing timeline entry is the same either way, and
+    # the repair note goes on a staff-only entry.
     condition = data.get("condition", "")
-    if condition not in ReservationItem.ReturnCondition.values:
-        return JsonResponse({"error": "A return condition (Good, Fair, or Needs Repair) is required."}, status=400)
+    if condition not in (ReservationItem.ReturnCondition.GOOD, ReservationItem.ReturnCondition.NEEDS_REPAIR):
+        return JsonResponse({"error": "Choose Returned or Returned — needs repair."}, status=400)
+    needs_repair = condition == ReservationItem.ReturnCondition.NEEDS_REPAIR
 
     item.stage = ReservationItem.Stage.RETURNED
     item.returned_on = timezone.localdate()
@@ -1494,17 +1590,20 @@ def reservation_item_mark_returned_view(request, item_id):
     item.save(update_fields=["stage", "returned_on", "return_condition", "updated_at"])
     ReservationStatusEvent.record(
         item.reservation, f"{item.gown_name} returned", item=item,
-        detail=f"Checked in by staff in {condition} condition.",
+        detail="Checked in by staff.",
         actor=ReservationStatusEvent.Actor.STAFF,
     )
+    if needs_repair:
+        ReservationStatusEvent.record(
+            item.reservation, f"{item.gown_name} needs repair", item=item,
+            detail="Checked in needing repair — kept off the website until it's set back to Available in Gown Catalog.",
+            actor=ReservationStatusEvent.Actor.STAFF,
+            staff_only=True,
+        )
 
     if item.gown_id:
         item.gown.condition = condition
-        item.gown.status = (
-            Gown.Status.OUT_OF_STOCK
-            if condition == ReservationItem.ReturnCondition.NEEDS_REPAIR
-            else Gown.Status.AVAILABLE
-        )
+        item.gown.status = Gown.Status.OUT_OF_STOCK if needs_repair else Gown.Status.AVAILABLE
         item.gown.last_returned_at = timezone.localdate()
         item.gown.save(update_fields=["condition", "status", "last_returned_at", "updated_at"])
 
@@ -1566,6 +1665,7 @@ def reservation_item_send_reminder_view(request, item_id):
 
 
 @require_http_methods(["POST"])
+@transaction.atomic  # the availability check below locks the gown row until the save commits
 def reservation_item_reschedule_view(request, item_id):
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
@@ -1592,6 +1692,8 @@ def reservation_item_reschedule_view(request, item_id):
             {"error": "Dates must run Pick-up ≤ Event ≤ Return ≤ Overdue."}, status=400
         )
 
+    today = timezone.localdate()
+
     # Only the owner may back-date the official schedule. A customer's booking
     # window is what they actually chose at checkout -- rewriting it to a day
     # that has already happened has no honest use (an early/late pickup or
@@ -1602,26 +1704,15 @@ def reservation_item_reschedule_view(request, item_id):
     # the raw possibly-null field, so re-saving a booking's already-past dates
     # unchanged (e.g. Active Reservations' "Mark Picked Up", or an old overdue
     # item that has never been opened here before) is never mistaken for staff
-    # backdating something new.
+    # backdating something new. Event is included here like the other three --
+    # staff CAN move it (a previous version locked it entirely, which turned out
+    # to be the wrong call; staff just need to see what the customer originally
+    # picked, see _original_event_date and the calendar's own subtitle-note JS),
+    # they just can't back-date it any more than Pick-up/Return/Overdue.
     if not _is_owner(request):
-        today = timezone.localdate()
-
-        # The event day is the customer's own, fixed when they booked -- the shop
-        # schedules its pick-up/return around it, never the other way round. Staff
-        # adjust those operational dates all day long, but moving the event itself
-        # would rewrite a fact that belongs to the customer (and shift the anchor
-        # every early/late day count is measured from). Only a real change is
-        # refused: the calendar modal, Active Reservations' Mark Picked Up and the
-        # undo endpoint all resend _event_date(item) untouched on every save, which
-        # has to keep working. The Event date is therefore absent from the
-        # back-dating table below -- any change at all, forward or back, stops here.
-        if event_date != _event_date(item):
-            return JsonResponse({
-                "error": "Only the owner can change the Event date -- it's the day the customer booked.",
-            }, status=403)
-
         effective_current = {
             "Pick-up": (rental_date, item.rental_date),
+            "Event": (event_date, _event_date(item)),
             "Return": (return_date, item.return_date),
             "Overdue": (overdue_date, _overdue_date(item)),
         }
@@ -1659,13 +1750,33 @@ def reservation_item_reschedule_view(request, item_id):
             ),
         }, status=400)
 
+    # Moving a booking's pick-up/return must not land it on days this same physical
+    # gown already belongs to someone else (or is blocked for cleaning/repair) -- for
+    # owner and staff alike, since one gown can't be in two places. Only checked when
+    # those dates actually move: a save that leaves them alone (Mark Picked Up, a
+    # status change) must never be blocked by some older overlap it didn't create.
+    # The gown row is locked first, the same lock checkout's _find_available_unit
+    # takes, so a customer booking and a staff reschedule can't both claim the same
+    # days at the same moment.
+    if item.gown_id and (rental_date, return_date) != (item.rental_date, item.return_date):
+        list(Gown.objects.select_for_update().filter(id=item.gown_id))
+        conflict = _schedule_conflict(item, rental_date, return_date)
+        if conflict:
+            return JsonResponse({"error": conflict}, status=409)
+
     # Snapshotted before the assignments below so the timeline can log what actually
     # changed. Staff hit Save on this form constantly (often with nothing edited, or to
     # nudge one date); logging every save unchanged would bury the real milestones in
     # noise, so only genuine changes become events.
     was_stage = item.stage
-    was_dates = (item.rental_date, item.event_date, item.return_date, item.overdue_date)
-    was_picked_up = bool(item.picked_up_on)
+    # Effective values, not the raw fields: a never-opened booking has event_date /
+    # overdue_date blank, and the modal (or Mark Picked Up) sends back their computed
+    # defaults -- saving those isn't a change anyone made, so it must not show up on
+    # the customer's timeline as "rental dates updated".
+    was_dates = (item.rental_date, _event_date(item), item.return_date, _overdue_date(item))
+    # A "picked up" date that hasn't come yet was never a real pickup (older data from
+    # before reservation_item_set_actual_date_view refused those), so it doesn't count.
+    was_picked_up = bool(item.picked_up_on) and item.picked_up_on <= today
 
     item.rental_date = rental_date
     item.event_date = event_date
@@ -1674,15 +1785,19 @@ def reservation_item_reschedule_view(request, item_id):
     item.stage = stage
     update_fields = ["rental_date", "event_date", "return_date", "overdue_date", "stage", "updated_at"]
 
-    # Leaving Pick-up implies the gown has actually gone out -- reflect it in the catalog.
-    if stage != ReservationItem.Stage.PICKUP and not item.picked_up_on:
-        item.picked_up_on = timezone.localdate()
+    # Leaving Pick-up means the gown is physically going out now, so the recorded
+    # pickup is today -- unless a real (today-or-earlier) date is already there, e.g.
+    # staff pre-filled yesterday's via Edit after forgetting to click. A future date is
+    # never kept: it can't be when the gown left, and keeping one is exactly how an item
+    # once ended up Reserved while "picked up tomorrow".
+    if stage != ReservationItem.Stage.PICKUP and (not item.picked_up_on or item.picked_up_on > today):
+        item.picked_up_on = today
         update_fields.append("picked_up_on")
     item.save(update_fields=update_fields)
 
     # "Picked up" is the milestone a customer cares about, so it gets its own event and
     # takes precedence over the generic status line that caused it.
-    if not was_picked_up and item.picked_up_on:
+    if not was_picked_up and item.picked_up_on and item.picked_up_on <= today:
         ReservationStatusEvent.record(
             item.reservation, f"{item.gown_name} picked up", item=item,
             detail="The gown is now with the customer.",
@@ -1754,6 +1869,51 @@ def reservation_item_set_actual_date_view(request, item_id):
     if getattr(item, field) == new_value:
         return JsonResponse({"success": True, "value": new_value.isoformat() if new_value else None})
 
+    today = timezone.localdate()
+
+    # These two fields record something that already happened, so a day that hasn't
+    # come yet is never a correct value -- for owner or staff; this isn't a trust
+    # boundary like the back-dating check below, it's simply impossible. (An earlier
+    # version allowed it behind a "did the customer adjust their pickup date?" popup,
+    # which let an item sit at Reserved while claiming it would be picked up
+    # tomorrow.) A customer moving their day is a change to the PLAN -- the Pick-up /
+    # Return Date in the Rental Schedule, which the calendar, availability and the
+    # early/late count all read -- see reservation_item_reschedule_view.
+    if new_value and new_value > today:
+        if field == "picked_up_on":
+            message = (
+                f"The gown can't be recorded as picked up on {new_value:%b %d, %Y} -- that "
+                f"day hasn't come yet. If the customer is coming on another day, change "
+                f"the Pick-up Date in the Rental Schedule instead."
+            )
+            if item.stage != ReservationItem.Stage.PICKUP:
+                message += " If it was marked picked up by mistake, use Undo pickup."
+        else:
+            message = (
+                f"The gown can't be recorded as returned on {new_value:%b %d, %Y} -- that "
+                f"day hasn't come yet. If the customer is bringing it back on another day, "
+                f"change the Return Date in the Rental Schedule instead."
+            )
+        return JsonResponse({"error": message}, status=400)
+
+    # A gown can't come back before it left. Checked against whichever of the pair
+    # isn't being edited; clearing either side (new_value None) always passes, since
+    # that only removes a record.
+    picked = new_value if field == "picked_up_on" else item.picked_up_on
+    returned = new_value if field == "returned_on" else item.returned_on
+    if new_value and picked and returned and returned < picked:
+        if field == "picked_up_on":
+            message = (
+                f"The picked-up date can't be after the returned date "
+                f"({returned:%b %d, %Y}) -- a gown can't come back before it left."
+            )
+        else:
+            message = (
+                f"The returned date can't be before the picked-up date "
+                f"({picked:%b %d, %Y}) -- a gown can't come back before it left."
+            )
+        return JsonResponse({"error": message}, status=400)
+
     # Same protection as reservation_item_reschedule_view's schedule dates, with
     # one deliberate difference: staff get a one-day grace window here, because
     # "I forgot to click the button yesterday" is a real, everyday, honest
@@ -1761,15 +1921,8 @@ def reservation_item_set_actual_date_view(request, item_id):
     # dates, which have no legitimate reason to ever move backward. Clearing a
     # date (new_value is None) is never restricted: it only removes a record,
     # it can't be used to fabricate one.
-    #
-    # A future date is never blocked here, on purpose: staff and owner both keep
-    # full access to every date on the picker, past or future. The frontend
-    # confirms before saving one ("this hasn't happened yet -- save anyway?") and
-    # active_reservations_view flags it with a lasting badge afterward -- a
-    # reminder, not a wall, since this is a plain data-entry nudge, not a trust
-    # boundary like the check below.
     if new_value and not _is_owner(request):
-        grace_cutoff = timezone.localdate() - timedelta(days=1)
+        grace_cutoff = today - timedelta(days=1)
         if new_value < grace_cutoff:
             noun = "picked up" if field == "picked_up_on" else "returned"
             return JsonResponse({

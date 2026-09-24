@@ -19,7 +19,7 @@ from .models import ReservationStatusEvent
 # presentation concern (which colour the dot gets) -- the label itself is written once
 # when the event happens and is never rewritten, so changing this list restyles old
 # history without rewriting it.
-NEGATIVE_WORDS = ("rejected", "cancelled", "overdue")
+NEGATIVE_WORDS = ("rejected", "cancelled", "overdue", "needs repair")
 
 
 def _annotate(events):
@@ -39,20 +39,23 @@ def _newest_first(events):
     return sorted(events, key=lambda e: (e.occurred_at, e.id), reverse=True)
 
 
-def for_item(item):
+def for_item(item, *, include_staff_only=False):
     """The ordered history to show for ONE gown: everything that happened to its
     reservation as a whole, plus everything that happened to this gown specifically.
     A sibling gown's pick-up is not this gown's history.
 
     Newest first, the way every order tracker presents it -- the thing the customer
     opened the page to check is the most recent thing, so it goes on top.
+
+    This is what the CUSTOMER's order page shows, so staff-only notes (e.g. "needs
+    repair" at check-in) are left out unless asked for. The admin pages build their
+    timelines with attach_to_items / attach_to_reservations below, which always
+    include them.
     """
-    events = list(
-        item.reservation.status_events
-        .filter(Q(item__isnull=True) | Q(item_id=item.id))
-        .order_by('-occurred_at', '-id')
-    )
-    return _annotate(events)
+    events = item.reservation.status_events.filter(Q(item__isnull=True) | Q(item_id=item.id))
+    if not include_staff_only:
+        events = events.filter(staff_only=False)
+    return _annotate(list(events.order_by('-occurred_at', '-id')))
 
 
 def attach_to_items(items):

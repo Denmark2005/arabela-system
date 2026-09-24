@@ -466,13 +466,8 @@
 
                 <!-- Line 3: secondary badges + actions -->
                 {% with can_cancel=item.can_customer_cancel %}
-                {% if item.return_condition or reservation.payment_state or reservation.can_upload_proof or can_cancel %}
+                {% if reservation.payment_state or reservation.can_upload_proof or can_cancel %}
                 <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-black/5 pt-3">
-                  {% if item.return_condition %}
-                    <span class="res-chip {% if item.return_condition == 'Good' %}bg-emerald-50 text-emerald-600{% elif item.return_condition == 'Fair' %}bg-amber-50 text-amber-600{% else %}bg-red-50 text-red-600{% endif %}">
-                      Returned &middot; {{ item.return_condition }}
-                    </span>
-                  {% endif %}
                   {% if reservation.payment_state %}
                     <span class="res-chip {% if reservation.payment_state == 'Payment Verified' %}bg-emerald-50 text-emerald-600{% elif reservation.payment_state == 'Payment Under Review' %}bg-amber-50 text-amber-600{% else %}bg-red-50 text-red-600{% endif %}">
                       {{ reservation.payment_state }}

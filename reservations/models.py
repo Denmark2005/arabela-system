@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.conf import settings
 from django.db import IntegrityError, models, transaction
 from django.utils import timezone
@@ -272,6 +274,19 @@ class ReservationItem(models.Model):
         return f'{self.gown_name} ({self.rental_date} → {self.return_date})'
 
     @property
+    def effective_event_date(self):
+        """The customer's event day. event_date is never saved at checkout, so until
+        staff set one it's worked out from the return date: checkout always books
+        return = event + 2, while pick-up gets pinned to today for a booking made less
+        than 2 days out (products.html's clampedPickup) -- so "pick-up + 2" (the old
+        guess) lands on the wrong day for those, and "return - 2" is right for every
+        booking. Never earlier than the pick-up date, so the four dates stay in order
+        even if staff have since shrunk the window."""
+        if self.event_date:
+            return self.event_date
+        return max(self.rental_date, self.return_date - timedelta(days=2))
+
+    @property
     def can_customer_cancel(self):
         """Whether the customer can self-cancel from this item. Cancelling is a
         whole-Reservation action (mirrors reservation_approve/reject_view, which act
@@ -331,6 +346,10 @@ class ReservationStatusEvent(models.Model):
     # never recorded. Those render as a date with no time rather than showing an
     # invented "8:00 AM" -- a timeline people may rely on must never make a time up.
     time_known = models.BooleanField(default=True)
+    # A note for the shop's own records that the customer never sees -- e.g. a gown
+    # checked in needing repair. Shown on every admin timeline, but left out of the
+    # customer's own order page (reservations.timeline.for_item).
+    staff_only = models.BooleanField(default=False)
 
     class Meta:
         ordering = ['occurred_at', 'id']
@@ -340,7 +359,7 @@ class ReservationStatusEvent(models.Model):
         return f'{self.reservation.reference_code}: {self.label} @ {self.occurred_at}'
 
     @classmethod
-    def record(cls, reservation, label, *, item=None, detail='', actor=Actor.SYSTEM):
+    def record(cls, reservation, label, *, item=None, detail='', actor=Actor.SYSTEM, staff_only=False):
         """The one way events get written. Deliberately swallows its own errors: a
         timeline is a record OF the action, never a reason the action itself fails --
         an approval must still go through even if writing its history row somehow
@@ -355,7 +374,7 @@ class ReservationStatusEvent(models.Model):
             with transaction.atomic():
                 return cls.objects.create(
                     reservation=reservation, item=item, label=label,
-                    detail=(detail or '')[:300], actor=actor,
+                    detail=(detail or '')[:300], actor=actor, staff_only=staff_only,
                 )
         except Exception:
             return None
