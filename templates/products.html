@@ -1053,6 +1053,23 @@
       }
     })();
 
+    // A candidate event date isn't available just because THAT day is free -- picking it
+    // commits the gown for its whole pickup..return window (clampedPickup(d) through
+    // d+2), and that window can still reach into a day some OTHER booking already has,
+    // even when the event day itself was never booked by anyone (e.g. every unit is taken
+    // Sep24-28 and a customer picks event=Sep23: pickup lands on Sep24, overlapping it).
+    // Checked against this exact same blockedDates set -- the one gowns/views.py
+    // _find_available_unit's own overlap check is built from -- so this can never wave
+    // through a selection checkout would then refuse.
+    function windowOverlapsBlocked(eventDate) {
+      const start = clampedPickup(eventDate);
+      const end = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate() + 2);
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        if (blockedDates.has(ymd(d))) return true;
+      }
+      return false;
+    }
+
     // Single shared tooltip, repositioned above whichever unavailable day is
     // hovered/tapped, rather than one tooltip per day.
     let tooltipHideTimer = null;
@@ -1118,7 +1135,7 @@
         // inventory says -- checked before the server's blocked list so past days stay
         // plainly disabled instead of claiming a gown is unavailable.
         const isPast = dateStr < todayStr;
-        const isUnavailable = !isPast && blockedDates.has(dateStr);
+        const isUnavailable = !isPast && windowOverlapsBlocked(d);
 
         if (isPast) {
           // Greyed out like an unavailable day, but with no tooltip: "this date has
