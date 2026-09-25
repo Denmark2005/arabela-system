@@ -19,6 +19,14 @@ from .models import UserProfile
 User = get_user_model()
 PASSWORD_PATTERN = re.compile(r'^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,16}$')
 
+# Shown whenever the verification email can't be sent. Deliberately generic (not
+# "check your Gmail SMTP settings" -- that wording is for US to read in the logs,
+# not something a customer can act on) since this fires for two very different
+# reasons: our own mail settings are wrong, OR the connection to Gmail's server
+# drops/times out mid-request (a real customer's flaky wifi, or ours). Both are
+# caught below -- see the (SMTPException, OSError) catches.
+_EMAIL_SEND_FAILURE_MESSAGE = "We couldn't send the verification email. Please check your connection and try again."
+
 # Keeps ?next= (e.g. reservation) across signup + email verify when login page loses the query string.
 SESSION_LOGIN_NEXT = 'login_next_after_auth'
 
@@ -260,12 +268,12 @@ def signup_view(request):
                 request.session['verification_code'] = verification_code
                 try:
                     _send_verification_code(request, email, verification_code)
-                except SMTPException:
+                except (SMTPException, OSError):
                     return render(
                         request,
                         'signup.html',
                         {
-                            'error': 'We could not send the verification email. Please check your Gmail SMTP settings and try again.',
+                            'error': _EMAIL_SEND_FAILURE_MESSAGE,
                             'first_name': first_name,
                             'last_name': last_name,
                             'email': email,
@@ -305,13 +313,13 @@ def signup_view(request):
 
         try:
             _send_verification_code(request, email, verification_code)
-        except SMTPException:
+        except (SMTPException, OSError):
             user.delete()
             return render(
                 request,
                 'signup.html',
                 {
-                    'error': 'We could not send the verification email. Please check your Gmail SMTP settings and try again.',
+                    'error': _EMAIL_SEND_FAILURE_MESSAGE,
                     'first_name': first_name,
                     'last_name': last_name,
                     'email': email,
@@ -357,8 +365,8 @@ def resend_verification_email_view(request):
 
     try:
         _send_verification_code(request, email, verification_code)
-    except SMTPException:
-        return render(request, 'verification.html', {'error': 'Unable to resend the verification code. Please try again later.', 'email': email})
+    except (SMTPException, OSError):
+        return render(request, 'verification.html', {'error': _EMAIL_SEND_FAILURE_MESSAGE, 'email': email})
 
     return redirect(f"{reverse('accounts:verify_email_pending')}?email={email}&resent=1")
 

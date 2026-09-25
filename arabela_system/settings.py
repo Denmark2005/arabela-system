@@ -271,7 +271,14 @@ if not DEBUG:
     # certificate, so proving it out at a short value first is the safe order of operations.
     SECURE_HSTS_SECONDS = 3600
 
-SITE_ID = 2
+# Which `django_site` row this deployment is. Was hardcoded to 2 for both local dev
+# AND production -- meaning production always resolved to whatever domain sat on
+# site #2 (127.0.0.1:8000, since that's the only one ever set up), which is wrong
+# for anything that reads the current site's domain (django-allauth's own account
+# emails/pages). Render now needs its own SITE_ID env var pointed at a site row
+# whose domain is the real onrender.com address; local dev keeps working exactly
+# as before via the default.
+SITE_ID = int(os.getenv('SITE_ID', '2'))
 
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
@@ -325,6 +332,30 @@ elif _env_default_from == 'no-reply@arabela.local' and EMAIL_HOST_USER:
     DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 else:
     DEFAULT_FROM_EMAIL = _env_default_from
+
+# Error visibility in production. Without this, an unhandled exception on Render
+# (DEBUG=False) shows the visitor a bare "Internal Server Error" and leaves NO
+# record anywhere of what actually broke -- Django's own default only e-mails
+# ADMINS, which was never configured. This sends every unhandled request error,
+# with its full traceback, to stderr, which Render's dashboard already captures
+# as that service's Logs -- so the next crash is something we can actually read
+# and fix instead of guessing at.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+    },
+}
 
 # Arabela Recommends -- AI chat (Google Gemini, free tier).
 # NOT 'gemini-flash-latest': that alias currently resolves to gemini-3.6-flash,

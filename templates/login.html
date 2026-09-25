@@ -89,6 +89,7 @@
                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-5 mb-5 sm:mb-8">
                   <a
                     href="{% provider_login_url 'google' process='login' %}"
+                    id="google_auth_link"
                     class="inline-flex items-center justify-center gap-3 py-3 text-sm font-normal text-gray-700 transition-colors bg-gray-100 rounded-lg px-7 hover:bg-gray-200 hover:text-gray-800 dark:bg-white/5 dark:text-white/90 dark:hover:bg-white/10"
                   >
                     <svg
@@ -308,7 +309,25 @@
       const passwordInput = document.getElementById('password');
       const errorContainer = document.getElementById('error_container');
       const errorText = document.getElementById('error_text');
-      
+
+      // A slow connection tempts a second tap on "Sign in with Google" before the
+      // first has finished navigating away -- that second request reuses Google's
+      // one-time login code, which Google refuses, landing on the generic
+      // "Third-Party Login Failure" page instead of actually signing them in.
+      const googleAuthLink = document.getElementById('google_auth_link');
+      if (googleAuthLink) {
+        let googleAuthClicked = false;
+        googleAuthLink.addEventListener('click', (e) => {
+          if (googleAuthClicked) {
+            e.preventDefault();
+            return;
+          }
+          googleAuthClicked = true;
+          googleAuthLink.style.opacity = '0.6';
+          googleAuthLink.style.pointerEvents = 'none';
+        });
+      }
+
       const genericErrorMessage = "Gmail account not found. Please check your spelling or create an account.";
 
       const validateEmail = (email) => {
