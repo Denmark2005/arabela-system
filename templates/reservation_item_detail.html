@@ -734,18 +734,67 @@
         });
       }
 
+      // A phone camera photo is routinely 5-15MB -- well over the server's 5MB
+      // limit -- while a screenshot of a GCash receipt is usually under 1MB and
+      // already fine. Shrink anything large enough to matter before it's sent;
+      // screenshots stay under the skip threshold and are untouched. Any failure
+      // along the way (unsupported format, decode error) just falls back to the
+      // original file, so a photo can never be blocked by compression itself.
+      // Same helper as reservation.html's checkout upload -- kept as its own copy
+      // here since this page doesn't load that page's script.
+      function compressImageFile(file) {
+        var SKIP_BELOW_BYTES = 1.5 * 1024 * 1024; // 1.5MB
+        var MAX_DIMENSION = 1600; // px, longest side
+        var QUALITY = 0.82;
+        return new Promise(function (resolve) {
+          if (!file || !file.type || file.type.indexOf('image/') !== 0 || file.size <= SKIP_BELOW_BYTES) {
+            resolve(file);
+            return;
+          }
+          var objectUrl = URL.createObjectURL(file);
+          var img = new Image();
+          img.onload = function () {
+            URL.revokeObjectURL(objectUrl);
+            var scale = Math.min(1, MAX_DIMENSION / Math.max(img.width, img.height));
+            var w = Math.max(1, Math.round(img.width * scale));
+            var h = Math.max(1, Math.round(img.height * scale));
+            var canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            var ctx = canvas.getContext('2d');
+            if (!ctx) { resolve(file); return; }
+            ctx.drawImage(img, 0, 0, w, h);
+            canvas.toBlob(function (blob) {
+              if (!blob || blob.size >= file.size) { resolve(file); return; }
+              var newName = file.name.replace(/\.\w+$/, '') + '.jpg';
+              resolve(new File([blob], newName, { type: 'image/jpeg' }));
+            }, 'image/jpeg', QUALITY);
+          };
+          img.onerror = function () {
+            URL.revokeObjectURL(objectUrl);
+            resolve(file);
+          };
+          img.src = objectUrl;
+        });
+      }
+
       function uploadPaymentProof(url, input) {
         if (!input.files || !input.files[0]) return;
-        var formData = new FormData();
-        formData.append('proof_of_payment', input.files[0]);
+        var rawFile = input.files[0];
         input.disabled = true;
-        // No 'Content-Type' header: the browser must set it so the multipart
-        // boundary is included. Setting it by hand breaks the upload.
-        fetch(url, {
-          method: 'POST',
-          headers: { 'X-CSRFToken': getCsrfToken() },
-          body: formData,
-        })
+        compressImageFile(rawFile)
+          .catch(function () { return rawFile; })
+          .then(function (fileToUpload) {
+            var formData = new FormData();
+            formData.append('proof_of_payment', fileToUpload || rawFile);
+            // No 'Content-Type' header: the browser must set it so the multipart
+            // boundary is included. Setting it by hand breaks the upload.
+            return fetch(url, {
+              method: 'POST',
+              headers: { 'X-CSRFToken': getCsrfToken() },
+              body: formData,
+            });
+          })
           .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
           .then(function (result) {
             if (!result.ok || !result.data.success) throw new Error(result.data.error || 'Could not upload your proof of payment.');

@@ -219,7 +219,7 @@
             <div id="proof-payment-empty-state" class="flex flex-col items-center justify-center">
               <span class="material-symbols-outlined text-3xl text-secondary group-hover:text-primary transition-colors mb-2">cloud_upload</span>
               <p class="text-sm font-medium text-on-surface">Upload Receipt</p>
-              <p class="mt-0.5 text-[0.75rem] text-secondary">JPG, PNG or WEBP &middot; max 5MB</p>
+              <p class="mt-0.5 text-[0.75rem] text-secondary">JPG, PNG or WEBP &middot; large photos are resized automatically</p>
             </div>
             <div id="proof-payment-preview-state" class="hidden absolute inset-0 flex items-center gap-4 px-5">
               <img id="proof-payment-preview-img" class="h-24 w-24 shrink-0 rounded-[6px] border border-black/10 object-cover bg-white" alt="Uploaded receipt preview" />
@@ -537,6 +537,66 @@
             if (emptyState) emptyState.classList.remove('hidden');
         }
 
+        // A phone camera photo is routinely 5-15MB -- well over the server's 5MB
+        // limit -- while a screenshot of a GCash receipt is usually under 1MB and
+        // already fine. Rather than reject real camera photos, shrink anything
+        // large enough to matter before it's ever sent. Screenshots are left
+        // completely untouched (skipped below the threshold), so the already-working
+        // path is not changed at all. Always resolves to SOME usable file --
+        // any failure along the way just falls back to the original, so a photo
+        // can never be blocked by compression itself misbehaving.
+        var PROOF_COMPRESS_SKIP_BELOW_BYTES = 1.5 * 1024 * 1024; // 1.5MB
+        var PROOF_COMPRESS_MAX_DIMENSION = 1600; // px, longest side
+        var PROOF_COMPRESS_QUALITY = 0.82;
+
+        function compressImageFile(file) {
+            return new Promise(function (resolve) {
+                if (!file || !file.type || file.type.indexOf('image/') !== 0) {
+                    resolve(file);
+                    return;
+                }
+                if (file.size <= PROOF_COMPRESS_SKIP_BELOW_BYTES) {
+                    resolve(file);
+                    return;
+                }
+                var objectUrl = URL.createObjectURL(file);
+                var img = new Image();
+                img.onload = function () {
+                    URL.revokeObjectURL(objectUrl);
+                    var scale = Math.min(1, PROOF_COMPRESS_MAX_DIMENSION / Math.max(img.width, img.height));
+                    var w = Math.max(1, Math.round(img.width * scale));
+                    var h = Math.max(1, Math.round(img.height * scale));
+                    var canvas = document.createElement('canvas');
+                    canvas.width = w;
+                    canvas.height = h;
+                    var ctx = canvas.getContext('2d');
+                    if (!ctx) { resolve(file); return; }
+                    ctx.drawImage(img, 0, 0, w, h);
+                    canvas.toBlob(function (blob) {
+                        if (!blob || blob.size >= file.size) {
+                            resolve(file); // compression didn't actually help -- keep the original
+                            return;
+                        }
+                        var newName = file.name.replace(/\.\w+$/, '') + '.jpg';
+                        resolve(new File([blob], newName, { type: 'image/jpeg' }));
+                    }, 'image/jpeg', PROOF_COMPRESS_QUALITY);
+                };
+                img.onerror = function () {
+                    URL.revokeObjectURL(objectUrl);
+                    resolve(file); // couldn't decode it (e.g. an unsupported format) -- let the
+                                    // server's own extension/type check give the real error
+                };
+                img.src = objectUrl;
+            });
+        }
+
+        // Resolves to the exact File that should actually be uploaded -- the
+        // compressed version once it's ready, or the original while compression is
+        // still running / for a file too small to need it. The submit handler awaits
+        // this instead of reading proof_of_payment.files[0] directly, so a click that
+        // lands before compression finishes can never send the oversized original.
+        var proofUploadFilePromise = Promise.resolve(null);
+
         function triggerReservationInvalidShake(el) {
             if (!el) return;
             el.classList.add('animate-reservation-invalid-shake');
@@ -695,17 +755,26 @@
                     formData.append('postal_code', document.getElementById('postal').value.trim());
                     formData.append('phone', document.getElementById('phone').value.trim());
                     var proofInputEl = document.getElementById('proof_of_payment');
-                    if (proofInputEl && proofInputEl.files && proofInputEl.files[0]) {
-                        formData.append('proof_of_payment', proofInputEl.files[0]);
-                    }
+                    var rawProofFile = (proofInputEl && proofInputEl.files && proofInputEl.files[0]) || null;
 
-                    fetch(SUBMIT_URL, {
-                        method: 'POST',
-                        headers: {
-                            'X-CSRFToken': getCsrfToken()
-                        },
-                        body: formData
-                    })
+                    // Wait for the compressed version (see compressImageFile above) so a
+                    // click that lands before it's ready still sends the shrunk file, not
+                    // the original multi-MB camera photo.
+                    proofUploadFilePromise
+                        .catch(function () { return null; })
+                        .then(function (compressedFile) {
+                            if (rawProofFile) {
+                                formData.append('proof_of_payment', compressedFile || rawProofFile);
+                            }
+
+                            return fetch(SUBMIT_URL, {
+                                method: 'POST',
+                                headers: {
+                                    'X-CSRFToken': getCsrfToken()
+                                },
+                                body: formData
+                            });
+                        })
                         .then(function (res) {
                             return res.json().then(function (data) {
                                 return { ok: res.ok, data: data };
@@ -743,9 +812,12 @@
                     var z = document.getElementById('proof-payment-dropzone');
                     if (z) z.classList.remove('reservation-proof-invalid');
                     if (proofInput.files && proofInput.files[0]) {
-                        showProofPreview(proofInput.files[0]);
+                        var rawFile = proofInput.files[0];
+                        showProofPreview(rawFile);
+                        proofUploadFilePromise = compressImageFile(rawFile);
                     } else {
                         clearProofPreview();
+                        proofUploadFilePromise = Promise.resolve(null);
                     }
                 });
             }
@@ -757,6 +829,7 @@
                     event.stopPropagation();
                     proofInput.value = '';
                     clearProofPreview();
+                    proofUploadFilePromise = Promise.resolve(null);
                 });
             }
         });
