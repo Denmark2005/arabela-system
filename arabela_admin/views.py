@@ -311,7 +311,12 @@ def _schedule_conflict(item, rental_date, return_date):
     block = (
         GownUnavailability.objects.filter(
             gown_id=item.gown_id, start_date__lte=return_date, end_date__gte=rental_date,
-        ).order_by("start_date").first()
+        )
+        # This item's OWN trailing cooldown isn't a foreign obstacle -- it's about to
+        # be moved to sit after whatever return_date is being saved right now (see
+        # _resync_cooldown_block below), so it must never block its own reschedule.
+        .exclude(auto_for_item=item)
+        .order_by("start_date").first()
     )
     if block:
         return (
@@ -320,6 +325,22 @@ def _schedule_conflict(item, rental_date, return_date):
             f"don't overlap."
         )
     return None
+
+
+def _resync_cooldown_block(item, base_date):
+    """Move this item's auto-created cooldown block (if it still has one) to sit
+    right after base_date, matching reservation_submit's own [+1, +3] window.
+
+    If staff already released/deleted it, that choice is respected -- this never
+    recreates one. getattr is safe here: Django raises RelatedObjectDoesNotExist
+    (an AttributeError subclass) for a reverse one-to-one with nothing on the other
+    end, exactly like a missing plain attribute."""
+    block = getattr(item, "auto_cooldown_block", None)
+    if block is None:
+        return
+    block.start_date = base_date + timedelta(days=1)
+    block.end_date = base_date + timedelta(days=3)
+    block.save(update_fields=["start_date", "end_date"])
 
 
 def _other_holds_by_gown(gown_ids):
@@ -342,7 +363,10 @@ def _other_holds_by_gown(gown_ids):
         })
     for block in GownUnavailability.objects.filter(gown_id__in=gown_ids, end_date__gte=today):
         holds[block.gown_id].append({
-            "itemId": None, "start": block.start_date.isoformat(),
+            # A block's own auto_for_item_id (None for a manual staff block) lets the
+            # calendar recognize "this is the very item I'm viewing's own cooldown",
+            # instead of always reading as an unrelated hold.
+            "itemId": block.auto_for_item_id, "start": block.start_date.isoformat(),
             "end": block.end_date.isoformat(), "label": f"Blocked · {block.get_reason_display()}",
         })
     for gown_holds in holds.values():
@@ -821,7 +845,10 @@ def gown_catalog_view(request):
             # live suggestion all read -- see GOWN_COLOR_PRESETS's own docstring.
             "color_presets": [{"name": n, "code": c} for n, c in GOWN_COLOR_PRESETS],
             "gown_blocks": dict(blocks_by_gown),
-            "block_reasons": GownUnavailability.Reason.values,
+            # Cooldown is left out on purpose -- it's the label the system uses for
+            # its own auto-added post-rental blocks (see reservation_submit), not a
+            # reason a staff member would ever pick by hand for a new one.
+            "block_reasons": [r for r in GownUnavailability.Reason.values if r != GownUnavailability.Reason.COOLDOWN],
             "today_iso": today.isoformat(),
             "blocked_today_count": sum(
                 1 for rows in blocks_by_gown.values() if any(r["active"] for r in rows)
@@ -1606,6 +1633,13 @@ def reservation_item_mark_returned_view(request, item_id):
         item.gown.status = Gown.Status.OUT_OF_STOCK if needs_repair else Gown.Status.AVAILABLE
         item.gown.last_returned_at = timezone.localdate()
         item.gown.save(update_fields=["condition", "status", "last_returned_at", "updated_at"])
+        # Good condition only: resync the cooldown to the ACTUAL return day, which
+        # may be earlier or later than what was planned. Skipped for needs-repair --
+        # Out-of-Stock already keeps the gown off the market indefinitely on its own,
+        # so a temporary cooldown window would be redundant (and, if left stale,
+        # confusing once staff restore it to Available later).
+        if not needs_repair:
+            _resync_cooldown_block(item, item.returned_on)
 
     return JsonResponse({
         "success": True, "stage": item.stage,
@@ -1795,6 +1829,12 @@ def reservation_item_reschedule_view(request, item_id):
         update_fields.append("picked_up_on")
     item.save(update_fields=update_fields)
 
+    # The gown's own trailing cooldown moves with its return date -- otherwise
+    # extending (or shortening) a stay would leave the cooldown sitting after
+    # whatever the return date used to be, not where it's supposed to be now.
+    if item.gown_id and return_date != was_dates[2]:
+        _resync_cooldown_block(item, return_date)
+
     # "Picked up" is the milestone a customer cares about, so it gets its own event and
     # takes precedence over the generic status line that caused it.
     if not was_picked_up and item.picked_up_on and item.picked_up_on <= today:
@@ -1934,6 +1974,12 @@ def reservation_item_set_actual_date_view(request, item_id):
 
     setattr(item, field, new_value)
     item.save(update_fields=[field, "updated_at"])
+
+    # Correcting an already-recorded return date (e.g. staff fixes a typo after the
+    # fact) must move the cooldown along with it -- effective_return_date falls back
+    # to the planned return_date if this correction just cleared the real one.
+    if field == "returned_on" and item.gown_id:
+        _resync_cooldown_block(item, item.effective_return_date)
 
     label = "picked-up" if field == "picked_up_on" else "return"
     detail = (

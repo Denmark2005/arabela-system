@@ -275,6 +275,7 @@ class GownUnavailability(models.Model):
         CLEANING = 'Cleaning', 'Cleaning'
         REPAIR = 'Repair', 'Repair'
         ALTERATION = 'Alteration', 'Alteration'
+        COOLDOWN = 'Cooldown', 'Cooldown'
         OTHER = 'Other', 'Other'
 
     gown = models.ForeignKey(
@@ -285,6 +286,17 @@ class GownUnavailability(models.Model):
     reason = models.CharField(max_length=20, choices=Reason.choices, default=Reason.CLEANING)
     note = models.CharField(max_length=200, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    # The ReservationItem this block was auto-created for, if it was the system that
+    # created it (reason=COOLDOWN) rather than a staff member typing in a manual
+    # cleaning/repair range. Lets reschedule/mark-returned find and resync "their"
+    # block, without ever recreating one a staff member already deleted on purpose.
+    # String reference: reservations.models already imports Gown from this module,
+    # so importing ReservationItem here directly would be a circular import.
+    auto_for_item = models.OneToOneField(
+        'reservations.ReservationItem', null=True, blank=True,
+        on_delete=models.CASCADE, related_name='auto_cooldown_block',
+    )
 
     class Meta:
         ordering = ['start_date', 'id']

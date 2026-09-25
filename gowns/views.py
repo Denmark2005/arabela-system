@@ -835,7 +835,7 @@ def reservation_submit(request):
             total_amount=total_amount,
         )
         for item in parsed_items:
-            ReservationItem.objects.create(
+            created_item = ReservationItem.objects.create(
                 reservation=reservation_obj,
                 gown=item["matched_gown"],
                 gown_name=item["gown_name"][:150],
@@ -847,6 +847,24 @@ def reservation_submit(request):
                 original_rental_date=item["rental_date"],
                 original_return_date=item["return_date"],
             )
+            # Automatic 3-day cooldown after the return date -- combined with the
+            # existing 2-day return buffer and the reach-back that already blocks a
+            # NEW event date whose own pickup window would touch a booked day, this
+            # adds up to the shop's full 7-days-after-the-event policy. Staff/owner
+            # can shorten or delete it early from Gown Catalog's Blocked Dates, the
+            # exact same tool they already use for a cleaning/repair gap -- see
+            # GownUnavailability.Reason.COOLDOWN and arabela_admin/views.py's
+            # _resync_cooldown_block, which keeps this in sync on reschedule/return.
+            if item["matched_gown"] is not None:
+                GownUnavailability.objects.create(
+                    gown=item["matched_gown"],
+                    start_date=item["return_date"] + timedelta(days=1),
+                    end_date=item["return_date"] + timedelta(days=3),
+                    reason=GownUnavailability.Reason.COOLDOWN,
+                    note="Auto-added post-rental cooldown. Shorten or release it once "
+                         "the gown's checked and ready to go out again.",
+                    auto_for_item=created_item,
+                )
 
         # Recorded inside the same atomic block as the rows it describes: if the
         # reservation rolls back, its history must not survive it.

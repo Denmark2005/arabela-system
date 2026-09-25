@@ -287,6 +287,13 @@ class ReservationItem(models.Model):
         return max(self.rental_date, self.return_date - timedelta(days=2))
 
     @property
+    def effective_return_date(self):
+        """The date this item's rental actually ended, or is scheduled to end.
+        Mirrors effective_event_date's shape: returned_on is the ground truth once
+        the gown is physically back; until then return_date is the plan."""
+        return self.returned_on or self.return_date
+
+    @property
     def can_customer_cancel(self):
         """Whether the customer can self-cancel from this item. Cancelling is a
         whole-Reservation action (mirrors reservation_approve/reject_view, which act
