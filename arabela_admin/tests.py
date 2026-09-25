@@ -1925,7 +1925,10 @@ class ReceiptRecordsTests(TestCase):
         self.assertNotIn("RSV-0142", html)
         self.assertNotIn("Maria Santos", html)
         self.assertNotIn("Customer Name</label>", html)
-        self.assertIn("Reservation Reference Code", html)
+        # The booking is searched for and PICKED (never a typed customer name), and the
+        # receipt is still filed under that reservation's reference code.
+        self.assertIn(reverse("arabela_admin:receipt_reservation_search"), html)
+        self.assertIn("pickReservation(", html)
         for leak in ("{%", "{{", "{#"):
             self.assertNotIn(leak, html)
 
@@ -2034,3 +2037,106 @@ class ReceiptRecordsTests(TestCase):
         html = self.client.get(reverse("arabela_admin:receipt_records")).content.decode()
         self.assertIn(':href="viewingReceipt.photoUrl"', html)
         self.assertIn('target="_blank"', html)
+
+    def test_each_receipt_row_names_the_staff_member_who_uploaded_it(self):
+        response = self.client.post(reverse("arabela_admin:receipt_upload"), data={
+            "reference_code": self.reservation.reference_code, "photo": _make_jpeg(),
+        })
+        self.assertEqual(response.json()["receipt"]["uploadedBy"], "Ana Cruz")
+        html = self.client.get(reverse("arabela_admin:receipt_records")).content.decode()
+        self.assertIn(">Uploaded By<", html)
+
+
+class ReservationRecordsTests(TestCase):
+    """Reservation Records -- one row per reservation with its dates, where it actually
+    is, the deposit, and every manual receipt (with who uploaded it), plus the live
+    reservation search behind Receipt Records' picker. _save_receipt_photo is mocked:
+    this environment's default storage is real Cloudinary."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            username="records_test_staff", password="x", is_staff=True,
+            first_name="Ana", last_name="Cruz")
+        UserProfile.objects.update_or_create(user=cls.staff, defaults={"role": UserProfile.Role.STAFF})
+        cls.customer = User.objects.create_user(
+            username="records_test_customer", password="x", email="records.maria@gmail.com")
+        UserProfile.objects.update_or_create(user=cls.customer, defaults={"display_name": "Maria Records"})
+
+    def setUp(self):
+        self.client.force_login(self.staff)
+        patcher = patch("arabela_admin.views._save_receipt_photo",
+                        side_effect=lambda f: f"https://example.test/receipts/{f.name}")
+        self.addCleanup(patcher.stop)
+        patcher.start()
+        self.today = date.today()
+        self.two_gowns = Reservation.objects.create(
+            customer=self.customer, customer_name="Maria Records",
+            status=Reservation.Status.CONFIRMED, security_deposit=Decimal("4000"))
+        ReservationItem.objects.create(
+            reservation=self.two_gowns, gown_name="Records Gown A",
+            rental_date=self.today - timedelta(days=1), return_date=self.today + timedelta(days=3),
+            stage=ReservationItem.Stage.RESERVED)
+        ReservationItem.objects.create(
+            reservation=self.two_gowns, gown_name="Records Gown B",
+            rental_date=self.today, return_date=self.today + timedelta(days=5))
+
+    def _records(self):
+        html = self.client.get(reverse("arabela_admin:reservation_records")).content.decode()
+        match = re.search(
+            r'<script id="reservation-records-data" type="application/json">(.*?)</script>', html, re.S)
+        return {r["reference"]: r for r in json.loads(match.group(1))}
+
+    def test_one_row_per_reservation_with_its_full_window(self):
+        row = self._records()[self.two_gowns.reference_code]
+        self.assertEqual(row["gownSummary"], "Records Gown A + 1 more")
+        self.assertEqual(row["start"], (self.today - timedelta(days=1)).isoformat())
+        self.assertEqual(row["end"], (self.today + timedelta(days=5)).isoformat())
+        self.assertEqual(len(row["items"]), 2)
+
+    def test_status_follows_the_gowns_not_the_frozen_reservation_status(self):
+        # reservation.status stays "Confirmed" after the gown goes out and comes back;
+        # the row must say where the booking actually is.
+        self.assertEqual(self._records()[self.two_gowns.reference_code]["progress"], "With customer")
+        self.two_gowns.items.update(stage=ReservationItem.Stage.RETURNED)
+        self.assertEqual(self._records()[self.two_gowns.reference_code]["progress"], "Completed")
+
+    def test_deposit_status_and_security_deposits_link(self):
+        row = self._records()[self.two_gowns.reference_code]
+        self.assertEqual(row["depositStatus"], "Held")
+        self.assertEqual(row["deposit"], "₱4,000.00")
+        self.assertTrue(row["depositLink"].endswith("?search=" + self.two_gowns.reference_code))
+        cancelled = Reservation.objects.create(
+            customer=self.customer, customer_name="Maria Records", status=Reservation.Status.CANCELLED)
+        row = self._records()[cancelled.reference_code]
+        self.assertEqual(row["depositStatus"], "Not held")
+        self.assertEqual(row["depositLink"], "")
+
+    def test_receipts_show_who_uploaded_them(self):
+        self.client.post(reverse("arabela_admin:receipt_upload"), data={
+            "reference_code": self.two_gowns.reference_code, "photo": _make_jpeg(),
+        })
+        receipts = self._records()[self.two_gowns.reference_code]["receipts"]
+        self.assertEqual(len(receipts), 1)
+        self.assertEqual(receipts[0]["uploadedBy"], "Ana Cruz")
+
+    def test_staff_only(self):
+        self.client.logout()
+        self.assertEqual(self.client.get(reverse("arabela_admin:reservation_records")).status_code, 302)
+        self.client.force_login(self.customer)
+        self.assertEqual(self.client.get(reverse("arabela_admin:reservation_records")).status_code, 302)
+        response = self.client.get(reverse("arabela_admin:receipt_reservation_search"), {"q": "maria"})
+        self.assertEqual(response.status_code, 401)
+
+    def test_picker_search_finds_by_name_email_reference_and_gown(self):
+        url = reverse("arabela_admin:receipt_reservation_search")
+        for query in ("Maria Records", "records.maria", self.two_gowns.reference_code, "Records Gown B"):
+            results = self.client.get(url, {"q": query}).json()["results"]
+            self.assertIn(self.two_gowns.reference_code, [r["reference"] for r in results], query)
+        self.assertEqual(self.client.get(url, {"q": "m"}).json()["results"], [])
+        self.assertEqual(self.client.get(url, {"q": "nobody-by-this-name"}).json()["results"], [])
+
+    def test_client_list_links_to_the_customers_history(self):
+        html = self.client.get(reverse("arabela_admin:clients")).content.decode()
+        self.assertIn(
+            reverse("arabela_admin:reservation_records") + "?customer=' + viewingCustomer.userId", html)

@@ -8,170 +8,441 @@
       content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0"
     />
     <meta http-equiv="X-UA-Compatible" content="ie=edge" />
-    <title>Calendar | Arabela System Admin Panel</title>
+    <title>Reservation Records | Arabela System Admin Panel</title>
     <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
   <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet">
-  <link href="{% static 'arabela_admin/css/calendar.css' %}" rel="stylesheet">
-  <style>
-    /* Bolder, clearly-distinguishable booking colours (yellow/green/blue/red) with
-       readable text -- the precompiled palette used pale -50 backgrounds with the
-       same grey text for every state, which was hard to tell apart at a glance. */
-    .event-fc-color.fc-bg-warning { background-color: #F59E0B; border-color: #F59E0B; }
-    .event-fc-color.fc-bg-warning .fc-event-title { color: #78350F; font-weight: 600; }
-    .event-fc-color.fc-bg-success { background-color: #16A34A; border-color: #16A34A; }
-    .event-fc-color.fc-bg-success .fc-event-title { color: #FFFFFF; font-weight: 600; }
-    .event-fc-color.fc-bg-primary { background-color: #2563EB; border-color: #2563EB; }
-    .event-fc-color.fc-bg-primary .fc-event-title { color: #FFFFFF; font-weight: 600; }
-    .event-fc-color.fc-bg-danger { background-color: #DC2626; border-color: #DC2626; }
-    .event-fc-color.fc-bg-danger .fc-event-title { color: #FFFFFF; font-weight: 600; }
-    /* Maintenance blocks (cleaning/repair) aren't customer bookings, so they read as a
-       neutral slate rather than competing with the four booking colours. */
-    .event-fc-color.fc-bg-blocked { background-color: #64748B; border-color: #64748B; }
-    .event-fc-color.fc-bg-blocked .fc-event-title { color: #FFFFFF; font-weight: 600; }
-    .event-fc-color.fc-bg-blocked .fc-daygrid-event-dot { background-color: #64748B; }
-    .event-fc-color.fc-bg-blocked { cursor: default; }
-    .event-fc-color.fc-bg-warning .fc-daygrid-event-dot { background-color: #F59E0B; }
-    .event-fc-color.fc-bg-success .fc-daygrid-event-dot { background-color: #16A34A; }
-    .event-fc-color.fc-bg-primary .fc-daygrid-event-dot { background-color: #2563EB; }
-    .event-fc-color.fc-bg-danger .fc-daygrid-event-dot { background-color: #DC2626; }
-
-    /* Long titles (e.g. "Overdue · Denmark Concepcion — Dresses One") truncate cleanly
-       with an ellipsis instead of wrapping or overflowing a narrow day cell. */
-    .fc-event-title {
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    /* Busy days (many bookings landing on the same date -- e.g. several customers with
-       the same event day) are capped via dayMaxEvents so the week row never balloons in
-       height; the rest collapse into a "+N more" link that opens a small readable list. */
-    .fc-daygrid-more-link {
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: #465FFF;
-      padding: 2px 6px;
-    }
-    .fc-daygrid-more-link:hover { text-decoration: underline; }
-    .dark .fc-daygrid-more-link { color: #8098FF; }
-
-    .fc-popover {
-      background: #FFFFFF;
-      border: 1px solid #E5E7EB;
-      border-radius: 0.75rem;
-      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.15), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
-      overflow: hidden;
-      z-index: 99999;
-    }
-    .dark .fc-popover { background: #101828; border-color: #344054; }
-    .fc-popover-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.75rem;
-      padding: 0.5rem 0.75rem;
-      background: #F9FAFB;
-      border-bottom: 1px solid #E5E7EB;
-    }
-    .dark .fc-popover-header { background: #1D2939; border-color: #344054; }
-    .fc-popover-title { font-size: 0.75rem; font-weight: 600; color: #1D2939; }
-    .dark .fc-popover-title { color: #D0D5DD; }
-    .fc-popover-close {
-      font-size: 1rem;
-      line-height: 1;
-      color: #667085;
-      cursor: pointer;
-      background: none;
-      border: none;
-    }
-    .dark .fc-popover-close { color: #98A2B3; }
-    .fc-popover-body {
-      padding: 0.5rem;
-      max-height: 320px;
-      overflow-y: auto;
-    }
-    .fc-popover-body .fc-daygrid-event { margin-bottom: 4px; }
-
-    /* The four status-date inputs in a 2x2 grid on wider screens (defined here since
-       these grid utilities aren't in the precompiled stylesheet). */
-    .booking-date-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
-    @media (min-width: 640px) {
-      .booking-date-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    }
-
-    /* "This gown is also booked" box + live clash warning in Booking Details -- same
-       palette as the status/condition chips below, defined here since the precompiled
-       stylesheet can't be extended. */
-    .booking-holds {
-      border: 1px solid #E5E7EB;
-      border-radius: 0.75rem;
-      background: #F9FAFB;
-      padding: 0.75rem 0.875rem;
-    }
-    .dark .booking-holds { border-color: #374151; background: rgba(255, 255, 255, 0.03); }
-    .booking-holds-title { font-size: 0.75rem; font-weight: 600; color: #374151; margin: 0 0 0.375rem; }
-    .dark .booking-holds-title { color: #D1D5DB; }
-    .booking-holds-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.25rem; }
-    .booking-holds-list li {
-      display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.375rem;
-      font-size: 0.75rem; color: #667085; border-radius: 0.375rem; padding: 0.125rem 0.375rem;
-      transition: background-color .15s ease, color .15s ease;
-    }
-    .dark .booking-holds-list li { color: #98A2B3; }
-    .booking-holds-list .booking-hold-dates { font-weight: 600; color: #374151; font-variant-numeric: tabular-nums; }
-    .dark .booking-holds-list .booking-hold-dates { color: #D1D5DB; }
-    .booking-holds-list li.is-clash { background: #FEF3F2; color: #B42318; }
-    .booking-holds-list li.is-clash .booking-hold-dates { color: #B42318; }
-    .dark .booking-holds-list li.is-clash { background: rgba(240, 68, 56, 0.12); color: #F97066; }
-    .dark .booking-holds-list li.is-clash .booking-hold-dates { color: #F97066; }
-    .booking-hold-warning { font-size: 0.8125rem; font-weight: 500; color: #D92D20; margin: 0; }
-    .dark .booking-hold-warning { color: #F97066; }
-
-    /* Status picker chips -- same 4 colours as the calendar events/legend, so choosing a
-       status previews the exact colour the booking will show once saved. */
-    .booking-status-chip {
-      border: 1px solid #E5E7EB;
-      border-radius: 9999px;
-      padding: 0.5rem 1rem;
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: #374151;
-      background: #FFFFFF;
-      cursor: pointer;
-      transition: background-color .15s ease, border-color .15s ease, color .15s ease;
-    }
-    .dark .booking-status-chip { border-color: #374151; color: #D1D5DB; background: #1F2937; }
-    .booking-status-chip:hover { opacity: 0.85; }
-    .booking-status-chip[data-status="Pick-up"].is-selected { background: #F59E0B; border-color: #F59E0B; color: #78350F; }
-    .booking-status-chip[data-status="Reserved"].is-selected { background: #16A34A; border-color: #16A34A; color: #FFFFFF; }
-    .booking-status-chip[data-status="Overdue"].is-selected { background: #DC2626; border-color: #DC2626; color: #FFFFFF; }
-
-    /* Return-condition chips on the Mark Returned step -- staff records the gown's checked-in
-       condition here (same palette family as the status chips, kept visually distinct). */
-    .booking-condition-chip {
-      border: 1px solid #E5E7EB;
-      border-radius: 9999px;
-      padding: 0.5rem 1rem;
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: #374151;
-      background: #FFFFFF;
-      cursor: pointer;
-      transition: background-color .15s ease, border-color .15s ease, color .15s ease;
-    }
-    .dark .booking-condition-chip { border-color: #374151; color: #D1D5DB; background: #1F2937; }
-    .booking-condition-chip:hover { opacity: 0.85; }
-    .booking-condition-chip[data-condition="Good"].is-selected { background: #16A34A; border-color: #16A34A; color: #FFFFFF; }
-    .booking-condition-chip[data-condition="Needs Repair"].is-selected { background: #DC2626; border-color: #DC2626; color: #FFFFFF; }
-  </style>
-  </head>
+  {% include "arabela_admin/partials/photo_viewer_styles.html" %}
+    {% include "arabela_admin/partials/timeline_styles.html" %}
+    <style>
+      /* Reservation Records -- page-scoped (rr-) styles for the few layout needs the
+         precompiled admin CSS doesn't ship (it only has the classes the template pack
+         itself used). Colours are the admin theme's own gray/brand values. */
+      [x-cloak] { display: none !important; }
+      .rr-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+      .rr-stat { display: block; width: 100%; text-align: left; border-radius: 1rem; border: 1px solid #e4e7ec; background: #fff; padding: 1.25rem; transition: background-color .15s, border-color .15s; }
+      .rr-stat:hover { background: #f9fafb; }
+      .rr-stat.is-on { border-color: #465fff; box-shadow: 0 0 0 1px #465fff inset; }
+      .dark .rr-stat { border-color: #1d2939; background: rgba(255,255,255,.03); }
+      .dark .rr-stat:hover { background: rgba(255,255,255,.06); }
+      .dark .rr-stat.is-on { border-color: #7592ff; box-shadow: 0 0 0 1px #7592ff inset; }
+      .rr-stat-hint { margin-top: .25rem; font-size: .75rem; color: #98a2b3; }
+      .rr-filters { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
+      .rr-grow { flex: 1 1 260px; min-width: 0; }
+      .rr-fixed { flex: 0 0 auto; }
+      .rr-seg { display: inline-flex; flex-wrap: wrap; gap: .25rem; padding: .25rem; border-radius: .75rem; background: #f2f4f7; }
+      .dark .rr-seg { background: rgba(255,255,255,.05); }
+      .rr-seg button { padding: .45rem .8rem; border-radius: .55rem; font-size: .8125rem; font-weight: 500; color: #667085; white-space: nowrap; }
+      .rr-seg button.is-on { background: #fff; color: #1d2939; box-shadow: 0 1px 2px rgba(16,24,40,.08); }
+      .dark .rr-seg button { color: #98a2b3; }
+      .dark .rr-seg button.is-on { background: #1d2939; color: #fff; }
+      .rr-date { color-scheme: light; }
+      .dark .rr-date { color-scheme: dark; }
+      .rr-nowrap { white-space: nowrap; }
+      .rr-clip { display: block; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .rr-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: .125rem .625rem; font-size: .75rem; font-weight: 500; white-space: nowrap; }
+      .rr-row { cursor: pointer; transition: background-color .15s; }
+      .rr-row:hover { background: #f9fafb; }
+      .dark .rr-row:hover { background: rgba(255,255,255,.03); }
+      .rr-row.is-highlight { background: #ecf3ff; }
+      .dark .rr-row.is-highlight { background: rgba(70,95,255,.12); }
+      .rr-link { color: #465fff; font-weight: 500; }
+      .rr-link:hover { text-decoration: underline; }
+      .dark .rr-link { color: #7592ff; }
+      .rr-chip { display: inline-flex; align-items: center; gap: .5rem; border-radius: 999px; background: #ecf3ff; color: #3641f5; padding: .375rem .5rem .375rem .875rem; font-size: .8125rem; font-weight: 500; }
+      .dark .rr-chip { background: rgba(70,95,255,.15); color: #9cb9ff; }
+      .rr-chip button { display: inline-flex; width: 1.25rem; height: 1.25rem; align-items: center; justify-content: center; border-radius: 999px; }
+      .rr-chip button:hover { background: rgba(70,95,255,.18); }
+      .rr-panel { max-width: 980px; }
+      .rr-section { margin-top: 1.5rem; border-top: 1px solid #f2f4f7; padding-top: 1.25rem; }
+      .dark .rr-section { border-top-color: #1d2939; }
+      .rr-section-title { margin-bottom: .75rem; font-size: .75rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #667085; }
+      .dark .rr-section-title { color: #98a2b3; }
+      .rr-kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .875rem 1.25rem; }
+      .rr-kv > div { min-width: 0; overflow-wrap: anywhere; }
+      .rr-mini-table { width: 100%; border-collapse: collapse; font-size: .8125rem; }
+      .rr-mini-table th { text-align: left; font-weight: 500; font-size: .75rem; color: #667085; padding: .5rem .75rem; white-space: nowrap; border-bottom: 1px solid #f2f4f7; }
+      .rr-mini-table td { padding: .625rem .75rem; color: #344054; white-space: nowrap; border-bottom: 1px solid #f2f4f7; vertical-align: top; }
+      .dark .rr-mini-table th { color: #98a2b3; border-bottom-color: #1d2939; }
+      .dark .rr-mini-table td { color: #d0d5dd; border-bottom-color: #1d2939; }
+      .rr-scroll-x { overflow-x: auto; }
+      .rr-receipt { display: flex; align-items: center; gap: .875rem; padding: .75rem; border: 1px solid #e4e7ec; border-radius: .75rem; }
+      .dark .rr-receipt { border-color: #1d2939; }
+      .rr-receipt + .rr-receipt { margin-top: .5rem; }
+      .rr-thumb { width: 3.25rem; height: 3.25rem; flex: 0 0 auto; border-radius: .5rem; object-fit: cover; background: #f2f4f7; cursor: zoom-in; }
+      .dark .rr-thumb { background: #1d2939; }
+      .rr-receipt-body { flex: 1 1 auto; min-width: 0; }
+      .rr-empty-box { border-radius: .75rem; background: #f9fafb; padding: .875rem 1rem; font-size: .8125rem; color: #667085; }
+      .dark .rr-empty-box { background: rgba(255,255,255,.03); color: #98a2b3; }
+      .rr-dropzone { border: 1px dashed #d0d5dd; border-radius: .75rem; background: #f9fafb; padding: 1.75rem 1rem; text-align: center; transition: border-color .15s; }
+      .rr-dropzone.is-over { border-color: #465fff; }
+      .dark .rr-dropzone { border-color: #344054; background: #101828; }
+      .rr-overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 1.25rem; overflow-y: auto; }
+      .rr-overlay.rr-z1 { z-index: 99999; }
+      .rr-overlay.rr-z2 { z-index: 100000; }
+      .rr-backdrop { position: fixed; inset: 0; background: rgba(152,162,179,.5); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); }
+      .rr-spinner { display: inline-block; width: .875rem; height: .875rem; border: 2px solid currentColor; border-top-color: transparent; border-radius: 999px; animation: rr-spin .8s linear infinite; }
+      @keyframes rr-spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { .rr-spinner { animation-duration: 2s; } }
+    </style>
+</head>
   <body
-    x-data="{ page: 'rental', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false }"
-    x-init="
-         darkMode = JSON.parse(localStorage.getItem('darkMode'));
-         $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)))"
+    x-data="reservationRecordsPage()"
+    @keydown.escape.window="closeTopModal()"
     :class="{'dark bg-gray-900': darkMode === true}"
   >
+    <!-- Server data first, so it is in the DOM before Alpine (deferred) initializes. -->
+    {{ records|json_script:"reservation-records-data" }}
+    {{ date_ranges|json_script:"reservation-records-ranges" }}
+
+    <!-- One status history per reservation, rendered server-side by the SAME shared
+         partial Active Reservations and Pending Approval use, and copied into the detail
+         view on open. Django auto-escapes everything in it, so x-html of this is safe. -->
+    {% for r in reservations %}
+      <template id="rr-timeline-{{ r.id }}">{% include "arabela_admin/partials/timeline_rows.html" with timeline=r.timeline %}</template>
+    {% endfor %}
+
+    <script>
+      function reservationRecordsPage() {
+        var UPLOAD_URL = '{% url "arabela_admin:receipt_upload" %}';
+
+        // A phone camera photo of a paper receipt is routinely 5-15MB -- over the 5MB
+        // receipt limit. Shrink anything large before it's sent; small files and
+        // screenshots are left untouched, and any failure falls back to the original
+        // file (same helper as the customer checkout's proof-of-payment upload).
+        function compressImageFile(file) {
+          var SKIP_BELOW_BYTES = 1.5 * 1024 * 1024;
+          var MAX_DIMENSION = 1600;
+          var QUALITY = 0.82;
+          return new Promise(function (resolve) {
+            if (!file || !file.type || file.type.indexOf('image/') !== 0 || file.size <= SKIP_BELOW_BYTES) {
+              resolve(file);
+              return;
+            }
+            var objectUrl = URL.createObjectURL(file);
+            var img = new Image();
+            img.onload = function () {
+              URL.revokeObjectURL(objectUrl);
+              var scale = Math.min(1, MAX_DIMENSION / Math.max(img.width, img.height));
+              var w = Math.max(1, Math.round(img.width * scale));
+              var h = Math.max(1, Math.round(img.height * scale));
+              var canvas = document.createElement('canvas');
+              canvas.width = w;
+              canvas.height = h;
+              var ctx = canvas.getContext('2d');
+              if (!ctx) { resolve(file); return; }
+              ctx.drawImage(img, 0, 0, w, h);
+              canvas.toBlob(function (blob) {
+                if (!blob || blob.size >= file.size) { resolve(file); return; }
+                resolve(new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' }));
+              }, 'image/jpeg', QUALITY);
+            };
+            img.onerror = function () {
+              URL.revokeObjectURL(objectUrl);
+              resolve(file);
+            };
+            img.src = objectUrl;
+          });
+        }
+
+        return {
+          // Read by the shared sidebar/header markup on every admin page.
+          page: 'reservation-records', loaded: true, darkMode: false, stickyMenu: false, sidebarToggle: false, scrollTop: false,
+
+          records: JSON.parse(document.getElementById('reservation-records-data').textContent),
+          ranges: JSON.parse(document.getElementById('reservation-records-ranges').textContent),
+          progressOptions: ['Pending approval', 'Awaiting pickup', 'With customer', 'Partly returned', 'Overdue', 'Completed', 'Rejected', 'Cancelled'],
+
+          search: '',
+          dateFilter: 'all',
+          customFrom: '',
+          customTo: '',
+          statusFilter: 'All',
+          receiptFilter: 'All',
+          customerFilter: null,
+          customerFilterName: '',
+          filtering: false,
+          filterTimeout: null,
+
+          openDetail: false,
+          viewing: null,
+          openPhoto: false,
+          photo: {},
+          openUpload: false,
+          uploadFor: null,
+          uploadFile: null,
+          uploadFileName: '',
+          uploadPreviewUrl: null,
+          uploadDragOver: false,
+          uploadBusy: false,
+          uploadPreparing: false,
+          uploadError: '',
+          showUploadToast: false,
+          uploadToastTimeout: null,
+
+          init() {
+            this.darkMode = JSON.parse(localStorage.getItem('darkMode'));
+            this.$watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)));
+
+            // Deep links: ?search= from anywhere (e.g. a Receipt Records reference
+            // code), ?customer=<account id> from Client List's "View Reservation History".
+            const params = new URLSearchParams(window.location.search);
+            const presetSearch = params.get('search');
+            if (presetSearch) { this.search = presetSearch; }
+            const presetCustomer = parseInt(params.get('customer'), 10);
+            if (!isNaN(presetCustomer)) {
+              const match = this.records.find(r => r.customerId === presetCustomer);
+              this.customerFilter = presetCustomer;
+              this.customerFilterName = match ? match.customer : 'this customer';
+            }
+            // Keep the address bar matching what's on screen, so a reload lands back here.
+            this.$watch('search', () => this.syncUrl());
+            this.$watch('customerFilter', () => this.syncUrl());
+          },
+
+          syncUrl() {
+            const params = new URLSearchParams(window.location.search);
+            this.search ? params.set('search', this.search) : params.delete('search');
+            this.customerFilter !== null ? params.set('customer', this.customerFilter) : params.delete('customer');
+            const query = params.toString();
+            history.replaceState(null, '', window.location.pathname + (query ? '?' + query : ''));
+          },
+
+          flash() {
+            this.filtering = true;
+            clearTimeout(this.filterTimeout);
+            this.filterTimeout = setTimeout(() => this.filtering = false, 300);
+          },
+
+          getCsrfToken() {
+            const m = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
+            return m ? decodeURIComponent(m[1]) : '';
+          },
+
+          // [from, to] as YYYY-MM-DD strings, or null for "all time". A single custom
+          // date (only one box filled) means just that day.
+          dateRange(mode) {
+            switch (mode) {
+              case 'today': return [this.ranges.today, this.ranges.today];
+              case 'week': return [this.ranges.weekStart, this.ranges.weekEnd];
+              case 'month': return [this.ranges.monthStart, this.ranges.monthEnd];
+              case 'custom': {
+                const from = this.customFrom || this.customTo;
+                const to = this.customTo || this.customFrom;
+                if (!from) { return null; }
+                return from <= to ? [from, to] : [to, from];
+              }
+              default: return null;
+            }
+          },
+
+          // A reservation belongs to a date range when any day of its rental
+          // (first pick-up to last return) falls inside it.
+          inRange(r, range) {
+            return !range || (r.start <= range[1] && r.end >= range[0]);
+          },
+
+          needsReceipt(r) {
+            return r.receipts.length === 0 && (r.depositStatus === 'Held' || r.depositStatus === 'Returned');
+          },
+
+          inCustomerScope(r) {
+            return this.customerFilter === null || r.customerId === this.customerFilter;
+          },
+
+          matches(r) {
+            if (!this.inCustomerScope(r)) { return false; }
+            if (this.statusFilter !== 'All' && r.progress !== this.statusFilter) { return false; }
+            if (this.receiptFilter === 'has' && r.receipts.length === 0) { return false; }
+            if (this.receiptFilter === 'needs' && !this.needsReceipt(r)) { return false; }
+            if (!this.inRange(r, this.dateRange(this.dateFilter))) { return false; }
+            const q = this.search.trim().toLowerCase();
+            if (q && !r.q.includes(q)) { return false; }
+            return true;
+          },
+
+          get visibleRecords() {
+            return this.records.filter(r => this.matches(r));
+          },
+
+          get scopedRecords() {
+            return this.records.filter(r => this.inCustomerScope(r));
+          },
+
+          // Card counts follow the customer filter too, so arriving from Client List
+          // shows THAT customer's totals.
+          countFor(mode) {
+            if (mode === 'needs') { return this.scopedRecords.filter(r => this.needsReceipt(r)).length; }
+            const range = this.dateRange(mode);
+            return this.scopedRecords.filter(r => this.inRange(r, range)).length;
+          },
+
+          // A card is a quick view: it clears the other filters so the rows shown are
+          // exactly the number on the card (the customer filter, if any, stays).
+          applyCard(mode) {
+            this.search = '';
+            this.statusFilter = 'All';
+            this.customFrom = '';
+            this.customTo = '';
+            if (mode === 'needs') {
+              this.dateFilter = 'all';
+              this.receiptFilter = 'needs';
+            } else {
+              this.dateFilter = mode;
+              this.receiptFilter = 'All';
+            }
+            this.flash();
+          },
+
+          cardActive(mode) {
+            if (this.search || this.statusFilter !== 'All') { return false; }
+            if (mode === 'needs') { return this.receiptFilter === 'needs' && this.dateFilter === 'all'; }
+            return this.dateFilter === mode && this.receiptFilter === 'All';
+          },
+
+          setDateFilter(mode) {
+            this.dateFilter = mode;
+            this.flash();
+          },
+
+          clearCustomerFilter() {
+            this.customerFilter = null;
+            this.customerFilterName = '';
+            this.flash();
+          },
+
+          resetFilters() {
+            this.search = '';
+            this.dateFilter = 'all';
+            this.customFrom = '';
+            this.customTo = '';
+            this.statusFilter = 'All';
+            this.receiptFilter = 'All';
+            this.flash();
+          },
+
+          progressClass(progress) {
+            switch (progress) {
+              case 'Completed': return 'bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500';
+              case 'Overdue':
+              case 'Rejected': return 'bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500';
+              case 'Pending approval': return 'bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400';
+              case 'With customer':
+              case 'Partly returned': return 'bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400';
+              case 'Awaiting pickup': return 'bg-blue-light-50 text-blue-light-500 dark:bg-blue-light-500/15 dark:text-blue-light-500';
+              default: return 'bg-gray-100 text-gray-700 dark:bg-white/5 dark:text-white/80';
+            }
+          },
+
+          depositClass(status) {
+            switch (status) {
+              case 'Returned': return 'bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500';
+              case 'Held': return 'bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400';
+              case 'Awaiting verification': return 'bg-blue-light-50 text-blue-light-500 dark:bg-blue-light-500/15 dark:text-blue-light-500';
+              default: return 'bg-gray-100 text-gray-700 dark:bg-white/5 dark:text-white/80';
+            }
+          },
+
+          isHighlighted(r) {
+            return this.search !== '' && r.reference.toLowerCase() === this.search.trim().toLowerCase();
+          },
+
+          openRecord(r) {
+            this.viewing = r;
+            this.openDetail = true;
+          },
+
+          timelineHtml(record) {
+            if (!record) { return ''; }
+            const tpl = document.getElementById('rr-timeline-' + record.id);
+            return tpl ? tpl.innerHTML : '';
+          },
+
+          viewPhoto(receipt, record) {
+            this.photo = {
+              url: receipt.photoUrl,
+              customer: record ? record.customer : receipt.customer,
+              reference: record ? record.reference : receipt.reservation,
+              uploaded: receipt.uploaded,
+              uploadedBy: receipt.uploadedBy || '',
+            };
+            this.openPhoto = true;
+          },
+
+          startUpload(record) {
+            this.uploadFor = record;
+            this.clearUploadFile();
+            this.uploadError = '';
+            this.openUpload = true;
+          },
+
+          handleUploadFile(file) {
+            if (!file) { return; }
+            this.uploadError = '';
+            this.uploadPreparing = true;
+            compressImageFile(file)
+              .catch(() => file)
+              .then(ready => {
+                this.uploadPreparing = false;
+                if (this.uploadPreviewUrl) { URL.revokeObjectURL(this.uploadPreviewUrl); }
+                this.uploadFile = ready || file;
+                this.uploadFileName = file.name;
+                this.uploadPreviewUrl = URL.createObjectURL(this.uploadFile);
+              });
+          },
+
+          clearUploadFile() {
+            if (this.uploadPreviewUrl) { URL.revokeObjectURL(this.uploadPreviewUrl); }
+            this.uploadFile = null;
+            this.uploadFileName = '';
+            this.uploadPreviewUrl = null;
+            if (this.$refs.rrFileInput) { this.$refs.rrFileInput.value = ''; }
+            if (this.$refs.rrCameraInput) { this.$refs.rrCameraInput.value = ''; }
+          },
+
+          closeUpload() {
+            if (this.uploadBusy) { return; }
+            this.openUpload = false;
+            this.clearUploadFile();
+            this.uploadError = '';
+          },
+
+          submitUpload() {
+            if (!this.uploadFor || this.uploadBusy) { return; }
+            if (this.uploadPreparing) { this.uploadError = 'Still preparing the photo -- one moment.'; return; }
+            if (!this.uploadFile) { this.uploadError = 'Please attach a photo of the receipt.'; return; }
+            this.uploadBusy = true;
+            this.uploadError = '';
+            const target = this.uploadFor;
+            const form = new FormData();
+            form.append('reference_code', target.reference);
+            form.append('photo', this.uploadFile);
+            fetch(UPLOAD_URL, { method: 'POST', headers: { 'X-CSRFToken': this.getCsrfToken() }, body: form })
+              .then(r => r.json().then(data => ({ ok: r.ok, data })))
+              .then(({ ok, data }) => {
+                this.uploadBusy = false;
+                if (!ok) { this.uploadError = data.error || 'Could not upload this receipt.'; return; }
+                target.receipts.unshift(data.receipt);
+                this.openUpload = false;
+                this.clearUploadFile();
+                this.showUploadToast = true;
+                clearTimeout(this.uploadToastTimeout);
+                this.uploadToastTimeout = setTimeout(() => this.showUploadToast = false, 2500);
+              })
+              .catch(() => {
+                this.uploadBusy = false;
+                this.uploadError = 'Could not upload this receipt. Please try again.';
+              });
+          },
+
+          // Escape closes whichever modal is on top, one layer at a time.
+          closeTopModal() {
+            if (this.openPhoto) { this.openPhoto = false; return; }
+            if (this.openUpload) { this.closeUpload(); return; }
+            if (this.openDetail) { this.openDetail = false; }
+          },
+        };
+      }
+    </script>
     <!-- ===== Preloader Start ===== -->
     <script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('admin-dark-boot');}catch(e){}</script>
     <div
@@ -1351,7 +1622,7 @@
         <main>
           <div class="mx-auto max-w-(--breakpoint-2xl) p-4 md:p-6">
             <!-- Breadcrumb Start -->
-            <div x-data="{ pageName: `Calendar`}">
+            <div x-data="{ pageName: `Reservation Records`}">
               <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
   <h2
     class="text-xl font-semibold text-gray-800 dark:text-white/90"
@@ -1393,333 +1664,450 @@
 </div>
 </div>
             <!-- Breadcrumb End -->
-
-            <div class="status-legend mb-3 flex flex-wrap items-center gap-4 text-[24px] font-semibold text-gray-800 dark:text-white">
-              <span class="status-legend-item inline-flex items-center gap-2">
-                <span style="display:inline-block;width:16px;height:16px;border-radius:9999px;background:#F59E0B;box-shadow:0 0 0 2px rgba(0,0,0,0.06)"></span>
-                Pick-up
-              </span>
-              <span class="status-legend-item inline-flex items-center gap-2">
-                <span style="display:inline-block;width:16px;height:16px;border-radius:9999px;background:#16A34A;box-shadow:0 0 0 2px rgba(0,0,0,0.06)"></span>
-                Reserved
-              </span>
-              <span class="status-legend-item inline-flex items-center gap-2">
-                <span style="display:inline-block;width:16px;height:16px;border-radius:9999px;background:#2563EB;box-shadow:0 0 0 2px rgba(0,0,0,0.06)"></span>
-                Return
-              </span>
-              <span class="status-legend-item inline-flex items-center gap-2">
-                <span style="display:inline-block;width:16px;height:16px;border-radius:9999px;background:#DC2626;box-shadow:0 0 0 2px rgba(0,0,0,0.06)"></span>
-                Overdue
-              </span>
-              <span class="status-legend-item inline-flex items-center gap-2">
-                <span style="display:inline-block;width:16px;height:16px;border-radius:9999px;background:#64748B;box-shadow:0 0 0 2px rgba(0,0,0,0.06)"></span>
-                Blocked
-              </span>
-            </div>
-            <p class="mb-3 text-sm text-gray-500 dark:text-gray-400">
-              Blocked days are gowns held back for cleaning or repair, not customer bookings — set them
-              from a gown's row in <a href="{% url 'arabela_admin:gown_catalog' %}" class="text-brand-500">Gown Catalog</a>.
-              Customers can't book a date until every gown in that category is free.
-            </p>
-            <div
-              class="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]"
-            >
-              <div id="calendar" class="min-h-screen"></div>
-              {{ calendar_events|json_script:"calendar-events-data" }}
+            <!-- Quick views. Each card is a filter: clicking it shows exactly those rows. -->
+            <div class="rr-stats">
+              <button type="button" @click="applyCard('all')" class="rr-stat" :class="cardActive('all') && 'is-on'">
+                <p class="text-sm text-gray-500 dark:text-gray-400">All Reservations</p>
+                <h4 class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90" x-text="countFor('all')"></h4>
+                <p class="rr-stat-hint">Every booking on record</p>
+              </button>
+              <button type="button" @click="applyCard('week')" class="rr-stat" :class="cardActive('week') && 'is-on'">
+                <p class="text-sm text-gray-500 dark:text-gray-400">This Week</p>
+                <h4 class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90" x-text="countFor('week')"></h4>
+                <p class="rr-stat-hint">Rentals out any day this week</p>
+              </button>
+              <button type="button" @click="applyCard('month')" class="rr-stat" :class="cardActive('month') && 'is-on'">
+                <p class="text-sm text-gray-500 dark:text-gray-400">This Month</p>
+                <h4 class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90" x-text="countFor('month')"></h4>
+                <p class="rr-stat-hint">Rentals out any day this month</p>
+              </button>
+              <button type="button" @click="applyCard('needs')" class="rr-stat" :class="cardActive('needs') && 'is-on'">
+                <p class="text-sm text-gray-500 dark:text-gray-400">Needs a Receipt</p>
+                <h4 class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90" x-text="countFor('needs')"></h4>
+                <p class="rr-stat-hint">Confirmed, no manual receipt yet</p>
+              </button>
             </div>
 
-            <!-- BEGIN BOOKING DETAIL PANEL -->
-            <div
-              class="fixed inset-0 items-center justify-center hidden p-5 overflow-y-auto modal z-99999"
-              id="bookingDetailModal"
-            >
-              <div
-                class="modal-close-btn fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]"
-              ></div>
-              <div
-                class="modal-dialog modal-dialog-scrollable modal-lg no-scrollbar relative flex w-full max-w-[700px] flex-col overflow-y-auto rounded-3xl bg-white p-6 dark:bg-gray-900 lg:p-8"
-              >
-                <button
-                  type="button"
-                  class="modal-close-btn transition-color absolute right-5 top-5 z-999 flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300 sm:h-11 sm:w-11"
-                >
-                  <svg class="fill-current" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path fill-rule="evenodd" clip-rule="evenodd" d="M6.04289 16.5418C5.65237 16.9323 5.65237 17.5655 6.04289 17.956C6.43342 18.3465 7.06658 18.3465 7.45711 17.956L11.9987 13.4144L16.5408 17.9565C16.9313 18.347 17.5645 18.347 17.955 17.9565C18.3455 17.566 18.3455 16.9328 17.955 16.5423L13.4129 12.0002L17.955 7.45808C18.3455 7.06756 18.3455 6.43439 17.955 6.04387C17.5645 5.65335 16.9313 5.65335 16.5408 6.04387L11.9987 10.586L7.45711 6.04439C7.06658 5.65386 6.43342 5.65386 6.04289 6.04439C5.65237 6.43491 5.65237 7.06808 6.04289 7.4586L10.5845 12.0002L6.04289 16.5418Z" fill=""/>
-                  </svg>
-                </button>
-
-                <div class="flex flex-col px-2 overflow-y-auto modal-content custom-scrollbar">
-                  <div class="modal-header">
-                    <h5 class="mb-2 font-semibold text-gray-800 modal-title text-theme-xl dark:text-white/90 lg:text-2xl">
-                      Booking Details
-                    </h5>
-                    <p id="bookingModalSubtitle" class="text-sm text-gray-500 dark:text-gray-400"></p>
-                  </div>
-                  <div class="mt-6 modal-body space-y-5">
-                    <div>
-                      <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-400">Status</label>
-                      <div class="flex flex-wrap gap-2" id="bookingModalStatusGroup">
-                        <button type="button" data-status="Pick-up" class="booking-status-chip">Pick-up</button>
-                        <button type="button" data-status="Reserved" class="booking-status-chip">Reserved</button>
-                        <button type="button" data-status="Overdue" class="booking-status-chip">Overdue</button>
-                      </div>
-                      <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">Pick-up shows on its own. Reserved also shows the Return date. Overdue adds on top of both.</p>
-                    </div>
-
-                    <div class="booking-date-grid">
-                      <div>
-                        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Pick-up Date</label>
-                        <input id="bookingModalRentalDate" type="date" class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" onclick="this.showPicker()" />
-                      </div>
-                      <div>
-                        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Event Date</label>
-                        <input id="bookingModalEventDate" type="date" class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" onclick="this.showPicker()" />
-                        <p id="bookingModalEventOriginalNote" class="mt-1.5 text-xs text-gray-500 dark:text-gray-400" style="display: none;"></p>
-                      </div>
-                      <div>
-                        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Return Date</label>
-                        <input id="bookingModalReturnDate" type="date" class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" onclick="this.showPicker()" />
-                      </div>
-                      <div>
-                        <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Overdue Date</label>
-                        <input id="bookingModalOverdueDate" type="date" class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" onclick="this.showPicker()" />
-                      </div>
-                    </div>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">Pick-up = pick-up date to the day before the event · Return date shows automatically once Reserved is picked · Overdue = the overdue date.</p>
-
-                    <!-- Everything else holding this same physical gown, filled in by the
-                         bookingModalHolds script at the bottom of the page, plus a live
-                         warning when a moved Pick-up/Return date runs into one of them.
-                         The server refuses such a save regardless
-                         (reservation_item_reschedule_view). -->
-                    <div id="bookingModalHolds" class="booking-holds" style="display: none;">
-                      <p class="booking-holds-title">This gown is also booked:</p>
-                      <ul id="bookingModalHoldsList" class="booking-holds-list"></ul>
-                    </div>
-                    <p id="bookingModalHoldWarning" class="booking-hold-warning" role="alert" style="display: none;"></p>
-
-                    <!-- Same two choices as Active Reservations' Mark Returned popover
-                         (reservation_item_mark_returned_view). data-condition is the stored
-                         value bundle.js posts; only the wording is what staff see. -->
-                    <div id="bookingModalConditionSection">
-                      <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-400">Mark Returned As</label>
-                      <div class="flex flex-wrap gap-2" id="bookingModalConditionGroup">
-                        <button type="button" data-condition="Good" class="booking-condition-chip">Returned</button>
-                        <button type="button" data-condition="Needs Repair" class="booking-condition-chip">Returned — needs repair</button>
-                      </div>
-                      <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">Pick one, then Mark Returned. "Needs repair" keeps this gown off the website until it's set back to Available in Gown Catalog.</p>
-                    </div>
-
-                    <p id="bookingModalError" class="hidden text-sm text-error-500"></p>
-                  </div>
-                  <div class="flex flex-col gap-3 mt-6 modal-footer sm:flex-row sm:justify-end">
-                    <button type="button" class="modal-close-btn flex w-full justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] sm:w-auto">
-                      Close
-                    </button>
-                    <button type="button" id="bookingModalMarkReturnedBtn" class="flex w-full justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] sm:w-auto">
-                      Mark Returned
-                    </button>
-                    <button type="button" id="bookingModalSaveChangesBtn" class="flex w-full justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 sm:w-auto">
-                      Save Changes
-                    </button>
-                  </div>
+            <!-- Filters -->
+            <div class="mt-5 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03] sm:p-5">
+              <div class="rr-filters">
+                <div class="rr-grow">
+                  <input
+                    type="text"
+                    x-model="search"
+                    @input="flash()"
+                    placeholder="Search customer, email, reference, or gown..."
+                    class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
+                  />
+                </div>
+                <div class="rr-fixed">
+                  <select
+                    x-model="statusFilter"
+                    @change="flash()"
+                    style="min-width: 11rem;" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
+                  >
+                    <option value="All">All statuses</option>
+                    <template x-for="option in progressOptions" :key="option">
+                      <option :value="option" x-text="option"></option>
+                    </template>
+                  </select>
+                </div>
+                <div class="rr-fixed">
+                  <select
+                    x-model="receiptFilter"
+                    @change="flash()"
+                    style="min-width: 11rem;" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
+                  >
+                    <option value="All">All receipts</option>
+                    <option value="has">Has a receipt</option>
+                    <option value="needs">Needs a receipt</option>
+                  </select>
                 </div>
               </div>
-            </div>
-            <!-- END BOOKING DETAIL PANEL -->
 
-          </div>
+              <div class="mt-3 rr-filters">
+                <p class="text-sm font-medium text-gray-700 dark:text-gray-400">Rental dates:</p>
+                <div class="rr-seg" role="group" aria-label="Rental date range">
+                  <button type="button" :class="dateFilter === 'all' && 'is-on'" @click="setDateFilter('all')">All time</button>
+                  <button type="button" :class="dateFilter === 'today' && 'is-on'" @click="setDateFilter('today')">Today</button>
+                  <button type="button" :class="dateFilter === 'week' && 'is-on'" @click="setDateFilter('week')">This week</button>
+                  <button type="button" :class="dateFilter === 'month' && 'is-on'" @click="setDateFilter('month')">This month</button>
+                  <button type="button" :class="dateFilter === 'custom' && 'is-on'" @click="setDateFilter('custom')">Pick dates</button>
+                </div>
+                <template x-if="dateFilter === 'custom'">
+                  <div class="rr-filters">
+                    <input type="date" x-model="customFrom" @change="flash()" aria-label="From date"
+                      class="rr-date dark:bg-dark-900 h-11 rounded-lg border border-gray-300 bg-transparent px-3 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:bg-gray-900 dark:text-white/90" />
+                    <span class="text-sm text-gray-500 dark:text-gray-400">to</span>
+                    <input type="date" x-model="customTo" @change="flash()" aria-label="To date"
+                      class="rr-date dark:bg-dark-900 h-11 rounded-lg border border-gray-300 bg-transparent px-3 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:bg-gray-900 dark:text-white/90" />
+                    <span x-show="!customFrom && !customTo" class="text-theme-xs text-gray-400">Pick one day, or a from/to range</span>
+                  </div>
+                </template>
+              </div>
+
+              <div class="mt-3 rr-filters" x-show="customerFilter !== null" x-cloak>
+                <span class="rr-chip">
+                  <span x-text="'Showing ' + customerFilterName + '\'s reservations'"></span>
+                  <button type="button" @click="clearCustomerFilter()" aria-label="Show every customer">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                  </button>
+                </span>
+              </div>
+            </div>
+
+            <!-- Records table -->
+            <div class="mt-5 overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+              <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-6">
+                <h3 class="text-base font-medium text-gray-800 dark:text-white/90">Reservations</h3>
+                <p class="text-theme-sm text-gray-500 dark:text-gray-400">
+                  Showing <span class="font-medium text-gray-800 dark:text-white/90" x-text="visibleRecords.length"></span>
+                  of <span x-text="scopedRecords.length"></span>
+                  <button type="button" x-show="visibleRecords.length !== scopedRecords.length" x-cloak @click="resetFilters()" class="rr-link" style="margin-left: .5rem;">Clear filters</button>
+                </p>
+              </div>
+              <div x-show="filtering" x-cloak class="flex items-center justify-center" style="height: 240px;">
+                <div class="h-10 w-10 animate-spin rounded-full border-4 border-solid border-gray-300 border-t-transparent dark:border-gray-600"></div>
+              </div>
+              <div x-show="!filtering" class="custom-scrollbar rr-scroll-x" style="max-height: 760px; overflow-y: auto;">
+                <table class="min-w-full">
+                  <thead class="sticky top-0 z-10 bg-white dark:bg-gray-900">
+                    <tr class="border-t border-gray-100 dark:border-gray-800">
+                      <th class="px-5 py-3 sm:px-6 text-left"><p class="rr-nowrap font-medium text-gray-500 text-theme-xs dark:text-gray-400">Customer</p></th>
+                      <th class="px-5 py-3 sm:px-6 text-left"><p class="rr-nowrap font-medium text-gray-500 text-theme-xs dark:text-gray-400">Reference</p></th>
+                      <th class="px-5 py-3 sm:px-6 text-left"><p class="rr-nowrap font-medium text-gray-500 text-theme-xs dark:text-gray-400">Rental Dates</p></th>
+                      <th class="px-5 py-3 sm:px-6 text-left"><p class="rr-nowrap font-medium text-gray-500 text-theme-xs dark:text-gray-400">Status</p></th>
+                      <th class="px-5 py-3 sm:px-6 text-left"><p class="rr-nowrap font-medium text-gray-500 text-theme-xs dark:text-gray-400">Deposit</p></th>
+                      <th class="px-5 py-3 sm:px-6 text-left"><p class="rr-nowrap font-medium text-gray-500 text-theme-xs dark:text-gray-400">Receipts</p></th>
+                      <th class="px-5 py-3 sm:px-6 text-left"><p class="rr-nowrap font-medium text-gray-500 text-theme-xs dark:text-gray-400">Actions</p></th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                    <template x-for="r in visibleRecords" :key="r.id">
+                      <tr class="rr-row" :class="isHighlighted(r) && 'is-highlight'" @click="openRecord(r)">
+                        <td class="px-5 py-4 sm:px-6">
+                          <span class="rr-clip font-medium text-gray-800 text-theme-sm dark:text-white/90" x-text="r.customer"></span>
+                          <span class="rr-clip text-theme-xs text-gray-500 dark:text-gray-400" x-text="r.email"></span>
+                        </td>
+                        <td class="px-5 py-4 sm:px-6">
+                          <p class="rr-nowrap text-theme-sm font-medium text-gray-800 dark:text-white/90" x-text="r.reference"></p>
+                          <p class="rr-nowrap text-theme-xs text-gray-500 dark:text-gray-400" x-text="'Booked ' + r.booked"></p>
+                        </td>
+                        <td class="px-5 py-4 sm:px-6">
+                          <p class="rr-nowrap text-theme-sm text-gray-800 dark:text-white/90" x-text="r.startDisplay + ' → ' + r.endDisplay"></p>
+                          <span class="rr-clip text-theme-xs text-gray-500 dark:text-gray-400" x-text="r.gownSummary"></span>
+                        </td>
+                        <td class="px-5 py-4 sm:px-6">
+                          <span class="rr-badge" :class="progressClass(r.progress)" x-text="r.progress"></span>
+                        </td>
+                        <td class="px-5 py-4 sm:px-6">
+                          <span class="rr-badge" :class="depositClass(r.depositStatus)" x-text="r.depositStatus"></span>
+                          <p class="rr-nowrap mt-1 text-theme-xs text-gray-500 dark:text-gray-400" x-text="r.deposit"></p>
+                        </td>
+                        <td class="px-5 py-4 sm:px-6">
+                          <template x-if="r.receipts.length">
+                            <p class="rr-nowrap text-theme-sm font-medium text-success-600 dark:text-success-500" x-text="r.receipts.length + (r.receipts.length === 1 ? ' receipt' : ' receipts')"></p>
+                          </template>
+                          <template x-if="!r.receipts.length">
+                            <p class="rr-nowrap text-theme-sm text-gray-400" x-text="needsReceipt(r) ? 'None yet' : '—'"></p>
+                          </template>
+                        </td>
+                        <td class="px-5 py-4 sm:px-6">
+                          <div class="flex items-center gap-2">
+                            <button type="button" @click.stop="openRecord(r)"
+                              class="rr-nowrap inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">
+                              View
+                            </button>
+                            <button type="button" @click.stop="startUpload(r)"
+                              class="rr-nowrap inline-flex items-center rounded-lg bg-brand-500 px-3 py-1.5 text-theme-xs font-medium text-white shadow-theme-xs hover:bg-brand-600">
+                              Upload Receipt
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    </template>
+                    <tr x-show="visibleRecords.length === 0" x-cloak>
+                      <td colspan="7" class="px-5 text-center sm:px-6" style="padding-top: 2.5rem; padding-bottom: 2.5rem;">
+                        <p class="text-sm text-gray-500 dark:text-gray-400">No reservations match these filters.</p>
+                        <button type="button" @click="resetFilters()" class="rr-link text-sm" style="margin-top: .5rem;">Clear filters</button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            </div>
         </main>
         <!-- ===== Main Content End ===== -->
       </div>
       <!-- ===== Content Area End ===== -->
     </div>
     <!-- ===== Page Wrapper End ===== -->
+
+    <!-- ===== Reservation detail ===== -->
+    <!-- Closed by its own backdrop / Close button / Escape -- deliberately not
+         @click.outside, which would also fire while the photo viewer or upload dialog
+         (separate overlays stacked on top) is being used. -->
+    <div x-show="openDetail" x-cloak class="rr-overlay rr-z1">
+      <div class="rr-backdrop" @click="openDetail = false"></div>
+      <div class="no-scrollbar rr-panel relative w-full overflow-y-auto rounded-3xl bg-white p-5 dark:bg-gray-900 lg:p-8" style="max-height: calc(100vh - 2.5rem);">
+        <template x-if="viewing">
+          <div>
+            <button
+              type="button"
+              @click="openDetail = false"
+              aria-label="Close"
+              class="absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07]"
+            >
+              <svg class="fill-current" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M6.04289 16.5418C5.65237 16.9323 5.65237 17.5655 6.04289 17.956C6.43342 18.3465 7.06658 18.3465 7.45711 17.956L11.9987 13.4144L16.5408 17.9565C16.9313 18.347 17.5645 18.347 17.955 17.9565C18.3455 17.566 18.3455 16.9328 17.955 16.5423L13.4129 12.0002L17.955 7.45808C18.3455 7.06756 18.3455 6.43439 17.955 6.04387C17.5645 5.65335 16.9313 5.65335 16.5408 6.04387L11.9987 10.586L7.45711 6.04439C7.06658 5.65386 6.43342 5.65386 6.04289 6.04439C5.65237 6.43491 5.65237 7.06808 6.04289 7.4586L10.5845 12.0002L6.04289 16.5418Z" fill=""/></svg>
+            </button>
+
+            <div style="padding-right: 3.5rem;">
+              <div class="flex flex-wrap items-center gap-3">
+                <h4 class="text-2xl font-semibold text-gray-800 dark:text-white/90" x-text="viewing.customer"></h4>
+                <span class="rr-badge" :class="progressClass(viewing.progress)" x-text="viewing.progress"></span>
+              </div>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400" x-text="viewing.reference + ' · Booked ' + viewing.booked"></p>
+              <p x-show="viewing.bookedAs" class="mt-1 text-theme-xs text-gray-400" x-text="'Booked under the name: ' + viewing.bookedAs"></p>
+            </div>
+
+            <div class="rr-section">
+              <p class="rr-section-title">Customer</p>
+              <div class="rr-kv">
+                <div>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">Email</p>
+                  <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewing.email || 'Not provided'"></p>
+                </div>
+                <div>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">Phone</p>
+                  <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewing.phone || 'Not provided'"></p>
+                </div>
+                <div>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">Rental period</p>
+                  <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewing.startDisplay + ' → ' + viewing.endDisplay"></p>
+                </div>
+              </div>
+            </div>
+
+            <div class="rr-section">
+              <p class="rr-section-title" x-text="'Gowns (' + viewing.items.length + ')'"></p>
+              <div class="rr-scroll-x">
+                <table class="rr-mini-table">
+                  <thead>
+                    <tr>
+                      <th>Gown</th>
+                      <th>Size</th>
+                      <th>Pick-up</th>
+                      <th>Event</th>
+                      <th>Return</th>
+                      <th>Stage</th>
+                      <th>Actually picked up</th>
+                      <th>Actually returned</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template x-for="(item, itemIndex) in viewing.items" :key="itemIndex">
+                      <tr>
+                        <td>
+                          <span class="font-medium text-gray-800 dark:text-white/90" x-text="item.gown"></span>
+                          <span x-show="item.gownCode" class="text-theme-xs text-gray-400" style="display: block;" x-text="item.gownCode"></span>
+                        </td>
+                        <td x-text="item.size"></td>
+                        <td x-text="item.pickup"></td>
+                        <td x-text="item.event"></td>
+                        <td x-text="item.ret"></td>
+                        <td x-text="item.stage"></td>
+                        <td x-text="item.pickedUpOn || '—'"></td>
+                        <td x-text="item.returnedOn || '—'"></td>
+                      </tr>
+                    </template>
+                    <tr x-show="viewing.items.length === 0">
+                      <td colspan="8">No gowns on this reservation.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="rr-section">
+              <p class="rr-section-title">Payment &amp; Deposit</p>
+              <div class="rr-kv">
+                <div>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">Rental fee</p>
+                  <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewing.subtotal"></p>
+                </div>
+                <div>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">Security deposit</p>
+                  <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewing.deposit"></p>
+                </div>
+                <div>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">Total</p>
+                  <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewing.total"></p>
+                </div>
+                <div>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">Online payment</p>
+                  <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewing.paymentState || '—'"></p>
+                </div>
+                <div>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">Deposit status</p>
+                  <p class="mt-1">
+                    <span class="rr-badge" :class="depositClass(viewing.depositStatus)" x-text="viewing.depositStatus"></span>
+                  </p>
+                  <p x-show="viewing.depositReturnedOn" class="mt-1 text-theme-xs text-gray-500 dark:text-gray-400" x-text="'Released ' + viewing.depositReturnedOn"></p>
+                </div>
+              </div>
+              <div class="mt-3 flex flex-wrap items-center gap-4">
+                <a x-show="viewing.paymentProofUrl" :href="viewing.paymentProofUrl" target="_blank" rel="noopener" class="rr-link text-theme-sm">View customer's payment proof</a>
+                <a x-show="viewing.depositLink" :href="viewing.depositLink" class="rr-link text-theme-sm">Open in Security Deposits</a>
+              </div>
+            </div>
+
+            <div class="rr-section">
+              <div class="flex flex-wrap items-center justify-between gap-3" style="margin-bottom: .75rem;">
+                <p class="rr-section-title" style="margin-bottom: 0;" x-text="'Manual Receipts (' + viewing.receipts.length + ')'"></p>
+                <button type="button" @click="startUpload(viewing)"
+                  class="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-3 py-1.5 text-theme-xs font-medium text-white shadow-theme-xs hover:bg-brand-600">
+                  Upload Receipt
+                </button>
+              </div>
+              <template x-if="viewing.receipts.length === 0">
+                <p class="rr-empty-box">No manual receipt attached yet. Upload a photo of the shop's paper receipt for this booking.</p>
+              </template>
+              <template x-for="receipt in viewing.receipts" :key="receipt.id">
+                <div class="rr-receipt">
+                  <img class="rr-thumb" :src="receipt.photoUrl" alt="Receipt photo" @click="viewPhoto(receipt, viewing)" />
+                  <div class="rr-receipt-body">
+                    <p class="text-sm font-medium text-gray-800 dark:text-white/90" x-text="'Uploaded ' + receipt.uploaded"></p>
+                    <p class="text-theme-xs text-gray-500 dark:text-gray-400" x-text="'By ' + receipt.uploadedBy"></p>
+                  </div>
+                  <button type="button" @click="viewPhoto(receipt, viewing)"
+                    class="rr-nowrap inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">
+                    View
+                  </button>
+                </div>
+              </template>
+            </div>
+
+            <div class="rr-section">
+              <div x-html="timelineHtml(viewing)"></div>
+            </div>
+
+            <div class="mt-6 flex justify-end">
+              <button type="button" @click="openDetail = false"
+                class="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">
+                Close
+              </button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- ===== Receipt photo viewer ===== -->
+    <div x-show="openPhoto" x-cloak class="rr-overlay rr-z2">
+      <div class="rr-backdrop" @click="openPhoto = false"></div>
+      <div class="no-scrollbar relative w-full overflow-y-auto rounded-3xl bg-white p-5 dark:bg-gray-900 lg:p-8" style="max-width: min(1100px, 92vw); max-height: calc(100vh - 2.5rem);">
+        <button type="button" @click="openPhoto = false" aria-label="Close"
+          class="absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07]">
+          <svg class="fill-current" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M6.04289 16.5418C5.65237 16.9323 5.65237 17.5655 6.04289 17.956C6.43342 18.3465 7.06658 18.3465 7.45711 17.956L11.9987 13.4144L16.5408 17.9565C16.9313 18.347 17.5645 18.347 17.955 17.9565C18.3455 17.566 18.3455 16.9328 17.955 16.5423L13.4129 12.0002L17.955 7.45808C18.3455 7.06756 18.3455 6.43439 17.955 6.04387C17.5645 5.65335 16.9313 5.65335 16.5408 6.04387L11.9987 10.586L7.45711 6.04439C7.06658 5.65386 6.43342 5.65386 6.04289 6.04439C5.65237 6.43491 5.65237 7.06808 6.04289 7.4586L10.5845 12.0002L6.04289 16.5418Z" fill=""/></svg>
+        </button>
+        <div style="padding-right: 3.5rem;">
+          <h4 class="mb-1 text-2xl font-semibold text-gray-800 dark:text-white/90">Receipt Photo</h4>
+          <p class="text-sm text-gray-500 dark:text-gray-400" x-text="photo.customer + ' · ' + photo.reference"></p>
+          <p class="mb-5 text-theme-xs text-gray-400" x-text="'Uploaded ' + photo.uploaded + (photo.uploadedBy ? ' by ' + photo.uploadedBy : '')"></p>
+        </div>
+        <template x-if="photo.url">
+          <div>
+            <div class="mb-3 flex w-full justify-center">
+              <div class="admin-photo-frame overflow-hidden rounded-2xl bg-gray-100 dark:bg-gray-800">
+                <img :src="photo.url" alt="Receipt photo" style="display: block; max-height: 75vh; max-width: 100%; width: auto; height: auto;" />
+              </div>
+            </div>
+            <a :href="photo.url" target="_blank" rel="noopener" class="rr-link text-theme-xs">View Full Image</a>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- ===== Upload receipt (pre-filled: staff are already on the right booking) ===== -->
+    <div x-show="openUpload" x-cloak class="rr-overlay rr-z2">
+      <div class="rr-backdrop" @click="closeUpload()"></div>
+      <div class="no-scrollbar relative w-full overflow-y-auto rounded-3xl bg-white p-5 dark:bg-gray-900 lg:p-8" style="max-width: 620px; max-height: calc(100vh - 2.5rem);">
+        <template x-if="uploadFor">
+          <div>
+            <h4 class="text-2xl font-semibold text-gray-800 dark:text-white/90">Upload Receipt</h4>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400" x-text="'For ' + uploadFor.customer + ' · ' + uploadFor.reference"></p>
+            <p class="mb-5 text-theme-xs text-gray-400" x-text="uploadFor.gownSummary + ' · ' + uploadFor.startDisplay + ' → ' + uploadFor.endDisplay"></p>
+
+            <input type="file" x-ref="rrFileInput" class="hidden" accept="image/png,image/jpeg,image/webp" @change="handleUploadFile($event.target.files[0])" />
+            <input type="file" x-ref="rrCameraInput" class="hidden" accept="image/png,image/jpeg,image/webp" capture="environment" @change="handleUploadFile($event.target.files[0])" />
+
+            <div
+              class="rr-dropzone"
+              :class="uploadDragOver && 'is-over'"
+              @dragover.prevent="uploadDragOver = true"
+              @dragleave.prevent="uploadDragOver = false"
+              @drop.prevent="uploadDragOver = false; handleUploadFile($event.dataTransfer.files[0])"
+            >
+              <template x-if="uploadPreparing">
+                <p class="text-sm text-gray-600 dark:text-gray-400"><span class="rr-spinner" style="margin-right: .5rem; vertical-align: -2px;"></span>Preparing photo...</p>
+              </template>
+              <template x-if="!uploadPreparing && !uploadFile">
+                <div>
+                  <p class="mb-1 text-base font-semibold text-gray-800 dark:text-white/90">Drop the receipt photo here</p>
+                  <p class="mb-4 text-sm text-gray-500 dark:text-gray-400">PNG, JPG, or WebP &middot; large phone photos are resized automatically</p>
+                  <div class="flex flex-wrap items-center justify-center gap-3">
+                    <button type="button" @click="$refs.rrCameraInput.click()"
+                      class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">
+                      Take Photo
+                    </button>
+                    <button type="button" @click="$refs.rrFileInput.click()"
+                      class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">
+                      Choose from Gallery
+                    </button>
+                  </div>
+                </div>
+              </template>
+              <template x-if="!uploadPreparing && uploadFile">
+                <div>
+                  <img :src="uploadPreviewUrl" alt="Selected receipt" style="display: block; margin: 0 auto .75rem; max-height: 220px; max-width: 100%; border-radius: .5rem;" />
+                  <p class="text-sm font-medium text-gray-800 dark:text-white/90" style="overflow-wrap: anywhere;" x-text="uploadFileName"></p>
+                  <button type="button" @click="clearUploadFile()" class="mt-2 text-theme-sm font-medium text-error-500 underline">Remove</button>
+                </div>
+              </template>
+            </div>
+
+            <p x-show="uploadError" x-cloak x-text="uploadError" class="mt-3 rounded-lg bg-error-50 px-4 py-2.5 text-sm text-error-700 dark:bg-error-500/15 dark:text-error-500"></p>
+
+            <div class="mt-6 flex flex-wrap items-center justify-end gap-3">
+              <button type="button" @click="closeUpload()" :class="uploadBusy && 'pointer-events-none opacity-60'"
+                class="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">
+                Cancel
+              </button>
+              <button type="button" @click="submitUpload()" :class="(uploadBusy || uploadPreparing) && 'pointer-events-none opacity-60'"
+                class="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs hover:bg-brand-600">
+                <span x-show="uploadBusy" x-cloak class="rr-spinner"></span>
+                <span x-text="uploadBusy ? 'Uploading...' : 'Upload Receipt'"></span>
+              </button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Receipt Uploaded Toast -->
+    <div
+      x-show="showUploadToast"
+      x-cloak
+      class="fixed bottom-6 right-6 z-99999 flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-theme-lg dark:border-gray-800 dark:bg-gray-900"
+      style="z-index: 100001;"
+    >
+      <span class="h-2 w-2 rounded-full bg-success-500"></span>
+      <p class="text-sm font-medium text-gray-700 dark:text-gray-300">Receipt uploaded successfully</p>
+    </div>
+
   <script defer src="{% static 'arabela_admin/bundle.js' %}?v={{ admin_asset_version }}"></script>
   <script defer src="{% static 'arabela_admin/global-search.js' %}"></script>
 
-  <script defer>
-    // Shows "Customer chose <date>" under the Event Date box whenever a reschedule has
-    // moved it away from what the customer actually picked -- added here rather than in
-    // bundle.js, which is a committed, non-rebuildable asset (see
-    // feedback_admin_bundlejs_not_rebuildable). bundle.js keeps activeItemId in its own
-    // closure with nothing exposed on window, so there's no direct hook for "the modal
-    // just opened for item X" -- instead this watches bookingModalSubtitle, which
-    // bundle.js's eventClick handler sets synchronously (customer — gownName · reference)
-    // from the exact same calendar-events-data JSON this script also reads, so the two
-    // can never read it differently.
-    document.addEventListener('DOMContentLoaded', function () {
-      var subtitleEl = document.getElementById('bookingModalSubtitle');
-      var noteEl = document.getElementById('bookingModalEventOriginalNote');
-      var dataEl = document.getElementById('calendar-events-data');
-      if (!subtitleEl || !noteEl || !dataEl) return;
-
-      // Keyed by that exact subtitle string. A booking can render 1-3 markers (see
-      // _stage_segments), all sharing the same customer/gown/reference/bookedEventDate,
-      // so re-visiting the same key here is expected and harmless -- confirmed against
-      // this project's real reservation data that no two DIFFERENT items ever produce
-      // the same key (reference is unique per reservation; the one way to collide would
-      // be two items in the same reservation sharing a gown name, which does not occur).
-      var byLabel = {};
-      try {
-        JSON.parse(dataEl.textContent).forEach(function (ev) {
-          var props = (ev && ev.extendedProps) || {};
-          if (!props.itemId || !props.bookedEventDate) return; // e.g. a Blocked-dates marker
-          var label = (props.customer || '') + ' — ' + (props.gownName || '')
-            + (props.reference ? ' · ' + props.reference : '');
-          byLabel[label] = {
-            bookedEventDate: props.bookedEventDate, eventDate: props.eventDate,
-            rentalDate: props.rentalDate, returnDate: props.returnDate,
-            otherHolds: Array.isArray(props.otherHolds) ? props.otherHolds : []
-          };
-        });
-      } catch (e) {
-        return; // malformed/empty JSON -- fail quiet, the modal itself still works fine
-      }
-
-      function formatLong(iso) {
-        var d = new Date(iso + 'T00:00:00');
-        return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-      }
-      function formatShort(iso) {
-        var d = new Date(iso + 'T00:00:00');
-        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      }
-
-      // "This gown is also booked" + live clash warning. Only warns once Pick-up or
-      // Return has actually been moved away from what the booking already had --
-      // the same rule the server's own check (reservation_item_reschedule_view)
-      // uses, so an older overlap the modal merely displays never looks like
-      // something the save will refuse. Names come from customer data, so the list
-      // is built with textContent only, never innerHTML.
-      var holdsEl = document.getElementById('bookingModalHolds');
-      var holdsListEl = document.getElementById('bookingModalHoldsList');
-      var holdWarningEl = document.getElementById('bookingModalHoldWarning');
-      var rentalInputEl = document.getElementById('bookingModalRentalDate');
-      var returnInputEl = document.getElementById('bookingModalReturnDate');
-      var currentEntry = null;
-
-      function renderHolds() {
-        if (!holdsEl || !holdsListEl) return;
-        while (holdsListEl.firstChild) holdsListEl.removeChild(holdsListEl.firstChild);
-        var holds = currentEntry ? currentEntry.otherHolds : [];
-        holds.forEach(function (hold) {
-          var li = document.createElement('li');
-          li.dataset.start = hold.start;
-          li.dataset.end = hold.end;
-          var dates = document.createElement('span');
-          dates.className = 'booking-hold-dates';
-          dates.textContent = hold.start === hold.end
-            ? formatShort(hold.start)
-            : formatShort(hold.start) + ' – ' + formatShort(hold.end);
-          var who = document.createElement('span');
-          who.textContent = hold.label;
-          li.appendChild(dates);
-          li.appendChild(who);
-          holdsListEl.appendChild(li);
-        });
-        holdsEl.style.display = holds.length ? '' : 'none';
-      }
-
-      function checkHoldClash() {
-        if (!holdWarningEl) return;
-        var start = rentalInputEl ? rentalInputEl.value : '';
-        var end = returnInputEl ? returnInputEl.value : '';
-        var moved = !!currentEntry && (start !== currentEntry.rentalDate || end !== currentEntry.returnDate);
-        var clash = null;
-        if (holdsListEl) {
-          Array.prototype.forEach.call(holdsListEl.children, function (li) {
-            var hits = moved && !!start && !!end && start <= end
-              && li.dataset.start <= end && li.dataset.end >= start;
-            li.classList.toggle('is-clash', hits);
-            if (hits && !clash) clash = li;
-          });
-        }
-        if (clash) {
-          var hold = currentEntry.otherHolds[Array.prototype.indexOf.call(holdsListEl.children, clash)];
-          holdWarningEl.textContent = 'These dates run into ' + hold.label + ' ('
-            + formatLong(hold.start) + (hold.start === hold.end ? '' : ' – ' + formatLong(hold.end))
-            + '). Pick dates that don\'t overlap — this can\'t be saved.';
-          holdWarningEl.style.display = '';
-        } else {
-          holdWarningEl.textContent = '';
-          holdWarningEl.style.display = 'none';
-        }
-      }
-
-      function refreshNote() {
-        var entry = byLabel[subtitleEl.textContent];
-        if (entry && entry.bookedEventDate !== entry.eventDate) {
-          noteEl.textContent = 'Customer chose ' + formatLong(entry.bookedEventDate);
-          noteEl.style.display = '';
-        } else {
-          noteEl.style.display = 'none';
-        }
-        currentEntry = entry || null;
-        renderHolds();
-        checkHoldClash();
-      }
-
-      [rentalInputEl, returnInputEl].forEach(function (input) {
-        if (!input) return;
-        input.addEventListener('input', checkHoldClash);
-        input.addEventListener('change', checkHoldClash);
-      });
-
-      new MutationObserver(refreshNote).observe(subtitleEl, {
-        childList: true, characterData: true, subtree: true
-      });
-    });
-
-    // The "+N more" list (FullCalendar's own .fc-popover, for a day with too many
-    // bookings to show inline) tries to stay on screen, but only checks its LEFT/RIGHT
-    // edges against the viewport, never its bottom, and for a day right at the edge of
-    // the grid its own left-edge correction can still leave it hanging off-screen --
-    // confirmed by comparing two real days with the same kind of content: one with
-    // room to spare renders and scrolls perfectly, one at the edge doesn't reposition
-    // at all. Fixed here rather than in bundle.js (a committed, non-rebuildable asset --
-    // see feedback_admin_bundlejs_not_rebuildable): once the popover lands in the DOM,
-    // measure where it actually ended up and nudge it back on screen if any edge
-    // overshoots, using the same min-then-max clamp FullCalendar's own code already
-    // uses for its left edge, just also applied to top/bottom. This never touches how
-    // the list scrolls (that part already works, untouched) -- only where it sits.
-    document.addEventListener('DOMContentLoaded', function () {
-      var VIEWPORT_MARGIN = 8;
-
-      function keepOnScreen(popoverEl) {
-        var rect = popoverEl.getBoundingClientRect();
-        var currentLeft = parseFloat(popoverEl.style.left) || 0;
-        var currentTop = parseFloat(popoverEl.style.top) || 0;
-
-        var idealLeft = Math.min(rect.left, window.innerWidth - VIEWPORT_MARGIN - rect.width);
-        idealLeft = Math.max(idealLeft, VIEWPORT_MARGIN);
-
-        var idealTop = Math.min(rect.top, window.innerHeight - VIEWPORT_MARGIN - rect.height);
-        idealTop = Math.max(idealTop, VIEWPORT_MARGIN);
-
-        popoverEl.style.left = (currentLeft + (idealLeft - rect.left)) + 'px';
-        popoverEl.style.top = (currentTop + (idealTop - rect.top)) + 'px';
-      }
-
-      new MutationObserver(function (mutations) {
-        mutations.forEach(function (mutation) {
-          mutation.addedNodes.forEach(function (node) {
-            if (node.nodeType !== 1) return;
-            if (node.classList && node.classList.contains('fc-popover')) {
-              keepOnScreen(node);
-            } else if (node.querySelector) {
-              var nested = node.querySelector('.fc-popover');
-              if (nested) keepOnScreen(nested);
-            }
-          });
-        });
-      }).observe(document.body, { childList: true, subtree: true });
-    });
-  </script>
-
-{% include "arabela_admin/partials/dialog.html" %}
 </body>
 </html>
-
-
-

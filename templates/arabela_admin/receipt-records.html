@@ -16,20 +16,108 @@
   <body
     x-data="{ page: 'receipt-records', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', receiptFilter: 'All', yearFilter: '', showYearToast: false, yearToastTimeout: null, filtering: false, filterTimeout: null, openPreview: false, viewingReceipt: {},
       receipts: JSON.parse(document.getElementById('receipt-records-data').textContent),
-      newReceiptReservation: '', newReceiptFile: null, newReceiptFileName: '', newReceiptPreviewUrl: null, dragOver: false,
-      uploadBusy: false, uploadError: '',
+      newReceiptReservation: '', newReceiptCustomer: '', newReceiptFile: null, newReceiptFileName: '', newReceiptPreviewUrl: null, dragOver: false,
+      uploadBusy: false, uploadError: '', filePreparing: false,
       showReplaceToast: false, replaceToastTimeout: null, viewingPhotoDragOver: false,
       replaceBusy: false, replaceError: '',
+      uploaderFilter: 'All',
+      pickedReservation: null, reservationQuery: '', reservationResults: [], reservationSearching: false,
+      reservationSearched: false, reservationSearchTimeout: null, reservationSearchSeq: 0,
       getCsrfToken() {
         const m = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
         return m ? decodeURIComponent(m[1]) : '';
       },
+      get uploaders() {
+        return [...new Set(this.receipts.map(r => r.uploadedBy).filter(Boolean))].sort();
+      },
+      // Staff find the booking by typing part of the customer's name, email, a gown or
+      // the reference code, then pick it -- instead of having to know the exact code.
+      // reservationSearchSeq drops a slow, older response that lands after a newer one.
+      searchReservations() {
+        this.pickedReservation = null;
+        this.newReceiptReservation = '';
+        this.newReceiptCustomer = '';
+        clearTimeout(this.reservationSearchTimeout);
+        const q = this.reservationQuery.trim();
+        if (q.length < 2) {
+          this.reservationResults = []; this.reservationSearching = false; this.reservationSearched = false;
+          return;
+        }
+        this.reservationSearching = true;
+        const seq = ++this.reservationSearchSeq;
+        this.reservationSearchTimeout = setTimeout(() => {
+          fetch('{% url "arabela_admin:receipt_reservation_search" %}?q=' + encodeURIComponent(q), { headers: { 'Accept': 'application/json' } })
+            .then(r => r.json())
+            .then(data => {
+              if (seq !== this.reservationSearchSeq) { return; }
+              this.reservationResults = data.results || [];
+              this.reservationSearching = false;
+              this.reservationSearched = true;
+            })
+            .catch(() => {
+              if (seq !== this.reservationSearchSeq) { return; }
+              this.reservationResults = []; this.reservationSearching = false; this.reservationSearched = true;
+            });
+        }, 300);
+      },
+      pickReservation(result) {
+        this.pickedReservation = result;
+        this.newReceiptReservation = result.reference;
+        this.newReceiptCustomer = result.customer;
+        this.reservationResults = [];
+        this.reservationSearched = false;
+        this.uploadError = '';
+      },
+      pickFirstResult() {
+        if (this.reservationResults.length) { this.pickReservation(this.reservationResults[0]); }
+      },
+      clearPickedReservation() {
+        this.pickedReservation = null;
+        this.newReceiptReservation = '';
+        this.newReceiptCustomer = '';
+        this.reservationQuery = '';
+        this.reservationResults = [];
+        this.reservationSearched = false;
+        this.reservationSearchSeq++;
+      },
+      // A phone camera photo of a paper receipt is routinely 5-15MB -- over the 5MB
+      // limit. Shrink anything large before it's sent; small files are left untouched,
+      // and any failure falls back to the original (same helper as customer checkout).
+      compressImageFile(file) {
+        const SKIP_BELOW_BYTES = 1.5 * 1024 * 1024, MAX_DIMENSION = 1600, QUALITY = 0.82;
+        return new Promise(resolve => {
+          if (!file || !file.type || file.type.indexOf('image/') !== 0 || file.size <= SKIP_BELOW_BYTES) { resolve(file); return; }
+          const objectUrl = URL.createObjectURL(file);
+          const img = new Image();
+          img.onload = () => {
+            URL.revokeObjectURL(objectUrl);
+            const scale = Math.min(1, MAX_DIMENSION / Math.max(img.width, img.height));
+            const w = Math.max(1, Math.round(img.width * scale));
+            const h = Math.max(1, Math.round(img.height * scale));
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) { resolve(file); return; }
+            ctx.drawImage(img, 0, 0, w, h);
+            canvas.toBlob(blob => {
+              if (!blob || blob.size >= file.size) { resolve(file); return; }
+              resolve(new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' }));
+            }, 'image/jpeg', QUALITY);
+          };
+          img.onerror = () => { URL.revokeObjectURL(objectUrl); resolve(file); };
+          img.src = objectUrl;
+        });
+      },
       handleReceiptFile(file) {
         if (!file) { return; }
-        if (this.newReceiptPreviewUrl) { URL.revokeObjectURL(this.newReceiptPreviewUrl); }
-        this.newReceiptFile = file;
-        this.newReceiptFileName = file.name;
-        this.newReceiptPreviewUrl = URL.createObjectURL(file);
+        this.filePreparing = true;
+        this.compressImageFile(file).catch(() => file).then(ready => {
+          this.filePreparing = false;
+          if (this.newReceiptPreviewUrl) { URL.revokeObjectURL(this.newReceiptPreviewUrl); }
+          this.newReceiptFile = ready || file;
+          this.newReceiptFileName = file.name;
+          this.newReceiptPreviewUrl = URL.createObjectURL(this.newReceiptFile);
+        });
       },
       clearReceiptFile() {
         if (this.newReceiptPreviewUrl) { URL.revokeObjectURL(this.newReceiptPreviewUrl); }
@@ -39,7 +127,13 @@
       },
       uploadReceipt() {
         this.uploadError = '';
-        if (!this.newReceiptReservation.trim()) { this.uploadError = 'Please enter the reservation\'s reference code.'; return; }
+        // A complete reference code typed straight in still works without picking it
+        // from the list (the server checks it exists, exactly as before).
+        if (!this.newReceiptReservation && /^RSV-\d{4}-\d+$/i.test(this.reservationQuery.trim())) {
+          this.newReceiptReservation = this.reservationQuery.trim().toUpperCase();
+        }
+        if (!this.newReceiptReservation.trim()) { this.uploadError = 'Please search for the reservation and pick it from the list.'; return; }
+        if (this.filePreparing) { this.uploadError = 'Still preparing the photo -- one moment.'; return; }
         if (!this.newReceiptFile) { this.uploadError = 'Please attach a photo of the receipt.'; return; }
         this.uploadBusy = true;
         const form = new FormData();
@@ -53,8 +147,10 @@
             this.uploadBusy = false;
             if (!ok) { this.uploadError = data.error || 'Could not upload this receipt.'; return; }
             this.receipts.unshift(data.receipt);
-            this.newReceiptReservation = '';
+            this.clearPickedReservation();
             this.clearReceiptFile();
+            if (this.$refs.receiptFileInput) { this.$refs.receiptFileInput.value = ''; }
+            if (this.$refs.receiptCameraInput) { this.$refs.receiptCameraInput.value = ''; }
             this.showUploadToast = true;
             clearTimeout(this.uploadToastTimeout);
             this.uploadToastTimeout = setTimeout(() => this.showUploadToast = false, 2500);
@@ -66,17 +162,22 @@
         if (!file || !this.viewingReceipt.id) { return; }
         this.replaceError = '';
         this.replaceBusy = true;
-        const form = new FormData();
-        form.append('photo', file);
-        fetch('{% url "arabela_admin:receipt_replace" 999999 %}'.replace('999999', this.viewingReceipt.id), {
-          method: 'POST', headers: { 'X-CSRFToken': this.getCsrfToken() }, body: form,
-        })
+        const receiptId = this.viewingReceipt.id;
+        this.compressImageFile(file)
+          .catch(() => file)
+          .then(ready => {
+            const form = new FormData();
+            form.append('photo', ready || file);
+            return fetch('{% url "arabela_admin:receipt_replace" 999999 %}'.replace('999999', receiptId), {
+              method: 'POST', headers: { 'X-CSRFToken': this.getCsrfToken() }, body: form,
+            });
+          })
           .then(r => r.json().then(data => ({ ok: r.ok, data })))
           .then(({ ok, data }) => {
             this.replaceBusy = false;
             if (!ok) { this.replaceError = data.error || 'Could not update this receipt.'; return; }
-            this.viewingReceipt.photoUrl = data.receipt.photoUrl;
-            const i = this.receipts.findIndex(r => r.id === this.viewingReceipt.id);
+            if (this.viewingReceipt.id === receiptId) { this.viewingReceipt.photoUrl = data.receipt.photoUrl; }
+            const i = this.receipts.findIndex(r => r.id === receiptId);
             if (i !== -1) { this.receipts[i] = data.receipt; }
             this.showReplaceToast = true;
             clearTimeout(this.replaceToastTimeout);
@@ -144,7 +245,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown' || page === 'condition' || page === 'categories') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits' || page === 'receipt-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown' || page === 'condition' || page === 'categories') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits' || page === 'receipt-records' || page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -650,6 +751,15 @@
                     :class="page === 'receipt-records' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
                     Receipt Records
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:reservation_records' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'reservation-records' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Reservation Records
                   </a>
                 </li>
               </ul>
@@ -1341,15 +1451,48 @@
                 <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Select the customer's reservation, then attach the receipt photo &mdash; the system automatically logs the date and time.</p>
               </div>
               <div class="space-y-5 border-t border-gray-100 p-5 sm:p-6 dark:border-gray-800">
-                <!-- No "Customer Name" field on purpose: typing a name by hand could
-                     drift from the reservation it's actually attached to. The reference
-                     code alone identifies the booking, and the customer's current name
-                     is resolved from it server-side (Reservation.display_customer_name),
-                     the same always-correct name every other admin screen shows. -->
+                <!-- Staff find the booking by searching (customer name, email, gown, or part
+                     of the reference code) and PICK it -- nothing is attached to a name typed
+                     by hand. The receipt is filed under the picked reservation's reference
+                     code, and the customer's current name is resolved from it server-side
+                     (Reservation.display_customer_name), like every other admin screen. -->
                 <div>
-                  <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Reservation Reference Code</label>
-                  <input type="text" x-model="newReceiptReservation" placeholder="e.g. RSV-2026-0142"
-                    class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800" />
+                  <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Reservation</label>
+                  <template x-if="pickedReservation">
+                    <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-brand-50 px-4 py-3 dark:border-gray-800 dark:bg-brand-500/15">
+                      <div style="min-width: 0;">
+                        <p class="text-sm font-medium text-gray-800 dark:text-white/90" x-text="pickedReservation.customer + ' · ' + pickedReservation.reference"></p>
+                        <p class="text-theme-xs text-gray-500 dark:text-gray-400" x-text="pickedReservation.gownSummary + ' · ' + pickedReservation.dates + ' · ' + pickedReservation.progress"></p>
+                        <p x-show="pickedReservation.receiptCount" class="text-theme-xs text-warning-600 dark:text-warning-400" x-text="'Already has ' + pickedReservation.receiptCount + (pickedReservation.receiptCount === 1 ? ' receipt' : ' receipts') + ' -- this adds another.'"></p>
+                      </div>
+                      <button type="button" @click="clearPickedReservation(); $nextTick(() => $refs.reservationSearchInput && $refs.reservationSearchInput.focus())" class="text-theme-sm font-medium text-brand-500 underline">Change</button>
+                    </div>
+                  </template>
+                  <div x-show="!pickedReservation" style="position: relative;" @click.outside="reservationResults = []; reservationSearched = false">
+                    <input type="text" x-ref="reservationSearchInput" x-model="reservationQuery"
+                      @input="searchReservations()"
+                      @keydown.enter.prevent="pickFirstResult()"
+                      @keydown.escape="reservationResults = []; reservationSearched = false"
+                      placeholder="Search by customer name, email, gown, or reference code..."
+                      autocomplete="off"
+                      class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800" />
+                    <div x-show="reservationQuery.trim().length >= 2 && (reservationSearching || reservationSearched)" x-cloak
+                      class="rounded-lg border border-gray-200 bg-white shadow-theme-lg dark:border-gray-800 dark:bg-gray-900"
+                      style="position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 50; max-height: 320px; overflow-y: auto;">
+                      <p x-show="reservationSearching" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">Searching...</p>
+                      <template x-if="!reservationSearching && reservationSearched && reservationResults.length === 0">
+                        <p class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">No reservations match. Try the customer's name, email, or the reference code.</p>
+                      </template>
+                      <template x-for="result in (reservationSearching ? [] : reservationResults)" :key="result.reference">
+                        <button type="button" @click="pickReservation(result)"
+                          class="block w-full border-b border-gray-100 px-4 py-3 text-left hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-white/[0.03]">
+                          <span class="block text-sm font-medium text-gray-800 dark:text-white/90" x-text="result.customer + ' · ' + result.reference"></span>
+                          <span class="block text-theme-xs text-gray-500 dark:text-gray-400" x-text="result.gownSummary + ' · ' + result.dates + ' · ' + result.progress + (result.receiptCount ? ' · ' + result.receiptCount + ' receipt(s) already' : '')"></span>
+                          <span class="block text-theme-xs text-gray-400" x-text="result.email"></span>
+                        </button>
+                      </template>
+                    </div>
+                  </div>
                 </div>
 
                 <input type="file" x-ref="receiptFileInput" class="hidden" accept="image/png,image/jpeg,image/webp" @change="handleReceiptFile($event.target.files[0])" />
@@ -1373,7 +1516,7 @@
                       </div>
                       <h4 class="text-theme-xl mb-3 font-semibold text-gray-800 dark:text-white/90">Drop File Here</h4>
                       <span class="mx-auto mb-5 block w-full max-w-[290px] text-sm text-gray-700 dark:text-gray-400">
-                        Drag and drop your PNG, JPG, or WebP image here, or choose an option below
+                        Drag and drop your PNG, JPG, or WebP image here, or choose an option below. Large phone photos are resized automatically.
                       </span>
                       <div class="flex flex-wrap items-center justify-center gap-3">
                         <button type="button" @click="$refs.receiptCameraInput.click()" class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">
@@ -1408,10 +1551,10 @@
 
                 <p x-show="uploadError" x-cloak x-text="uploadError" class="rounded-lg bg-error-50 px-4 py-2.5 text-sm text-error-700 dark:bg-error-500/15 dark:text-error-500"></p>
                 <div class="flex justify-end">
-                  <button type="button" @click="uploadReceipt()" :class="uploadBusy && 'pointer-events-none opacity-60'"
+                  <button type="button" @click="uploadReceipt()" :class="(uploadBusy || filePreparing) && 'pointer-events-none opacity-60'"
                     class="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs hover:bg-brand-600">
-                    <span x-show="uploadBusy" x-cloak class="animate-spin rounded-full" style="width: 0.875rem; height: 0.875rem; border: 2px solid currentColor; border-top-color: transparent;"></span>
-                    <span x-text="uploadBusy ? 'Uploading...' : 'Upload Receipt'"></span>
+                    <span x-show="uploadBusy || filePreparing" x-cloak class="animate-spin rounded-full" style="width: 0.875rem; height: 0.875rem; border: 2px solid currentColor; border-top-color: transparent;"></span>
+                    <span x-text="uploadBusy ? 'Uploading...' : (filePreparing ? 'Preparing photo...' : 'Upload Receipt')"></span>
                   </button>
                 </div>
               </div>
@@ -1419,16 +1562,32 @@
 
             <div class="mt-5 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03] sm:p-5">
               <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div class="sm:flex-1">
+                <div style="flex: 1 1 260px; min-width: 0;">
                   <input
                     type="text"
                     x-model="search"
                     @input="filtering = true; clearTimeout(filterTimeout); filterTimeout = setTimeout(() => filtering = false, 500)"
-                    placeholder="Search by customer or reservation..."
+                    placeholder="Search by customer, reservation, or staff..."
                     class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
                   />
                 </div>
-                <div class="sm:w-44">
+                <!-- Which staff member attached the receipt -- lets the owner review one
+                     person's uploads at a time. -->
+                <div style="flex: 0 0 auto;">
+                  <select
+                    x-model="uploaderFilter"
+                    @change="filtering = true; clearTimeout(filterTimeout); filterTimeout = setTimeout(() => filtering = false, 500)"
+                    aria-label="Uploaded by"
+                    style="min-width: 11rem;"
+                    class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
+                  >
+                    <option value="All">All staff</option>
+                    <template x-for="name in uploaders" :key="name">
+                      <option :value="name" x-text="name"></option>
+                    </template>
+                  </select>
+                </div>
+                <div style="flex: 0 0 11rem;">
                   <input
                     type="text"
                     inputmode="numeric"
@@ -1453,12 +1612,13 @@
                       <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Customer</p></th>
                       <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Reservation</p></th>
                       <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Date Uploaded</p></th>
+                      <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Uploaded By</p></th>
                       <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Actions</p></th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
               <template x-for="(receipt, receiptIndex) in receipts" :key="receiptIndex">
-                <tr x-show="(receiptFilter === 'All' || (receiptFilter === 'ThisWeek' && receipt.isThisWeek)) && (yearFilter === '' || yearFilter === receipt.year) && (search === '' || (receipt.customer + ' ' + receipt.reservation).toLowerCase().includes(search.toLowerCase()))">
+                <tr x-show="(receiptFilter === 'All' || (receiptFilter === 'ThisWeek' && receipt.isThisWeek)) && (yearFilter === '' || yearFilter === receipt.year) && (uploaderFilter === 'All' || receipt.uploadedBy === uploaderFilter) && (search === '' || (receipt.customer + ' ' + receipt.reservation + ' ' + (receipt.uploadedBy || '')).toLowerCase().includes(search.toLowerCase()))">
                   <td class="px-5 py-4 sm:px-6">
                     <div class="flex items-center gap-3">
                       <div class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-gray-400 dark:bg-gray-800">
@@ -1467,8 +1627,14 @@
                       <span class="block font-medium text-gray-800 text-theme-sm dark:text-white/90" x-text="receipt.customer"></span>
                     </div>
                   </td>
-                  <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400" x-text="receipt.reservation"></p></td>
+                  <td class="px-5 py-4 sm:px-6">
+                    <!-- The full booking -- dates, deposit, every receipt, history -- on Reservation Records. -->
+                    <a :href="'{% url 'arabela_admin:reservation_records' %}?search=' + encodeURIComponent(receipt.reservation)"
+                      class="text-theme-sm font-medium text-brand-500 dark:text-brand-400" x-text="receipt.reservation"
+                      title="Open this reservation's full record"></a>
+                  </td>
                   <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400" x-text="receipt.uploaded"></p></td>
+                  <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400" x-text="receipt.uploadedBy || '—'"></p></td>
                   <td class="px-5 py-4 sm:px-6">
                     <button type="button"
                       @click="viewingReceipt = receipt; openPreview = true"
@@ -1543,9 +1709,15 @@
                       </span>
                     </div>
                   </template>
-                  <div>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">Auto-logged upload date</p>
-                    <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewingReceipt.uploaded"></p>
+                  <div class="flex flex-wrap gap-6">
+                    <div>
+                      <p class="text-xs text-gray-500 dark:text-gray-400">Auto-logged upload date</p>
+                      <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewingReceipt.uploaded"></p>
+                    </div>
+                    <div x-show="viewingReceipt.uploadedBy">
+                      <p class="text-xs text-gray-500 dark:text-gray-400">Uploaded by</p>
+                      <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewingReceipt.uploadedBy"></p>
+                    </div>
                   </div>
                 </div>
                 <p x-show="replaceError" x-cloak x-text="replaceError" class="mx-2 mb-3 rounded-lg bg-error-50 px-4 py-2.5 text-sm text-error-700 dark:bg-error-500/15 dark:text-error-500"></p>

@@ -630,7 +630,7 @@ def receipt_records_view(request):
     week_start = today - timedelta(days=today.weekday())
 
     receipts = list(
-        ReceiptRecord.objects.select_related("reservation__customer__profile")
+        ReceiptRecord.objects.select_related("reservation__customer__profile", "uploaded_by")
     )
     rows = [_receipt_row(r, today) for r in receipts]
 
@@ -696,9 +696,9 @@ def receipt_replace_view(request, receipt_id):
     scan, etc. Deliberately leaves uploaded_at/uploaded_by alone: this is fixing the
     existing record, not creating a new one."""
     try:
-        receipt = ReceiptRecord.objects.select_related("reservation__customer__profile").get(
-            id=receipt_id
-        )
+        receipt = ReceiptRecord.objects.select_related(
+            "reservation__customer__profile", "uploaded_by"
+        ).get(id=receipt_id)
     except ReceiptRecord.DoesNotExist:
         return JsonResponse({"error": "Receipt not found."}, status=404)
 
@@ -718,6 +718,229 @@ def receipt_replace_view(request, receipt_id):
     receipt.photo_url = photo_url
     receipt.save(update_fields=["photo_url"])
     return JsonResponse({"success": True, "receipt": _receipt_row(receipt)})
+
+
+# --- Reservation Records -------------------------------------------------------------
+# One row per reservation, with everything a staff member needs to answer a customer's
+# question in one place: the rental dates, where the booking actually is, the deposit,
+# the customer's own payment proof, and the shop's manual receipts. Nothing here is new
+# business logic -- every value is read from the same fields the pages it links to
+# (Security Deposits, Receipt Records, Active Reservations) already use.
+
+def _reservation_window(items):
+    """(first pick-up, last return) across every gown in the booking -- a multi-gown
+    reservation can have a different window per gown."""
+    if not items:
+        return None, None
+    return min(i.rental_date for i in items), max(i.return_date for i in items)
+
+
+def _gown_summary(items):
+    """'Wedding Gown 14' or 'Wedding Gown 14 + 2 more' for a one-line table cell."""
+    if not items:
+        return "No gowns"
+    first = items[0].gown_name
+    return first if len(items) == 1 else f"{first} + {len(items) - 1} more"
+
+
+def _reservation_progress(reservation, items, today):
+    """One plain label for where this booking actually is right now.
+
+    reservation.status alone can't say: nothing moves it past Confirmed once the gown
+    goes out or comes back -- the gown's own stage tracks that -- so a finished rental
+    would still read "Confirmed". Built from the same fields every other page reads;
+    "Completed"/"Overdue" follow Rental History's own rule (Returned stage, or an
+    unreturned gown past its return date)."""
+    if reservation.status == Reservation.Status.PENDING:
+        return "Pending approval"
+    if reservation.status in _NON_RENTAL_STATUSES:
+        return reservation.status
+    if not items:
+        return reservation.status
+    returned = [i.stage == ReservationItem.Stage.RETURNED for i in items]
+    if all(returned):
+        return "Completed"
+    if any(
+        i.stage != ReservationItem.Stage.RETURNED
+        and (i.stage == ReservationItem.Stage.OVERDUE or i.return_date < today)
+        for i in items
+    ):
+        return "Overdue"
+    if any(i.stage in (ReservationItem.Stage.RESERVED, ReservationItem.Stage.RETURN) for i in items):
+        return "With customer"
+    if any(returned):
+        return "Partly returned"
+    return "Awaiting pickup"
+
+
+def _deposit_status(reservation):
+    """Where the P2,000 deposit stands. Only Confirmed-and-later bookings actually hold
+    one (the same set Security Deposits lists); Pending ones haven't been verified yet."""
+    if reservation.deposit_returned_at:
+        return "Returned"
+    if reservation.status in _SCHEDULED_STATUSES:
+        return "Held"
+    if reservation.status == Reservation.Status.PENDING:
+        return "Awaiting verification" if reservation.payment_proof_url else "Not paid"
+    return "Not held"
+
+
+def _peso(amount):
+    return f"₱{amount:,.2f}"
+
+
+@_require_admin_staff
+def reservation_records_view(request):
+    today = timezone.localdate()
+    reservations = reservation_timeline.attach_to_reservations(
+        Reservation.objects.select_related("customer__profile")
+        .prefetch_related(
+            Prefetch("items", queryset=ReservationItem.objects.select_related("gown").order_by("rental_date", "id")),
+            Prefetch(
+                "receipt_records",
+                queryset=ReceiptRecord.objects.select_related("uploaded_by").order_by("-uploaded_at"),
+            ),
+        )
+        .order_by("-created_at")
+    )
+
+    records = []
+    for r in reservations:
+        items = list(r.items.all())
+        start, end = _reservation_window(items)
+        deposit_status = _deposit_status(r)
+        booked = timezone.localtime(r.created_at)
+        records.append({
+            "id": r.id,
+            "reference": r.reference_code,
+            "customer": r.display_customer_name,
+            "customerId": r.customer_id,
+            "email": r.customer.email,
+            "phone": r.phone,
+            "bookedAs": r.booked_as_name,
+            "booked": date_format(booked, "M j, Y"),
+            "progress": _reservation_progress(r, items, today),
+            "start": start.isoformat() if start else booked.date().isoformat(),
+            "end": end.isoformat() if end else booked.date().isoformat(),
+            "startDisplay": date_format(start, "M j, Y") if start else "—",
+            "endDisplay": date_format(end, "M j, Y") if end else "—",
+            "gownSummary": _gown_summary(items),
+            "items": [
+                {
+                    "gown": i.gown_name,
+                    "gownCode": i.gown.gown_id if i.gown_id else "",
+                    "size": i.size or "TBD",
+                    "pickup": date_format(i.rental_date, "M j, Y"),
+                    "event": date_format(i.effective_event_date, "M j, Y"),
+                    "ret": date_format(i.return_date, "M j, Y"),
+                    "stage": i.stage,
+                    "pickedUpOn": date_format(i.picked_up_on, "M j, Y") if i.picked_up_on else "",
+                    "returnedOn": date_format(i.returned_on, "M j, Y") if i.returned_on else "",
+                }
+                for i in items
+            ],
+            "subtotal": _peso(r.rental_subtotal),
+            "deposit": _peso(r.security_deposit),
+            "total": _peso(r.total_amount),
+            "paymentState": r.payment_state,
+            "paymentProofUrl": r.payment_proof_url,
+            "depositStatus": deposit_status,
+            "depositReturnedOn": (
+                date_format(timezone.localtime(r.deposit_returned_at), "M j, Y")
+                if r.deposit_returned_at else ""
+            ),
+            # Security Deposits only lists Confirmed-and-later bookings, so only link
+            # there when this one is actually on that page.
+            "depositLink": (
+                reverse("arabela_admin:security_deposits") + "?" + urlencode({"search": r.reference_code})
+                if deposit_status in ("Held", "Returned") else ""
+            ),
+            "receipts": [_receipt_row(rec, today) for rec in r.receipt_records.all()],
+            # Everything the search box should match, lower-cased once here.
+            "q": " ".join(filter(None, [
+                r.display_customer_name, r.booked_as_name, r.customer.email, r.phone,
+                r.reference_code, *[i.gown_name for i in items],
+                *[i.gown.gown_id for i in items if i.gown_id],
+            ])).lower(),
+        })
+
+    # The shop's own calendar (TIME_ZONE = Asia/Manila), not the viewer's browser clock,
+    # decides what "today" / "this week" / "this month" mean for the date filter.
+    week_start = today - timedelta(days=today.weekday())
+    month_start = today.replace(day=1)
+    month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+
+    return render(
+        request,
+        "arabela_admin/reservation-records.html",
+        {
+            "page": "reservation-records",
+            "records": records,
+            "reservations": reservations,
+            "date_ranges": {
+                "today": today.isoformat(),
+                "weekStart": week_start.isoformat(),
+                "weekEnd": (week_start + timedelta(days=6)).isoformat(),
+                "monthStart": month_start.isoformat(),
+                "monthEnd": month_end.isoformat(),
+            },
+        },
+    )
+
+
+def receipt_reservation_search_view(request):
+    """Live lookup behind Receipt Records' "find the reservation" box: staff type part of
+    a customer's name, email, a reference code, or a gown, and pick the booking from the
+    results -- instead of having to know its exact reference code by heart. Read-only;
+    the upload itself still goes through receipt_upload_view unchanged."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+
+    query = (request.GET.get("q") or "").strip()
+    if len(query) < 2:
+        return JsonResponse({"results": []})
+
+    matches = list(
+        Reservation.objects.filter(
+            Q(customer_name__icontains=query)
+            | Q(reference_code__icontains=query)
+            | Q(customer__profile__display_name__icontains=query)
+            | Q(customer__first_name__icontains=query)
+            | Q(customer__last_name__icontains=query)
+            | Q(customer__email__icontains=query)
+            | Q(items__gown_name__icontains=query)
+        )
+        .distinct()
+        .select_related("customer__profile")
+        .prefetch_related(
+            Prefetch("items", queryset=ReservationItem.objects.order_by("rental_date", "id"))
+        )
+        .order_by("-created_at")[:8]
+    )
+    receipt_counts = {
+        row["reservation_id"]: row["n"]
+        for row in ReceiptRecord.objects.filter(reservation_id__in=[r.id for r in matches])
+        .values("reservation_id")
+        .annotate(n=Count("id"))
+    }
+
+    today = timezone.localdate()
+    results = []
+    for r in matches:
+        items = list(r.items.all())
+        start, end = _reservation_window(items)
+        results.append({
+            "reference": r.reference_code,
+            "customer": r.display_customer_name,
+            "email": r.customer.email,
+            "dates": (
+                f"{date_format(start, 'M j')} – {date_format(end, 'M j, Y')}" if start else "No dates"
+            ),
+            "gownSummary": _gown_summary(items),
+            "progress": _reservation_progress(r, items, today),
+            "receiptCount": receipt_counts.get(r.id, 0),
+        })
+    return JsonResponse({"results": results})
 
 
 @_require_admin_staff
@@ -1096,6 +1319,10 @@ def _receipt_row(receipt, today=None):
         "customer": receipt.reservation.display_customer_name,
         "reservation": receipt.reservation.reference_code,
         "uploaded": uploaded_display,
+        # Who attached it -- so the owner can see, per receipt, which staff member
+        # filed it. "Removed account" when that staff account was later deleted
+        # (uploaded_by is SET_NULL on purpose: the receipt itself must survive).
+        "uploadedBy": _staff_display_name(receipt.uploaded_by) if receipt.uploaded_by else "Removed account",
         "photoUrl": receipt.photo_url,
         "year": str(local_uploaded.year),
         "isThisWeek": local_uploaded.date() >= week_start,

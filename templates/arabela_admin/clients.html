@@ -84,7 +84,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown' || page === 'condition' || page === 'categories') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits' || page === 'receipt-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown' || page === 'condition' || page === 'categories') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits' || page === 'receipt-records' || page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -590,6 +590,15 @@
                     :class="page === 'receipt-records' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
                     Receipt Records
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:reservation_records' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'reservation-records' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Reservation Records
                   </a>
                 </li>
               </ul>
@@ -1497,6 +1506,15 @@
       </div>
     </div>
     <div x-show="!pendingFlagAction" class="mt-6 flex flex-col gap-3 px-2 sm:flex-row sm:justify-end">
+      <!-- Every reservation this customer has made -- dates, deposit, receipts and full
+           history -- on Reservation Records. Filtered by account id, not name: several
+           different customers can share one display name. -->
+      <a
+        :href="'{% url 'arabela_admin:reservation_records' %}?customer=' + viewingCustomer.userId"
+        class="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs hover:bg-brand-600 sm:w-auto"
+      >
+        View Reservation History
+      </a>
       <button
         type="button"
         x-show="viewingCustomer.status !== 'Flagged'"
