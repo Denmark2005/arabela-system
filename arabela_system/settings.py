@@ -13,6 +13,8 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 from pathlib import Path
 
+import cloudinary
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -221,6 +223,13 @@ if _cloudinary_cloud_name:
         'API_SECRET': os.getenv('CLOUDINARY_API_SECRET', '').strip(),
     }
     _default_file_storage = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+    # django-cloudinary-storage only ever forwards CLOUD_NAME/API_KEY/API_SECRET
+    # (and SECURE) out of CLOUDINARY_STORAGE into cloudinary.config() -- it has no
+    # timeout option of its own -- so without this, every upload (gown photos,
+    # GCash proof, receipts, admin profile photos) would wait on Cloudinary with
+    # no cap at all, the same class of bug EMAIL_TIMEOUT fixes above. Confirmed
+    # empirically: cloudinary.config().timeout is None unless set here.
+    cloudinary.config(timeout=int(os.getenv('CLOUDINARY_TIMEOUT', '15')))
 else:
     _default_file_storage = 'django.core.files.storage.FileSystemStorage'
 
@@ -323,6 +332,15 @@ EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'true').lower() == 'true'
+# Without this, a slow/unresponsive connection to the mail server blocks the
+# request forever (no default timeout exists) -- signup, resend, and forgot-
+# password would just hang until something outside Django (the worker, Render's
+# own limits) eventually kills the request, showing a bare Internal Server Error
+# instead of the friendly "couldn't send it, try again" message that's already
+# coded for exactly this failure (see accounts.views's SMTPException/OSError
+# handling -- socket.timeout is an OSError subclass, so it's already covered
+# once there's actually a timeout to raise one).
+EMAIL_TIMEOUT = int(os.getenv('EMAIL_TIMEOUT', '10'))
 _env_default_from = os.getenv('DEFAULT_FROM_EMAIL', '').strip()
 if not _env_default_from:
     DEFAULT_FROM_EMAIL = EMAIL_HOST_USER or 'no-reply@arabela.local'

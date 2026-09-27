@@ -819,7 +819,13 @@ def reservation_submit(request):
         security_deposit = Decimal(len(parsed_items)) * Decimal("2000")
         total_amount = rental_subtotal + security_deposit
 
-        payment_proof_url = _save_proof_file(proof_file)
+        try:
+            payment_proof_url = _save_proof_file(proof_file)
+        except Exception:
+            return JsonResponse(
+                {"success": False, "error": "The payment proof couldn't be uploaded just now. Please try again."},
+                status=502,
+            )
 
         reservation_obj = Reservation.objects.create(
             customer=request.user,
@@ -1013,7 +1019,13 @@ def reservation_upload_proof(request, item_id):
     if error:
         return JsonResponse({"success": False, "error": error}, status=400)
 
-    reservation.payment_proof_url = _save_proof_file(proof_file)
+    try:
+        reservation.payment_proof_url = _save_proof_file(proof_file)
+    except Exception:
+        return JsonResponse(
+            {"success": False, "error": "The payment proof couldn't be uploaded just now. Please try again."},
+            status=502,
+        )
     reservation.save(update_fields=["payment_proof_url", "updated_at"])
     ReservationStatusEvent.record(
         reservation, "Proof of payment uploaded",

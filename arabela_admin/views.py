@@ -1648,7 +1648,13 @@ def gown_photo_update_view(request, gown_id):
     if not photo_file:
         return JsonResponse({"error": "Please choose a photo to upload."}, status=400)
 
-    gown.photo_url = _save_gown_photo(photo_file)
+    try:
+        gown.photo_url = _save_gown_photo(photo_file)
+    except Exception:
+        return JsonResponse(
+            {"error": "The gown photo couldn't be uploaded just now. Please try again."},
+            status=502,
+        )
     gown.save(update_fields=["photo_url", "updated_at"])
     return JsonResponse({"success": True, "photo_url": gown.photo_url})
 
