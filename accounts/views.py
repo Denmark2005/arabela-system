@@ -8,7 +8,9 @@ from django.core.validators import validate_email
 from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
+from datetime import datetime, timedelta
 from smtplib import SMTPException
 import random
 import re
@@ -65,8 +67,38 @@ def _build_unique_username(email: str) -> str:
     return username
 
 
+_VERIFICATION_CODE_TTL_MINUTES = 5
+
+
 def _generate_verification_code() -> str:
     return f"{random.randint(0, 999999):06d}"
+
+
+def _issue_verification_code(request, email: str) -> str:
+    """Generates a fresh code and stores it in the session together with an
+    absolute expiry timestamp, so a code that's merely sitting unused in the
+    session can't be entered after the 5 minutes promised in its own email
+    (see _send_verification_code) have passed. Shared by signup, the
+    already-registered-but-unverified resend path, and the explicit Resend
+    Code button, which all previously duplicated these three session writes."""
+    code = _generate_verification_code()
+    request.session['pending_verification_email'] = email
+    request.session['verification_code'] = code
+    request.session['verification_code_expires_at'] = (
+        timezone.now() + timedelta(minutes=_VERIFICATION_CODE_TTL_MINUTES)
+    ).isoformat()
+    return code
+
+
+def _verification_code_expired(request) -> bool:
+    expires_at_raw = request.session.get('verification_code_expires_at')
+    if not expires_at_raw:
+        return True
+    try:
+        expires_at = datetime.fromisoformat(expires_at_raw)
+    except ValueError:
+        return True
+    return timezone.now() > expires_at
 
 
 def _send_verification_code(request, email: str, code: str) -> None:
@@ -263,9 +295,7 @@ def signup_view(request):
                         profile.display_name = display_name
                         profile.save(update_fields=["display_name"])
 
-                request.session['pending_verification_email'] = email
-                verification_code = _generate_verification_code()
-                request.session['verification_code'] = verification_code
+                verification_code = _issue_verification_code(request, email)
                 try:
                     _send_verification_code(request, email, verification_code)
                 except (SMTPException, OSError):
@@ -307,9 +337,7 @@ def signup_view(request):
 
         email_address = EmailAddress.objects.create(user=user, email=email, primary=True, verified=False)
         UserProfile.objects.create(user=user, display_name=f"{first_name} {last_name}".strip())
-        verification_code = _generate_verification_code()
-        request.session['pending_verification_email'] = email
-        request.session['verification_code'] = verification_code
+        verification_code = _issue_verification_code(request, email)
 
         try:
             _send_verification_code(request, email, verification_code)
@@ -359,9 +387,7 @@ def resend_verification_email_view(request):
     if not user:
         return redirect('accounts:signup')
 
-    verification_code = _generate_verification_code()
-    request.session['pending_verification_email'] = email
-    request.session['verification_code'] = verification_code
+    verification_code = _issue_verification_code(request, email)
 
     try:
         _send_verification_code(request, email, verification_code)
@@ -383,6 +409,15 @@ def verify_email_code_view(request):
 
     if not code:
         return render(request, 'verification.html', {'error': 'Please enter the 6-digit verification code.', 'email': email})
+
+    if not request.session.get('verification_code') or _verification_code_expired(request):
+        request.session.pop('verification_code', None)
+        request.session.pop('verification_code_expires_at', None)
+        return render(
+            request,
+            'verification.html',
+            {'error': 'This code has expired. Please request a new one.', 'email': email},
+        )
 
     if code != request.session.get('verification_code'):
         return render(request, 'verification.html', {'error': 'The code you entered is invalid. Please try again.', 'email': email})
@@ -409,6 +444,7 @@ def verify_email_code_view(request):
         email_address.save()
 
     request.session.pop('verification_code', None)
+    request.session.pop('verification_code_expires_at', None)
     request.session.pop('pending_verification_email', None)
     request.session['auth_notice'] = 'Your email has been verified. Please sign in.'
     return redirect('accounts:login')

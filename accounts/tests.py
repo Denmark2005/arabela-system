@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.core import mail
@@ -140,6 +142,32 @@ class EmailVerificationTests(TestCase):
         response = self.client.post(reverse("accounts:verify_email_code"), data={"code": ""})
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Please enter")
+
+    def test_expired_code_is_rejected_even_if_correct(self):
+        code = self._signed_up_session(email="expiredcode@gmail.com")
+        session = self.client.session
+        session["verification_code_expires_at"] = (timezone.now() - timedelta(seconds=1)).isoformat()
+        session.save()
+
+        response = self.client.post(reverse("accounts:verify_email_code"), data={"code": code})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "expired")
+        user = User.objects.get(email="expiredcode@gmail.com")
+        self.assertFalse(EmailAddress.objects.filter(user=user, verified=True).exists())
+        self.assertNotIn("verification_code", self.client.session)
+
+    def test_resend_issues_a_fresh_non_expired_code(self):
+        self._signed_up_session(email="resendme@gmail.com")
+        session = self.client.session
+        session["verification_code_expires_at"] = (timezone.now() - timedelta(seconds=1)).isoformat()
+        session.save()
+
+        self.client.post(reverse("accounts:resend_verification_email"), data={"email": "resendme@gmail.com"})
+        new_code = self.client.session.get("verification_code")
+
+        response = self.client.post(reverse("accounts:verify_email_code"), data={"code": new_code})
+        self.assertRedirects(response, reverse("accounts:login"))
 
 
 class LoginTests(TestCase):
