@@ -346,6 +346,17 @@
           .then(r => r.json().then(data => ({ ok: r.ok, data })))
           .then(({ ok, data }) => {
             if (!ok) { this.releasingBlockId = null; this.blockError = data.error || 'Could not remove that block.'; return; }
+            // Remove it from the in-memory list immediately, not just after the reload below.
+            // Without this, reopening the View modal in the meantime calls openGownBlockForm(),
+            // which resets releasingBlockId to null -- and the already-released block, still
+            // sitting in gownBlocks, would show its Release button as clickable again, letting
+            // staff fire a second (harmless but confusing) release request on the same block.
+            const list = this.gownBlocks[this.viewingGown.id];
+            if (list) {
+              const idx = list.findIndex(b => b.id === block.id);
+              if (idx !== -1) { list.splice(idx, 1); }
+            }
+            this.releasingBlockId = null;
             this.gownToast('Dates released — gown is bookable again.');
             setTimeout(() => window.location.reload(), 800);
           })
