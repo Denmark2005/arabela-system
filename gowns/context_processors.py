@@ -51,6 +51,9 @@ _CATEGORIES = (
     {"key": "belo", "url_name": "collection_belo", "label": "Belo"},
     {"key": "thailand-gown", "url_name": "collection_thailand_gown", "label": "Thailand Gown"},
     {"key": "dresses", "url_name": "collection_dresses", "label": "Dresses"},
+    {"key": "kids-gown", "url_name": "collection_kids_gown", "label": "Kids Gown"},
+    {"key": "barong", "url_name": "collection_barong", "label": "Barong"},
+    {"key": "ball-gown-tulle", "url_name": "collection_ball_gown_tulle", "label": "Ball Gown Tulle"},
 )
 
 # "All" is a synthetic first row (not a real category) prepended wherever the

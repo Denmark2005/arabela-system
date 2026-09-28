@@ -182,6 +182,18 @@ def collection_dresses(request):
     return _render_collection(request, 'dresses.html', 'dresses')
 
 
+def collection_kids_gown(request):
+    return _render_collection(request, 'kids_gown.html', 'kids-gown')
+
+
+def collection_barong(request):
+    return _render_collection(request, 'barong.html', 'barong')
+
+
+def collection_ball_gown_tulle(request):
+    return _render_collection(request, 'ball_gown_tulle.html', 'ball-gown-tulle')
+
+
 def featured_men_collections(request):
     return render(request, 'featured_men_collections.html', {})
 

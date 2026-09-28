@@ -49,6 +49,9 @@ class Gown(models.Model):
         BELO = 'Belo', 'Belo'
         THAILAND_GOWN = 'Thailand Gown', 'Thailand Gown'
         DRESSES = 'Dresses', 'Dresses'
+        KIDS_GOWN = 'Kids Gown', 'Kids Gown'
+        BARONG = 'Barong', 'Barong'
+        BALL_GOWN_TULLE = 'Ball Gown Tulle', 'Ball Gown Tulle'
 
     class Size(models.TextChoices):
         SMALL = 'Small', 'Small'

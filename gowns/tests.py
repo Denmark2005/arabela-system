@@ -868,6 +868,116 @@ class CategorySwapTests(TestCase):
         self.assertNotIn('value="Ninang Gown"', html)
 
 
+class NewGownCategoriesTests(TestCase):
+    """Kids Gown, Barong, and Ball Gown Tulle added to the registry -- no products yet,
+    per the owner, so these must behave exactly like any other empty category rather
+    than as a special case. Barong is the one men's addition (alongside Suit); Kids
+    Gown and Ball Gown Tulle are women's, like everything else that isn't Suit/Barong."""
+
+    NEW_CATEGORIES = [
+        ("collection_kids_gown", "Kids Gown"),
+        ("collection_barong", "Barong"),
+        ("collection_ball_gown_tulle", "Ball Gown Tulle"),
+    ]
+
+    def test_each_new_category_page_renders_with_its_own_label(self):
+        for url_name, label in self.NEW_CATEGORIES:
+            with self.subTest(category=label):
+                html = self.client.get(reverse(f"gowns:{url_name}")).content.decode()
+                self.assertIn(f">{label}<", html)
+                self.assertIn(f"{label} Collection", html)  # <title>
+                for leak in ("{%", "{{", "{#"):
+                    self.assertNotIn(leak, html)
+
+    def test_each_new_category_shows_the_empty_state_with_no_product_yet(self):
+        """The owner was explicit: these are categories only, no products yet -- so
+        the normal empty-collection state must show, not an error or a 500."""
+        for url_name, _ in self.NEW_CATEGORIES:
+            with self.subTest(category=url_name):
+                html = self.client.get(reverse(f"gowns:{url_name}")).content.decode()
+                self.assertIn("No gowns available in this collection", html)
+
+    def test_the_browse_all_grid_lists_the_new_categories(self):
+        html = self.client.get(reverse("gowns:collections")).content.decode()
+        for _, label in self.NEW_CATEGORIES:
+            self.assertIn(label, html)
+
+    def test_the_rent_all_cycle_through_view_includes_the_new_categories(self):
+        html = self.client.get(reverse("gowns:collection_all")).content.decode()
+        for _, label in self.NEW_CATEGORIES:
+            self.assertIn(label, html)
+
+    def test_gown_model_accepts_the_new_categories(self):
+        for _, label in self.NEW_CATEGORIES:
+            self.assertIn(label, Gown.Category.values)
+
+    def _grid_tile_present(self, html, url):
+        """Both featured pages extend base.html, whose own shared nav dropdown and
+        mobile drawer ALSO list every category (correctly -- that menu is the same
+        on every page). So a bare "is this URL/label anywhere in the page" check
+        would find Barong on the women's page too, via the navbar, regardless of
+        whether the men/women GRID itself is right. The grid tile's own markup
+        (featured_men_collections.html / featured_women_collections.html) pairs the
+        href directly with this exact class string, which the nav links never use
+        (confirmed against base.html -- its dropdown links use a plain text-list
+        class), so this is what actually distinguishes "in this page's grid" from
+        "in the site-wide nav that happens to render on this page too"."""
+        return f'href="{url}" class="group cursor-pointer flex flex-col items-center"' in html
+
+    def test_barong_is_in_men_not_women(self):
+        men_html = self.client.get(reverse("gowns:featured_men_collections")).content.decode()
+        women_html = self.client.get(reverse("gowns:featured_women_collections")).content.decode()
+        barong_url = reverse("gowns:collection_barong")
+        self.assertTrue(self._grid_tile_present(men_html, barong_url), "Barong tile missing from the men's grid")
+        self.assertFalse(self._grid_tile_present(women_html, barong_url), "Barong tile should not be in the women's grid")
+        # Suit must still be there too -- Barong is an addition, not a replacement.
+        self.assertTrue(self._grid_tile_present(men_html, reverse("gowns:collection_suit")), "Suit tile missing from the men's grid")
+
+    def test_kids_gown_and_ball_gown_tulle_are_in_women_not_men(self):
+        men_html = self.client.get(reverse("gowns:featured_men_collections")).content.decode()
+        women_html = self.client.get(reverse("gowns:featured_women_collections")).content.decode()
+        for label, url_name in (("Kids Gown", "collection_kids_gown"), ("Ball Gown Tulle", "collection_ball_gown_tulle")):
+            with self.subTest(category=label):
+                url = reverse(f"gowns:{url_name}")
+                self.assertTrue(self._grid_tile_present(women_html, url), f"{label} tile missing from the women's grid")
+                self.assertFalse(self._grid_tile_present(men_html, url), f"{label} tile should not be in the men's grid")
+
+    def test_a_real_gown_can_be_added_in_a_new_category_and_appears_live(self):
+        """The actual end-to-end proof: create through the real admin endpoint, then
+        confirm it is visible on the real customer-facing page -- not just that the
+        category string is accepted somewhere in isolation."""
+        staff = User.objects.create_user(username="newcat_admin", password="x", is_staff=True)
+        self.client.force_login(staff)
+        response = self.client.post(reverse("arabela_admin:gown_create"), data={
+            "name": "Barong Test Piece", "category": "Barong",
+            "color_name": "Ivory", "color_code": "IV",
+            "size": Gown.Size.MEDIUM, "rental_price": "1500",
+            "status": Gown.Status.AVAILABLE,
+        })
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["gown"]["gown_id"], "Barong-IV-001")
+
+        self.client.logout()
+        html = self.client.get(reverse("gowns:collection_barong")).content.decode()
+        self.assertIn("Barong Test Piece", html)
+
+    def test_admin_categories_page_shows_the_new_categories(self):
+        staff = User.objects.create_user(username="newcat_cats", password="x", is_staff=True)
+        self.client.force_login(staff)
+        html = self.client.get(reverse("arabela_admin:categories")).content.decode()
+        for _, label in self.NEW_CATEGORIES:
+            self.assertIn(label, html)
+        for leak in ("{%", "{{", "{#"):
+            self.assertNotIn(leak, html)
+
+    def test_gown_catalog_dropdowns_offer_the_new_categories(self):
+        staff = User.objects.create_user(username="newcat_catalog", password="x", is_staff=True)
+        self.client.force_login(staff)
+        html = self.client.get(reverse("arabela_admin:gown_catalog")).content.decode()
+        for _, label in self.NEW_CATEGORIES:
+            self.assertIn(f'<option value="{label}">{label}</option>', html)
+
+
 class CollectionPaginationTests(TestCase):
     """Every collection grid (`_render_collection` in gowns/views.py) now paginates at
     _COLLECTION_PAGE_SIZE (8) instead of dumping every real gown onto one page. The old

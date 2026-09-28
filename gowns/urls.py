@@ -35,6 +35,9 @@ urlpatterns = [
     path("collections/belo/", views.collection_belo, name="collection_belo"),
     path("collections/thailand-gown/", views.collection_thailand_gown, name="collection_thailand_gown"),
     path("collections/dresses/", views.collection_dresses, name="collection_dresses"),
+    path("collections/kids-gown/", views.collection_kids_gown, name="collection_kids_gown"),
+    path("collections/barong/", views.collection_barong, name="collection_barong"),
+    path("collections/ball-gown-tulle/", views.collection_ball_gown_tulle, name="collection_ball_gown_tulle"),
 
     # Product detail -- legacy (unnamed) route must stay BEFORE the generic one.
     path(
