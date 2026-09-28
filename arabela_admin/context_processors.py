@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import UserProfile
-from arabela_admin.views import _staff_display_name
+from arabela_admin.views import _SCHEDULED_STATUSES, _staff_display_name
 from gowns.models import Gown
 from reservations.models import Reservation, ReservationItem
 
@@ -250,6 +250,36 @@ def admin_notifications(request):
             # A plain date has no time; midnight is close enough for ordering, and the
             # sort only ever calls .timestamp() on each key in isolation.
             "sort": datetime.combine(it.return_date, time.min),
+        })
+
+    # --- Missed pick-ups (approved, still sitting in the shop past the pick-up date) --
+    # Deliberately just a staff-facing nudge, no customer message -- unlike the overdue-
+    # return reminder, nothing automatically contacts the customer for this one. Scoped
+    # to _SCHEDULED_STATUSES (the same filter Active Reservations itself queries on) so
+    # a click always lands on a row that's actually visible there.
+    late_pickup_items = (
+        ReservationItem.objects.filter(
+            stage=ReservationItem.Stage.PICKUP,
+            rental_date__lt=today,
+            reservation__status__in=_SCHEDULED_STATUSES,
+        )
+        .select_related("reservation__customer__profile")
+        .order_by("rental_date")[:10]
+    )
+    for it in late_pickup_items:
+        days_late = (today - it.rental_date).days
+        items.append({
+            "kind": "late_pickup",
+            "level": "warning",
+            "icon": "late_pickup",
+            "actor": it.gown_name,
+            "text": f"is {days_late} day{'s' if days_late != 1 else ''} late for pick-up by",
+            "subject": it.reservation.display_customer_name,
+            "module": "Reservations",
+            "url": _searchable("arabela_admin:active_reservations", it.reservation.reference_code),
+            "when": it.rental_date,
+            "ago": _ago(it.rental_date),
+            "sort": datetime.combine(it.rental_date, time.min),
         })
 
     # --- Deposits still held on fully-returned rentals -----------------------------

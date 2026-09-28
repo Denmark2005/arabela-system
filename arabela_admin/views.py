@@ -10,8 +10,7 @@ from django.contrib.auth import authenticate, login, logout, get_user_model, upd
 from django.core.cache import cache
 from django.core.files.storage import default_storage
 from django.db import DataError, IntegrityError, transaction
-from django.db.models import Q, Count, Prefetch
-from django.db.models.functions import ExtractMonth
+from django.db.models import Q, Count, Min, Prefetch
 from django.shortcuts import redirect, render
 from django.http import Http404, JsonResponse
 from django.urls import reverse
@@ -108,24 +107,20 @@ def dashboard_view(request):
     gowns = Gown.objects.all()
     gown_total = gowns.count()
 
-    # Monthly Rentals chart: how many GOWNS went out in each month of the current year.
-    # Counts ReservationItem (one row per gown), not Reservation -- a booking with three
-    # gowns is three rentals -- and keys off rental_date (the day the gown actually
-    # leaves) rather than created_at (the day it was booked). Rental History lists the
-    # same rows keyed the same way, so clicking a bar lands on exactly that many rows;
-    # keying the two differently is what would make the drill-down lie.
-    current_year = timezone.localdate().year
-    counts_by_month = {
-        row["month"]: row["count"]
-        for row in (
-            ReservationItem.objects.filter(rental_date__year=current_year)
-            .exclude(reservation__status__in=_NON_RENTAL_STATUSES)
-            .annotate(month=ExtractMonth("rental_date"))
-            .values("month")
-            .annotate(count=Count("id"))
-        )
-    }
-    monthly_rentals = [counts_by_month.get(m, 0) for m in range(1, 13)]
+    # Reservations This Month: one per BOOKING (not per gown), counted in the month its
+    # FIRST gown is picked up (the same first pick-up _reservation_window gives
+    # Reservation Records), leaving out bookings that never became rentals. The tile
+    # links to Reservation Records' ?month= filter, which applies this exact rule to
+    # its own one-row-per-reservation list -- counting gowns here, or by any day of the
+    # rental, would make the number on the tile disagree with the rows it opens.
+    month_start = timezone.localdate().replace(day=1)
+    next_month_start = (month_start + timedelta(days=32)).replace(day=1)
+    reservations_this_month = (
+        Reservation.objects.exclude(status__in=_NON_RENTAL_STATUSES)
+        .annotate(first_pickup=Min("items__rental_date"))
+        .filter(first_pickup__gte=month_start, first_pickup__lt=next_month_start)
+        .count()
+    )
 
     return render(
         request,
@@ -146,8 +141,12 @@ def dashboard_view(request):
             # Drives the empty-state call to action: with no gowns the shop cannot take
             # a real booking at all, so it is the single most important thing to surface.
             "catalog_is_empty": gown_total == 0,
-            "monthly_rentals": monthly_rentals,
-            "monthly_rentals_year": current_year,
+            "reservations_this_month": reservations_this_month,
+            "reservations_this_month_label": date_format(month_start, "F Y"),
+            "reservations_this_month_url": (
+                reverse("arabela_admin:reservation_records")
+                + "?" + urlencode({"month": month_start.strftime("%Y-%m")})
+            ),
         },
     )
 
@@ -426,13 +425,21 @@ def _unavailability_events(blocks):
 
     Deliberately carries no itemId: the calendar's click handler bails out early without
     one (see bundle.js bookingEventClick), so these render but stay read-only -- they're
-    edited from the gown's own row in the Gown Catalog, which is where they're created."""
+    edited from the gown's own row in the Gown Catalog, which is where they're created.
+
+    The title deliberately never includes block.note -- FullCalendar renders it as one
+    unbroken line, in both the day cell and its own "+N more" popover, neither of which
+    wrap or truncate cleanly. The auto-cooldown note in particular is a full sentence
+    ("Auto-added post-rental cooldown, backfilled for a booking made before this rule
+    shipped.") that overflowed the row and got cut off mid-word. The full note is still
+    readable in its proper place -- the block's row in Gown Catalog's Blocked Dates list,
+    which actually has room to wrap it -- so nothing is lost, just moved off a row too
+    narrow for it."""
     events = []
     for block in blocks:
-        note = f" · {block.note}" if block.note else ""
         events.append({
             "id": f"block-{block.id}",
-            "title": f"{block.reason} · {block.gown.gown_id} — {block.gown.name}{note}",
+            "title": f"{block.reason} · {block.gown.gown_id} — {block.gown.name}",
             "start": block.start_date.isoformat(),
             "end": (block.end_date + timedelta(days=1)).isoformat(),
             "allDay": True,
@@ -507,12 +514,12 @@ def payment_verification_view(request):
 
 @_require_admin_staff
 def rental_history_view(request):
-    """Every gown that has gone out, one row per gown.
+    """Every gown that has gone out, one row per gown (ReservationItem), bucketed by
+    rental_date and excluding bookings that never became rentals.
 
-    Deliberately keyed exactly like the dashboard's Monthly Rentals chart -- one
-    ReservationItem per row, bucketed by rental_date, excluding bookings that never
-    became rentals -- so clicking a bar lands on precisely that many rows. If the two
-    ever diverge the drill-down silently lies about the numbers.
+    Counts GOWNS, not bookings -- a three-gown reservation is three rows here but one
+    in Reservation Records' monthly breakdown and the dashboard's Reservations This
+    Month tile, so this page's month totals are expected to be higher than those.
     """
     today = timezone.localdate()
     items = list(
@@ -824,6 +831,14 @@ def reservation_records_view(request):
             "end": end.isoformat() if end else booked.date().isoformat(),
             "startDisplay": date_format(start, "M j, Y") if start else "—",
             "endDisplay": date_format(end, "M j, Y") if end else "—",
+            # The one month this booking counts under in the monthly breakdown, the
+            # ?month= filter, and the dashboard's Reservations This Month tile: the
+            # month its FIRST gown is picked up (see dashboard_view). Blank for a
+            # booking with no gowns, so it is never counted anywhere.
+            "pickupMonth": start.strftime("%Y-%m") if start else "",
+            # Rejected/Cancelled bookings never became rentals -- still listed here like
+            # every other booking, but left out of those monthly counts.
+            "countsAsRental": r.status not in _NON_RENTAL_STATUSES,
             "gownSummary": _gown_summary(items),
             "items": [
                 {
@@ -883,6 +898,7 @@ def reservation_records_view(request):
                 "weekEnd": (week_start + timedelta(days=6)).isoformat(),
                 "monthStart": month_start.isoformat(),
                 "monthEnd": month_end.isoformat(),
+                "thisMonth": month_start.strftime("%Y-%m"),
             },
         },
     )
@@ -2300,6 +2316,9 @@ def categories_view(request):
             "belo_count": counts_by_category.get(Gown.Category.BELO, 0),
             "thailand_gown_count": counts_by_category.get(Gown.Category.THAILAND_GOWN, 0),
             "dresses_count": counts_by_category.get(Gown.Category.DRESSES, 0),
+            "kids_gown_count": counts_by_category.get(Gown.Category.KIDS_GOWN, 0),
+            "barong_count": counts_by_category.get(Gown.Category.BARONG, 0),
+            "ball_gown_tulle_count": counts_by_category.get(Gown.Category.BALL_GOWN_TULLE, 0),
         },
     )
 
@@ -2719,15 +2738,11 @@ def admin_logout_view(request):
 
 
 def page_view(request, page: str):
-    # Only the static template-pack demo pages + the real Edit Profile page. Note this
-    # deliberately EXCLUDES calendar / payment-verification / security-deposits: those
-    # have their own gated named routes, and letting the "<page>.html" catch-all also
-    # render them bypassed that auth (and served them with no context).
+    # Only the real Edit Profile / Account Settings pages. Note this deliberately
+    # EXCLUDES calendar / payment-verification / security-deposits: those have their
+    # own gated named routes, and letting the "<page>.html" catch-all also render
+    # them bypassed that auth (and served them with no context).
     allowed_pages = {
-        "alerts",
-        "badge",
-        "buttons",
-        "form-elements",
         "profile",
         "account-settings",
     }
@@ -2747,14 +2762,12 @@ def page_view(request, page: str):
             "bio": profile.display_name,
         })
 
-    if page == "account-settings":
-        # admin_full_name/admin_role/admin_is_owner already come from the global admin
-        # context processor -- only the raw login username is specific to this page.
-        return render(request, "arabela_admin/account-settings.html", {
-            "admin_username": request.user.get_username(),
-        })
-
-    return render(request, f"arabela_admin/{page}.html")
+    # page == "account-settings"
+    # admin_full_name/admin_role/admin_is_owner already come from the global admin
+    # context processor -- only the raw login username is specific to this page.
+    return render(request, "arabela_admin/account-settings.html", {
+        "admin_username": request.user.get_username(),
+    })
 
 
 @require_http_methods(["POST"])

@@ -160,6 +160,24 @@
           receiptFilter: 'All',
           customerFilter: null,
           customerFilterName: '',
+          // Pick-up year/month browser -- 'YYYY' and zero-padded 'MM', or '' for either.
+          // A month only means anything once a year is picked (cascading, like a
+          // country/state pair) -- see pickupYearChanged(). pickupYear is the ACTUAL
+          // applied filter, only ever written by pickupYearChanged() after validating
+          // it's a real 4-digit year -- never bound directly to the year text field.
+          // pickupYearInput is the raw, unvalidated text the field is bound to; it's
+          // free to be "2", "20", garbage, or empty while the customer is mid-keystroke
+          // without ever touching the actual filter or flashing the list empty.
+          // pickupYearChanged() resyncs it to match pickupYear directly and
+          // unconditionally on commit, so invalid text never stays visibly on screen --
+          // see the comment on that function for why that can't be left to a $watch.
+          // init()'s $watch('pickupYear', ...) additionally mirrors it for every OTHER
+          // way pickupYear can change (Clear filters, a quick-view card, a date range,
+          // a deep link) -- those only ever write pickupYear directly, so a plain
+          // mirror is correct and sufficient for them.
+          pickupYear: '',
+          pickupYearInput: '',
+          pickupMonthNum: '',
           filtering: false,
           filterTimeout: null,
 
@@ -194,15 +212,47 @@
               this.customerFilter = presetCustomer;
               this.customerFilterName = match ? match.customer : 'this customer';
             }
+            // ?month=YYYY-MM from the dashboard's Reservations This Month tile (exact
+            // month), or ?year=YYYY for a whole year. Anything malformed is ignored
+            // rather than filtering the list down to nothing. Checked in this order so
+            // a link that somehow carries both isn't ambiguous about which one wins.
+            const presetMonth = params.get('month');
+            if (presetMonth && /^\d{4}-(0[1-9]|1[0-2])$/.test(presetMonth)) {
+              this.pickupYear = presetMonth.slice(0, 4);
+              this.pickupMonthNum = presetMonth.slice(5, 7);
+            } else {
+              const presetYear = params.get('year');
+              if (presetYear && /^\d{4}$/.test(presetYear)) {
+                this.pickupYear = presetYear;
+              }
+            }
+            // Mirror whatever the deep link (or the '' default) resolved to before
+            // watching -- $watch only fires on FUTURE changes, not the value already
+            // set above.
+            this.pickupYearInput = this.pickupYear;
+
             // Keep the address bar matching what's on screen, so a reload lands back here.
             this.$watch('search', () => this.syncUrl());
             this.$watch('customerFilter', () => this.syncUrl());
+            this.$watch('pickupYear', () => this.syncUrl());
+            this.$watch('pickupYear', value => { this.pickupYearInput = value; });
+            this.$watch('pickupMonthNum', () => this.syncUrl());
           },
 
           syncUrl() {
             const params = new URLSearchParams(window.location.search);
             this.search ? params.set('search', this.search) : params.delete('search');
             this.customerFilter !== null ? params.set('customer', this.customerFilter) : params.delete('customer');
+            if (this.pickupYear && this.pickupMonthNum) {
+              params.set('month', this.pickupYear + '-' + this.pickupMonthNum);
+              params.delete('year');
+            } else if (this.pickupYear) {
+              params.set('year', this.pickupYear);
+              params.delete('month');
+            } else {
+              params.delete('month');
+              params.delete('year');
+            }
             const query = params.toString();
             history.replaceState(null, '', window.location.pathname + (query ? '?' + query : ''));
           },
@@ -255,6 +305,16 @@
             if (this.receiptFilter === 'has' && r.receipts.length === 0) { return false; }
             if (this.receiptFilter === 'needs' && !this.needsReceipt(r)) { return false; }
             if (!this.inRange(r, this.dateRange(this.dateFilter))) { return false; }
+            if (this.pickupYear) {
+              // r.pickupMonth is 'YYYY-MM' or '' (a booking with no gowns) -- slice
+              // rather than build a key to compare, so a year-only pick still matches
+              // every month within it.
+              if (!r.pickupMonth || r.pickupMonth.slice(0, 4) !== this.pickupYear) { return false; }
+              if (this.pickupMonthNum && r.pickupMonth.slice(5, 7) !== this.pickupMonthNum) { return false; }
+              // A period's count leaves out cancelled/rejected bookings, so its rows do
+              // too -- unless a status is picked on purpose, which then shows that status.
+              if (this.statusFilter === 'All' && !r.countsAsRental) { return false; }
+            }
             const q = this.search.trim().toLowerCase();
             if (q && !r.q.includes(q)) { return false; }
             return true;
@@ -266,6 +326,94 @@
 
           get scopedRecords() {
             return this.records.filter(r => this.inCustomerScope(r));
+          },
+
+          // Real count for whatever year is currently applied, shown as a small live hint
+          // next to the year field (there's no longer a list of options to write a count
+          // into). Same two fields matches() filters on above, and follows the customer
+          // filter, like the quick-view cards -- so this always agrees with what
+          // choosing that year alone (no month) actually shows.
+          get pickupYearTotal() {
+            if (!this.pickupYear) { return 0; }
+            return this.scopedRecords.filter(
+              r => r.pickupMonth && r.countsAsRental && r.pickupMonth.slice(0, 4) === this.pickupYear
+            ).length;
+          },
+
+          // All 12 months of whichever year is picked, always in order and always all
+          // twelve -- unlike the Year dropdown, a month with zero bookings is still worth
+          // seeing (that's the whole point of being able to check "did anything happen in
+          // January"), not just the ones with data. Empty until a year is chosen: a month
+          // number alone is ambiguous about which year it belongs to.
+          get pickupMonthOptions() {
+            if (!this.pickupYear) { return []; }
+            const counts = {};
+            for (let m = 1; m <= 12; m++) { counts[String(m).padStart(2, '0')] = 0; }
+            this.scopedRecords.forEach(r => {
+              if (r.pickupMonth && r.countsAsRental && r.pickupMonth.slice(0, 4) === this.pickupYear) {
+                const mm = r.pickupMonth.slice(5, 7);
+                counts[mm] += 1;
+              }
+            });
+            const thisYear = this.ranges.thisMonth.slice(0, 4);
+            const thisMonthNum = this.ranges.thisMonth.slice(5, 7);
+            return Object.keys(counts).sort().map(mm => ({
+              key: mm,
+              label: this.monthNumLabel(mm),
+              count: counts[mm],
+              isCurrent: this.pickupYear === thisYear && mm === thisMonthNum,
+            }));
+          },
+
+          // '09' -> 'September'. A plain lookup table rather than Date-based formatting
+          // (as the old single-dropdown version used) -- there is no real calendar date
+          // to build here, just a month number picked independently of any year.
+          monthNumLabel(mm) {
+            const names = ['January', 'February', 'March', 'April', 'May', 'June',
+              'July', 'August', 'September', 'October', 'November', 'December'];
+            return names[parseInt(mm, 10) - 1] || mm;
+          },
+
+          // Fires when the year field loses focus (or Enter is pressed) with its text
+          // actually changed -- not on every keystroke, so a list never flashes empty
+          // while someone is mid-way through typing "2026". Validates what was typed
+          // against a generous but real sanity range (1900-2100 -- "any year", not "any
+          // string") and only ever writes to the real pickupYear if it's a clean 4-digit
+          // year; anything else -- blank, "20", letters, "99999" -- commits '' instead.
+          //
+          // pickupYearInput is resynced HERE, directly and unconditionally, rather than
+          // left to the $watch('pickupYear', ...) in init() -- that watch only fires when
+          // pickupYear's VALUE actually changes, and "already blank, type garbage, still
+          // blank" is not a change by that measure. Relying on it alone was a real bug:
+          // rejected text would sit visibly in the box looking accepted, even though the
+          // underlying filter was correctly untouched. The line below is what actually
+          // guarantees invalid input never stays on screen, in every case, not just the
+          // ones where pickupYear happens to move away from its previous value.
+          //
+          // Also resets whatever month was picked for the PREVIOUS year (September only
+          // means something once you know which year's September), so it never silently
+          // keeps a year+month combination that was never actually chosen together.
+          pickupYearChanged() {
+            const typed = (this.pickupYearInput || '').trim();
+            const asNumber = parseInt(typed, 10);
+            const isValidYear = /^\d{4}$/.test(typed) && asNumber >= 1900 && asNumber <= 2100;
+            this.pickupYear = isValidYear ? typed : '';
+            this.pickupYearInput = this.pickupYear;
+            this.pickupMonthNum = '';
+            this.pickupPeriodChanged();
+          },
+
+          // The Year/Month dropdowns and the "Rental dates" buttons are two different
+          // ways of picking dates, so choosing one switches the other off (setDateFilter
+          // does the reverse). Search, status and receipts still combine with either,
+          // the same way the other dropdowns combine with each other.
+          pickupPeriodChanged() {
+            if (this.pickupYear) {
+              this.dateFilter = 'all';
+              this.customFrom = '';
+              this.customTo = '';
+            }
+            this.flash();
           },
 
           // Card counts follow the customer filter too, so arriving from Client List
@@ -283,6 +431,8 @@
             this.statusFilter = 'All';
             this.customFrom = '';
             this.customTo = '';
+            this.pickupYear = '';
+            this.pickupMonthNum = '';
             if (mode === 'needs') {
               this.dateFilter = 'all';
               this.receiptFilter = 'needs';
@@ -294,13 +444,17 @@
           },
 
           cardActive(mode) {
-            if (this.search || this.statusFilter !== 'All') { return false; }
+            if (this.search || this.statusFilter !== 'All' || this.pickupYear) { return false; }
             if (mode === 'needs') { return this.receiptFilter === 'needs' && this.dateFilter === 'all'; }
             return this.dateFilter === mode && this.receiptFilter === 'All';
           },
 
+          // A date range and a pick-up year/month are two different ways of picking
+          // dates, so choosing one replaces the other -- never both at once.
           setDateFilter(mode) {
             this.dateFilter = mode;
+            this.pickupYear = '';
+            this.pickupMonthNum = '';
             this.flash();
           },
 
@@ -317,6 +471,8 @@
             this.customTo = '';
             this.statusFilter = 'All';
             this.receiptFilter = 'All';
+            this.pickupYear = '';
+            this.pickupMonthNum = '';
             this.flash();
           },
 
@@ -1043,210 +1199,9 @@
             </a>
           </li>
           <!-- Menu Item Profile -->
-
-          <!-- Menu Item Forms -->
-          <li data-admin-template-nav="forms">
-            <a
-              href="#"
-              @click.prevent="selected = (selected === 'Forms' ? '':'Forms')"
-              class="menu-item group"
-              :class=" (selected === 'Forms') || (page === 'formElements' || page === 'formLayout' || page === 'proFormElements' || page === 'proFormLayout') ? 'menu-item-active' : 'menu-item-inactive'"
-            >
-              <svg
-                :class="(selected === 'Forms') || (page === 'formElements' || page === 'formLayout' || page === 'proFormElements' || page === 'proFormLayout') ? 'menu-item-icon-active'  :'menu-item-icon-inactive'"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  fill-rule="evenodd"
-                  clip-rule="evenodd"
-                  d="M5.5 3.25C4.25736 3.25 3.25 4.25736 3.25 5.5V18.5C3.25 19.7426 4.25736 20.75 5.5 20.75H18.5001C19.7427 20.75 20.7501 19.7426 20.7501 18.5V5.5C20.7501 4.25736 19.7427 3.25 18.5001 3.25H5.5ZM4.75 5.5C4.75 5.08579 5.08579 4.75 5.5 4.75H18.5001C18.9143 4.75 19.2501 5.08579 19.2501 5.5V18.5C19.2501 18.9142 18.9143 19.25 18.5001 19.25H5.5C5.08579 19.25 4.75 18.9142 4.75 18.5V5.5ZM6.25005 9.7143C6.25005 9.30008 6.58583 8.9643 7.00005 8.9643L17 8.96429C17.4143 8.96429 17.75 9.30008 17.75 9.71429C17.75 10.1285 17.4143 10.4643 17 10.4643L7.00005 10.4643C6.58583 10.4643 6.25005 10.1285 6.25005 9.7143ZM6.25005 14.2857C6.25005 13.8715 6.58583 13.5357 7.00005 13.5357H17C17.4143 13.5357 17.75 13.8715 17.75 14.2857C17.75 14.6999 17.4143 15.0357 17 15.0357H7.00005C6.58583 15.0357 6.25005 14.6999 6.25005 14.2857Z"
-                  fill=""
-                />
-              </svg>
-
-              <span
-                class="menu-item-text"
-                :class="sidebarToggle ? 'lg:hidden' : ''"
-              >
-                Forms
-              </span>
-
-              <svg
-                class="menu-item-arrow absolute right-2.5 top-1/2 -translate-y-1/2 stroke-current"
-                :class="[(selected === 'Forms') ? 'menu-item-arrow-active' : 'menu-item-arrow-inactive', sidebarToggle ? 'lg:hidden' : '' ]"
-                width="20"
-                height="20"
-                viewBox="0 0 20 20"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M4.79175 7.39584L10.0001 12.6042L15.2084 7.39585"
-                  stroke=""
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-            </a>
-
-            <!-- Dropdown Menu Start -->
-            <div
-              class="overflow-hidden transform translate"
-              :class="(selected === 'Forms') ? 'block' :'hidden'"
-            >
-              <ul
-                :class="sidebarToggle ? 'lg:hidden' : 'flex'"
-                class="flex flex-col gap-1 mt-2 menu-dropdown pl-9"
-              >
-                <li>
-                  <a
-                    href="{% url 'arabela_admin:page' page='form-elements' %}"
-                    class="menu-dropdown-item group"
-                    :class="page === 'formElements' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Form Elements
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <!-- Dropdown Menu End -->
-          </li>
-          <!-- Menu Item Forms -->
-
                   </ul>
       </div>
 
-      <!-- Others Group -->
-      <div data-admin-template-nav="others-ui">
-        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
-          <span
-            class="menu-group-title"
-            :class="sidebarToggle ? 'lg:hidden' : ''"
-          >
-            others
-          </span>
-
-          <svg
-            :class="sidebarToggle ? 'lg:block hidden' : 'hidden'"
-            class="mx-auto fill-current menu-group-icon"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              fill-rule="evenodd"
-              clip-rule="evenodd"
-              d="M5.99915 10.2451C6.96564 10.2451 7.74915 11.0286 7.74915 11.9951V12.0051C7.74915 12.9716 6.96564 13.7551 5.99915 13.7551C5.03265 13.7551 4.24915 12.9716 4.24915 12.0051V11.9951C4.24915 11.0286 5.03265 10.2451 5.99915 10.2451ZM17.9991 10.2451C18.9656 10.2451 19.7491 11.0286 19.7491 11.9951V12.0051C19.7491 12.9716 18.9656 13.7551 17.9991 13.7551C17.0326 13.7551 16.2491 12.9716 16.2491 12.0051V11.9951C16.2491 11.0286 17.0326 10.2451 17.9991 10.2451ZM13.7491 11.9951C13.7491 11.0286 12.9656 10.2451 11.9991 10.2451C11.0326 10.2451 10.2491 11.0286 10.2491 11.9951V12.0051C10.2491 12.9716 11.0326 13.7551 11.9991 13.7551C12.9656 13.7551 13.7491 12.9716 13.7491 12.0051V11.9951Z"
-              fill=""
-            />
-          </svg>
-        </h3>
-
-        <ul class="flex flex-col gap-4 mb-6">
-          
-
-          <!-- Menu Item Ui Elements -->
-          <li>
-            <a
-              href="#"
-              @click.prevent="selected = (selected === 'UIElements' ? '':'UIElements')"
-              class="menu-item group"
-              :class="(selected === 'UIElements') || (page === 'alerts' || page === 'badge' || page === 'buttons' || page === 'buttonsGroup' || page === 'cards'|| page === 'carousel' || page === 'dropdowns' || page === 'list' || page === 'modals' ) ? 'menu-item-active' : 'menu-item-inactive'"
-            >
-              <svg
-                :class="(selected === 'UIElements') || (page === 'alerts' || page === 'badge' || page === 'breadcrumb' || page === 'buttons' || page === 'buttonsGroup' || page === 'cards'|| page === 'carousel' || page === 'dropdowns' || page === 'list' || page === 'modals' || page === 'notifications' || page === 'popovers' || page === 'progress' || page === 'spinners' || page === 'tooltips' ) ? 'menu-item-icon-active'  :'menu-item-icon-inactive'"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  fill-rule="evenodd"
-                  clip-rule="evenodd"
-                  d="M11.665 3.75618C11.8762 3.65061 12.1247 3.65061 12.3358 3.75618L18.7807 6.97853L12.3358 10.2009C12.1247 10.3064 11.8762 10.3064 11.665 10.2009L5.22014 6.97853L11.665 3.75618ZM4.29297 8.19199V16.0946C4.29297 16.3787 4.45347 16.6384 4.70757 16.7654L11.25 20.0365V11.6512C11.1631 11.6205 11.0777 11.5843 10.9942 11.5425L4.29297 8.19199ZM12.75 20.037L19.2933 16.7654C19.5474 16.6384 19.7079 16.3787 19.7079 16.0946V8.19199L13.0066 11.5425C12.9229 11.5844 12.8372 11.6207 12.75 11.6515V20.037ZM13.0066 2.41453C12.3732 2.09783 11.6277 2.09783 10.9942 2.41453L4.03676 5.89316C3.27449 6.27429 2.79297 7.05339 2.79297 7.90563V16.0946C2.79297 16.9468 3.27448 17.7259 4.03676 18.1071L10.9942 21.5857L11.3296 20.9149L10.9942 21.5857C11.6277 21.9024 12.3732 21.9024 13.0066 21.5857L19.9641 18.1071C20.7264 17.7259 21.2079 16.9468 21.2079 16.0946V7.90563C21.2079 7.05339 20.7264 6.27429 19.9641 5.89316L13.0066 2.41453Z"
-                  fill=""
-                />
-              </svg>
-
-              <span
-                class="menu-item-text"
-                :class="sidebarToggle ? 'lg:hidden' : ''"
-              >
-                UI Elements
-              </span>
-
-              <svg
-                class="menu-item-arrow absolute right-2.5 top-1/2 -translate-y-1/2 stroke-current"
-                :class="[(selected === 'UIElements') ? 'menu-item-arrow-active' : 'menu-item-arrow-inactive', sidebarToggle ? 'lg:hidden' : '' ]"
-                width="20"
-                height="20"
-                viewBox="0 0 20 20"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M4.79175 7.39584L10.0001 12.6042L15.2084 7.39585"
-                  stroke=""
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-            </a>
-
-            <!-- Dropdown Menu Start -->
-            <div
-              class="overflow-hidden transform translate"
-              :class="(selected === 'UIElements') ? 'block' :'hidden'"
-            >
-              <ul
-                :class="sidebarToggle ? 'lg:hidden' : 'flex'"
-                class="flex flex-col gap-1 mt-2 menu-dropdown pl-9"
-              >
-                <li>
-                  <a
-                    href="{% url 'arabela_admin:page' page='alerts' %}"
-                    class="menu-dropdown-item group"
-                    :class="page === 'alerts' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Alerts
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="{% url 'arabela_admin:page' page='badge' %}"
-                    class="menu-dropdown-item group"
-                    :class="page === 'badge' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Badges
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="{% url 'arabela_admin:page' page='buttons' %}"
-                    class="menu-dropdown-item group"
-                    :class="page === 'buttons' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Buttons
-                  </a>
-                </li>
-                </ul>
-            </div>
-            <!-- Dropdown Menu End -->
-          </li>
-          <!-- Menu Item Ui Elements -->
-
-          
-        </ul>
-      </div>
     </nav>
     <!-- Sidebar Menu --></div>
 </aside>
@@ -1723,12 +1678,52 @@
                     <option value="needs">Needs a receipt</option>
                   </select>
                 </div>
+                <!-- Pick-up year/month: replaces the dashboard's old Monthly Rentals chart, and
+                     is where its Reservations This Month tile lands (?month=). Cascading like a
+                     country/state pair -- Month is empty and disabled until a Year is chosen,
+                     since a month number alone doesn't say which year's September it means.
+                     Year is a typed field, not a list -- see pickupYearChanged() -- so any year
+                     is reachable, not just ones already in a fixed range. Each count uses the
+                     same rule as the dashboard tile -- see pickupYearTotal / pickupMonthOptions. -->
+                <div class="rr-fixed" style="display: flex; align-items: center; gap: .5rem;">
+                  <input
+                    type="text"
+                    inputmode="numeric"
+                    pattern="[0-9]*"
+                    maxlength="4"
+                    x-model="pickupYearInput"
+                    @change="pickupYearChanged()"
+                    placeholder="Any year"
+                    aria-label="Pick-up year"
+                    style="width: 6.5rem;" class="dark:bg-dark-900 h-11 appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
+                  />
+                  <span x-show="pickupYear" x-cloak class="text-theme-xs whitespace-nowrap text-gray-400" x-text="pickupYearTotal === 1 ? '1 reservation' : pickupYearTotal + ' reservations'"></span>
+                </div>
+                <div class="rr-fixed">
+                  <select
+                    x-model="pickupMonthNum"
+                    @change="pickupPeriodChanged()"
+                    :disabled="!pickupYear"
+                    :title="!pickupYear ? 'Choose a year first' : ''"
+                    aria-label="Pick-up month"
+                    style="min-width: 11rem;" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
+                  >
+                    <option value="">All months</option>
+                    <template x-for="m in pickupMonthOptions" :key="m.key">
+                      <option
+                        :value="m.key"
+                        :selected="pickupMonthNum === m.key"
+                        x-text="m.label + ' (' + m.count + (m.count === 1 ? ' reservation)' : ' reservations)')"
+                      ></option>
+                    </template>
+                  </select>
+                </div>
               </div>
 
               <div class="mt-3 rr-filters">
                 <p class="text-sm font-medium text-gray-700 dark:text-gray-400">Rental dates:</p>
                 <div class="rr-seg" role="group" aria-label="Rental date range">
-                  <button type="button" :class="dateFilter === 'all' && 'is-on'" @click="setDateFilter('all')">All time</button>
+                  <button type="button" :class="dateFilter === 'all' && !pickupYear && 'is-on'" @click="setDateFilter('all')">All time</button>
                   <button type="button" :class="dateFilter === 'today' && 'is-on'" @click="setDateFilter('today')">Today</button>
                   <button type="button" :class="dateFilter === 'week' && 'is-on'" @click="setDateFilter('week')">This week</button>
                   <button type="button" :class="dateFilter === 'month' && 'is-on'" @click="setDateFilter('month')">This month</button>

@@ -8,6 +8,7 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from accounts.models import CustomerMessage, UserProfile
 from gowns.models import Gown, GownUnavailability
@@ -1107,6 +1108,55 @@ class AdminNotificationsTests(TestCase):
         kinds = [n["kind"] for n in self._notifications_as(self.staff)]
         self.assertNotIn("overdue", kinds)
 
+    def test_missed_pickup_appears_as_late_pickup_notification_not_a_customer_message(self):
+        from reservations.models import Reservation, ReservationItem
+        reservation = Reservation.objects.create(
+            customer=self.customer, customer_name="Late Pickup Notif Customer",
+            status=Reservation.Status.CONFIRMED,
+        )
+        ReservationItem.objects.create(
+            reservation=reservation, gown_name="Late Pickup Notif Gown",
+            rental_date=date.today() - timedelta(days=1),
+            return_date=date.today() + timedelta(days=2),
+        )
+        messages_before = CustomerMessage.objects.count()
+        notifications = self._notifications_as(self.staff)
+        late_pickups = [n for n in notifications if n["kind"] == "late_pickup"]
+        self.assertEqual(len(late_pickups), 1)
+        self.assertEqual(late_pickups[0]["level"], "warning")
+        self.assertIn(reverse("arabela_admin:active_reservations"), late_pickups[0]["url"])
+        self.assertIn(reservation.reference_code, late_pickups[0]["url"])
+        # No automatic customer-facing reminder -- this is staff-only, on purpose.
+        self.assertEqual(CustomerMessage.objects.count(), messages_before)
+
+    def test_pending_reservations_missed_pickup_not_reported(self):
+        from reservations.models import Reservation, ReservationItem
+        reservation = Reservation.objects.create(
+            customer=self.customer, customer_name="Pending Missed Pickup Customer",
+        )
+        ReservationItem.objects.create(
+            reservation=reservation, gown_name="Pending Missed Pickup Gown",
+            rental_date=date.today() - timedelta(days=1),
+            return_date=date.today() + timedelta(days=2),
+        )
+        kinds = [n["kind"] for n in self._notifications_as(self.staff)]
+        self.assertNotIn("late_pickup", kinds)
+
+    def test_already_picked_up_item_not_reported_as_late_pickup(self):
+        from reservations.models import Reservation, ReservationItem
+        reservation = Reservation.objects.create(
+            customer=self.customer, customer_name="Already Picked Up Customer",
+            status=Reservation.Status.CONFIRMED,
+        )
+        ReservationItem.objects.create(
+            reservation=reservation, gown_name="Already Picked Up Gown",
+            stage=ReservationItem.Stage.RESERVED,
+            rental_date=date.today() - timedelta(days=1),
+            return_date=date.today() + timedelta(days=2),
+        )
+        kinds = [n["kind"] for n in self._notifications_as(self.staff)]
+        self.assertNotIn("late_pickup", kinds)
+
     def test_out_of_stock_gown_appears_as_inventory_notification(self):
         _make_gown(status=Gown.Status.OUT_OF_STOCK)
         kinds = [n["kind"] for n in self._notifications_as(self.staff)]
@@ -2140,3 +2190,141 @@ class ReservationRecordsTests(TestCase):
         html = self.client.get(reverse("arabela_admin:clients")).content.decode()
         self.assertIn(
             reverse("arabela_admin:reservation_records") + "?customer=' + viewingCustomer.userId", html)
+
+
+class MonthlyReservationCountTests(TestCase):
+    """The dashboard's Reservations This Month tile and Reservation Records' monthly
+    breakdown / ?month= filter (which replaced the old Monthly Rentals bar chart) must
+    count the same bookings: one per reservation, in the month its FIRST gown is picked
+    up, leaving out cancelled/rejected ones. If they ever disagree, clicking the tile
+    lands on a different number of rows than it showed."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = User.objects.create_user(username="monthly_count_owner", password="x", is_staff=True)
+        UserProfile.objects.update_or_create(user=cls.owner, defaults={"role": UserProfile.Role.OWNER})
+        cls.customer = User.objects.create_user(
+            username="monthly_count_customer", password="x", email="monthly.count@gmail.com")
+
+    def setUp(self):
+        self.client.force_login(self.owner)
+        # The dashboard runs the daily reminder sweep on load -- unrelated to these counts.
+        patcher = patch("arabela_admin.views.reservation_reminders.run_daily_sweep_if_due")
+        self.addCleanup(patcher.stop)
+        patcher.start()
+        self.month_start = timezone.localdate().replace(day=1)
+        self.last_month_day = self.month_start - timedelta(days=1)
+        self.next_month_day = (self.month_start + timedelta(days=32)).replace(day=1)
+
+    def _booking(self, status, *pickups):
+        reservation = Reservation.objects.create(
+            customer=self.customer, customer_name="Monthly Count", status=status)
+        for n, pickup in enumerate(pickups):
+            ReservationItem.objects.create(
+                reservation=reservation, gown_name=f"Count Gown {n}",
+                rental_date=pickup, return_date=pickup + timedelta(days=4))
+        return reservation
+
+    def _add_every_kind_of_booking(self):
+        this_month = self.month_start
+        self._booking(Reservation.Status.CONFIRMED, this_month, this_month)  # two gowns: one booking
+        self._booking(Reservation.Status.PENDING, this_month)  # awaiting approval still counts
+        self._booking(Reservation.Status.CANCELLED, this_month)  # never became a rental
+        self._booking(Reservation.Status.REJECTED, this_month)  # never became a rental
+        self._booking(Reservation.Status.CONFIRMED, self.last_month_day, this_month)  # first pick-up last month
+        self._booking(Reservation.Status.CONFIRMED, self.next_month_day)  # next month
+
+    def _dashboard_count(self):
+        return self.client.get(reverse("arabela_admin:dashboard")).context["reservations_this_month"]
+
+    def _records(self):
+        html = self.client.get(reverse("arabela_admin:reservation_records")).content.decode()
+        match = re.search(
+            r'<script id="reservation-records-data" type="application/json">(.*?)</script>', html, re.S)
+        return {r["reference"]: r for r in json.loads(match.group(1))}
+
+    def test_counts_bookings_once_by_first_pickup_and_skips_cancelled_and_rejected(self):
+        self._add_every_kind_of_booking()
+        self.assertEqual(self._dashboard_count(), 2)
+
+    def test_tile_number_equals_the_rows_reservation_records_counts_for_that_month(self):
+        self._add_every_kind_of_booking()
+        key = self.month_start.strftime("%Y-%m")
+        rows = [r for r in self._records().values() if r["pickupMonth"] == key and r["countsAsRental"]]
+        self.assertEqual(len(rows), self._dashboard_count())
+
+    def test_each_record_carries_its_pickup_month_and_whether_it_counts(self):
+        spans_two_months = self._booking(Reservation.Status.CONFIRMED, self.last_month_day, self.month_start)
+        cancelled = self._booking(Reservation.Status.CANCELLED, self.month_start)
+        records = self._records()
+        self.assertEqual(
+            records[spans_two_months.reference_code]["pickupMonth"], self.last_month_day.strftime("%Y-%m"))
+        self.assertTrue(records[spans_two_months.reference_code]["countsAsRental"])
+        self.assertFalse(records[cancelled.reference_code]["countsAsRental"])
+
+    def test_tile_links_to_this_months_records_and_the_bar_chart_is_gone(self):
+        html = self.client.get(reverse("arabela_admin:dashboard")).content.decode()
+        self.assertIn("Reservations This Month", html)
+        self.assertIn(
+            reverse("arabela_admin:reservation_records") + "?month=" + self.month_start.strftime("%Y-%m"), html)
+        self.assertNotIn('id="chartOne"', html)
+
+
+class FormsAndUiElementsRemovedTests(TestCase):
+    """The Forms and UI Elements sidebar modules were leftover TailAdmin demo-template
+    pages (Form Elements / Alerts / Badges / Buttons), not real business features.
+    Covers that every real admin page still renders with no trace of that sidebar
+    block left behind, and that the demo pages themselves are gone for good."""
+
+    REAL_PAGES = [
+        "dashboard",
+        "calendar",
+        "payment_verification",
+        "rental_history",
+        "security_deposits",
+        "receipt_records",
+        "reservation_records",
+        "active_reservations",
+        "pending_approval",
+        "gown_catalog",
+        "categories",
+        "clients",
+        "staff_management",
+    ]
+    REMOVED_PAGE_SLUGS = ["form-elements", "alerts", "badge", "buttons"]
+
+    @classmethod
+    def setUpTestData(cls):
+        # Owner so every gated page (e.g. Staff Management) is reachable in one pass --
+        # RBAC itself is covered elsewhere and isn't what this test is checking.
+        cls.owner = User.objects.create_user(username="forms_ui_removed_owner", password="x", is_staff=True)
+        UserProfile.objects.create(user=cls.owner, role=UserProfile.Role.OWNER)
+
+    def setUp(self):
+        self.client.force_login(self.owner)
+
+    def _assert_sidebar_clean(self, html):
+        self.assertNotIn("data-admin-template-nav", html)
+        self.assertNotIn("UI Elements", html)
+        for slug in self.REMOVED_PAGE_SLUGS:
+            self.assertNotIn(f"/admin-panel/{slug}.html", html)
+
+    def test_real_pages_render_with_no_leftover_sidebar_markup(self):
+        for name in self.REAL_PAGES:
+            with self.subTest(page=name):
+                response = self.client.get(reverse(f"arabela_admin:{name}"))
+                self.assertEqual(response.status_code, 200)
+                self._assert_sidebar_clean(response.content.decode())
+
+    def test_profile_and_account_settings_render_with_no_leftover_sidebar_markup(self):
+        for slug in ["profile", "account-settings"]:
+            with self.subTest(page=slug):
+                response = self.client.get(reverse("arabela_admin:page", args=[slug]))
+                self.assertEqual(response.status_code, 200)
+                self._assert_sidebar_clean(response.content.decode())
+
+    def test_removed_demo_pages_404(self):
+        for slug in self.REMOVED_PAGE_SLUGS:
+            with self.subTest(page=slug):
+                response = self.client.get(reverse("arabela_admin:page", args=[slug]))
+                self.assertEqual(response.status_code, 404)
