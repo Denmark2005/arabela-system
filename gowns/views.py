@@ -994,9 +994,13 @@ def reservation_item_cancel(request, item_id):
 
     # Mirror/reverse reservation_approve_view's Available->Reserved flip
     # (arabela_admin/views.py): only revert gowns still sitting at Reserved, so we
-    # don't clobber Out-of-Stock that staff set for unrelated reasons.
+    # don't clobber Out-of-Stock that staff set for unrelated reasons. Also skip it
+    # if this same physical gown is also booked (different, non-overlapping dates)
+    # by another still-active reservation -- cancelling this one must never clobber
+    # the Reserved status that sibling booking still legitimately needs.
     for sibling in reservation.items.select_related('gown').all():
-        if sibling.gown_id and sibling.gown.status == Gown.Status.RESERVED:
+        if (sibling.gown_id and sibling.gown.status == Gown.Status.RESERVED
+                and not sibling.gown_held_by_another_active_item):
             sibling.gown.status = Gown.Status.AVAILABLE
             sibling.gown.save(update_fields=["status", "updated_at"])
 

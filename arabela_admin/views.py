@@ -1879,7 +1879,13 @@ def reservation_item_mark_returned_view(request, item_id):
 
     if item.gown_id:
         item.gown.condition = condition
-        item.gown.status = Gown.Status.OUT_OF_STOCK if needs_repair else Gown.Status.AVAILABLE
+        if needs_repair:
+            item.gown.status = Gown.Status.OUT_OF_STOCK
+        elif not item.gown_held_by_another_active_item:
+            # Don't clobber Reserved back to Available if this same physical gown is
+            # also booked (for different, non-overlapping dates) by another still-active
+            # reservation -- that booking's own return is what should flip it, not this one.
+            item.gown.status = Gown.Status.AVAILABLE
         item.gown.last_returned_at = timezone.localdate()
         item.gown.save(update_fields=["condition", "status", "last_returned_at", "updated_at"])
         # Good condition only: resync the cooldown to the ACTUAL return day, which

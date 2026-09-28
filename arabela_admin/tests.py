@@ -495,6 +495,34 @@ class ReservationItemLifecycleTests(TestCase):
         gown.refresh_from_db()
         self.assertEqual(gown.status, Gown.Status.OUT_OF_STOCK)
 
+    def test_mark_returned_does_not_clobber_a_still_active_sibling_booking(self):
+        """Real bug: the same physical gown can be booked twice for non-overlapping
+        dates (normal and fine). Returning the LATER booking used to unconditionally
+        set Gown.status back to Available even while an EARLIER booking of that same
+        gown was still genuinely out -- silently mislabeling it as free in Gown
+        Catalog. Reproduces it with two items sharing one gown."""
+        from reservations.models import Reservation, ReservationItem
+        gown = _make_gown(status=Gown.Status.RESERVED)
+        still_out = ReservationItem.objects.create(
+            reservation=Reservation.objects.create(customer=self.customer, customer_name="Still Out Customer"),
+            gown=gown, gown_name=gown.name, stage=ReservationItem.Stage.RESERVED,
+            rental_date=date.today() - timedelta(days=3), return_date=date.today() + timedelta(days=2),
+        )
+        later_booking = ReservationItem.objects.create(
+            reservation=Reservation.objects.create(customer=self.customer, customer_name="Later Booking Customer"),
+            gown=gown, gown_name=gown.name,
+            rental_date=date.today() + timedelta(days=10), return_date=date.today() + timedelta(days=13),
+        )
+        response = self.client.post(
+            reverse("arabela_admin:reservation_item_mark_returned", args=[later_booking.id]),
+            data=json.dumps({"condition": "Good"}), content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        gown.refresh_from_db()
+        self.assertEqual(gown.status, Gown.Status.RESERVED)
+        still_out.refresh_from_db()
+        self.assertEqual(still_out.stage, ReservationItem.Stage.RESERVED)
+
     def test_mark_returned_missing_condition_is_rejected(self):
         item, _ = self._make_item()
         response = self.client.post(

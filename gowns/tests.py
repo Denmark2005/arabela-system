@@ -421,6 +421,38 @@ class CustomerStatusEventTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(reservation.status_events.count(), 0)
 
+    def test_cancelling_does_not_clobber_a_still_active_sibling_booking(self):
+        """Real bug: the same physical gown can be booked twice for non-overlapping
+        dates (normal and fine). Cancelling the LATER booking used to unconditionally
+        flip Gown.status back to Available even while an EARLIER, unrelated booking of
+        that same gown was still genuinely out."""
+        gown = Gown.objects.create(
+            gown_id="CUSTEVT-0002", name="Cust Event Clobber Gown",
+            category=Gown.Category.BELO, color_name="Teal", color_code="TL",
+            size=Gown.Size.MEDIUM, rental_price=Decimal("2000.00"),
+            status=Gown.Status.RESERVED,
+        )
+        still_out = ReservationItem.objects.create(
+            reservation=Reservation.objects.create(
+                customer=self.customer, customer_name="Still Out Customer",
+                status=Reservation.Status.CONFIRMED),
+            gown=gown, gown_name=gown.name, stage=ReservationItem.Stage.RESERVED,
+            rental_date=self.today - timedelta(days=3), return_date=self.today + timedelta(days=2),
+        )
+        cancel_me = ReservationItem.objects.create(
+            reservation=Reservation.objects.create(
+                customer=self.customer, customer_name="Cancel Me Customer",
+                status=Reservation.Status.CONFIRMED),
+            gown=gown, gown_name=gown.name,
+            rental_date=self.today + timedelta(days=10), return_date=self.today + timedelta(days=13),
+        )
+        response = self.client.post(reverse("gowns:reservation_item_cancel", args=[cancel_me.id]))
+        self.assertEqual(response.status_code, 200, response.content)
+        gown.refresh_from_db()
+        self.assertEqual(gown.status, Gown.Status.RESERVED)
+        still_out.refresh_from_db()
+        self.assertEqual(still_out.stage, ReservationItem.Stage.RESERVED)
+
     def test_uploading_proof_later_records_a_customer_event(self):
         reservation = Reservation.objects.create(
             customer=self.customer, customer_name="Evt Customer",

@@ -310,6 +310,26 @@ class ReservationItem(models.Model):
             return False
         return not self.reservation.items.exclude(stage=self.Stage.PICKUP).exists()
 
+    @property
+    def gown_held_by_another_active_item(self):
+        """Whether the physical gown this item points at is still legitimately needed
+        Reserved on account of a DIFFERENT booking -- checked before anything downgrades
+        Gown.status back to Available on THIS item's account (mark returned, customer
+        cancel). The same physical gown can be booked again for a later, non-overlapping
+        date range, so a second ReservationItem pointing at it is normal; finishing THIS
+        one must never clobber the status a still-active sibling booking depends on.
+        Excludes Returned items and Rejected/Cancelled reservations -- the same "still
+        holds real stock" rule gowns.views._find_available_unit already uses."""
+        if not self.gown_id:
+            return False
+        return (
+            ReservationItem.objects.filter(gown_id=self.gown_id)
+            .exclude(id=self.id)
+            .exclude(stage=self.Stage.RETURNED)
+            .exclude(reservation__status__in=[Reservation.Status.REJECTED, Reservation.Status.CANCELLED])
+            .exists()
+        )
+
 
 class ReservationStatusEvent(models.Model):
     """One row per real thing that happened to a reservation, in order, forever.
