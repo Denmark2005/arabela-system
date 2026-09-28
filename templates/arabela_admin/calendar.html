@@ -83,8 +83,10 @@
     #dayEventsModal .day-event-row {
       display: block;
       width: 100%;
+      border: 0;
       border-radius: 0.5rem;
       padding: 0.625rem 0.875rem;
+      font-family: inherit;
       font-size: 0.8125rem;
       font-weight: 600;
       color: #FFFFFF;
@@ -92,20 +94,16 @@
       text-decoration: none;
     }
     #dayEventsModal .event-fc-color.fc-bg-warning.day-event-row { color: #78350F; }
-    /* A row for a real booking (Pick-up/Reserved/Return/Overdue) is a link to that
-       booking's full record -- not an in-place editable modal like clicking the
-       same event directly on the calendar opens. Reusing bundle.js's own modal
-       -population logic isn't something this template can safely call (it's
-       private to that bundle, not exposed anywhere this file can reach), and
-       guessing at reimplementing it risks a save action firing against the wrong
-       reservation with no way to verify it here. A link is a small trade for
-       zero risk of that. A maintenance row (Cooldown/Cleaning) stays a plain,
-       unclickable div, exactly as it's always been. */
-    #dayEventsModal a.day-event-row {
+    /* A booking row (Pick-up/Reserved/Return/Overdue) opens the same Booking Details
+       modal as clicking that event directly on the calendar -- see openBookingDetailsFor
+       below. A maintenance row (Cooldown/Cleaning) stays an unclickable div, exactly
+       like those events are when clicked directly on the calendar. */
+    #dayEventsModal button.day-event-row {
       cursor: pointer;
       transition: filter 0.15s ease;
     }
-    #dayEventsModal a.day-event-row:hover { filter: brightness(0.92); }
+    #dayEventsModal button.day-event-row:hover { filter: brightness(0.92); }
+    #dayEventsModal button.day-event-row:focus-visible { outline: 2px solid #465FFF; outline-offset: 2px; }
     #dayEventsModal div.day-event-row { cursor: default; }
 
     /* The four status-date inputs in a 2x2 grid on wider screens (defined here since
@@ -1353,7 +1351,6 @@
             <div
               class="fixed inset-0 items-center justify-center hidden p-5 overflow-y-auto modal z-99999"
               id="dayEventsModal"
-              data-reservation-records-url="{% url 'arabela_admin:reservation_records' %}"
             >
               <div
                 class="day-events-modal-close fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]"
@@ -1560,7 +1557,6 @@
         return ev.start <= dateStr && dateStr < ev.end;
       });
 
-      var recordsUrl = modal.dataset.reservationRecordsUrl;
       var listEl = document.getElementById('dayEventsModalList');
       document.getElementById('dayEventsModalTitle').textContent = formatDayHeader(dateStr);
       listEl.innerHTML = '';
@@ -1570,19 +1566,38 @@
         var colorKey = (props.calendar || 'blocked').toLowerCase();
         var isBooking = props.itemId != null;
 
-        var row = document.createElement(isBooking ? 'a' : 'div');
+        var row = document.createElement(isBooking ? 'button' : 'div');
         row.className = 'event-fc-color fc-bg-' + colorKey + ' day-event-row';
         row.textContent = ev.title;
         if (isBooking) {
-          row.href = recordsUrl + '?search=' + encodeURIComponent(props.reference || '');
-          row.target = '_blank';
-          row.rel = 'noopener';
+          row.type = 'button';
+          row.addEventListener('click', function () { openBookingDetailsFor(ev.id); });
         }
         listEl.appendChild(row);
       });
 
       modal.classList.remove('hidden');
       modal.classList.add('flex');
+    }
+
+    // Opens Booking Details for one event by clicking that event's own element on the
+    // calendar, so it goes through the exact same path as clicking it directly:
+    // FullCalendar's eventClick -> bundle.js's bookingEventClick, which is the only thing
+    // that can set the private item id Save Changes / Mark Returned post against. Events
+    // hidden behind "+N more" are still rendered (FullCalendar 6.1.15 keeps them in the DOM
+    // with visibility:hidden), and FullCalendar tags every event element with its own
+    // segment data (el.fcSeg, or on the harness parent) -- matched here on the event's id.
+    function openBookingDetailsFor(eventId) {
+      var eventEls = document.querySelectorAll('#calendar .fc-event');
+      for (var i = 0; i < eventEls.length; i++) {
+        var el = eventEls[i];
+        var seg = el.fcSeg || (el.parentNode && el.parentNode.fcSeg);
+        if (seg && seg.eventRange && seg.eventRange.def.publicId === eventId) {
+          closeDayEventsModal();
+          el.click();
+          return;
+        }
+      }
     }
 
     function closeDayEventsModal() {
