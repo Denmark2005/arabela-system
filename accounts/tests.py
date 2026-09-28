@@ -1,29 +1,26 @@
-from datetime import timedelta
-
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
-from django.core import mail
-from django.core.cache import cache
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from allauth.account.models import EmailAddress
-from allauth.socialaccount.models import SocialApp
+from allauth.socialaccount.models import SocialAccount, SocialApp, SocialLogin
 
+from accounts.adapters import ArabelaSocialAccountAdapter
 from accounts.models import UserProfile
 
 User = get_user_model()
 
 
 def _ensure_google_social_app():
-    """login.html/signup.html/verification.html all render a "Sign in with Google"
-    link via allauth's {% provider_login_url %}, which looks up a SocialApp row for
-    the current Site. The real dev database has one added manually (outside any
-    migration); a fresh test database starts with none, so every page render would
-    otherwise fail with SocialApp.DoesNotExist. The actual client id/secret are
-    irrelevant here -- no test in this file completes a real Google OAuth round trip,
-    the page just needs the row to exist to render the link at all."""
+    """login.html renders a "Continue with Google" link via allauth's
+    {% provider_login_url %}, which looks up a SocialApp row for the current Site.
+    The real dev database has one added manually (outside any migration); a fresh
+    test database starts with none, so every page render would otherwise fail with
+    SocialApp.DoesNotExist. The actual client id/secret are irrelevant here -- no
+    test in this file completes a real Google OAuth round trip, the page just needs
+    the row to exist to render the link at all."""
     site = Site.objects.get_current()
     app, _ = SocialApp.objects.get_or_create(
         provider="google", name="Google",
@@ -32,289 +29,104 @@ def _ensure_google_social_app():
     app.sites.add(site)
     return app
 
-# Signup/verification send a real email via Gmail SMTP by default (see
-# arabela_system/settings.py). Every test in this file must run against Django's
-# in-memory backend instead -- this must NEVER touch the real Gmail account.
-_TEST_EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 
-
-@override_settings(EMAIL_BACKEND=_TEST_EMAIL_BACKEND)
-class SignupTests(TestCase):
-    """`signup_view` -- account creation, its field rules, and that a new account is
-    correctly left unverified pending the emailed code (never auto-verified)."""
+class LoginPageTests(TestCase):
+    """`login_view` -- the single Google-only entry point shared by accounts:login
+    and accounts:signup, now that manual password signup/OTP verification are gone."""
 
     @classmethod
     def setUpTestData(cls):
         _ensure_google_social_app()
 
-    def setUp(self):
-        mail.outbox = []
+    def test_login_page_renders_the_google_button(self):
+        response = self.client.get(reverse("accounts:login"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Continue with Google")
 
-    def _signup(self, **overrides):
-        data = dict(
-            first_name="Test", last_name="Signup", email="test.signup@gmail.com",
-            password="Password123", accept_terms="on",
+    def test_signup_url_renders_the_same_page(self):
+        response = self.client.get(reverse("accounts:signup"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Continue with Google")
+
+    def test_an_already_authenticated_visitor_is_redirected_away(self):
+        user = User.objects.create_user(username="alreadyin", email="already.in@gmail.com")
+        self.client.force_login(user)
+        response = self.client.get(reverse("accounts:login"))
+        self.assertRedirects(response, reverse("gowns:homepage"))
+
+    def test_next_is_threaded_into_the_google_login_link(self):
+        response = self.client.get(reverse("accounts:login"), {"next": "/gowns/orders/"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "next=%2Fgowns%2Forders%2F")
+
+    def test_an_unsafe_next_url_is_dropped(self):
+        response = self.client.get(reverse("accounts:login"), {"next": "https://evil.example.com/"})
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "evil.example.com")
+
+
+class GoogleAccountLinkingTests(TestCase):
+    """The custom social adapter (accounts/adapters.py) -- now that manual signup
+    is gone, this is the only thing standing between an old account created under
+    it and a permanently orphaned duplicate. A customer who signed up manually
+    before this change (verified or not -- some never finished the OTP step
+    that no longer exists) must land back in that SAME account when they use
+    "Continue with Google" with the same address, never a second one."""
+
+    @classmethod
+    def setUpTestData(cls):
+        # sociallogin.connect() resolves the "google" SocialApp for the current
+        # Site as part of actually saving the link -- not just for rendering the
+        # button like other tests in this file, this one exercises the real save.
+        _ensure_google_social_app()
+
+    def _google_login_for(self, email):
+        """Builds the same SocialLogin shape allauth constructs mid-OAuth-callback
+        for a Google account that has never signed in here before -- an unsaved
+        User (pk=None keeps `is_existing` False, exactly like a real first-time
+        social login) plus an unsaved SocialAccount for that provider."""
+        return SocialLogin(
+            user=User(email=email),
+            account=SocialAccount(provider="google", uid="1234567890"),
         )
-        data.update(overrides)
-        return self.client.post(reverse("accounts:signup"), data=data)
 
-    def test_valid_signup_creates_an_unverified_user_and_sends_one_email(self):
-        response = self._signup()
-        self.assertRedirects(response, reverse("accounts:verify_email_pending"))
-        user = User.objects.get(email="test.signup@gmail.com")
-        self.assertFalse(
-            EmailAddress.objects.filter(user=user, email=user.email, verified=True).exists()
+    def test_links_to_an_existing_unverified_account_instead_of_duplicating_it(self):
+        existing = User.objects.create_user(
+            username="oldmanual", email="old.manual@gmail.com", password="Whatever123",
         )
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertIn(user.email, mail.outbox[0].to)
+        EmailAddress.objects.create(user=existing, email="old.manual@gmail.com", verified=False, primary=True)
 
-    def test_non_gmail_address_is_rejected(self):
-        response = self._signup(email="test@yahoo.com")
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Gmail")
-        self.assertFalse(User.objects.filter(email="test@yahoo.com").exists())
-        self.assertEqual(len(mail.outbox), 0)
+        sociallogin = self._google_login_for("old.manual@gmail.com")
+        self.assertFalse(sociallogin.is_existing)
 
-    def test_weak_password_is_rejected(self):
-        response = self._signup(email="weak.pw@gmail.com", password="short")
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(User.objects.filter(email="weak.pw@gmail.com").exists())
+        request = self.client.get(reverse("gowns:homepage")).wsgi_request
+        ArabelaSocialAccountAdapter().pre_social_login(request, sociallogin)
 
-    def test_password_without_a_letter_is_rejected(self):
-        response = self._signup(email="numonly@gmail.com", password="12345678")
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(User.objects.filter(email="numonly@gmail.com").exists())
+        self.assertEqual(sociallogin.user.pk, existing.pk)
+        self.assertEqual(User.objects.filter(email__iexact="old.manual@gmail.com").count(), 1)
+        self.assertTrue(SocialAccount.objects.filter(user=existing, provider="google").exists())
 
-    def test_missing_terms_acceptance_is_rejected(self):
-        response = self._signup(email="noterms@gmail.com", accept_terms="")
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(User.objects.filter(email="noterms@gmail.com").exists())
+    def test_links_to_an_existing_verified_account_too(self):
+        existing = User.objects.create_user(
+            username="oldverified", email="old.verified@gmail.com", password="Whatever123",
+        )
+        EmailAddress.objects.create(user=existing, email="old.verified@gmail.com", verified=True, primary=True)
 
-    def test_signing_up_again_with_an_already_verified_email_is_rejected(self):
-        existing = User.objects.create_user(username="already", email="already@gmail.com", password="Password123")
-        EmailAddress.objects.create(user=existing, email="already@gmail.com", verified=True, primary=True)
-        response = self._signup(email="already@gmail.com")
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "already registered")
+        sociallogin = self._google_login_for("old.verified@gmail.com")
+        request = self.client.get(reverse("gowns:homepage")).wsgi_request
+        ArabelaSocialAccountAdapter().pre_social_login(request, sociallogin)
 
-    def test_signing_up_again_with_an_unverified_email_resends_the_code(self):
-        existing = User.objects.create_user(username="pending", email="pending@gmail.com", password="Password123")
-        EmailAddress.objects.create(user=existing, email="pending@gmail.com", verified=False, primary=True)
-        response = self._signup(email="pending@gmail.com")
-        self.assertRedirects(response, f"{reverse('accounts:verify_email_pending')}?email=pending@gmail.com&resent=1")
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertEqual(User.objects.filter(email="pending@gmail.com").count(), 1)  # no duplicate account
+        self.assertEqual(sociallogin.user.pk, existing.pk)
+        self.assertEqual(User.objects.filter(email__iexact="old.verified@gmail.com").count(), 1)
 
+    def test_a_brand_new_email_is_left_alone_for_normal_signup(self):
+        sociallogin = self._google_login_for("nobody.yet@gmail.com")
+        request = self.client.get(reverse("gowns:homepage")).wsgi_request
+        ArabelaSocialAccountAdapter().pre_social_login(request, sociallogin)
 
-@override_settings(EMAIL_BACKEND=_TEST_EMAIL_BACKEND)
-class EmailVerificationTests(TestCase):
-    """`verify_email_code_view` -- the actual security check that turns a pending
-    signup into a usable account. Must accept only the exact code just emailed."""
-
-    @classmethod
-    def setUpTestData(cls):
-        _ensure_google_social_app()
-
-    def _signed_up_session(self, email="verify.me@gmail.com"):
-        self.client.post(reverse("accounts:signup"), data=dict(
-            first_name="Verify", last_name="Me", email=email,
-            password="Password123", accept_terms="on",
-        ))
-        return self.client.session.get("verification_code")
-
-    def test_correct_code_verifies_the_email_and_redirects_to_login(self):
-        code = self._signed_up_session()
-        response = self.client.post(reverse("accounts:verify_email_code"), data={"code": code})
-        self.assertRedirects(response, reverse("accounts:login"))
-        user = User.objects.get(email="verify.me@gmail.com")
-        self.assertTrue(EmailAddress.objects.filter(user=user, verified=True).exists())
-
-    def test_wrong_code_is_rejected_and_does_not_verify(self):
-        self._signed_up_session(email="wrongcode@gmail.com")
-        response = self.client.post(reverse("accounts:verify_email_code"), data={"code": "000000"})
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "invalid")
-        user = User.objects.get(email="wrongcode@gmail.com")
-        self.assertFalse(EmailAddress.objects.filter(user=user, verified=True).exists())
-
-    def test_empty_code_is_rejected(self):
-        self._signed_up_session(email="emptycode@gmail.com")
-        response = self.client.post(reverse("accounts:verify_email_code"), data={"code": ""})
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Please enter")
-
-    def test_expired_code_is_rejected_even_if_correct(self):
-        code = self._signed_up_session(email="expiredcode@gmail.com")
-        session = self.client.session
-        session["verification_code_expires_at"] = (timezone.now() - timedelta(seconds=1)).isoformat()
-        session.save()
-
-        response = self.client.post(reverse("accounts:verify_email_code"), data={"code": code})
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "expired")
-        user = User.objects.get(email="expiredcode@gmail.com")
-        self.assertFalse(EmailAddress.objects.filter(user=user, verified=True).exists())
-        self.assertNotIn("verification_code", self.client.session)
-
-    def test_resend_issues_a_fresh_non_expired_code(self):
-        self._signed_up_session(email="resendme@gmail.com")
-        session = self.client.session
-        session["verification_code_expires_at"] = (timezone.now() - timedelta(seconds=1)).isoformat()
-        session.save()
-
-        self.client.post(reverse("accounts:resend_verification_email"), data={"email": "resendme@gmail.com"})
-        new_code = self.client.session.get("verification_code")
-
-        response = self.client.post(reverse("accounts:verify_email_code"), data={"code": new_code})
-        self.assertRedirects(response, reverse("accounts:login"))
-
-
-class LoginTests(TestCase):
-    """`login_view` -- every reason a login attempt should fail, and that a genuinely
-    correct, fully-verified login succeeds."""
-
-    @classmethod
-    def setUpTestData(cls):
-        _ensure_google_social_app()
-        cls.password = "Password123"
-        cls.user = User.objects.create_user(username="logintest", email="login.test@gmail.com", password=cls.password)
-        EmailAddress.objects.create(user=cls.user, email=cls.user.email, verified=True, primary=True)
-
-    def setUp(self):
-        cache.clear()  # the lockout below is stateful; start every test clean
-
-    def _login(self, **overrides):
-        data = dict(email="login.test@gmail.com", password=self.password)
-        data.update(overrides)
-        return self.client.post(reverse("accounts:login"), data=data)
-
-    def test_correct_credentials_log_in_successfully(self):
-        response = self._login()
-        self.assertRedirects(response, reverse("gowns:homepage"))
-        # Confirm the session actually carries an authenticated user on the next request.
-        session_check = self.client.get(reverse("gowns:homepage"))
-        self.assertTrue(session_check.wsgi_request.user.is_authenticated)
-
-    def test_wrong_password_is_rejected(self):
-        response = self._login(password="wrongpassword")
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Invalid email or password")
-
-    def test_nonexistent_email_is_rejected(self):
-        response = self._login(email="nobody.here@gmail.com")
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "No account found")
-
-    def test_unverified_email_cannot_log_in(self):
-        unverified = User.objects.create_user(username="unverified", email="unverified@gmail.com", password="Password123")
-        EmailAddress.objects.create(user=unverified, email=unverified.email, verified=False, primary=True)
-        response = self._login(email="unverified@gmail.com", password="Password123")
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "verify your email")
-
-    def test_google_only_account_cannot_password_login(self):
-        google_user = User.objects.create_user(username="googleuser", email="google.user@gmail.com")
-        google_user.set_unusable_password()
-        google_user.save()
-        EmailAddress.objects.create(user=google_user, email=google_user.email, verified=True, primary=True)
-        response = self._login(email="google.user@gmail.com", password="anything123")
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Google Sign In")
-
-    def test_invalid_email_format_is_rejected(self):
-        response = self._login(email="not-an-email")
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "valid email")
-
-
-class CustomerLoginLockoutTests(TestCase):
-    """`login_view`'s brute-force protection -- mirrors the admin login's existing
-    lockout exactly: 5 wrong passwords for the same email locks it out for 15
-    minutes. Only real wrong-password attempts against a valid, usable, verified
-    account count -- a mistyped email, a Google-only account, or an unverified
-    account never reach authenticate(), so none of those consume the budget."""
-
-    @classmethod
-    def setUpTestData(cls):
-        _ensure_google_social_app()
-        cls.password = "Password123"
-        cls.user = User.objects.create_user(username="locktest", email="lock.test@gmail.com", password=cls.password)
-        EmailAddress.objects.create(user=cls.user, email=cls.user.email, verified=True, primary=True)
-
-    def setUp(self):
-        cache.clear()
-
-    def _login(self, **overrides):
-        data = dict(email="lock.test@gmail.com", password=self.password)
-        data.update(overrides)
-        return self.client.post(reverse("accounts:login"), data=data)
-
-    def test_the_sixth_wrong_attempt_is_locked_out_even_with_the_wrong_password(self):
-        for _ in range(5):
-            self._login(password="wrongpassword")
-        response = self._login(password="wrongpassword")
-        self.assertContains(response, "Too many failed login attempts")
-
-    def test_a_locked_out_email_is_rejected_even_with_the_correct_password(self):
-        """The whole point of a lockout: once tripped, even the real password is
-        refused until the timer runs out -- otherwise it would not stop a script
-        that eventually guesses right."""
-        for _ in range(5):
-            self._login(password="wrongpassword")
-        response = self._login(password=self.password)
-        self.assertContains(response, "Too many failed login attempts")
-        session_check = self.client.get(reverse("gowns:homepage"))
-        self.assertTrue(session_check.wsgi_request.user.is_anonymous)
-
-    def test_remaining_attempts_count_down_correctly(self):
-        response = self._login(password="wrongpassword")
-        self.assertContains(response, "4 attempts remaining")
-        response = self._login(password="wrongpassword")
-        self.assertContains(response, "3 attempts remaining")
-
-    def test_a_successful_login_before_the_limit_clears_the_counter(self):
-        for _ in range(3):
-            self._login(password="wrongpassword")
-        response = self._login(password=self.password)
-        self.assertRedirects(response, reverse("gowns:homepage"))
-        # the counter reset -- 3 more wrong attempts afterward must not be an instant lockout
-        self.client.post(reverse("accounts:logout"))
-        for _ in range(3):
-            response = self._login(password="wrongpassword")
-        self.assertNotContains(response, "Too many failed login attempts")
-
-    def test_a_different_email_is_never_affected_by_someone_elses_lockout(self):
-        other = User.objects.create_user(username="othertest", email="other.test@gmail.com", password="Password123")
-        EmailAddress.objects.create(user=other, email=other.email, verified=True, primary=True)
-        for _ in range(5):
-            self._login(password="wrongpassword")
-        response = self._login(email="other.test@gmail.com", password="Password123")
-        self.assertRedirects(response, reverse("gowns:homepage"))
-
-    def test_a_nonexistent_email_never_counts_toward_lockout(self):
-        for _ in range(10):
-            self._login(email="nobody.here@gmail.com", password="whatever")
-        response = self._login(password=self.password)
-        self.assertRedirects(response, reverse("gowns:homepage"))
-
-    def test_a_google_only_account_never_counts_toward_lockout(self):
-        google_user = User.objects.create_user(username="lockgoogle", email="lock.google@gmail.com")
-        google_user.set_unusable_password()
-        google_user.save()
-        EmailAddress.objects.create(user=google_user, email=google_user.email, verified=True, primary=True)
-        for _ in range(10):
-            self._login(email="lock.google@gmail.com", password="anything123")
-        response = self._login(password=self.password)
-        self.assertRedirects(response, reverse("gowns:homepage"))
-
-    def test_an_unverified_account_never_counts_toward_lockout(self):
-        unverified = User.objects.create_user(username="lockunverified", email="lock.unverified@gmail.com", password="Password123")
-        EmailAddress.objects.create(user=unverified, email=unverified.email, verified=False, primary=True)
-        for _ in range(10):
-            self._login(email="lock.unverified@gmail.com", password="Password123")
-        response = self._login(password=self.password)
-        self.assertRedirects(response, reverse("gowns:homepage"))
+        # Untouched -- still the original unsaved instance, no existing account found to connect to.
+        self.assertIsNone(sociallogin.user.pk)
+        self.assertEqual(User.objects.filter(email__iexact="nobody.yet@gmail.com").count(), 0)
 
 
 class LogoutTests(TestCase):
