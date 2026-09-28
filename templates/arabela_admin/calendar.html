@@ -55,42 +55,58 @@
     .fc-daygrid-more-link:hover { text-decoration: underline; }
     .dark .fc-daygrid-more-link { color: #8098FF; }
 
-    .fc-popover {
-      background: #FFFFFF;
-      border: 1px solid #E5E7EB;
-      border-radius: 0.75rem;
-      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.15), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
-      overflow: hidden;
-      z-index: 99999;
+    /* The "+N more" link no longer opens FullCalendar's own popover at all (see the
+       dayEventsModal markup + script further down this file) -- that popover is a
+       piece of a third-party bundle we only have the compiled output of, and every
+       attempt to reshape or reposition it surfaced a new problem the last one
+       didn't (overflow, then a transparent background, then dead close/backdrop
+       buttons), each time because we were changing behavior we couldn't fully see.
+       dayEventsModal reuses this app's own Booking Details modal styling instead,
+       which we do have full control over. Row colors below are shared with the
+       calendar's own inline event chips (.event-fc-color.fc-bg-*, defined just
+       above) so a day's list reads exactly like the calendar it was opened from. */
+    /* Real, explicit CSS rather than a Tailwind utility class -- this project's
+       stylesheet is precompiled ahead of time, not generated live, so a class
+       like max-w-[420px] only works if that exact class already happened to be
+       used somewhere in the original template pack and got compiled in. It
+       wasn't, so it silently did nothing, and the dialog grew to whatever the
+       modal's own flex layout gave it (effectively the full screen width) with
+       no cap on how tall the row list could grow either. Booking Details' own
+       max-w-[700px] only works because that exact one WAS already compiled in. */
+    .day-events-dialog {
+      max-width: 480px;
     }
-    .dark .fc-popover { background: #101828; border-color: #344054; }
-    .fc-popover-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.75rem;
-      padding: 0.5rem 0.75rem;
-      background: #F9FAFB;
-      border-bottom: 1px solid #E5E7EB;
-    }
-    .dark .fc-popover-header { background: #1D2939; border-color: #344054; }
-    .fc-popover-title { font-size: 0.75rem; font-weight: 600; color: #1D2939; }
-    .dark .fc-popover-title { color: #D0D5DD; }
-    .fc-popover-close {
-      font-size: 1rem;
-      line-height: 1;
-      color: #667085;
-      cursor: pointer;
-      background: none;
-      border: none;
-    }
-    .dark .fc-popover-close { color: #98A2B3; }
-    .fc-popover-body {
-      padding: 0.5rem;
-      max-height: 320px;
+    #dayEventsModalList {
+      max-height: min(60vh, 420px);
       overflow-y: auto;
     }
-    .fc-popover-body .fc-daygrid-event { margin-bottom: 4px; }
+    #dayEventsModal .day-event-row {
+      display: block;
+      width: 100%;
+      border-radius: 0.5rem;
+      padding: 0.625rem 0.875rem;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: #FFFFFF;
+      text-align: left;
+      text-decoration: none;
+    }
+    #dayEventsModal .event-fc-color.fc-bg-warning.day-event-row { color: #78350F; }
+    /* A row for a real booking (Pick-up/Reserved/Return/Overdue) is a link to that
+       booking's full record -- not an in-place editable modal like clicking the
+       same event directly on the calendar opens. Reusing bundle.js's own modal
+       -population logic isn't something this template can safely call (it's
+       private to that bundle, not exposed anywhere this file can reach), and
+       guessing at reimplementing it risks a save action firing against the wrong
+       reservation with no way to verify it here. A link is a small trade for
+       zero risk of that. A maintenance row (Cooldown/Cleaning) stays a plain,
+       unclickable div, exactly as it's always been. */
+    #dayEventsModal a.day-event-row {
+      cursor: pointer;
+      transition: filter 0.15s ease;
+    }
+    #dayEventsModal a.day-event-row:hover { filter: brightness(0.92); }
+    #dayEventsModal div.day-event-row { cursor: default; }
 
     /* The four status-date inputs in a 2x2 grid on wider screens (defined here since
        these grid utilities aren't in the precompiled stylesheet). */
@@ -772,210 +788,9 @@
             </a>
           </li>
           <!-- Menu Item Profile -->
-
-          <!-- Menu Item Forms -->
-          <li data-admin-template-nav="forms">
-            <a
-              href="#"
-              @click.prevent="selected = (selected === 'Forms' ? '':'Forms')"
-              class="menu-item group"
-              :class=" (selected === 'Forms') || (page === 'formElements' || page === 'formLayout' || page === 'proFormElements' || page === 'proFormLayout') ? 'menu-item-active' : 'menu-item-inactive'"
-            >
-              <svg
-                :class="(selected === 'Forms') || (page === 'formElements' || page === 'formLayout' || page === 'proFormElements' || page === 'proFormLayout') ? 'menu-item-icon-active'  :'menu-item-icon-inactive'"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  fill-rule="evenodd"
-                  clip-rule="evenodd"
-                  d="M5.5 3.25C4.25736 3.25 3.25 4.25736 3.25 5.5V18.5C3.25 19.7426 4.25736 20.75 5.5 20.75H18.5001C19.7427 20.75 20.7501 19.7426 20.7501 18.5V5.5C20.7501 4.25736 19.7427 3.25 18.5001 3.25H5.5ZM4.75 5.5C4.75 5.08579 5.08579 4.75 5.5 4.75H18.5001C18.9143 4.75 19.2501 5.08579 19.2501 5.5V18.5C19.2501 18.9142 18.9143 19.25 18.5001 19.25H5.5C5.08579 19.25 4.75 18.9142 4.75 18.5V5.5ZM6.25005 9.7143C6.25005 9.30008 6.58583 8.9643 7.00005 8.9643L17 8.96429C17.4143 8.96429 17.75 9.30008 17.75 9.71429C17.75 10.1285 17.4143 10.4643 17 10.4643L7.00005 10.4643C6.58583 10.4643 6.25005 10.1285 6.25005 9.7143ZM6.25005 14.2857C6.25005 13.8715 6.58583 13.5357 7.00005 13.5357H17C17.4143 13.5357 17.75 13.8715 17.75 14.2857C17.75 14.6999 17.4143 15.0357 17 15.0357H7.00005C6.58583 15.0357 6.25005 14.6999 6.25005 14.2857Z"
-                  fill=""
-                />
-              </svg>
-
-              <span
-                class="menu-item-text"
-                :class="sidebarToggle ? 'lg:hidden' : ''"
-              >
-                Forms
-              </span>
-
-              <svg
-                class="menu-item-arrow absolute right-2.5 top-1/2 -translate-y-1/2 stroke-current"
-                :class="[(selected === 'Forms') ? 'menu-item-arrow-active' : 'menu-item-arrow-inactive', sidebarToggle ? 'lg:hidden' : '' ]"
-                width="20"
-                height="20"
-                viewBox="0 0 20 20"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M4.79175 7.39584L10.0001 12.6042L15.2084 7.39585"
-                  stroke=""
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-            </a>
-
-            <!-- Dropdown Menu Start -->
-            <div
-              class="overflow-hidden transform translate"
-              :class="(selected === 'Forms') ? 'block' :'hidden'"
-            >
-              <ul
-                :class="sidebarToggle ? 'lg:hidden' : 'flex'"
-                class="flex flex-col gap-1 mt-2 menu-dropdown pl-9"
-              >
-                <li>
-                  <a
-                    href="{% url 'arabela_admin:page' page='form-elements' %}"
-                    class="menu-dropdown-item group"
-                    :class="page === 'formElements' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Form Elements
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <!-- Dropdown Menu End -->
-          </li>
-          <!-- Menu Item Forms -->
-
                   </ul>
       </div>
 
-      <!-- Others Group -->
-      <div data-admin-template-nav="others-ui">
-        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
-          <span
-            class="menu-group-title"
-            :class="sidebarToggle ? 'lg:hidden' : ''"
-          >
-            others
-          </span>
-
-          <svg
-            :class="sidebarToggle ? 'lg:block hidden' : 'hidden'"
-            class="mx-auto fill-current menu-group-icon"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              fill-rule="evenodd"
-              clip-rule="evenodd"
-              d="M5.99915 10.2451C6.96564 10.2451 7.74915 11.0286 7.74915 11.9951V12.0051C7.74915 12.9716 6.96564 13.7551 5.99915 13.7551C5.03265 13.7551 4.24915 12.9716 4.24915 12.0051V11.9951C4.24915 11.0286 5.03265 10.2451 5.99915 10.2451ZM17.9991 10.2451C18.9656 10.2451 19.7491 11.0286 19.7491 11.9951V12.0051C19.7491 12.9716 18.9656 13.7551 17.9991 13.7551C17.0326 13.7551 16.2491 12.9716 16.2491 12.0051V11.9951C16.2491 11.0286 17.0326 10.2451 17.9991 10.2451ZM13.7491 11.9951C13.7491 11.0286 12.9656 10.2451 11.9991 10.2451C11.0326 10.2451 10.2491 11.0286 10.2491 11.9951V12.0051C10.2491 12.9716 11.0326 13.7551 11.9991 13.7551C12.9656 13.7551 13.7491 12.9716 13.7491 12.0051V11.9951Z"
-              fill=""
-            />
-          </svg>
-        </h3>
-
-        <ul class="flex flex-col gap-4 mb-6">
-          
-
-          <!-- Menu Item Ui Elements -->
-          <li>
-            <a
-              href="#"
-              @click.prevent="selected = (selected === 'UIElements' ? '':'UIElements')"
-              class="menu-item group"
-              :class="(selected === 'UIElements') || (page === 'alerts' || page === 'badge' || page === 'buttons' || page === 'buttonsGroup' || page === 'cards'|| page === 'carousel' || page === 'dropdowns' || page === 'list' || page === 'modals' ) ? 'menu-item-active' : 'menu-item-inactive'"
-            >
-              <svg
-                :class="(selected === 'UIElements') || (page === 'alerts' || page === 'badge' || page === 'breadcrumb' || page === 'buttons' || page === 'buttonsGroup' || page === 'cards'|| page === 'carousel' || page === 'dropdowns' || page === 'list' || page === 'modals' || page === 'notifications' || page === 'popovers' || page === 'progress' || page === 'spinners' || page === 'tooltips' ) ? 'menu-item-icon-active'  :'menu-item-icon-inactive'"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  fill-rule="evenodd"
-                  clip-rule="evenodd"
-                  d="M11.665 3.75618C11.8762 3.65061 12.1247 3.65061 12.3358 3.75618L18.7807 6.97853L12.3358 10.2009C12.1247 10.3064 11.8762 10.3064 11.665 10.2009L5.22014 6.97853L11.665 3.75618ZM4.29297 8.19199V16.0946C4.29297 16.3787 4.45347 16.6384 4.70757 16.7654L11.25 20.0365V11.6512C11.1631 11.6205 11.0777 11.5843 10.9942 11.5425L4.29297 8.19199ZM12.75 20.037L19.2933 16.7654C19.5474 16.6384 19.7079 16.3787 19.7079 16.0946V8.19199L13.0066 11.5425C12.9229 11.5844 12.8372 11.6207 12.75 11.6515V20.037ZM13.0066 2.41453C12.3732 2.09783 11.6277 2.09783 10.9942 2.41453L4.03676 5.89316C3.27449 6.27429 2.79297 7.05339 2.79297 7.90563V16.0946C2.79297 16.9468 3.27448 17.7259 4.03676 18.1071L10.9942 21.5857L11.3296 20.9149L10.9942 21.5857C11.6277 21.9024 12.3732 21.9024 13.0066 21.5857L19.9641 18.1071C20.7264 17.7259 21.2079 16.9468 21.2079 16.0946V7.90563C21.2079 7.05339 20.7264 6.27429 19.9641 5.89316L13.0066 2.41453Z"
-                  fill=""
-                />
-              </svg>
-
-              <span
-                class="menu-item-text"
-                :class="sidebarToggle ? 'lg:hidden' : ''"
-              >
-                UI Elements
-              </span>
-
-              <svg
-                class="menu-item-arrow absolute right-2.5 top-1/2 -translate-y-1/2 stroke-current"
-                :class="[(selected === 'UIElements') ? 'menu-item-arrow-active' : 'menu-item-arrow-inactive', sidebarToggle ? 'lg:hidden' : '' ]"
-                width="20"
-                height="20"
-                viewBox="0 0 20 20"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M4.79175 7.39584L10.0001 12.6042L15.2084 7.39585"
-                  stroke=""
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-            </a>
-
-            <!-- Dropdown Menu Start -->
-            <div
-              class="overflow-hidden transform translate"
-              :class="(selected === 'UIElements') ? 'block' :'hidden'"
-            >
-              <ul
-                :class="sidebarToggle ? 'lg:hidden' : 'flex'"
-                class="flex flex-col gap-1 mt-2 menu-dropdown pl-9"
-              >
-                <li>
-                  <a
-                    href="{% url 'arabela_admin:page' page='alerts' %}"
-                    class="menu-dropdown-item group"
-                    :class="page === 'alerts' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Alerts
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="{% url 'arabela_admin:page' page='badge' %}"
-                    class="menu-dropdown-item group"
-                    :class="page === 'badge' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Badges
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="{% url 'arabela_admin:page' page='buttons' %}"
-                    class="menu-dropdown-item group"
-                    :class="page === 'buttons' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Buttons
-                  </a>
-                </li>
-                </ul>
-            </div>
-            <!-- Dropdown Menu End -->
-          </li>
-          <!-- Menu Item Ui Elements -->
-
-          
-        </ul>
-      </div>
     </nav>
     <!-- Sidebar Menu --></div>
 </aside>
@@ -1528,6 +1343,38 @@
             </div>
             <!-- END BOOKING DETAIL PANEL -->
 
+            <!-- BEGIN DAY EVENTS PANEL -->
+            <!-- Replaces FullCalendar's own "+N more" popover entirely (see the CSS
+                 comment near .day-event-row for why) -- styled like Booking Details
+                 above rather than introducing a third look on this page. Its rows
+                 are filled in by openDayEventsModal() further down this file, from
+                 the same calendar-events-data JSON the calendar itself already
+                 reads to draw every event, not from anything new. -->
+            <div
+              class="fixed inset-0 items-center justify-center hidden p-5 overflow-y-auto modal z-99999"
+              id="dayEventsModal"
+              data-reservation-records-url="{% url 'arabela_admin:reservation_records' %}"
+            >
+              <div
+                class="day-events-modal-close fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]"
+              ></div>
+              <div
+                class="day-events-dialog modal-dialog relative flex w-full flex-col rounded-3xl bg-white p-6 dark:bg-gray-900"
+              >
+                <button
+                  type="button"
+                  class="day-events-modal-close transition-color absolute right-5 top-5 z-999 flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300"
+                >
+                  <svg class="fill-current" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path fill-rule="evenodd" clip-rule="evenodd" d="M6.04289 16.5418C5.65237 16.9323 5.65237 17.5655 6.04289 17.956C6.43342 18.3465 7.06658 18.3465 7.45711 17.956L11.9987 13.4144L16.5408 17.9565C16.9313 18.347 17.5645 18.347 17.955 17.9565C18.3455 17.566 18.3455 16.9328 17.955 16.5423L13.4129 12.0002L17.955 7.45808C18.3455 7.06756 18.3455 6.43439 17.955 6.04387C17.5645 5.65335 16.9313 5.65335 16.5408 6.04387L11.9987 10.586L7.45711 6.04439C7.06658 5.65386 6.43342 5.65386 6.04289 6.04439C5.65237 6.43491 5.65237 7.06808 6.04289 7.4586L10.5845 12.0002L6.04289 16.5418Z" fill=""/>
+                  </svg>
+                </button>
+                <h5 class="mb-4 font-semibold text-gray-800 text-theme-xl dark:text-white/90" id="dayEventsModalTitle"></h5>
+                <div class="flex flex-col gap-2 custom-scrollbar" id="dayEventsModalList"></div>
+              </div>
+            </div>
+            <!-- END DAY EVENTS PANEL -->
+
           </div>
         </main>
         <!-- ===== Main Content End ===== -->
@@ -1671,49 +1518,83 @@
       });
     });
 
-    // The "+N more" list (FullCalendar's own .fc-popover, for a day with too many
-    // bookings to show inline) tries to stay on screen, but only checks its LEFT/RIGHT
-    // edges against the viewport, never its bottom, and for a day right at the edge of
-    // the grid its own left-edge correction can still leave it hanging off-screen --
-    // confirmed by comparing two real days with the same kind of content: one with
-    // room to spare renders and scrolls perfectly, one at the edge doesn't reposition
-    // at all. Fixed here rather than in bundle.js (a committed, non-rebuildable asset --
-    // see feedback_admin_bundlejs_not_rebuildable): once the popover lands in the DOM,
-    // measure where it actually ended up and nudge it back on screen if any edge
-    // overshoots, using the same min-then-max clamp FullCalendar's own code already
-    // uses for its left edge, just also applied to top/bottom. This never touches how
-    // the list scrolls (that part already works, untouched) -- only where it sits.
+    // Replaces FullCalendar's own "+N more" popover with dayEventsModal (see that
+    // markup above, and the CSS comment near .day-event-row for why this exists
+    // instead of continuing to reshape the popover itself). Intercepted on capture
+    // so this runs before FullCalendar's own click handling ever opens its native
+    // popover -- a bubble-phase listener could run too late, after that popover
+    // already exists, since we don't know whether FullCalendar binds its own
+    // handler directly on the link or higher up.
+    document.addEventListener('click', function (e) {
+      var moreLink = e.target.closest('.fc-daygrid-more-link');
+      if (!moreLink) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      var dayCell = moreLink.closest('[data-date]');
+      if (!dayCell) return;
+      openDayEventsModal(dayCell.dataset.date);
+    }, true);
+
+    function formatDayHeader(dateStr) {
+      // Built from the Y/M/D parts rather than `new Date(dateStr)` -- that string
+      // form parses as UTC midnight, which renders as the PREVIOUS day once
+      // formatted in any browser sitting west of UTC. This is the same
+      // reliably-local-date construction used for admin date inputs elsewhere.
+      var parts = dateStr.split('-').map(Number);
+      var d = new Date(parts[0], parts[1] - 1, parts[2]);
+      return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    }
+
+    function openDayEventsModal(dateStr) {
+      var dataEl = document.getElementById('calendar-events-data');
+      var modal = document.getElementById('dayEventsModal');
+      if (!dataEl || !modal) return;
+
+      var allEvents = JSON.parse(dataEl.textContent);
+      // allDay events here always carry a plain YYYY-MM-DD start/end (end is
+      // exclusive, matching how the calendar itself was built) -- a day is "in"
+      // an event whenever it falls in that range, not just an exact start match,
+      // since a booking or cooldown can span several days.
+      var dayEvents = allEvents.filter(function (ev) {
+        return ev.start <= dateStr && dateStr < ev.end;
+      });
+
+      var recordsUrl = modal.dataset.reservationRecordsUrl;
+      var listEl = document.getElementById('dayEventsModalList');
+      document.getElementById('dayEventsModalTitle').textContent = formatDayHeader(dateStr);
+      listEl.innerHTML = '';
+
+      dayEvents.forEach(function (ev) {
+        var props = ev.extendedProps || {};
+        var colorKey = (props.calendar || 'blocked').toLowerCase();
+        var isBooking = props.itemId != null;
+
+        var row = document.createElement(isBooking ? 'a' : 'div');
+        row.className = 'event-fc-color fc-bg-' + colorKey + ' day-event-row';
+        row.textContent = ev.title;
+        if (isBooking) {
+          row.href = recordsUrl + '?search=' + encodeURIComponent(props.reference || '');
+          row.target = '_blank';
+          row.rel = 'noopener';
+        }
+        listEl.appendChild(row);
+      });
+
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeDayEventsModal() {
+      var modal = document.getElementById('dayEventsModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
-      var VIEWPORT_MARGIN = 8;
-
-      function keepOnScreen(popoverEl) {
-        var rect = popoverEl.getBoundingClientRect();
-        var currentLeft = parseFloat(popoverEl.style.left) || 0;
-        var currentTop = parseFloat(popoverEl.style.top) || 0;
-
-        var idealLeft = Math.min(rect.left, window.innerWidth - VIEWPORT_MARGIN - rect.width);
-        idealLeft = Math.max(idealLeft, VIEWPORT_MARGIN);
-
-        var idealTop = Math.min(rect.top, window.innerHeight - VIEWPORT_MARGIN - rect.height);
-        idealTop = Math.max(idealTop, VIEWPORT_MARGIN);
-
-        popoverEl.style.left = (currentLeft + (idealLeft - rect.left)) + 'px';
-        popoverEl.style.top = (currentTop + (idealTop - rect.top)) + 'px';
-      }
-
-      new MutationObserver(function (mutations) {
-        mutations.forEach(function (mutation) {
-          mutation.addedNodes.forEach(function (node) {
-            if (node.nodeType !== 1) return;
-            if (node.classList && node.classList.contains('fc-popover')) {
-              keepOnScreen(node);
-            } else if (node.querySelector) {
-              var nested = node.querySelector('.fc-popover');
-              if (nested) keepOnScreen(nested);
-            }
-          });
-        });
-      }).observe(document.body, { childList: true, subtree: true });
+      document.querySelectorAll('#dayEventsModal .day-events-modal-close').forEach(function (btn) {
+        btn.addEventListener('click', closeDayEventsModal);
+      });
     });
   </script>
 
