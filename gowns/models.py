@@ -1,3 +1,7 @@
+import re
+import uuid
+
+from django.conf import settings
 from django.db import models, transaction
 from django.utils import timezone
 
@@ -34,6 +38,55 @@ GOWN_COLOR_PRESETS = (
     ("Multicolor", "MC"),
 )
 
+# Colors for the PHYSICAL tag/ribbon on a gown -- one fixed color per CATEGORY, so a
+# staffer can tell what category a gown is from across the room. This is deliberately
+# unrelated to Gown.color_name/color_code (the dress's own real color): a white
+# Wedding Gown and a white Long Gown look alike, which is exactly why the tag color
+# has to come from the category instead.
+#
+# The owner can reassign these from Gown Catalog (SiteSettings.category_tag_colors
+# stores only what they've changed); DEFAULT_CATEGORY_TAG_COLORS fills in the rest, so
+# a brand-new category or a fresh database always resolves to a real color.
+TAG_COLOR_PALETTE = (
+    ("White", "#FFFFFF"), ("Black", "#111827"), ("Red", "#DC2626"), ("Orange", "#F97316"),
+    ("Yellow", "#FACC15"), ("Green", "#16A34A"), ("Teal", "#0D9488"), ("Blue", "#2563EB"),
+    ("Navy", "#1E3A8A"), ("Purple", "#9333EA"), ("Pink", "#EC4899"), ("Brown", "#92400E"),
+    ("Gray", "#6B7280"), ("Gold", "#CA8A04"),
+)
+TAG_COLOR_HEX = dict(TAG_COLOR_PALETTE)
+
+# Keyed by Gown.Category value. A test pins this to exactly Gown.Category.values so
+# adding a category without giving it a tag color fails loudly instead of silently
+# rendering a tag with no color.
+DEFAULT_CATEGORY_TAG_COLORS = {
+    'Wedding Gown': 'White',
+    'Ball Gown': 'Blue',
+    'Long Gown': 'Red',
+    'Luxury Gown': 'Purple',
+    'Mother Gown': 'Pink',
+    'Suit': 'Black',
+    'Filipiniana': 'Green',
+    'Guest Gown': 'Orange',
+    'Dresses': 'Yellow',
+    'Kids Gown': 'Teal',
+    'Barong': 'Brown',
+    'Ball Gown Tulle': 'Navy',
+    'Bridesmaid Dresses': 'Gray',
+}
+
+
+def resolve_tag_colors(saved):
+    """Every category's tag color as {category: color name}: whatever the owner has
+    saved, falling back to the default for any category they haven't touched -- or
+    whose saved value is no longer a color on the palette (a stale/hand-edited row
+    must never produce a tag with no color)."""
+    saved = saved if isinstance(saved, dict) else {}
+    resolved = {}
+    for category, default in DEFAULT_CATEGORY_TAG_COLORS.items():
+        chosen = saved.get(category)
+        resolved[category] = chosen if chosen in TAG_COLOR_HEX else default
+    return resolved
+
 
 class Gown(models.Model):
     class Category(models.TextChoices):
@@ -45,13 +98,11 @@ class Gown(models.Model):
         SUIT = 'Suit', 'Suit'
         FILIPINIANA = 'Filipiniana', 'Filipiniana'
         GUEST_GOWN = 'Guest Gown', 'Guest Gown'
-        FLOWER_GIRL = 'Flower Girl', 'Flower Girl'
-        BELO = 'Belo', 'Belo'
-        THAILAND_GOWN = 'Thailand Gown', 'Thailand Gown'
         DRESSES = 'Dresses', 'Dresses'
         KIDS_GOWN = 'Kids Gown', 'Kids Gown'
         BARONG = 'Barong', 'Barong'
         BALL_GOWN_TULLE = 'Ball Gown Tulle', 'Ball Gown Tulle'
+        BRIDESMAID_DRESSES = 'Bridesmaid Dresses', 'Bridesmaid Dresses'
 
     class Size(models.TextChoices):
         SMALL = 'Small', 'Small'
@@ -91,6 +142,16 @@ class Gown(models.Model):
     is_verified = models.BooleanField(default=False)
     last_returned_at = models.DateField(null=True, blank=True)
     notes = models.TextField(blank=True)
+    # The last time someone physically laid eyes on this gown and marked it present
+    # (the periodic walkthrough check). Only the latest check is kept -- enough to answer
+    # "when was this last confirmed here, and by whom", which is what narrows a missing
+    # gown down to a time window. SET_NULL so removing a staff account never erases the
+    # fact that a check happened.
+    last_checked_at = models.DateTimeField(null=True, blank=True)
+    last_checked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='+',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -99,6 +160,13 @@ class Gown(models.Model):
 
     def __str__(self):
         return f'{self.gown_id} — {self.name}'
+
+    @property
+    def tracking_number(self):
+        """The number at the end of gown_id (the 12 in 'Wedding Gown-WH-012') -- what
+        staff read off the physical tag. None for an ID that doesn't end in a number."""
+        match = re.search(r'-(\d+)$', self.gown_id or '')
+        return int(match.group(1)) if match else None
 
     def save(self, *args, **kwargs):
         if not self.slug:
@@ -114,21 +182,34 @@ class Gown(models.Model):
         # here (skip_bare) instead of through GownSlugSequence.
         from gowns.context_processors import _SLUG_ORDER
         base = slugify(self.name) or slugify(self.gown_id) or 'gown'
-        return GownSlugSequence.reserve(base, skip_bare=base in _SLUG_ORDER)
+        skip_bare = base in _SLUG_ORDER
+        # Each base has its own counter, and the counters know nothing about each other --
+        # yet two different names can land on the same slug: "White (2)" slugifies to
+        # "white-2", which is also what the second gown named "White" is handed. Whichever
+        # is created second would fail on the unique slug ("Couldn't save that gown"), so
+        # look at the real table too and simply ask again -- reserve() never returns the
+        # same string twice, so the next answer is a fresh one.
+        for _ in range(50):
+            slug = GownSlugSequence.reserve(base, skip_bare=skip_bare)
+            if not Gown.objects.filter(slug=slug).exclude(pk=self.pk).exists():
+                return slug
+        return f'{base}-{uuid.uuid4().hex[:8]}'
 
     @classmethod
-    def next_tracking_number(cls, category, color_code):
-        """Next 3-digit sequence within the same category+color group — automates the
-        seeding plan's manual 'check the sheet for the next available tracking number' step.
+    def next_tracking_number(cls, category):
+        """Next number for a new gown in this category -- ONE running count for the whole
+        category, whatever the gown's color. The number in gown_id used to restart at 001
+        for every new color, so a single category ended up with several parallel little
+        sequences (Blue-001, Gold-001, White-001, White-002...) and a mixed list of them
+        read as noise. Now 001 exists once per category and every later number is higher,
+        so "the Nth Wedding Gown ever added" is always what the number says. The color code
+        still rides along in the gown_id text for a quick read.
 
         Delegates the actual number to GownSequence, which hands out each integer under
-        a row lock -- see that model's docstring. This used to read the highest existing
-        gown_id in the group and add one: the same shape of race that
-        reservations.models.ReservationSequence replaced for Reservation.reference_code,
-        after that approach was proven -- with real concurrent threads against live
-        Postgres -- to fail under load. Same problem here, same fix.
+        a row lock -- see that model's docstring. A number, once handed out, is never
+        handed out again -- deleting a gown retires its number for good.
         """
-        return GownSequence.next_value_for(category, color_code)
+        return GownSequence.next_value_for(category)
 
 
 def pick_representative_gown(units):
@@ -162,28 +243,37 @@ def group_gowns_by_name(units):
 
 
 class GownSequence(models.Model):
-    """One row per (category, color_code) group, holding the next tracking number to
-    hand out for it -- the same fix as reservations.models.ReservationSequence,
-    applied to Gown.gown_id instead of Reservation.reference_code. See that model's
-    docstring for the full reasoning; the short version:
+    """The next tracking number to hand out for a category -- the same fix as
+    reservations.models.ReservationSequence, applied to Gown.gown_id instead of
+    Reservation.reference_code. See that model's docstring for the full reasoning; the
+    short version:
 
     "Read the highest existing gown_id in this group, add one" (the old approach)
     reads, then separately writes, with nothing stopping two staff adding a gown to
-    the same category+color at the same moment from both reading the same "last" row
-    before either has written. `next_value_for()` closes that with a real Postgres row
-    lock (`select_for_update()`): a second request asking for the same group does not
+    the same category at the same moment from both reading the same "last" row before
+    either has written. `next_value_for()` closes that with a real Postgres row lock
+    (`select_for_update()`): a second request asking for the same category does not
     race the first, it waits its turn and then reads the value the first one left
     behind. No number of simultaneous requests can defeat that.
 
     `get_or_create` covers the one thing a row lock cannot protect -- a row that does
-    not exist yet, for the very first gown ever added to a given category+color -- by
-    catching the unique-constraint violation from two requests both creating that row
-    for the first time and re-fetching the winner's row, which is standard, well-
-    tested Django behaviour, not something left to chance here.
+    not exist yet, for the very first gown ever added to a category -- by catching the
+    unique-constraint violation from two requests both creating that row for the first
+    time and re-fetching the winner's row, which is standard, well-tested Django
+    behaviour, not something left to chance here.
+
+    ONE COUNTER PER CATEGORY. It used to be one per (category, color_code), which made
+    the number restart at 001 for every new color. The category-wide counter is the
+    row whose `color_code` is '' (CATEGORY_WIDE). The old per-color rows are left in
+    place and simply no longer read: dropping the column would break the still-deployed
+    code that shares this database until it's updated, and they double as the record of
+    which numbers past gowns already used (see `_highest_used`).
     """
 
+    CATEGORY_WIDE = ''
+
     category = models.CharField(max_length=20)
-    color_code = models.CharField(max_length=2)
+    color_code = models.CharField(max_length=2, blank=True)
     next_value = models.PositiveIntegerField(default=1)
 
     class Meta:
@@ -192,15 +282,45 @@ class GownSequence(models.Model):
         ]
 
     def __str__(self):
-        return f'{self.category}-{self.color_code}: next is {self.next_value}'
+        scope = self.color_code or 'all colors'
+        return f'{self.category} ({scope}): next is {self.next_value}'
 
     @classmethod
-    def next_value_for(cls, category, color_code):
+    def _highest_used(cls, category):
+        """The highest tracking number this category has EVER handed out, as far as the
+        database can tell: the numbers on gowns that still exist, plus the old per-color
+        counters and the Removal Log (which both remember numbers used by gowns since
+        deleted). Seeds a new category-wide counter so it starts above every number
+        already spoken for -- otherwise the very first new gown could be issued a number
+        an existing (or long deleted) gown already carries."""
+        highest = 0
+        for gown_id in Gown.objects.filter(category=category).values_list('gown_id', flat=True):
+            match = re.search(r'-(\d+)$', gown_id or '')
+            if match:
+                highest = max(highest, int(match.group(1)))
+        for used_up_to in (
+            cls.objects.filter(category=category).exclude(color_code=cls.CATEGORY_WIDE)
+            .values_list('next_value', flat=True)
+        ):
+            highest = max(highest, used_up_to - 1)
+        # ...and the Removal Log, which remembers the number of every gown removed since,
+        # even when the category has no gowns (or no legacy counter) left to remember it.
+        logged = GownRemoval.objects.filter(category=category).aggregate(m=models.Max('tracking_number'))['m']
+        if logged:
+            highest = max(highest, logged)
+        return highest
+
+    @classmethod
+    def next_value_for(cls, category):
         with transaction.atomic():
-            cls.objects.get_or_create(category=category, color_code=color_code)
+            row, created = cls.objects.get_or_create(category=category, color_code=cls.CATEGORY_WIDE)
             # Locks THIS row until this transaction commits -- any other request
-            # asking for the same category+color group blocks here rather than racing.
-            row = cls.objects.select_for_update().get(category=category, color_code=color_code)
+            # asking for the same category blocks here rather than racing.
+            row = cls.objects.select_for_update().get(pk=row.pk)
+            if created:
+                # Only the one request that actually created the row gets here; anyone
+                # else was blocked on the insert and sees the seeded value below.
+                row.next_value = cls._highest_used(category) + 1
             value = row.next_value
             row.next_value = value + 1
             row.save(update_fields=['next_value'])
@@ -315,6 +435,56 @@ class GownUnavailability(models.Model):
         return self.start_date <= today <= self.end_date
 
 
+class GownRemoval(models.Model):
+    """A permanent record that a gown was removed from the catalog, and why.
+
+    Deleting a Gown is a hard delete -- the row is gone -- so without this there was no
+    way to find out afterwards why a number in the sequence (say 003) no longer exists:
+    damaged and thrown out, sold, or simply vanished. Every removal now writes one of
+    these first, copying enough of the gown (ID, name, category, color, size, photo) that
+    the log still makes sense once the gown itself is gone. That is what separates a
+    gap that is ACCOUNTED FOR (a row here says why) from one that is not -- the second
+    kind being the real red flag.
+
+    Gown IDs are never reused, so one ID is never expected to appear here twice.
+    `removed_at` is null for the handful of removals that happened before this log
+    existed: the number is known to be missing, the date and reason are not, and the
+    log says exactly that rather than inventing them."""
+
+    class Reason(models.TextChoices):
+        DAMAGED = 'Damaged', 'Damaged beyond repair'
+        LOST_STOLEN = 'Lost or stolen', 'Lost or stolen'
+        RETIRED = 'Retired', 'Retired (sold or no longer offered)'
+        OTHER = 'Other', 'Other'
+
+    gown_id = models.CharField(max_length=40, db_index=True)
+    tracking_number = models.PositiveIntegerField(null=True, blank=True)
+    name = models.CharField(max_length=150, blank=True)
+    category = models.CharField(max_length=20, blank=True)
+    color_name = models.CharField(max_length=40, blank=True)
+    size = models.CharField(max_length=20, blank=True)
+    photo_url = models.URLField(blank=True)
+    reason = models.CharField(max_length=20, choices=Reason.choices)
+    note = models.CharField(max_length=300, blank=True)
+    removed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='+',
+    )
+    # A snapshot of the name, so the log keeps saying who did it even if that staff
+    # account is later renamed or deleted (removed_by would go null).
+    removed_by_name = models.CharField(max_length=150, blank=True)
+    removed_at = models.DateTimeField(null=True, blank=True)
+    recorded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # Newest first; the undated historical rows sink to the bottom rather than
+        # floating to the top the way Postgres sorts NULLs in a descending order.
+        ordering = [models.F('removed_at').desc(nulls_last=True), '-id']
+
+    def __str__(self):
+        return f'{self.gown_id} removed ({self.reason})'
+
+
 class SiteSettings(models.Model):
     """Singleton (always pk=1) holding the business's public contact info -- the
     admin Edit Profile page and every customer-facing template (footer, Contact
@@ -330,10 +500,19 @@ class SiteSettings(models.Model):
     shop_city = models.CharField(max_length=100, blank=True, default='Antipolo')
     shop_country = models.CharField(max_length=100, blank=True, default='Philippines')
     shop_postal_code = models.CharField(max_length=10, blank=True, default='1830')
+    # Only the tag colors the owner has CHANGED from the defaults, keyed by category --
+    # see resolve_tag_colors(), which layers these over DEFAULT_CATEGORY_TAG_COLORS.
+    # Storing overrides (not a full copy) means a category added later just picks up
+    # its default instead of showing up blank.
+    category_tag_colors = models.JSONField(default=dict, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return 'Site settings'
+
+    def tag_colors(self):
+        """{category: tag color name} for every category, defaults filled in."""
+        return resolve_tag_colors(self.category_tag_colors)
 
     @classmethod
     def load(cls):

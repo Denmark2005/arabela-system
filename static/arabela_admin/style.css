@@ -5002,3 +5002,52 @@ span.flatpickr-weekday,
   border-color: #465fff;
   border-top-color: transparent;
 }
+
+/* Gown Catalog's 4-tile stat row (Total/Available/Reserved/Needs Attention).
+   This sparse build only compiles the grid-cols-2/3 utilities actually used
+   elsewhere, not grid-cols-4, so a plain `xl:grid-cols-4` class would silently
+   do nothing here. Mirrors Tailwind's own breakpoints (sm: 640px, xl: 1280px)
+   instead of inventing new ones, so it behaves identically to a real utility. */
+.admin-stat-grid-4 {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+@media (min-width: 640px) {
+  .admin-stat-grid-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1280px) {
+  .admin-stat-grid-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* Physical-tag color markers (Gown Catalog, booking screens, Tag Colors section).
+   The tag's color is set inline per element (it's data, not a fixed style), so this only
+   supplies the shape. The edge is what makes a WHITE tag visible at all -- white on the
+   panel's white/near-white background would otherwise vanish -- and it stays legible in
+   dark mode because it's a translucent grey rather than a fixed light or dark border. */
+.admin-tag-dot {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(107, 114, 128, 0.6);
+  flex: none;
+}
+.admin-tag-dot-lg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+/* The number staff read off the tag -- set apart and tabular so a column of them lines
+   up, and easy to spot in a table row. */
+.admin-tag-number {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+/* Stands in for Tailwind's shrink-0, which this build deliberately lacks. */
+.admin-no-shrink {
+  flex: none;
+}

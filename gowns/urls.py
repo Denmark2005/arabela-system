@@ -31,13 +31,11 @@ urlpatterns = [
     path("collections/suit/", views.collection_suit, name="collection_suit"),
     path("collections/filipiniana/", views.collection_filipiniana, name="collection_filipiniana"),
     path("collections/guest-gown/", views.collection_guest_gown, name="collection_guest_gown"),
-    path("collections/flower-girl/", views.collection_flower_girl, name="collection_flower_girl"),
-    path("collections/belo/", views.collection_belo, name="collection_belo"),
-    path("collections/thailand-gown/", views.collection_thailand_gown, name="collection_thailand_gown"),
     path("collections/dresses/", views.collection_dresses, name="collection_dresses"),
     path("collections/kids-gown/", views.collection_kids_gown, name="collection_kids_gown"),
     path("collections/barong/", views.collection_barong, name="collection_barong"),
     path("collections/ball-gown-tulle/", views.collection_ball_gown_tulle, name="collection_ball_gown_tulle"),
+    path("collections/bridesmaid-dresses/", views.collection_bridesmaid_dresses, name="collection_bridesmaid_dresses"),
 
     # Product detail -- legacy (unnamed) route must stay BEFORE the generic one.
     path(
@@ -82,9 +80,6 @@ _LEGACY_REDIRECTS = [
     ("suit/", "gowns:collection_suit"),
     ("filipiniana/", "gowns:collection_filipiniana"),
     ("guest-gown/", "gowns:collection_guest_gown"),
-    ("flower-girl/", "gowns:collection_flower_girl"),
-    ("belo/", "gowns:collection_belo"),
-    ("thailand-gown/", "gowns:collection_thailand_gown"),
     ("dresses/", "gowns:collection_dresses"),
 ]
 urlpatterns += [

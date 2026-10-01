@@ -17,7 +17,7 @@ from django.utils import formats, timezone
 from django.utils.datastructures import MultiValueDict
 
 from arabela_system.middleware import DatabaseRetryMiddleware
-from gowns.models import Gown, GownSequence, GownSlugSequence, GownUnavailability
+from gowns.models import Gown, GownRemoval, GownSequence, GownSlugSequence, GownUnavailability
 from gowns.views import (
     _UNIT_ASSIGNED,
     _UNIT_NO_INVENTORY,
@@ -88,7 +88,7 @@ class ReservationSubmitPriceTrustTests(TestCase):
         defaults = dict(
             gown_id=f"TESTGOWN-{Gown.objects.count() + 1:04d}",
             name="Price Trust Test Gown",
-            category=Gown.Category.BELO,
+            category=Gown.Category.GUEST_GOWN,
             color_name="Red", color_code="RD", size=Gown.Size.MEDIUM,
             rental_price=Decimal("4500.00"), status=Gown.Status.AVAILABLE,
         )
@@ -203,7 +203,7 @@ class ReservationSubmitPriceTrustTests(TestCase):
     def test_missing_proof_of_payment_rejected(self):
         response = self.client.post(self.submit_url, data={
             "items": json.dumps([{
-                "gown_name": "Belo Two", "gown_slug": "archive-satin", "size": "",
+                "gown_name": "Guest Gown Two", "gown_slug": "archive-satin", "size": "",
                 "rental_price": "1", "rental_date": "2027-06-10", "return_date": "2027-06-13",
             }]),
             "first_name": "Test", "last_name": "Buyer", "payment_method": "GCash",
@@ -230,7 +230,7 @@ class FindAvailableUnitTests(TestCase):
         n = Gown.objects.count() + 1
         defaults = dict(
             gown_id=f"AVAILTEST-{n:04d}", name="Availability Test Gown",
-            category=Gown.Category.BELO, color_name="Red", color_code="RD",
+            category=Gown.Category.GUEST_GOWN, color_name="Red", color_code="RD",
             size=Gown.Size.MEDIUM, rental_price=Decimal("3000.00"), status=Gown.Status.AVAILABLE,
         )
         defaults.update(overrides)
@@ -344,7 +344,7 @@ class CustomerStatusEventTests(TestCase):
         # can be checked out at all.
         cls.gown = Gown.objects.create(
             gown_id="CUSTEVT-0001", name="Cust Event Test Gown",
-            category=Gown.Category.BELO, color_name="Purple", color_code="PG",
+            category=Gown.Category.GUEST_GOWN, color_name="Purple", color_code="PG",
             size=Gown.Size.MEDIUM, rental_price=Decimal("2000.00"),
             status=Gown.Status.AVAILABLE,
         )
@@ -428,7 +428,7 @@ class CustomerStatusEventTests(TestCase):
         that same gown was still genuinely out."""
         gown = Gown.objects.create(
             gown_id="CUSTEVT-0002", name="Cust Event Clobber Gown",
-            category=Gown.Category.BELO, color_name="Teal", color_code="TL",
+            category=Gown.Category.GUEST_GOWN, color_name="Teal", color_code="TL",
             size=Gown.Size.MEDIUM, rental_price=Decimal("2000.00"),
             status=Gown.Status.RESERVED,
         )
@@ -540,32 +540,75 @@ class CustomerTimelineRenderTests(TestCase):
 
 class GownSequenceTests(TestCase):
     """`GownSequence.next_value_for` / `Gown.next_tracking_number` -- the row-locked
-    counter that replaced "read the highest gown_id in this category+color group, add
-    one". Identical fix to reservations.models.ReservationSequence, applied to
-    Gown.gown_id; see that model's docstring for why the old shape (check, then write,
-    no lock) is a real race and not just a theoretical one."""
+    counter that replaced "read the highest gown_id in this group, add one". Identical fix
+    to reservations.models.ReservationSequence, applied to Gown.gown_id; see that model's
+    docstring for why the old shape (check, then write, no lock) is a real race and not
+    just a theoretical one.
 
-    def test_first_call_for_a_fresh_group_returns_one(self):
-        self.assertEqual(GownSequence.next_value_for("Belo", "T1"), 1)
+    The counter is ONE PER CATEGORY: a gown's color plays no part in its number. It used
+    to be one per category+color, which made the number restart at 001 for every new color
+    and left a mixed list of gowns reading as noise."""
+
+    def test_first_call_for_a_fresh_category_returns_one(self):
+        self.assertEqual(GownSequence.next_value_for("Guest Gown"), 1)
 
     def test_consecutive_calls_increment_by_one(self):
-        first = GownSequence.next_value_for("Belo", "T2")
-        second = GownSequence.next_value_for("Belo", "T2")
-        third = GownSequence.next_value_for("Belo", "T2")
+        first = GownSequence.next_value_for("Guest Gown")
+        second = GownSequence.next_value_for("Guest Gown")
+        third = GownSequence.next_value_for("Guest Gown")
         self.assertEqual([first, second, third], [1, 2, 3])
 
-    def test_different_color_codes_have_independent_counters(self):
-        self.assertEqual(GownSequence.next_value_for("Belo", "T3"), 1)
-        self.assertEqual(GownSequence.next_value_for("Belo", "T4"), 1)
-        self.assertEqual(GownSequence.next_value_for("Belo", "T3"), 2)
-
-    def test_different_categories_have_independent_counters_even_with_the_same_color(self):
-        self.assertEqual(GownSequence.next_value_for("Belo", "T5"), 1)
-        self.assertEqual(GownSequence.next_value_for("Wedding Gown", "T5"), 1)
+    def test_different_categories_have_independent_counters(self):
+        self.assertEqual(GownSequence.next_value_for("Guest Gown"), 1)
+        self.assertEqual(GownSequence.next_value_for("Wedding Gown"), 1)
+        self.assertEqual(GownSequence.next_value_for("Guest Gown"), 2)
 
     def test_next_tracking_number_delegates_to_the_counter(self):
-        self.assertEqual(Gown.next_tracking_number("Belo", "T6"), 1)
-        self.assertEqual(Gown.next_tracking_number("Belo", "T6"), 2)
+        self.assertEqual(Gown.next_tracking_number("Guest Gown"), 1)
+        self.assertEqual(Gown.next_tracking_number("Guest Gown"), 2)
+
+    def test_a_new_categorys_counter_starts_above_the_gowns_it_already_has(self):
+        """The counter is created lazily the first time a category is used -- for a
+        category that already has gowns (all of them numbered under the old per-color
+        scheme), it must start ABOVE every existing number, or the very first new gown
+        could be handed a number an existing one already carries."""
+        for n_, code in ((5, "WH"), (3, "BU")):
+            Gown.objects.create(
+                gown_id=f"Guest Gown-{code}-{n_:03d}", name=f"Seed {code}", category="Guest Gown",
+                color_name="Seed", color_code=code, size=Gown.Size.MEDIUM,
+                rental_price=Decimal("1000.00"),
+            )
+        self.assertEqual(GownSequence.next_value_for("Guest Gown"), 6)
+        self.assertEqual(GownSequence.next_value_for("Guest Gown"), 7)
+
+    def test_a_new_categorys_counter_also_clears_numbers_used_by_since_deleted_gowns(self):
+        """The old per-color counters remember numbers that gowns since DELETED once had --
+        those must never be handed out again, so the new counter starts above them too."""
+        GownSequence.objects.create(category="Guest Gown", color_code="WH", next_value=20)
+        GownSequence.objects.create(category="Guest Gown", color_code="BU", next_value=4)
+        self.assertEqual(GownSequence.next_value_for("Guest Gown"), 20)
+
+    def test_a_new_categorys_counter_also_clears_numbers_recorded_in_the_removal_log(self):
+        """Even with no gown and no legacy counter left in the category, a number the
+        Removal Log remembers is retired for good."""
+        GownRemoval.objects.create(
+            gown_id="Guest Gown-WH-007", tracking_number=7, category="Guest Gown",
+            reason=GownRemoval.Reason.OTHER, note="Reason not recorded",
+        )
+        self.assertEqual(GownSequence.next_value_for("Guest Gown"), 8)
+
+    def test_the_removal_log_of_another_category_does_not_move_this_ones_counter(self):
+        GownRemoval.objects.create(
+            gown_id="Suit-BK-009", tracking_number=9, category="Suit",
+            reason=GownRemoval.Reason.DAMAGED,
+        )
+        self.assertEqual(GownSequence.next_value_for("Guest Gown"), 1)
+
+    def test_old_per_color_rows_are_left_alone(self):
+        """Dropping them would break the still-deployed code that shares this database."""
+        GownSequence.objects.create(category="Guest Gown", color_code="WH", next_value=7)
+        GownSequence.next_value_for("Guest Gown")
+        self.assertEqual(GownSequence.objects.get(category="Guest Gown", color_code="WH").next_value, 7)
 
     def test_ten_real_concurrent_callers_never_receive_the_same_number(self):
         """The property this fix exists for, proven with real threads and real,
@@ -574,14 +617,11 @@ class GownSequenceTests(TestCase):
         connections; going higher fails the CONNECTION itself before any application
         code runs, which would test the pool rather than the fix.
 
-        Uses a randomized category+color group so this test stays safe to re-run
-        against this project's persisted --keepdb database: each real thread commits
-        on its own connection, bypassing this TestCase's normal per-test rollback, so
-        a fixed key would already be past 1 on the test's second run. color_code is
-        capped at 2 characters by the model itself, so the category half of the key
-        (max_length=20, much more headroom) carries most of the randomization."""
+        Uses a randomized category so this test stays safe to re-run against this
+        project's persisted --keepdb database: each real thread commits on its own
+        connection, bypassing this TestCase's normal per-test rollback, so a fixed key
+        would already be past 1 on the test's second run."""
         category = "RaceCat%d" % random.randint(0, 999999)
-        color_code = "".join(random.choices(string.ascii_uppercase, k=2))
         n_threads = 10
         results = [None] * n_threads
         barrier = threading.Barrier(n_threads)
@@ -590,7 +630,7 @@ class GownSequenceTests(TestCase):
             connections.close_all()
             try:
                 barrier.wait(timeout=5)
-                results[index] = GownSequence.next_value_for(category, color_code)
+                results[index] = GownSequence.next_value_for(category)
             except Exception as exc:  # noqa: BLE001 -- surfaced via the assertion below
                 results[index] = exc
             finally:
@@ -634,10 +674,13 @@ class GownCreateConcurrencyTests(TestCase):
 
     def _create(self, color_code, **overrides):
         payload = {
-            "name": "Concurrency Test Gown", "category": Gown.Category.BELO,
+            "name": "Concurrency Test Gown", "category": Gown.Category.GUEST_GOWN,
             "color_name": "Test", "color_code": color_code,
             "size": Gown.Size.MEDIUM, "rental_price": "1500",
             "status": Gown.Status.AVAILABLE,
+            # These tests add the same gown name repeatedly on purpose; answering the
+            # "same gown or a different one?" prompt up front keeps them about numbering.
+            "name_choice": "same",
         }
         payload.update(overrides)
         return self.client.post(reverse("arabela_admin:gown_create"), data=payload)
@@ -645,15 +688,41 @@ class GownCreateConcurrencyTests(TestCase):
     def test_the_ordinary_uncontested_path_still_gets_sequential_ids(self):
         r1 = self._create("U1").json()
         r2 = self._create("U1").json()
-        self.assertEqual(r1["gown"]["gown_id"], "Belo-U1-001")
-        self.assertEqual(r2["gown"]["gown_id"], "Belo-U1-002")
+        self.assertEqual(r1["gown"]["gown_id"], "Guest Gown-U1-001")
+        self.assertEqual(r2["gown"]["gown_id"], "Guest Gown-U1-002")
 
     def test_no_number_is_skipped_on_the_normal_path(self):
         """The old `+ _attempt` offset is gone specifically because, under the new
         counter, it would have wasted a number on every loop iteration -- this proves
         the common case (attempt 0 always succeeds) produces no such gap."""
         ids = [self._create("U2").json()["gown"]["gown_id"] for _ in range(4)]
-        self.assertEqual(ids, ["Belo-U2-001", "Belo-U2-002", "Belo-U2-003", "Belo-U2-004"])
+        self.assertEqual(ids, ["Guest Gown-U2-001", "Guest Gown-U2-002", "Guest Gown-U2-003", "Guest Gown-U2-004"])
+
+    def test_the_number_keeps_climbing_across_colors(self):
+        """The whole point of the category-wide counter: a new COLOR does not restart at
+        001. One running number per category, the color just rides along in the ID."""
+        ids = [self._create(code).json()["gown"]["gown_id"] for code in ("U1", "U2", "U1", "U3")]
+        self.assertEqual(
+            ids,
+            ["Guest Gown-U1-001", "Guest Gown-U2-002", "Guest Gown-U1-003", "Guest Gown-U3-004"],
+        )
+
+    def test_a_removed_gowns_number_is_never_handed_out_again(self):
+        """Deleting a gown retires its number for good -- the next gown carries on from
+        where the count already was, never back-filling the gap."""
+        first = self._create("U1").json()["gown"]
+        second = self._create("U1").json()["gown"]
+        Gown.objects.filter(id=second["id"]).delete()
+        third = self._create("U1").json()["gown"]
+        self.assertEqual(
+            [first["gown_id"], third["gown_id"]],
+            ["Guest Gown-U1-001", "Guest Gown-U1-003"],
+        )
+
+    def test_each_category_has_its_own_count(self):
+        self._create("U1")
+        other = self._create("U1", category=Gown.Category.SUIT).json()["gown"]
+        self.assertEqual(other["gown_id"], "Suit-U1-001")
 
 
 class GownSlugSequenceTests(TestCase):
@@ -692,7 +761,7 @@ class GownSlugSequenceTests(TestCase):
     def _make_gown(self, name, **overrides):
         defaults = dict(
             gown_id=f"SLUGTEST-{Gown.objects.count() + 1:04d}",
-            name=name, category=Gown.Category.BELO,
+            name=name, category=Gown.Category.GUEST_GOWN,
             color_name="Test", color_code="ST", size=Gown.Size.MEDIUM,
             rental_price=Decimal("1000.00"),
         )
@@ -709,6 +778,36 @@ class GownSlugSequenceTests(TestCase):
         self.assertNotEqual(first.slug, second.slug)
         self.assertEqual(first.slug, "duplicate-named-gown")
         self.assertEqual(second.slug, "duplicate-named-gown-2")
+
+    def test_a_numbered_name_never_takes_the_slug_the_plain_names_counter_already_gave_out(self):
+        """'White (2)' slugifies to 'white-2' -- exactly what the SECOND gown named 'White'
+        is handed. The counters are per base, so nothing stopped both wanting it, and the
+        later one failed on the unique slug ("Couldn't save that gown just now")."""
+        plain = [self._make_gown("White") for _ in range(3)]
+        self.assertEqual([g.slug for g in plain], ["white", "white-2", "white-3"])
+        numbered = self._make_gown("White (2)")
+        self.assertNotIn(numbered.slug, {g.slug for g in plain})
+        self.assertTrue(numbered.slug.startswith("white-2"))
+
+    def test_the_same_clash_the_other_way_round_also_resolves(self):
+        """'White (2)' is created first (taking 'white-2'), THEN a second plain 'White'
+        arrives and its counter's next answer is also 'white-2'."""
+        first_plain = self._make_gown("White")
+        numbered = self._make_gown("White (2)")
+        second_plain = self._make_gown("White")
+        slugs = [first_plain.slug, numbered.slug, second_plain.slug]
+        self.assertEqual(len(set(slugs)), 3, slugs)
+        self.assertEqual(first_plain.slug, "white")
+        self.assertEqual(numbered.slug, "white-2")
+        self.assertEqual(second_plain.slug, "white-3")
+
+    def test_resaving_an_existing_gown_never_treats_its_own_slug_as_a_clash(self):
+        gown = self._make_gown("Resave Me")
+        slug = gown.slug
+        gown.notes = "edited"
+        gown.save()
+        gown.refresh_from_db()
+        self.assertEqual(gown.slug, slug)
 
     def test_a_name_matching_a_placeholder_slug_never_gets_the_bare_form(self):
         gown = self._make_gown("Valencia Lace")  # slugifies to the exact placeholder slug
@@ -879,10 +978,12 @@ class CategorySwapTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(Reservation.objects.count(), before)
 
-    def test_admin_categories_page_shows_new_categories_not_old(self):
+    def test_gown_catalog_category_chips_show_new_categories_not_old(self):
+        """The old, now-removed standalone Categories page used to be where this got
+        checked; the browse-by-category chip strip on Gown Catalog does that job now."""
         staff = User.objects.create_user(username="catswap_cats", password="x", is_staff=True)
         self.client.force_login(staff)
-        html = self.client.get(reverse("arabela_admin:categories")).content.decode()
+        html = self.client.get(reverse("arabela_admin:gown_catalog")).content.decode()
         for _, label in self.NEW_CATEGORIES:
             self.assertIn(label, html)
         self.assertNotIn("Sexy Gown", html)
@@ -898,6 +999,107 @@ class CategorySwapTests(TestCase):
             self.assertIn(f'<option value="{label}">{label}</option>', html)
         self.assertNotIn('value="Sexy Gown"', html)
         self.assertNotIn('value="Ninang Gown"', html)
+
+
+class BridesmaidDressesCategorySwapTests(TestCase):
+    """Belo, Thailand Gown, and Flower Girl were removed (zero real stock in any of
+    them, confirmed before deleting) and replaced with a single new category,
+    Bridesmaid Dresses -- everywhere: the real-inventory Gown model, the customer-
+    facing registry, and the admin panel. Same registry-propagation proof as
+    CategorySwapTests above, just for a 3-removed/1-added swap instead of 2-for-3."""
+
+    OLD_CATEGORIES = [
+        ("collection_belo", "Belo"),
+        ("collection_thailand_gown", "Thailand Gown"),
+        ("collection_flower_girl", "Flower Girl"),
+    ]
+    NEW_CATEGORY_URL_NAME = "collection_bridesmaid_dresses"
+    NEW_CATEGORY_LABEL = "Bridesmaid Dresses"
+
+    def test_new_category_page_renders_with_its_own_label(self):
+        html = self.client.get(reverse(f"gowns:{self.NEW_CATEGORY_URL_NAME}")).content.decode()
+        self.assertIn(f">{self.NEW_CATEGORY_LABEL}<", html)
+        self.assertIn(f"{self.NEW_CATEGORY_LABEL} Collection", html)  # <title>
+        for leak in ("{%", "{{", "{#"):
+            self.assertNotIn(leak, html)
+
+    def test_new_category_with_no_real_stock_shows_the_empty_state(self):
+        html = self.client.get(reverse(f"gowns:{self.NEW_CATEGORY_URL_NAME}")).content.decode()
+        self.assertIn("No gowns available in this collection", html)
+
+    def test_the_old_category_url_names_no_longer_resolve(self):
+        for old_name, _ in self.OLD_CATEGORIES:
+            with self.assertRaises(NoReverseMatch):
+                reverse(f"gowns:{old_name}")
+
+    def test_the_old_category_paths_404_cleanly_not_a_500(self):
+        for path in ("/collections/belo/", "/collections/thailand-gown/", "/collections/flower-girl/",
+                    "/belo/", "/thailand-gown/", "/flower-girl/"):
+            with self.subTest(path=path):
+                self.assertEqual(self.client.get(path).status_code, 404)
+
+    def test_the_browse_all_grid_lists_the_new_category_not_the_old(self):
+        html = self.client.get(reverse("gowns:collections")).content.decode()
+        self.assertIn(self.NEW_CATEGORY_LABEL, html)
+        for _, label in self.OLD_CATEGORIES:
+            self.assertNotIn(label, html)
+
+    def test_the_rent_all_cycle_through_view_includes_the_new_category_not_old(self):
+        html = self.client.get(reverse("gowns:collection_all")).content.decode()
+        self.assertIn(self.NEW_CATEGORY_LABEL, html)
+        for _, label in self.OLD_CATEGORIES:
+            self.assertNotIn(label, html)
+
+    def test_gown_model_accepts_the_new_category_not_old(self):
+        self.assertIn(self.NEW_CATEGORY_LABEL, Gown.Category.values)
+        for _, label in self.OLD_CATEGORIES:
+            self.assertNotIn(label, Gown.Category.values)
+
+    def test_a_real_gown_can_be_added_in_the_new_category_and_appears_live(self):
+        """The actual end-to-end proof: create through the real admin endpoint, then
+        confirm it is visible on the real customer-facing page -- not just that the
+        category string is accepted somewhere in isolation."""
+        staff = User.objects.create_user(username="bridesmaid_admin", password="x", is_staff=True)
+        self.client.force_login(staff)
+        response = self.client.post(reverse("arabela_admin:gown_create"), data={
+            "name": "Bridesmaid Test Piece", "category": self.NEW_CATEGORY_LABEL,
+            "color_name": "Sage Green", "color_code": "SG",
+            "size": Gown.Size.MEDIUM, "rental_price": "2500",
+            "status": Gown.Status.AVAILABLE,
+        })
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["gown"]["gown_id"], "Bridesmaid Dresses-SG-001")
+
+        self.client.logout()
+        html = self.client.get(reverse(f"gowns:{self.NEW_CATEGORY_URL_NAME}")).content.decode()
+        self.assertIn("Bridesmaid Test Piece", html)
+
+    def test_bridesmaid_dresses_is_in_women_not_men(self):
+        men_html = self.client.get(reverse("gowns:featured_men_collections")).content.decode()
+        women_html = self.client.get(reverse("gowns:featured_women_collections")).content.decode()
+        url = reverse(f"gowns:{self.NEW_CATEGORY_URL_NAME}")
+        tile = f'href="{url}" class="group cursor-pointer flex flex-col items-center"'
+        self.assertIn(tile, women_html, "Bridesmaid Dresses tile missing from the women's grid")
+        self.assertNotIn(tile, men_html, "Bridesmaid Dresses tile should not be in the men's grid")
+
+    def test_gown_catalog_category_chips_show_new_category_not_old(self):
+        staff = User.objects.create_user(username="bridesmaid_cats", password="x", is_staff=True)
+        self.client.force_login(staff)
+        html = self.client.get(reverse("arabela_admin:gown_catalog")).content.decode()
+        self.assertIn(self.NEW_CATEGORY_LABEL, html)
+        for _, label in self.OLD_CATEGORIES:
+            self.assertNotIn(label, html)
+        for leak in ("{%", "{{", "{#"):
+            self.assertNotIn(leak, html)
+
+    def test_gown_catalog_dropdowns_offer_new_category_not_old(self):
+        staff = User.objects.create_user(username="bridesmaid_catalog", password="x", is_staff=True)
+        self.client.force_login(staff)
+        html = self.client.get(reverse("arabela_admin:gown_catalog")).content.decode()
+        self.assertIn(f'<option value="{self.NEW_CATEGORY_LABEL}">{self.NEW_CATEGORY_LABEL}</option>', html)
+        self.assertNotIn('value="Belo"', html)
+        self.assertNotIn('value="Thailand Gown"', html)
+        self.assertNotIn('value="Flower Girl"', html)
 
 
 class NewGownCategoriesTests(TestCase):
@@ -993,10 +1195,12 @@ class NewGownCategoriesTests(TestCase):
         html = self.client.get(reverse("gowns:collection_barong")).content.decode()
         self.assertIn("Barong Test Piece", html)
 
-    def test_admin_categories_page_shows_the_new_categories(self):
+    def test_gown_catalog_category_chips_show_the_new_categories(self):
+        """The old, now-removed standalone Categories page used to be where this got
+        checked; the browse-by-category chip strip on Gown Catalog does that job now."""
         staff = User.objects.create_user(username="newcat_cats", password="x", is_staff=True)
         self.client.force_login(staff)
-        html = self.client.get(reverse("arabela_admin:categories")).content.decode()
+        html = self.client.get(reverse("arabela_admin:gown_catalog")).content.decode()
         for _, label in self.NEW_CATEGORIES:
             self.assertIn(label, html)
         for leak in ("{%", "{{", "{#"):
@@ -1016,10 +1220,10 @@ class CollectionPaginationTests(TestCase):
     "Next" button in every collection template was pure decoration -- no href, no
     onclick -- because a category's placeholder catalog is always exactly 8 items, so
     it never had anything to page through until real inventory could exceed 8 (see
-    [[project_real_gowns_replace_placeholder_catalog]]). These tests use Belo (not
+    [[project_real_gowns_replace_placeholder_catalog]]). These tests use Guest Gown (not
     Wedding Gown) for the >8 cases so they never collide with real production data."""
 
-    def _make_gown(self, n, category=Gown.Category.BELO, color_code="PG"):
+    def _make_gown(self, n, category=Gown.Category.GUEST_GOWN, color_code="PG"):
         return Gown.objects.create(
             gown_id=f"PAGETEST-{category}-{color_code}-{n:04d}",
             name=f"Page Test Gown {n}", category=category,
@@ -1035,7 +1239,7 @@ class CollectionPaginationTests(TestCase):
     def test_33_real_gowns_split_into_8_8_8_8_1_across_5_pages(self):
         for n in range(1, 34):
             self._make_gown(n)
-        url = reverse("gowns:collection_belo")
+        url = reverse("gowns:collection_guest_gown")
         expected_counts = {1: 8, 2: 8, 3: 8, 4: 8, 5: 1}
         for page, expected in expected_counts.items():
             with self.subTest(page=page):
@@ -1050,28 +1254,28 @@ class CollectionPaginationTests(TestCase):
     def test_first_page_has_no_previous_link_but_has_next(self):
         for n in range(1, 10):
             self._make_gown(n)
-        html = self.client.get(reverse("gowns:collection_belo")).content.decode()
+        html = self.client.get(reverse("gowns:collection_guest_gown")).content.decode()
         self.assertNotIn("Previous", html)
         self.assertIn(">Next<", html)
 
     def test_last_page_has_previous_link_but_no_next(self):
         for n in range(1, 10):
             self._make_gown(n)
-        html = self.client.get(reverse("gowns:collection_belo"), {"page": 2}).content.decode()
+        html = self.client.get(reverse("gowns:collection_guest_gown"), {"page": 2}).content.decode()
         self.assertIn("Previous", html)
         self.assertNotIn(">Next<", html)
 
     def test_middle_page_has_both_previous_and_next(self):
         for n in range(1, 25):
             self._make_gown(n)
-        html = self.client.get(reverse("gowns:collection_belo"), {"page": 2}).content.decode()
+        html = self.client.get(reverse("gowns:collection_guest_gown"), {"page": 2}).content.decode()
         self.assertIn("Previous", html)
         self.assertIn(">Next<", html)
 
     def test_out_of_range_or_garbage_page_number_never_errors(self):
         for n in range(1, 10):
             self._make_gown(n)
-        url = reverse("gowns:collection_belo")
+        url = reverse("gowns:collection_guest_gown")
         for bad_page in ("999", "0", "-1", "not-a-number", ""):
             with self.subTest(page=bad_page):
                 response = self.client.get(url, {"page": bad_page})
@@ -1082,7 +1286,7 @@ class CollectionPaginationTests(TestCase):
     def test_next_and_previous_links_point_at_the_right_page_number(self):
         for n in range(1, 25):
             self._make_gown(n)
-        html = self.client.get(reverse("gowns:collection_belo"), {"page": 2}).content.decode()
+        html = self.client.get(reverse("gowns:collection_guest_gown"), {"page": 2}).content.decode()
         self.assertIn('href="?page=1"', html)
         self.assertIn('href="?page=3"', html)
 
@@ -1158,7 +1362,7 @@ class RetiredPlaceholderCatalogTests(TestCase):
     and book real Gown rows. These lock in the three surfaces it used to leak through --
     the collection grid, the product page, and the search overlay."""
 
-    def _gown(self, n, category=Gown.Category.BELO, name=None):
+    def _gown(self, n, category=Gown.Category.GUEST_GOWN, name=None):
         return Gown.objects.create(
             gown_id=f"RETIRED-{category}-{n:04d}",
             name=name or f"Retired Test Gown {n}",
@@ -1171,7 +1375,7 @@ class RetiredPlaceholderCatalogTests(TestCase):
         """Stale links and bookmarks to the 8 fixed demo slugs must 404 rather than
         render a page for something the shop does not own."""
         for slug in ("valencia-lace", "archive-satin", "florence-organza"):
-            for collection in ("wedding", "belo"):
+            for collection in ("wedding", "guest-gown"):
                 with self.subTest(slug=slug, collection=collection):
                     response = self.client.get(
                         reverse("gowns:product_detail",
@@ -1181,7 +1385,7 @@ class RetiredPlaceholderCatalogTests(TestCase):
 
     def test_a_category_with_no_real_gowns_renders_no_products(self):
         from gowns.views import _products_for_category
-        self.assertEqual(_products_for_category("belo"), [])
+        self.assertEqual(_products_for_category("guest-gown"), [])
 
     def test_search_catalog_holds_only_real_bookable_gowns(self):
         from gowns.context_processors import _build_search_catalog
@@ -1200,7 +1404,7 @@ class RetiredPlaceholderCatalogTests(TestCase):
 class RelatedGownsTests(TestCase):
     """"You may also like" -- real gowns, same collection only, never the one open."""
 
-    def _gown(self, n, category=Gown.Category.BELO, status=Gown.Status.AVAILABLE):
+    def _gown(self, n, category=Gown.Category.GUEST_GOWN, status=Gown.Status.AVAILABLE):
         return Gown.objects.create(
             gown_id=f"RELATED-{category}-{n:04d}",
             name=f"Related Test Gown {n}", category=category,
@@ -1213,27 +1417,27 @@ class RelatedGownsTests(TestCase):
         gowns = [self._gown(n) for n in range(1, 6)]
         for g in gowns:
             with self.subTest(viewing=g.slug):
-                slugs = [r["slug"] for r in _related_gowns("Belo", g.slug)]
+                slugs = [r["slug"] for r in _related_gowns("Guest Gown", g.slug)]
                 self.assertNotIn(g.slug, slugs)
 
     def test_suggestions_stay_inside_the_same_collection(self):
         from gowns.views import _related_gowns
-        belo = [self._gown(n, category=Gown.Category.BELO) for n in range(1, 4)]
+        siblings = [self._gown(n, category=Gown.Category.GUEST_GOWN) for n in range(1, 4)]
         suit = self._gown(9, category=Gown.Category.SUIT)
-        slugs = [r["slug"] for r in _related_gowns("Belo", belo[0].slug)]
-        self.assertNotIn(suit.slug, slugs, "a Belo page must never suggest a Suit")
+        slugs = [r["slug"] for r in _related_gowns("Guest Gown", siblings[0].slug)]
+        self.assertNotIn(suit.slug, slugs, "a Guest Gown page must never suggest a Suit")
 
     def test_out_of_stock_gowns_are_never_suggested(self):
         from gowns.views import _related_gowns
         keep = self._gown(1)
         gone = self._gown(2, status=Gown.Status.OUT_OF_STOCK)
-        slugs = [r["slug"] for r in _related_gowns("Belo", keep.slug)]
+        slugs = [r["slug"] for r in _related_gowns("Guest Gown", keep.slug)]
         self.assertNotIn(gone.slug, slugs)
 
     def test_returns_nothing_when_the_collection_has_no_other_gowns(self):
         from gowns.views import _related_gowns
         only = self._gown(1)
-        self.assertEqual(_related_gowns("Belo", only.slug), [])
+        self.assertEqual(_related_gowns("Guest Gown", only.slug), [])
 
 
 class MultiUnitProductGroupingTests(TestCase):
@@ -1244,7 +1448,7 @@ class MultiUnitProductGroupingTests(TestCase):
     and every view/context-processor built on top of them."""
 
     def _gown(self, name, price="3000.00", status=Gown.Status.AVAILABLE,
-              category=Gown.Category.BELO, gown_id=None):
+              category=Gown.Category.GUEST_GOWN, gown_id=None):
         n = Gown.objects.count() + 1
         return Gown.objects.create(
             gown_id=gown_id or f"MUNIT-{n:04d}", name=name, category=category,
@@ -1258,7 +1462,7 @@ class MultiUnitProductGroupingTests(TestCase):
         for _ in range(3):
             self._gown("Grouped Gown")
         from gowns.views import _products_for_category
-        cards = [c for c in _products_for_category("belo") if c["title"] == "Grouped Gown"]
+        cards = [c for c in _products_for_category("guest-gown") if c["title"] == "Grouped Gown"]
         self.assertEqual(len(cards), 1)
         self.assertEqual(cards[0]["available_count"], 3)
 
@@ -1267,35 +1471,35 @@ class MultiUnitProductGroupingTests(TestCase):
         self._gown("Mismatched Price Gown", price="3500.00")
         self._gown("Mismatched Price Gown", price="4200.00")
         from gowns.views import _products_for_category
-        card = next(c for c in _products_for_category("belo") if c["title"] == "Mismatched Price Gown")
+        card = next(c for c in _products_for_category("guest-gown") if c["title"] == "Mismatched Price Gown")
         self.assertEqual(card["price"], 3500)
 
     def test_card_is_reserved_only_when_every_unit_is_reserved(self):
         self._gown("Half Reserved Gown", status=Gown.Status.RESERVED)
         self._gown("Half Reserved Gown", status=Gown.Status.AVAILABLE)
         from gowns.views import _products_for_category
-        card = next(c for c in _products_for_category("belo") if c["title"] == "Half Reserved Gown")
+        card = next(c for c in _products_for_category("guest-gown") if c["title"] == "Half Reserved Gown")
         self.assertFalse(card["reserved"], "one free sibling means quick-add must still work")
 
     def test_card_is_reserved_when_every_single_unit_is_reserved(self):
         self._gown("Fully Reserved Gown", status=Gown.Status.RESERVED)
         self._gown("Fully Reserved Gown", status=Gown.Status.RESERVED)
         from gowns.views import _products_for_category
-        card = next(c for c in _products_for_category("belo") if c["title"] == "Fully Reserved Gown")
+        card = next(c for c in _products_for_category("guest-gown") if c["title"] == "Fully Reserved Gown")
         self.assertTrue(card["reserved"])
 
     def test_a_product_with_some_but_not_all_units_out_of_stock_shows_the_smaller_count(self):
         self._gown("Partially Withdrawn Gown", status=Gown.Status.OUT_OF_STOCK)
         self._gown("Partially Withdrawn Gown", status=Gown.Status.AVAILABLE)
         from gowns.views import _products_for_category
-        card = next(c for c in _products_for_category("belo") if c["title"] == "Partially Withdrawn Gown")
+        card = next(c for c in _products_for_category("guest-gown") if c["title"] == "Partially Withdrawn Gown")
         self.assertEqual(card["available_count"], 1)
 
     def test_a_product_with_every_unit_out_of_stock_has_no_card_at_all(self):
         self._gown("Fully Withdrawn Gown", status=Gown.Status.OUT_OF_STOCK)
         self._gown("Fully Withdrawn Gown", status=Gown.Status.OUT_OF_STOCK)
         from gowns.views import _products_for_category
-        titles = [c["title"] for c in _products_for_category("belo")]
+        titles = [c["title"] for c in _products_for_category("guest-gown")]
         self.assertNotIn("Fully Withdrawn Gown", titles)
 
     # ---------------------------------------------------------- product detail page
@@ -1307,7 +1511,7 @@ class MultiUnitProductGroupingTests(TestCase):
         for unit in units:
             with self.subTest(slug=unit.slug):
                 response = client.get(
-                    reverse("gowns:product_detail", args=["belo", unit.slug])
+                    reverse("gowns:product_detail", args=["guest-gown", unit.slug])
                 )
                 self.assertEqual(response.status_code, 200)
                 self.assertContains(response, "Same Product Gown")
@@ -1317,7 +1521,7 @@ class MultiUnitProductGroupingTests(TestCase):
         withdrawn = self._gown("Product OOS Test Gown", status=Gown.Status.OUT_OF_STOCK)
         self._gown("Product OOS Test Gown", status=Gown.Status.AVAILABLE)
         response = self.client.get(
-            reverse("gowns:product_detail", args=["belo", withdrawn.slug])
+            reverse("gowns:product_detail", args=["guest-gown", withdrawn.slug])
         )
         self.assertNotContains(response, "Currently Unavailable")
 
@@ -1325,7 +1529,7 @@ class MultiUnitProductGroupingTests(TestCase):
         withdrawn = self._gown("All Gone Test Gown", status=Gown.Status.OUT_OF_STOCK)
         self._gown("All Gone Test Gown", status=Gown.Status.OUT_OF_STOCK)
         response = self.client.get(
-            reverse("gowns:product_detail", args=["belo", withdrawn.slug])
+            reverse("gowns:product_detail", args=["guest-gown", withdrawn.slug])
         )
         self.assertContains(response, "Currently Unavailable")
 
@@ -1334,7 +1538,7 @@ class MultiUnitProductGroupingTests(TestCase):
         # that only ever have one unit -- the line is reserved for when it's useful.
         unit = self._gown("Lonely Gown")
         response = self.client.get(
-            reverse("gowns:product_detail", args=["belo", unit.slug])
+            reverse("gowns:product_detail", args=["guest-gown", unit.slug])
         )
         self.assertNotContains(response, "available</p>")
 
@@ -1355,7 +1559,7 @@ class MultiUnitProductGroupingTests(TestCase):
         other = self._gown("Other Product Gown")
         for unit in units:
             with self.subTest(viewing=unit.slug):
-                slugs = [r["slug"] for r in _related_gowns("Belo", unit.slug)]
+                slugs = [r["slug"] for r in _related_gowns("Guest Gown", unit.slug)]
                 for sibling in units:
                     self.assertNotIn(sibling.slug, slugs)
                 self.assertIn(other.slug, slugs)
@@ -1365,7 +1569,7 @@ class MultiUnitProductGroupingTests(TestCase):
         for _ in range(3):
             self._gown("Suggested Grouped Gown")
         viewer = self._gown("Viewer Gown")
-        titles = [r["title"] for r in _related_gowns("Belo", viewer.slug)]
+        titles = [r["title"] for r in _related_gowns("Guest Gown", viewer.slug)]
         self.assertEqual(titles.count("Suggested Grouped Gown"), 1)
 
 

@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -22,7 +23,17 @@ import json
 
 from accounts.models import CustomerMessage, UserProfile
 from accounts.services import CANCELLATION_FLAG_THRESHOLD
-from gowns.models import GOWN_COLOR_PRESETS, Gown, GownUnavailability, SiteSettings
+from gowns.models import (
+    DEFAULT_CATEGORY_TAG_COLORS,
+    GOWN_COLOR_PRESETS,
+    Gown,
+    GownRemoval,
+    GownUnavailability,
+    SiteSettings,
+    TAG_COLOR_HEX,
+    TAG_COLOR_PALETTE,
+    resolve_tag_colors,
+)
 from reservations import reminders as reservation_reminders
 from reservations import timeline as reservation_timeline
 from reservations.models import Reservation, ReceiptRecord, ReservationItem, ReservationStatusEvent
@@ -159,30 +170,6 @@ _SCHEDULED_STATUSES = [
 ]
 
 
-def _schedule_diff_label(actual_date, scheduled_date, *, late_grace_days=0):
-    """"3 days early" / "1 day late" / None -- a plain description of how an actual
-    pickup or return date compares to what was originally scheduled, for staff to
-    see at a glance on Active Reservations. Deliberately just the day count, no
-    peso figure: the Php 200/day deposit deduction stays a manual staff call.
-
-    late_grace_days forgives that many days on the LATE side only. Pickup needs
-    this: the customer's promised pickup day is deliberately the START of the
-    2-day pre-event window products.html itself advertises ("pick-up is up to 2
-    days before" the event) -- picking up a day later still leaves a full day
-    before the event, so it isn't actually late yet. Return's promised day is
-    already the END of its own 2-day-after window (the real deadline), and being
-    early is never forgiven either, so both stay ungraced by default."""
-    if not actual_date:
-        return None
-    diff = (actual_date - scheduled_date).days
-    if diff > 0:
-        diff = max(0, diff - late_grace_days)
-    if diff == 0:
-        return None
-    n = abs(diff)
-    return f"{n} day{'s' if n != 1 else ''} {'late' if diff > 0 else 'early'}"
-
-
 # Bookings that never became an actual rental, so they must not be counted as one.
 # Everything else (Pending/Confirmed/Active/Returned/Overdue) is a real booking that
 # occupies a gown. Deliberately the same rule gowns.views._blocked_dates_for_category
@@ -255,25 +242,102 @@ def _return_span(item):
 
 
 def _overdue_span(item):
-    day = _overdue_date(item)
-    return day, day
+    """Red from the day after the return date up to today -- it grows by itself each day
+    the gown is still out."""
+    start = item.return_date + timedelta(days=1)
+    return start, max(start, timezone.localdate())
+
+
+def _effective_stage(item, today=None):
+    """The stage staff should SEE. Overdue is never chosen by hand: a gown that is out
+    (Reserved) and whose return date has passed is Overdue, and one marked Overdue before
+    its return date has passed is simply still out. Pick-up / Returned are unchanged."""
+    today = today or timezone.localdate()
+    if item.stage in (ReservationItem.Stage.RESERVED, ReservationItem.Stage.OVERDUE):
+        if today > item.return_date:
+            return ReservationItem.Stage.OVERDUE
+        return ReservationItem.Stage.RESERVED
+    return item.stage
 
 
 def _stage_segments(item):
-    """Which marker(s) show for the booking's CURRENT admin-chosen status -- this is
-    cumulative, not exclusive, so the calendar always shows the full picture so far:
+    """Which marker(s) show on the calendar for the booking -- cumulative, so the calendar
+    always shows the full picture so far:
       Pick-up  -> Pick-up only (nothing else is relevant until the gown is out)
-      Reserved -> Reserved AND Return together (admin sees it's out + when it's due back)
-      Overdue  -> Reserved + Return + Overdue together (the overdue flag adds on top,
-                  it never replaces the history of when it was reserved/due)
-    Each entry is (label, span_fn)."""
-    if item.stage == ReservationItem.Stage.PICKUP:
+      Reserved -> Reserved AND Return together (it's out + when it's due back)
+      Overdue  -> Reserved + Return + Overdue (derived from the return date, see
+                  _effective_stage; it adds on top, it never replaces the history)
+    Each entry is (label, span_fn). The pick-up / return spans follow the booking's
+    CURRENT dates, so a pick-up the customer moved earlier is painted in the Pick-up
+    colour and a later return in the Return colour -- not as a grey block."""
+    stage = _effective_stage(item)
+    if stage == ReservationItem.Stage.PICKUP:
         return [("Pick-up", _pickup_span)]
-    if item.stage == ReservationItem.Stage.RESERVED:
+    if stage == ReservationItem.Stage.RESERVED:
         return [("Reserved", _reserved_span), ("Return", _return_span)]
-    if item.stage == ReservationItem.Stage.OVERDUE:
+    if stage == ReservationItem.Stage.OVERDUE:
         return [("Reserved", _reserved_span), ("Return", _return_span), ("Overdue", _overdue_span)]
     return []  # RETURNED (or anything unexpected) -- nothing shown
+
+
+def _plural_days(n):
+    return f"{n} day{'s' if n != 1 else ''}"
+
+
+def _item_remarks(item, today=None):
+    """The status remarks staff read, as [{"text", "tone"}] -- ONE definition used by both
+    Active Reservations and the (read-only) Rental Schedule, so the two can never word or
+    colour the same booking differently. tone: warning (orange, pick-up), success (green,
+    out), primary (blue, return), danger (red, late/overdue), muted (grey, plain info).
+
+    Early / late are always measured against what the customer ORIGINALLY booked
+    (original_rental_date / original_return_date), the figures the Php 200/day charge is
+    counted from -- so a pick-up the customer moved to the 10th keeps saying "6 days
+    early" even if they finally collect it on the 17th, and a late return keeps counting
+    from the original return date. Deliberately just day counts, no peso amounts."""
+    today = today or timezone.localdate()
+    scheduled_pickup = item.original_rental_date or item.rental_date
+    scheduled_return = item.original_return_date or item.return_date
+    stage = _effective_stage(item, today)
+    remarks = []
+
+    if stage == ReservationItem.Stage.RETURNED:
+        when = item.returned_on
+        remarks.append({"text": f"Returned {when:%b %d}" if when else "Returned", "tone": "success"})
+        if when and when > scheduled_return:
+            remarks.append({"text": f"{_plural_days((when - scheduled_return).days)} late", "tone": "danger"})
+    elif stage == ReservationItem.Stage.PICKUP:
+        days = (item.rental_date - today).days
+        if days > 0:
+            remarks.append({"text": f"Pick-up in {_plural_days(days)}", "tone": "muted"})
+        elif days == 0:
+            remarks.append({"text": "Pick up today", "tone": "warning"})
+        else:
+            remarks.append({"text": f"{_plural_days(-days)} late for pick-up", "tone": "danger"})
+    else:  # out with the customer
+        remarks.append({"text": "Out with customer", "tone": "success"})
+        if stage == ReservationItem.Stage.OVERDUE:
+            remarks.append({
+                "text": f"Overdue · {_plural_days((today - scheduled_return).days)} late", "tone": "danger",
+            })
+        else:
+            days = (item.return_date - today).days
+            remarks.append({
+                "text": "Return due today" if days == 0 else f"Return in {_plural_days(days)}",
+                "tone": "primary",
+            })
+
+    moved = (scheduled_pickup - item.rental_date).days
+    if moved > 0:
+        remarks.append({"text": f"Changed pick-up date by customer · {_plural_days(moved)} early", "tone": "warning"})
+    elif moved < 0:
+        remarks.append({"text": f"Pick-up moved {_plural_days(-moved)} later", "tone": "muted"})
+    extended = (item.return_date - scheduled_return).days
+    if extended > 0:
+        remarks.append({"text": f"Changed return date by customer · {_plural_days(extended)} late", "tone": "primary"})
+    elif extended < 0:
+        remarks.append({"text": f"Return moved {_plural_days(-extended)} earlier", "tone": "muted"})
+    return remarks
 
 
 def _holding_items(gown_ids):
@@ -313,7 +377,7 @@ def _schedule_conflict(item, rental_date, return_date):
         )
         # This item's OWN trailing cooldown isn't a foreign obstacle -- it's about to
         # be moved to sit after whatever return_date is being saved right now (see
-        # _resync_cooldown_block below), so it must never block its own reschedule.
+        # _resync_cooldown_block below), so it must never block its own pick-up / return change.
         .exclude(auto_for_item=item)
         .order_by("start_date").first()
     )
@@ -373,22 +437,50 @@ def _other_holds_by_gown(gown_ids):
     return holds
 
 
-def _calendar_events(reservations, holds_by_gown=None):
+def _item_gown_tag(item, tag_colors):
+    """(gown_id, tag color name, tag hex) for the exact physical gown a booking item is
+    matched to -- what staff need to pick the RIGHT dress off the rack at pick-up when
+    several gowns share a name. All three are '' for an item with no matched gown, so
+    callers can render it unconditionally. Expects item.gown to be prefetched."""
+    gown = item.gown if item.gown_id else None
+    if gown is None:
+        return "", "", ""
+    color = tag_colors.get(gown.category, "")
+    return gown.gown_id, color, TAG_COLOR_HEX.get(color, "")
+
+
+def _calendar_events(reservations, holds_by_gown=None, tag_colors=None):
     """Each active booking renders as one or more markers depending on its current status
     (see _stage_segments) -- Reserved and Overdue build UP on what came before instead of
     replacing it, so the calendar always shows the whole story for that booking so far.
     Every marker for the same booking shares the same itemId/customer/gown/reference/stage,
     so clicking any of them opens the same booking panel. Returned bookings drop off."""
     events = []
+    tag_colors = tag_colors or {}
     for reservation in reservations:
         for item in reservation.items.all():
             label = f"{reservation.display_customer_name} — {item.gown_name}"
+            gown_code, tag_color, tag_hex = _item_gown_tag(item, tag_colors)
             base_props = {
                 "itemId": item.id,
                 "customer": reservation.display_customer_name,
                 "reference": reservation.reference_code,
                 "gownName": item.gown_name,
-                "stage": item.stage,
+                # The exact physical gown this booking is matched to, and the color of
+                # its category's tag -- shown in the Booking Details modal (see
+                # calendar.html) so staff can match the booking to the dress by its tag.
+                "gownCode": gown_code,
+                "tagColor": tag_color,
+                "tagHex": tag_hex,
+                "stage": _effective_stage(item),
+                # Read-only summary in the Booking Details window: the same remarks Active
+                # Reservations shows, and where to go to actually act on this booking.
+                "remarks": _item_remarks(item),
+                "activeUrl": (
+                    reverse("arabela_admin:active_reservations") + "?" + urlencode({"search": reservation.reference_code})
+                ),
+                "originalRentalDate": (item.original_rental_date or item.rental_date).isoformat(),
+                "originalReturnDate": (item.original_return_date or item.return_date).isoformat(),
                 "rentalDate": item.rental_date.isoformat(),
                 "eventDate": _event_date(item).isoformat(),
                 "returnDate": item.return_date.isoformat(),
@@ -400,7 +492,7 @@ def _calendar_events(reservations, holds_by_gown=None):
                 "bookedEventDate": _original_event_date(item).isoformat(),
                 # Everything else holding this same physical gown (see
                 # _other_holds_by_gown) -- the modal lists it and warns live when a
-                # moved date runs into one; reservation_item_reschedule_view refuses it.
+                # moved date runs into one (the server's _schedule_conflict refuses it).
                 "otherHolds": [
                     h for h in (holds_by_gown or {}).get(item.gown_id, [])
                     if h["itemId"] != item.id
@@ -453,19 +545,23 @@ def rental_schedule_view(request):
     reservations = list(
         Reservation.objects.filter(status__in=_SCHEDULED_STATUSES)
         .select_related("customer__profile")
-        .prefetch_related("items")
+        .prefetch_related("items__gown")
     )
     blocks = GownUnavailability.objects.filter(
         end_date__gte=timezone.localdate()
     ).select_related("gown")
     gown_ids = {item.gown_id for r in reservations for item in r.items.all() if item.gown_id}
     holds_by_gown = _other_holds_by_gown(gown_ids)
+    tag_colors = SiteSettings.load().tag_colors()
     return render(
         request,
         "arabela_admin/calendar.html",
         {
             "page": "rental",
-            "calendar_events": _calendar_events(reservations, holds_by_gown) + _unavailability_events(blocks),
+            "calendar_events": (
+                _calendar_events(reservations, holds_by_gown, tag_colors)
+                + _unavailability_events(blocks)
+            ),
         },
     )
 
@@ -631,29 +727,6 @@ def reservation_return_deposit_view(request, pk):
     })
 
 
-@_require_admin_staff
-def receipt_records_view(request):
-    today = timezone.localdate()
-    week_start = today - timedelta(days=today.weekday())
-
-    receipts = list(
-        ReceiptRecord.objects.select_related("reservation__customer__profile", "uploaded_by")
-    )
-    rows = [_receipt_row(r, today) for r in receipts]
-
-    return render(
-        request,
-        "arabela_admin/receipt-records.html",
-        {
-            "page": "receipt-records",
-            "receipt_rows": rows,
-            "total_receipts": len(rows),
-            "receipts_this_week": sum(1 for r in rows if r["isThisWeek"]),
-            "reservations_covered": len({r["reservation"] for r in rows}),
-        },
-    )
-
-
 @require_http_methods(["POST"])
 @_require_admin_staff
 def receipt_upload_view(request):
@@ -730,9 +803,11 @@ def receipt_replace_view(request, receipt_id):
 # --- Reservation Records -------------------------------------------------------------
 # One row per reservation, with everything a staff member needs to answer a customer's
 # question in one place: the rental dates, where the booking actually is, the deposit,
-# the customer's own payment proof, and the shop's manual receipts. Nothing here is new
-# business logic -- every value is read from the same fields the pages it links to
-# (Security Deposits, Receipt Records, Active Reservations) already use.
+# the customer's own payment proof, and the shop's manual receipts (upload/view/replace
+# all live right here now -- the standalone Receipt Records page this used to just link
+# out to was folded into this page and removed). Nothing here is new business logic --
+# every value is read from the same fields the pages it links to (Security Deposits,
+# Active Reservations) already use.
 
 def _reservation_window(items):
     """(first pick-up, last return) across every gown in the booking -- a multi-gown
@@ -811,6 +886,7 @@ def reservation_records_view(request):
         .order_by("-created_at")
     )
 
+    tag_colors = SiteSettings.load().tag_colors()
     records = []
     for r in reservations:
         items = list(r.items.all())
@@ -844,6 +920,10 @@ def reservation_records_view(request):
                 {
                     "gown": i.gown_name,
                     "gownCode": i.gown.gown_id if i.gown_id else "",
+                    # Color of the category tag on this exact gown, so the booking shows
+                    # which tag to look for -- same helper the other booking screens use.
+                    "tagColor": _item_gown_tag(i, tag_colors)[1],
+                    "tagHex": _item_gown_tag(i, tag_colors)[2],
                     "size": i.size or "TBD",
                     "pickup": date_format(i.rental_date, "M j, Y"),
                     "event": date_format(i.effective_event_date, "M j, Y"),
@@ -864,11 +944,22 @@ def reservation_records_view(request):
                 date_format(timezone.localtime(r.deposit_returned_at), "M j, Y")
                 if r.deposit_returned_at else ""
             ),
-            # Security Deposits only lists Confirmed-and-later bookings, so only link
-            # there when this one is actually on that page.
+            # Wherever staff would actually act on this deposit's CURRENT state: Held/
+            # Returned bookings live on Security Deposits; a booking still Awaiting
+            # verification isn't on that page at all yet (it only lists Confirmed-and-
+            # later bookings) -- that one's payment proof is reviewed on Payment
+            # Verification instead, which already reads this exact ?search= param.
             "depositLink": (
                 reverse("arabela_admin:security_deposits") + "?" + urlencode({"search": r.reference_code})
-                if deposit_status in ("Held", "Returned") else ""
+                if deposit_status in ("Held", "Returned")
+                else reverse("arabela_admin:payment_verification") + "?" + urlencode({"search": r.reference_code})
+                if deposit_status == "Awaiting verification"
+                else ""
+            ),
+            "depositLinkLabel": (
+                "Open in Security Deposits" if deposit_status in ("Held", "Returned")
+                else "Open in Payment Verification" if deposit_status == "Awaiting verification"
+                else ""
             ),
             "receipts": [_receipt_row(rec, today) for rec in r.receipt_records.all()],
             # Everything the search box should match, lower-cased once here.
@@ -905,10 +996,10 @@ def reservation_records_view(request):
 
 
 def receipt_reservation_search_view(request):
-    """Live lookup behind Receipt Records' "find the reservation" box: staff type part of
-    a customer's name, email, a reference code, or a gown, and pick the booking from the
-    results -- instead of having to know its exact reference code by heart. Read-only;
-    the upload itself still goes through receipt_upload_view unchanged."""
+    """Live lookup behind Reservation Records' "find the reservation" box: staff type
+    part of a customer's name, email, a reference code, or a gown, and pick the booking
+    from the results -- instead of having to know its exact reference code by heart.
+    Read-only; the upload itself still goes through receipt_upload_view unchanged."""
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
 
@@ -964,37 +1055,38 @@ def active_reservations_view(request):
     reservations = reservation_timeline.attach_to_reservations(
         Reservation.objects.filter(status__in=_SCHEDULED_STATUSES)
         .select_related("customer__profile")
-        .prefetch_related("items")
+        .prefetch_related("items__gown")
     )
 
     # The wording staff see pre-filled in the Send Reminder dialog. Computed here rather
     # than in the browser so the manual message and the automatic one are produced by the
     # exact same rules -- staff should never be offered text the system itself wouldn't send.
     today = timezone.localdate()
+    tag_colors = SiteSettings.load().tag_colors()
+    holds_by_gown = _other_holds_by_gown(
+        {i.gown_id for r in reservations for i in r.items.all() if i.gown_id}
+    )
+    item_holds = {}
     for reservation in reservations:
         for item in reservation.items.all():
+            # The exact gown this line is matched to + its tag color, shown under the
+            # gown name so staff at pick-up can find the right dress among look-alikes.
+            item.gown_code, item.tag_color, item.tag_hex = _item_gown_tag(item, tag_colors)
             item.suggested_reminder = reservation_reminders.suggested_message(item, today)
-            # How many days off-schedule the ACTUAL pickup/return was, versus what was
-            # first promised at submission (original_rental_date/original_return_date --
-            # never touched by a later reschedule, see the model). Positive = late,
-            # negative = early, None = not recorded yet. Deliberately just the day count,
-            # no peso amount: the Php 200/day deposit deduction stays a manual staff
-            # decision, this is only the record they'd base it on.
-            scheduled_pickup = item.original_rental_date or item.rental_date
-            scheduled_return = item.original_return_date or item.return_date
-            item.scheduled_pickup = scheduled_pickup
-            item.scheduled_return = scheduled_return
-            item.pickup_diff_label = _schedule_diff_label(item.picked_up_on, scheduled_pickup, late_grace_days=1)
-            item.return_diff_label = _schedule_diff_label(item.returned_on, scheduled_return)
-            # Needed so the quick "Mark Picked Up" action here can call the SAME
-            # reservation_item_reschedule_view the calendar uses, passing dates it
-            # already validates (rental_date <= event_date <= return_date <=
-            # overdue_date). event_date/overdue_date are frequently still null on a
-            # freshly-confirmed item that has never been opened on the calendar, so
-            # this reuses the calendar's own fallback helpers -- never a second,
-            # separately-maintained copy of that default. (The event date needs no
-            # line here: ReservationItem.effective_event_date is already a property.)
-            item.effective_overdue_date = _overdue_date(item)
+            # What the customer originally booked (never touched by a later change --
+            # see the model) next to the current dates, plus the status remarks. The
+            # early / late counts the Php 200/day charge is based on come from comparing
+            # the two; deliberately day counts only, no peso amounts.
+            item.scheduled_pickup = item.original_rental_date or item.rental_date
+            item.scheduled_return = item.original_return_date or item.return_date
+            item.effective_stage = _effective_stage(item, today)
+            item.remarks = _item_remarks(item, today)
+            # Everything else holding this same physical gown, so the Change pick-up /
+            # return calendars can grey out the days that are taken and say why. The
+            # server still decides (_schedule_conflict); this is only the early guide.
+            item_holds[item.id] = [
+                h for h in holds_by_gown.get(item.gown_id, []) if h["itemId"] != item.id
+            ] if item.gown_id else []
 
         # The Status column shows this, not the raw reservation.status: a stage
         # change made on the Rental Schedule calendar (item.stage) is otherwise
@@ -1005,13 +1097,18 @@ def active_reservations_view(request):
         # by Payment Verification, Security Deposits, the reminder sweep, etc.
         # exactly as before -- only what THIS page displays changes.
         reservation.has_overdue_item = any(
-            item.stage == ReservationItem.Stage.OVERDUE for item in reservation.items.all()
+            item.effective_stage == ReservationItem.Stage.OVERDUE for item in reservation.items.all()
         )
 
     return render(
         request,
         "arabela_admin/active-reservations.html",
-        {"page": "active", "reservations": reservations},
+        {
+            "page": "active", "reservations": reservations, "item_holds": item_holds,
+            # The shop's own "today" (Asia/Manila), so the calendars grey out past days by
+            # the same clock the server enforces -- not the browser's.
+            "today_iso": today.isoformat(),
+        },
     )
 
 
@@ -1020,8 +1117,12 @@ def pending_approval_view(request):
     reservations = reservation_timeline.attach_to_reservations(
         Reservation.objects.filter(status=Reservation.Status.PENDING)
         .select_related("customer__profile")
-        .prefetch_related("items")
+        .prefetch_related("items__gown")
     )
+    tag_colors = SiteSettings.load().tag_colors()
+    for reservation in reservations:
+        for item in reservation.items.all():
+            item.gown_code, item.tag_color, item.tag_hex = _item_gown_tag(item, tag_colors)
     return render(
         request,
         "arabela_admin/pending-approval.html",
@@ -1029,21 +1130,76 @@ def pending_approval_view(request):
     )
 
 
+# A gown counts as "due for a check" once nobody has confirmed it's physically there
+# for this many days (or never has).
+CHECK_STALE_DAYS = 7
+_REMOVAL_LOG_LIMIT = 500
+
+
+def _decorate_gowns_for_catalog(gowns, tag_colors, now):
+    """Sets the per-gown display fields the catalog needs -- tag color, the number staff
+    read off the tag, the search text, and how long since the last physical check --
+    directly on each Gown instance, so the table row and the client-side filter data
+    (gowns_min) are both built from the SAME values and can never disagree.
+
+    The search text is one lowercase string per gown: ID, name, category, real color,
+    size, tag color, and the tag number in every form staff might type it ("012",
+    "12", "#12"). The catalog splits what staff type into words and requires every word
+    to appear, so "white 012" or "blue #4" both work."""
+    for g in gowns:
+        g.tag_color = tag_colors.get(g.category, "White")
+        g.tag_hex = TAG_COLOR_HEX.get(g.tag_color, "#FFFFFF")
+        number = g.tracking_number
+        g.tag_number = f"{number:03d}" if number is not None else "—"
+        # "tag" / "no." are in there so a natural phrase like "white tag 12" or "tag no. 012"
+        # (every word must match) finds the gown, not just the bare number.
+        parts = [g.gown_id, g.name, g.category, g.color_name, g.size, g.tag_color, "tag"]
+        if number is not None:
+            parts += ["no.", f"{number:03d}", str(number), f"#{number}"]
+        g.search_hay = " ".join(parts).lower()
+        if g.last_checked_at is None:
+            g.days_since_check = None
+            g.check_label = "Never checked"
+        else:
+            g.days_since_check = max(0, (now - g.last_checked_at).days)
+            when = timezone.localtime(g.last_checked_at)
+            who = _staff_display_name(g.last_checked_by) if g.last_checked_by_id else ""
+            g.check_label = f"Checked {when:%b} {when.day}" + (f" by {who}" if who else "")
+
+
 @_require_admin_staff
 def gown_catalog_view(request):
     today = timezone.localdate()
-    gowns = list(Gown.objects.all())  # one query; iterated by the row loop AND below
+    now = timezone.now()
+    site_settings = SiteSettings.load()
+    tag_colors = site_settings.tag_colors()
+    # one query (plus the staff name for "checked by"); iterated by the row loop AND below
+    gowns = list(Gown.objects.select_related("last_checked_by"))
+    # Category, then the number staff read off the tag -- so a category's gowns list in
+    # the order they were added, instead of grouped by color with the numbers jumping
+    # around inside each color. Gowns with no readable number sink to the end of their
+    # category; the ID is only the tiebreaker (old IDs repeat 001 across colors).
+    gowns.sort(key=lambda g: (
+        g.category,
+        g.tracking_number if g.tracking_number is not None else 10**9,
+        g.gown_id,
+    ))
+    _decorate_gowns_for_catalog(gowns, tag_colors, now)
 
     # Minimal per-gown data the catalog's Alpine layer needs for the client-side
     # "no gowns match your filters" count and the select-all-visible checkbox. Kept
     # separate from the rendered rows, but built from the same `gowns` list so the
-    # two can never drift. `hay` mirrors the row's own search haystack.
+    # two can never drift. `hay` is the row's own search haystack.
     gowns_min = [
         {
             "id": g.id,
             "category": g.category,
             "status": g.status,
-            "hay": f"{g.gown_id} {g.name} {g.category} {g.color_name} {g.size}".lower(),
+            "hay": g.search_hay,
+            # None = never checked. Lets the "not checked lately" filter count and
+            # select-all-visible agree with which rows the table actually shows.
+            "check_days": g.days_since_check,
+            "check_label": g.check_label,
             # color_name/color_code: lets the Add/Edit modal warn about a code clash
             # (and suggest a free one) against every REAL gown already in the catalog,
             # not just the 36 presets, without a separate request for that check.
@@ -1073,6 +1229,57 @@ def gown_catalog_view(request):
             "delete_url": reverse("arabela_admin:gown_block_delete", args=[block.id]),
         })
 
+    # Counted from `gowns`, already fetched above -- no extra query. Out-of-Stock
+    # excluded, matching every other "in stock" tally on this page. This one list
+    # backs the category filter dropdown, the Add/Edit Gown dropdown, AND the
+    # browse-by-category chip strip below, instead of each hardcoding its own copy
+    # of Gown.Category (the old, easy-to-forget pattern that needed a manual edit in
+    # 4 separate places every time a category was added).
+    category_rows = [
+        {
+            "key": key,
+            "label": label,
+            "count": sum(
+                1 for g in gowns
+                if g.category == key and g.status != Gown.Status.OUT_OF_STOCK
+            ),
+            # The category's physical-tag color, so the Add Gown form and the Tag Colors
+            # section read it from the same row the rest of the category data lives in.
+            "tag_color": tag_colors.get(key, "White"),
+            "tag_hex": TAG_COLOR_HEX.get(tag_colors.get(key, "White"), "#FFFFFF"),
+        }
+        for key, label in Gown.Category.choices
+    ]
+
+    # The Removal Log panel -- every gown ever removed and why, newest first. Capped so
+    # the page can't grow without bound; the cap is far above what a single shop's
+    # catalog could realistically remove.
+    gown_removals = list(GownRemoval.objects.all()[:_REMOVAL_LOG_LIMIT])
+    removal_hays = []
+    for removal in gown_removals:
+        removal.number_label = f"{removal.tracking_number:03d}" if removal.tracking_number is not None else "—"
+        # One lowercase string per log entry for the panel's search box (ID, the number in
+        # every form staff might type it, name, category, reason, note, who removed it).
+        number = removal.tracking_number
+        removal_hays.append(" ".join(filter(None, [
+            removal.gown_id, removal.name, removal.category, removal.get_reason_display(),
+            removal.note, removal.removed_by_name,
+            f"{number:03d} {number} #{number}" if number is not None else "",
+        ])).lower())
+
+    # "Blocked Gowns" tile/list -- every gown with an active block TODAY, right
+    # here in Inventory instead of only on the Rental Schedule calendar, so staff
+    # can find one and release it without leaving this page. Sorted so whichever
+    # gown frees up soonest is checked first. At most one active block per gown
+    # (an overlapping block on the same gown is rejected at creation), so each
+    # blocked gown contributes exactly the one block that covers today.
+    blocked_gowns_today = []
+    for g in gowns:
+        active_block = next((b for b in blocks_by_gown.get(g.id, []) if b["active"]), None)
+        if active_block:
+            blocked_gowns_today.append({"gown": g, "block": active_block})
+    blocked_gowns_today.sort(key=lambda row: row["block"]["end"])
+
     return render(
         request,
         "arabela_admin/gown-catalog.html",
@@ -1089,14 +1296,42 @@ def gown_catalog_view(request):
             # reason a staff member would ever pick by hand for a new one.
             "block_reasons": [r for r in GownUnavailability.Reason.values if r != GownUnavailability.Reason.COOLDOWN],
             "today_iso": today.isoformat(),
-            "blocked_today_count": sum(
-                1 for rows in blocks_by_gown.values() if any(r["active"] for r in rows)
-            ),
+            "total_gowns_count": len(gowns),
             "available_count": sum(1 for g in gowns if g.status == Gown.Status.AVAILABLE),
             "reserved_count": sum(1 for g in gowns if g.status == Gown.Status.RESERVED),
-            "needs_attention_count": sum(
-                1 for g in gowns if g.status == Gown.Status.OUT_OF_STOCK
+            "blocked_gowns_today": blocked_gowns_today,
+            "category_rows": category_rows,
+            # Tag Colors: everyone sees the list, only the owner gets the edit controls.
+            # Decided HERE from _is_owner(request) -- the same check the save endpoint
+            # enforces -- rather than the context-processor's admin_is_owner flag, which
+            # can disagree for an admin account that has no UserProfile.
+            "can_edit_tag_colors": _is_owner(request),
+            "tag_colors_data": {
+                key: {"color": tag_colors.get(key, "White"), "hex": TAG_COLOR_HEX.get(tag_colors.get(key, "White"), "#FFFFFF")}
+                for key, _label in Gown.Category.choices
+            },
+            "tag_palette_data": {name: hex_ for name, hex_ in TAG_COLOR_PALETTE},
+            "tag_palette": [{"name": name, "hex": hex_} for name, hex_ in TAG_COLOR_PALETTE],
+            "gown_removals": gown_removals,
+            "removal_hays": removal_hays,
+            "removal_reasons": [
+                {"value": value, "label": label} for value, label in GownRemoval.Reason.choices
+            ],
+            "check_stale_days": CHECK_STALE_DAYS,
+            "checked_recent_count": sum(
+                1 for g in gowns
+                if g.days_since_check is not None and g.days_since_check < CHECK_STALE_DAYS
             ),
+            # The chip strip doesn't show all 15 with equal weight -- a shop that has
+            # only just started stocking one category would otherwise show a wall of
+            # zeros next to it, which reads as broken more than "not stocked yet".
+            # Populated categories surface first, by how much stock they actually
+            # carry; empty ones collapse behind a single "+N more" toggle instead.
+            "category_rows_populated": sorted(
+                (row for row in category_rows if row["count"] > 0),
+                key=lambda row: row["count"], reverse=True,
+            ),
+            "category_rows_empty": [row for row in category_rows if row["count"] == 0],
         },
     )
 
@@ -1140,6 +1375,52 @@ def _gown_blocking_reservation_item(gown):
     )
 
 
+_REMOVAL_NOTE_MAX = 300
+
+
+def _parse_removal(data):
+    """Validates the "why is this gown being removed" answer from a delete request.
+    Returns (reason, note, error) -- error is '' only when the reason is one of the
+    real choices, the note fits, and an "Other" reason comes with a note (an "Other"
+    with nothing written explains nothing, which is exactly the vague gap the removal
+    log exists to prevent)."""
+    if not isinstance(data, dict):
+        data = {}
+    reason = str(data.get("reason") or "").strip()
+    note = str(data.get("note") or "").strip()
+    if reason not in GownRemoval.Reason.values:
+        return None, "", "Please choose why this gown is being removed."
+    if len(note) > _REMOVAL_NOTE_MAX:
+        return None, "", f"Please keep the note to {_REMOVAL_NOTE_MAX} characters or fewer."
+    if reason == GownRemoval.Reason.OTHER and not note:
+        return None, "", "Please add a short note explaining why (you chose Other)."
+    return reason, note, ""
+
+
+def _remove_gown(gown, reason, note, user):
+    """Writes the Removal Log entry and deletes the gown as ONE atomic step: either both
+    happen or neither does, so the log can never claim a gown was removed that is still
+    there, and a gown can never disappear without leaving its reason behind. The log row
+    copies what identifies the gown (ID, name, category, color, size, photo) because the
+    gown row itself is about to stop existing."""
+    with transaction.atomic():
+        GownRemoval.objects.create(
+            gown_id=gown.gown_id,
+            tracking_number=gown.tracking_number,
+            name=gown.name,
+            category=gown.category,
+            color_name=gown.color_name,
+            size=gown.size,
+            photo_url=gown.photo_url,
+            reason=reason,
+            note=note,
+            removed_by=user if getattr(user, "is_authenticated", False) else None,
+            removed_by_name=_staff_display_name(user) if getattr(user, "is_authenticated", False) else "",
+            removed_at=timezone.now(),
+        )
+        gown.delete()
+
+
 @require_http_methods(["POST"])
 def gown_delete_view(request, gown_id):
     if not _is_admin_staff(request):
@@ -1148,6 +1429,14 @@ def gown_delete_view(request, gown_id):
         gown = Gown.objects.get(id=gown_id)
     except Gown.DoesNotExist:
         return JsonResponse({"error": "Gown not found"}, status=404)
+
+    try:
+        data = json.loads(request.body or b"{}")
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        data = {}
+    reason, note, reason_error = _parse_removal(data)
+    if reason_error:
+        return JsonResponse({"error": reason_error}, status=400)
 
     blocking_item = _gown_blocking_reservation_item(gown)
     if blocking_item:
@@ -1163,8 +1452,13 @@ def gown_delete_view(request, gown_id):
             status=400,
         )
 
-    gown.delete()
-    return JsonResponse({"success": True})
+    removed_id = gown.gown_id
+    _remove_gown(gown, reason, note, request.user)
+    return JsonResponse({
+        "success": True,
+        "removed": removed_id,
+        "message": f"{removed_id} removed. Its number is retired and won't be used again.",
+    })
 
 
 _BULK_MAX_IDS = 200
@@ -1173,9 +1467,11 @@ _BULK_MAX_IDS = 200
 @require_http_methods(["POST"])
 def gown_bulk_action_view(request):
     """One request, many gowns -- the catalog's multi-select toolbar. action='status'
-    flips every selected gown's status; action='delete' removes them, skipping (not
-    failing) any that are still on a live reservation and reporting which. Kept a
-    single endpoint rather than a loop of per-gown fetches from the browser so a
+    flips every selected gown's status; action='checked' stamps them as physically
+    confirmed present right now, by whoever is logged in; action='delete' removes them
+    (one reason for the whole batch, each gown getting its own Removal Log entry),
+    skipping (not failing) any that are still on a live reservation and reporting which.
+    Kept a single endpoint rather than a loop of per-gown fetches from the browser so a
     half-finished batch can't happen from a dropped connection mid-loop."""
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
@@ -1183,9 +1479,11 @@ def gown_bulk_action_view(request):
         data = json.loads(request.body)
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid request."}, status=400)
+    if not isinstance(data, dict):
+        return JsonResponse({"error": "Invalid request."}, status=400)
 
     action = data.get("action")
-    if action not in ("status", "delete"):
+    if action not in ("status", "delete", "checked"):
         return JsonResponse({"error": "Unknown bulk action."}, status=400)
 
     raw_ids = data.get("ids")
@@ -1219,8 +1517,29 @@ def gown_bulk_action_view(request):
             "message": f"{updated} {noun} marked {new_status}.",
         })
 
-    # action == "delete" -- best-effort, NOT one atomic block: deleting what can be
-    # deleted and reporting the rest is the whole point.
+    if action == "checked":
+        # Same explicit-updated_at reason as the status branch above: .update() doesn't
+        # run save(), so the auto_now field would otherwise stay stale.
+        now = timezone.now()
+        with transaction.atomic():
+            updated = Gown.objects.filter(id__in=ids).update(
+                last_checked_at=now, last_checked_by=request.user, updated_at=now
+            )
+        noun = "gown" if updated == 1 else "gowns"
+        return JsonResponse({
+            "success": True,
+            "updated": updated,
+            "message": f"{updated} {noun} marked as checked.",
+        })
+
+    # action == "delete" -- the reason is validated ONCE, up front, before anything is
+    # touched: a batch with no reason must delete nothing, not delete some of it.
+    reason, note, reason_error = _parse_removal(data)
+    if reason_error:
+        return JsonResponse({"error": reason_error}, status=400)
+
+    # Best-effort, NOT one atomic block: deleting what can be deleted and reporting
+    # the rest is the whole point.
     deleted = 0
     skipped = []
     for gown in Gown.objects.filter(id__in=ids):
@@ -1232,13 +1551,13 @@ def gown_bulk_action_view(request):
             })
             continue
         try:
-            gown.delete()
+            _remove_gown(gown, reason, note, request.user)
             deleted += 1
         except Exception:
             skipped.append({"gown_id": gown.gown_id, "reference_code": None})
 
     noun = "gown" if deleted == 1 else "gowns"
-    message = f"{deleted} {noun} deleted."
+    message = f"{deleted} {noun} removed and logged."
     if skipped:
         message += f" {len(skipped)} skipped (still on active reservations)."
     return JsonResponse({
@@ -1246,6 +1565,65 @@ def gown_bulk_action_view(request):
         "deleted": deleted,
         "skipped": skipped,
         "message": message,
+    })
+
+
+@require_http_methods(["POST"])
+def gown_tag_colors_update_view(request):
+    """Saves which physical-tag color each category uses. OWNER ONLY, enforced here on
+    the server: the Tag Colors section hides its edit controls from staff, but hiding a
+    button protects nothing on its own -- a staff account sending this request by hand
+    must get refused too. (Inline rather than @_require_owner: that decorator redirects
+    a signed-out session to the login page, which a fetch() would follow and choke on;
+    like every other endpoint on this page, this one answers in JSON.)
+
+    Accepts {"colors": {"Wedding Gown": "White", ...}} -- any subset of categories. The
+    whole request is rejected if any entry is bad, so a typo can never save half."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    if not _is_owner(request):
+        return JsonResponse({"error": "Only the owner can change tag colors."}, status=403)
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({"error": "Invalid request."}, status=400)
+    colors = data.get("colors") if isinstance(data, dict) else None
+    if not isinstance(colors, dict) or not colors:
+        return JsonResponse({"error": "No tag colors were sent."}, status=400)
+
+    for category, color in colors.items():
+        if category not in DEFAULT_CATEGORY_TAG_COLORS:
+            return JsonResponse({"error": f"'{category}' isn't a gown category."}, status=400)
+        if color not in TAG_COLOR_HEX:
+            return JsonResponse({"error": f"'{color}' isn't one of the tag colors."}, status=400)
+
+    with transaction.atomic():
+        # Locked so two simultaneous saves (two owner tabs) apply one after the other
+        # instead of one overwriting the other's whole dict.
+        site_settings = SiteSettings.objects.select_for_update().filter(pk=1).first() or SiteSettings.load()
+        saved = dict(site_settings.category_tag_colors) if isinstance(site_settings.category_tag_colors, dict) else {}
+        saved.update(colors)
+        site_settings.category_tag_colors = saved
+        site_settings.save(update_fields=["category_tag_colors", "updated_at"])
+
+    resolved = resolve_tag_colors(saved)
+    # Two categories sharing one color defeats the point of color-coding: the tag would
+    # no longer say which of them a gown belongs to. Allowed (the owner may have a
+    # reason, or be mid-swap) but flagged so it's never a surprise.
+    by_color = defaultdict(list)
+    for category, color in resolved.items():
+        by_color[color].append(category)
+    shared = [
+        {"color": color, "categories": cats}
+        for color, cats in by_color.items() if len(cats) > 1
+    ]
+    return JsonResponse({
+        "success": True,
+        "colors": [
+            {"category": category, "color": color, "hex": TAG_COLOR_HEX[color]}
+            for category, color in resolved.items()
+        ],
+        "shared": shared,
     })
 
 
@@ -1448,6 +1826,28 @@ def _parse_rental_price(raw):
     return price, ""
 
 
+def _next_free_gown_name(category, name):
+    """`name` with the smallest "(n)" suffix (n >= 2) that no gown in this category
+    already uses -- "White" -> "White (2)" -> "White (3)". Any suffix already on `name`
+    is dropped first, so re-adding "White (2)" gives "White (3)" and never "White (2)
+    (2)". Compared case-insensitively, the same way the customer site decides whether
+    two gowns share a name. The base is trimmed if needed so the result always fits the
+    150-character name column."""
+    root = re.sub(r"\s*\(\d+\)\s*$", "", name).strip() or name
+    taken = {
+        existing.casefold()
+        for existing in Gown.objects.filter(category=category, name__istartswith=root)
+        .values_list("name", flat=True)
+    }
+    n = 2
+    while True:
+        suffix = f" ({n})"
+        candidate = root[: 150 - len(suffix)] + suffix
+        if candidate.casefold() not in taken:
+            return candidate
+        n += 1
+
+
 @require_http_methods(["POST"])
 def gown_create_view(request):
     if not _is_admin_staff(request):
@@ -1483,6 +1883,33 @@ def gown_create_view(request):
     if photo_error:
         return JsonResponse({"error": photo_error}, status=400)
 
+    # Same name already used in this category? The customer site groups every gown that
+    # shares a name into ONE product with a quantity ("3 available") -- exactly right for
+    # another size/unit of the same dress, and exactly wrong for a genuinely different
+    # dress that just happens to share the name (it would silently vanish into the other
+    # one's listing). Only the person adding it knows which this is, so ask -- and do it
+    # here, BEFORE the photo upload below, so answering the question never uploads the
+    # photo twice.
+    name_choice = (request.POST.get("name_choice") or "").strip()
+    same_name = Gown.objects.filter(category=category, name__iexact=name)
+    if same_name.exists():
+        if name_choice not in ("same", "different"):
+            existing = list(same_name.order_by("gown_id")[:6])
+            return JsonResponse({
+                "code": "name_conflict",
+                "error": f'A gown named "{name}" already exists in {category}.',
+                "name_conflict": {
+                    "name": name,
+                    "count": same_name.count(),
+                    "existing": [
+                        {"gown_id": g.gown_id, "size": g.size, "color_name": g.color_name}
+                        for g in existing
+                    ],
+                },
+            }, status=409)
+        if name_choice == "different":
+            name = _next_free_gown_name(category, name)
+
     # Photo first: nothing is in the DB yet, so a storage failure here is a clean
     # "try again" with zero cleanup rather than a half-created gown.
     photo_url = ""
@@ -1503,9 +1930,12 @@ def gown_create_view(request):
     # as the primary defense it used to be. Each attempt re-reads via a fresh
     # transaction.atomic() (a savepoint), which keeps the connection usable after a
     # failed INSERT instead of poisoning the whole request.
+    #
+    # The number comes from ONE counter for the whole category (color plays no part in
+    # it), so every gown in a category gets a number no other gown in it has ever had.
     gown = None
     for _attempt in range(3):
-        tracking_number = Gown.next_tracking_number(category, color_code)
+        tracking_number = Gown.next_tracking_number(category)
         gown_id = f"{category}-{color_code}-{tracking_number:03d}"
         try:
             with transaction.atomic():
@@ -1953,313 +2383,190 @@ def reservation_item_send_reminder_view(request, item_id):
     return JsonResponse({"success": True, "body": sent})
 
 
-@require_http_methods(["POST"])
-@transaction.atomic  # the availability check below locks the gown row until the save commits
-def reservation_item_reschedule_view(request, item_id):
+def _parse_iso_date(raw):
+    try:
+        return datetime.strptime((raw or "").strip(), "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _load_open_item(request, item_id):
+    """(item, None) for a booking staff may act on, else (None, JsonResponse). Shared by
+    the three scheduling actions below: signed in as staff, the item exists, its
+    reservation is approved (Confirmed/Active/Overdue) and the gown isn't already back."""
     if not _is_admin_staff(request):
-        return JsonResponse({"error": "Unauthorized"}, status=401)
+        return None, JsonResponse({"error": "Unauthorized"}, status=401)
     try:
         item = ReservationItem.objects.select_related("gown", "reservation").get(id=item_id)
     except ReservationItem.DoesNotExist:
-        return JsonResponse({"error": "Item not found"}, status=404)
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
-
-    try:
-        rental_date = datetime.strptime(data.get("rental_date", ""), "%Y-%m-%d").date()
-        event_date = datetime.strptime(data.get("event_date", ""), "%Y-%m-%d").date()
-        return_date = datetime.strptime(data.get("return_date", ""), "%Y-%m-%d").date()
-        overdue_date = datetime.strptime(data.get("overdue_date", ""), "%Y-%m-%d").date()
-    except ValueError:
-        return JsonResponse({"error": "Invalid dates"}, status=400)
-
-    # Pick-up <= Event <= Return <= Overdue keeps the four status dates in the right order.
-    if not (rental_date <= event_date <= return_date <= overdue_date):
-        return JsonResponse(
-            {"error": "Dates must run Pick-up ≤ Event ≤ Return ≤ Overdue."}, status=400
+        return None, JsonResponse({"error": "Item not found"}, status=404)
+    if item.reservation.status not in _SCHEDULED_STATUSES:
+        return None, JsonResponse(
+            {"error": "Only approved bookings can be changed here. Approve it first in Pending Approval."},
+            status=400,
         )
-
-    today = timezone.localdate()
-
-    # Only the owner may back-date the official schedule. A customer's booking
-    # window is what they actually chose at checkout -- rewriting it to a day
-    # that has already happened has no honest use (an early/late pickup or
-    # return is recorded via picked_up_on/returned_on instead, see
-    # reservation_item_set_actual_date_view below), and it directly feeds the
-    # early/late-day figures staff use to justify a deposit deduction. Compared
-    # against the EFFECTIVE current value (via _event_date/_overdue_date), not
-    # the raw possibly-null field, so re-saving a booking's already-past dates
-    # unchanged (e.g. Active Reservations' "Mark Picked Up", or an old overdue
-    # item that has never been opened here before) is never mistaken for staff
-    # backdating something new. Event is included here like the other three --
-    # staff CAN move it (a previous version locked it entirely, which turned out
-    # to be the wrong call; staff just need to see what the customer originally
-    # picked, see _original_event_date and the calendar's own subtitle-note JS),
-    # they just can't back-date it any more than Pick-up/Return/Overdue.
-    if not _is_owner(request):
-        effective_current = {
-            "Pick-up": (rental_date, item.rental_date),
-            "Event": (event_date, _event_date(item)),
-            "Return": (return_date, item.return_date),
-            "Overdue": (overdue_date, _overdue_date(item)),
-        }
-        for label, (new_value, current_value) in effective_current.items():
-            if new_value != current_value and new_value < today:
-                return JsonResponse({
-                    "error": (
-                        f"Only the owner can set the {label} date to something "
-                        f"that's already passed."
-                    ),
-                }, status=403)
-
-    # Status is chosen by staff -- Pick-up, Reserved, or Overdue. "Return" is no longer
-    # picked directly; it now shows automatically alongside Reserved (and Overdue), see
-    # _stage_segments.
-    stage = data.get("stage")
-    settable = {
-        ReservationItem.Stage.PICKUP, ReservationItem.Stage.RESERVED,
-        ReservationItem.Stage.OVERDUE,
-    }
-    if stage not in settable:
-        return JsonResponse({"error": "Invalid status"}, status=400)
-
-    # A gown can't be overdue before its own return date has actually passed --
-    # matches the one other place this project already decides what counts as
-    # overdue (reservations.reminders._due_kind, keyed on return_date, not the
-    # separate overdue_date marker which is only where the calendar's red segment
-    # starts). Without this, staff could flag something overdue today for a
-    # return date days in the future, which would be actively false.
-    if stage == ReservationItem.Stage.OVERDUE and timezone.localdate() <= return_date:
-        return JsonResponse({
-            "error": (
-                f"This item's return date ({return_date:%b %d, %Y}) hasn't passed "
-                f"yet, so it can't be marked Overdue."
-            ),
-        }, status=400)
-
-    # Moving a booking's pick-up/return must not land it on days this same physical
-    # gown already belongs to someone else (or is blocked for cleaning/repair) -- for
-    # owner and staff alike, since one gown can't be in two places. Only checked when
-    # those dates actually move: a save that leaves them alone (Mark Picked Up, a
-    # status change) must never be blocked by some older overlap it didn't create.
-    # The gown row is locked first, the same lock checkout's _find_available_unit
-    # takes, so a customer booking and a staff reschedule can't both claim the same
-    # days at the same moment.
-    if item.gown_id and (rental_date, return_date) != (item.rental_date, item.return_date):
-        list(Gown.objects.select_for_update().filter(id=item.gown_id))
-        conflict = _schedule_conflict(item, rental_date, return_date)
-        if conflict:
-            return JsonResponse({"error": conflict}, status=409)
-
-    # Snapshotted before the assignments below so the timeline can log what actually
-    # changed. Staff hit Save on this form constantly (often with nothing edited, or to
-    # nudge one date); logging every save unchanged would bury the real milestones in
-    # noise, so only genuine changes become events.
-    was_stage = item.stage
-    # Effective values, not the raw fields: a never-opened booking has event_date /
-    # overdue_date blank, and the modal (or Mark Picked Up) sends back their computed
-    # defaults -- saving those isn't a change anyone made, so it must not show up on
-    # the customer's timeline as "rental dates updated".
-    was_dates = (item.rental_date, _event_date(item), item.return_date, _overdue_date(item))
-    # A "picked up" date that hasn't come yet was never a real pickup (older data from
-    # before reservation_item_set_actual_date_view refused those), so it doesn't count.
-    was_picked_up = bool(item.picked_up_on) and item.picked_up_on <= today
-
-    item.rental_date = rental_date
-    item.event_date = event_date
-    item.return_date = return_date
-    item.overdue_date = overdue_date
-    item.stage = stage
-    update_fields = ["rental_date", "event_date", "return_date", "overdue_date", "stage", "updated_at"]
-
-    # Leaving Pick-up means the gown is physically going out now, so the recorded
-    # pickup is today -- unless a real (today-or-earlier) date is already there, e.g.
-    # staff pre-filled yesterday's via Edit after forgetting to click. A future date is
-    # never kept: it can't be when the gown left, and keeping one is exactly how an item
-    # once ended up Reserved while "picked up tomorrow".
-    if stage != ReservationItem.Stage.PICKUP and (not item.picked_up_on or item.picked_up_on > today):
-        item.picked_up_on = today
-        update_fields.append("picked_up_on")
-    item.save(update_fields=update_fields)
-
-    # The gown's own trailing cooldown moves with its return date -- otherwise
-    # extending (or shortening) a stay would leave the cooldown sitting after
-    # whatever the return date used to be, not where it's supposed to be now.
-    if item.gown_id and return_date != was_dates[2]:
-        _resync_cooldown_block(item, return_date)
-
-    # "Picked up" is the milestone a customer cares about, so it gets its own event and
-    # takes precedence over the generic status line that caused it.
-    if not was_picked_up and item.picked_up_on and item.picked_up_on <= today:
-        ReservationStatusEvent.record(
-            item.reservation, f"{item.gown_name} picked up", item=item,
-            detail="The gown is now with the customer.",
-            actor=ReservationStatusEvent.Actor.STAFF,
-        )
-    elif stage != was_stage:
-        ReservationStatusEvent.record(
-            item.reservation, f"{item.gown_name} status changed to {stage}", item=item,
-            actor=ReservationStatusEvent.Actor.STAFF,
-        )
-
-    if (rental_date, event_date, return_date, overdue_date) != was_dates:
-        ReservationStatusEvent.record(
-            item.reservation, f"{item.gown_name} rental dates updated", item=item,
-            detail=f"Pick-up {rental_date:%b %d, %Y} · Return {return_date:%b %d, %Y}",
-            actor=ReservationStatusEvent.Actor.STAFF,
-        )
-
-    if (stage != ReservationItem.Stage.PICKUP and item.gown_id
-            and item.gown.status == Gown.Status.AVAILABLE):
-        item.gown.status = Gown.Status.RESERVED
-        item.gown.save(update_fields=["status", "updated_at"])
-
-    return JsonResponse({
-        "success": True,
-        "stage": item.stage,
-        "rental_date": item.rental_date.isoformat(),
-        "event_date": item.event_date.isoformat(),
-        "return_date": item.return_date.isoformat(),
-        "overdue_date": item.overdue_date.isoformat(),
-        "picked_up_on": item.picked_up_on.isoformat() if item.picked_up_on else None,
-    })
+    if item.stage == ReservationItem.Stage.RETURNED:
+        return None, JsonResponse({"error": "This gown has already been returned."}, status=400)
+    return item, None
 
 
 @require_http_methods(["POST"])
-def reservation_item_set_actual_date_view(request, item_id):
-    """Records (or corrects) the day a gown actually left/came back -- separate
-    from reservation_item_reschedule_view above, which manages the *planned*
-    Pick-up/Reserved/Overdue schedule shown on the calendar.
-
-    Deliberately does not touch stage or compute any fee: this is a record of
-    fact for staff (see original_rental_date/original_return_date on the
-    model) -- what, if anything, gets deducted from the deposit for an early
-    pickup or late return stays a manual decision made off this record."""
-    if not _is_admin_staff(request):
-        return JsonResponse({"error": "Unauthorized"}, status=401)
-    try:
-        item = ReservationItem.objects.select_related("reservation").get(id=item_id)
-    except ReservationItem.DoesNotExist:
-        return JsonResponse({"error": "Item not found"}, status=404)
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
-
-    field = data.get("field")
-    if field not in ("picked_up_on", "returned_on"):
-        return JsonResponse({"error": "Invalid field"}, status=400)
-
-    raw_value = (data.get("value") or "").strip()
-    if raw_value:
-        try:
-            new_value = datetime.strptime(raw_value, "%Y-%m-%d").date()
-        except ValueError:
-            return JsonResponse({"error": "Invalid date"}, status=400)
-    else:
-        new_value = None  # clearing a mistaken entry is allowed
-
-    if getattr(item, field) == new_value:
-        return JsonResponse({"success": True, "value": new_value.isoformat() if new_value else None})
-
+@transaction.atomic  # the availability check locks the gown row until the save commits
+def reservation_item_mark_picked_up_view(request, item_id):
+    """The gown leaves the shop. Only on or after the booking's CURRENT pick-up date (the
+    one the customer moved it to, if they did) -- before that the booking isn't due yet.
+    The recorded pick-up is always today. Late is allowed: a customer who turns up after
+    their day must still be recordable."""
+    item, error = _load_open_item(request, item_id)
+    if error:
+        return error
+    if item.stage != ReservationItem.Stage.PICKUP:
+        return JsonResponse({"error": "This item has already been marked picked up."}, status=400)
     today = timezone.localdate()
+    if today < item.rental_date:
+        return JsonResponse({
+            "error": (
+                f"Pick-up is {item.rental_date:%b %d, %Y}, not yet. It can be marked picked up "
+                f"on that day or after. If the customer wants it earlier, use Change pick-up date."
+            ),
+        }, status=400)
 
-    # These two fields record something that already happened, so a day that hasn't
-    # come yet is never a correct value -- for owner or staff; this isn't a trust
-    # boundary like the back-dating check below, it's simply impossible. (An earlier
-    # version allowed it behind a "did the customer adjust their pickup date?" popup,
-    # which let an item sit at Reserved while claiming it would be picked up
-    # tomorrow.) A customer moving their day is a change to the PLAN -- the Pick-up /
-    # Return Date in the Rental Schedule, which the calendar, availability and the
-    # early/late count all read -- see reservation_item_reschedule_view.
-    if new_value and new_value > today:
-        if field == "picked_up_on":
-            message = (
-                f"The gown can't be recorded as picked up on {new_value:%b %d, %Y} -- that "
-                f"day hasn't come yet. If the customer is coming on another day, change "
-                f"the Pick-up Date in the Rental Schedule instead."
-            )
-            if item.stage != ReservationItem.Stage.PICKUP:
-                message += " If it was marked picked up by mistake, use Undo pickup."
-        else:
-            message = (
-                f"The gown can't be recorded as returned on {new_value:%b %d, %Y} -- that "
-                f"day hasn't come yet. If the customer is bringing it back on another day, "
-                f"change the Return Date in the Rental Schedule instead."
-            )
-        return JsonResponse({"error": message}, status=400)
-
-    # A gown can't come back before it left. Checked against whichever of the pair
-    # isn't being edited; clearing either side (new_value None) always passes, since
-    # that only removes a record.
-    picked = new_value if field == "picked_up_on" else item.picked_up_on
-    returned = new_value if field == "returned_on" else item.returned_on
-    if new_value and picked and returned and returned < picked:
-        if field == "picked_up_on":
-            message = (
-                f"The picked-up date can't be after the returned date "
-                f"({returned:%b %d, %Y}) -- a gown can't come back before it left."
-            )
-        else:
-            message = (
-                f"The returned date can't be before the picked-up date "
-                f"({picked:%b %d, %Y}) -- a gown can't come back before it left."
-            )
-        return JsonResponse({"error": message}, status=400)
-
-    # Same protection as reservation_item_reschedule_view's schedule dates, with
-    # one deliberate difference: staff get a one-day grace window here, because
-    # "I forgot to click the button yesterday" is a real, everyday, honest
-    # correction for THIS field specifically -- unlike the official schedule
-    # dates, which have no legitimate reason to ever move backward. Clearing a
-    # date (new_value is None) is never restricted: it only removes a record,
-    # it can't be used to fabricate one.
-    if new_value and not _is_owner(request):
-        grace_cutoff = today - timedelta(days=1)
-        if new_value < grace_cutoff:
-            noun = "picked up" if field == "picked_up_on" else "returned"
-            return JsonResponse({
-                "error": (
-                    f"Only the owner can record this item as {noun} more than a day "
-                    f"in the past."
-                ),
-            }, status=403)
-
-    setattr(item, field, new_value)
-    item.save(update_fields=[field, "updated_at"])
-
-    # Correcting an already-recorded return date (e.g. staff fixes a typo after the
-    # fact) must move the cooldown along with it -- effective_return_date falls back
-    # to the planned return_date if this correction just cleared the real one.
-    if field == "returned_on" and item.gown_id:
-        _resync_cooldown_block(item, item.effective_return_date)
-
-    label = "picked-up" if field == "picked_up_on" else "return"
-    detail = (
-        f"Actual {label} date recorded as {new_value:%b %d, %Y} by staff."
-        if new_value else
-        f"Actual {label} date cleared by staff."
-    )
+    item.stage = ReservationItem.Stage.RESERVED
+    item.picked_up_on = today
+    item.save(update_fields=["stage", "picked_up_on", "updated_at"])
     ReservationStatusEvent.record(
-        item.reservation, f"{item.gown_name} actual {label} date updated", item=item,
-        detail=detail,
+        item.reservation, f"{item.gown_name} picked up", item=item,
+        detail="The gown is now with the customer.",
         actor=ReservationStatusEvent.Actor.STAFF,
     )
+    if item.gown_id and item.gown.status == Gown.Status.AVAILABLE:
+        item.gown.status = Gown.Status.RESERVED
+        item.gown.save(update_fields=["status", "updated_at"])
+    return JsonResponse({"success": True, "stage": item.stage, "picked_up_on": today.isoformat()})
 
-    return JsonResponse({"success": True, "value": new_value.isoformat() if new_value else None})
+
+@require_http_methods(["POST"])
+@transaction.atomic
+def reservation_item_change_pickup_view(request, item_id):
+    """The customer wants the gown EARLIER: move the booking's pick-up date back. Only
+    earlier (a later pick-up is just a late pick-up, counted as late), never before today,
+    and never onto days another booking, a block, or another booking's cooldown holds the
+    same physical gown. The booking's own pick-up moves, so everything that reads it -- the
+    Rental Schedule (painted in the Pick-up colour), availability, the early count against
+    original_rental_date -- follows by itself."""
+    item, error = _load_open_item(request, item_id)
+    if error:
+        return error
+    if item.stage != ReservationItem.Stage.PICKUP:
+        return JsonResponse({"error": "The gown has already been picked up, so its pick-up date can't change."}, status=400)
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    new_date = _parse_iso_date(data.get("date"))
+    if not new_date:
+        return JsonResponse({"error": "Invalid date"}, status=400)
+
+    today = timezone.localdate()
+    if new_date >= item.rental_date:
+        return JsonResponse({
+            "error": (
+                f"The new pick-up date must be earlier than the current one "
+                f"({item.rental_date:%b %d, %Y}). A customer who comes later is just marked late."
+            ),
+        }, status=400)
+    if new_date < today:
+        return JsonResponse({"error": "The new pick-up date can't be a day that has already passed."}, status=400)
+
+    if item.gown_id:
+        list(Gown.objects.select_for_update().filter(id=item.gown_id))
+        conflict = _schedule_conflict(item, new_date, item.return_date)
+        if conflict:
+            return JsonResponse({"error": conflict}, status=409)
+
+    old_date = item.rental_date
+    if item.original_rental_date is None:
+        item.original_rental_date = old_date
+    item.rental_date = new_date
+    item.save(update_fields=["rental_date", "original_rental_date", "updated_at"])
+    days_early = ((item.original_rental_date or old_date) - new_date).days
+    ReservationStatusEvent.record(
+        item.reservation, f"{item.gown_name} pick-up date changed", item=item,
+        detail=(
+            f"Pick-up moved from {old_date:%b %d} to {new_date:%b %d, %Y} at the customer's request "
+            f"({_plural_days(days_early)} earlier than originally booked)."
+        ),
+        actor=ReservationStatusEvent.Actor.STAFF,
+    )
+    return JsonResponse({"success": True, "rental_date": new_date.isoformat(), "days_early": days_early})
+
+
+@require_http_methods(["POST"])
+@transaction.atomic
+def reservation_item_change_return_view(request, item_id):
+    """The customer needs the gown LONGER: move the return date later. Only later (there
+    is no early return -- bringing it back sooner changes nothing), never to a day that has
+    passed, and never into days another booking or block holds the gown. The gown's own
+    cooldown moves along with it. Counted as late days against the ORIGINAL return date."""
+    item, error = _load_open_item(request, item_id)
+    if error:
+        return error
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    new_date = _parse_iso_date(data.get("date"))
+    if not new_date:
+        return JsonResponse({"error": "Invalid date"}, status=400)
+
+    today = timezone.localdate()
+    if new_date <= item.return_date:
+        return JsonResponse({
+            "error": (
+                f"The new return date must be later than the current one "
+                f"({item.return_date:%b %d, %Y}). There is no early return."
+            ),
+        }, status=400)
+    if new_date < today:
+        return JsonResponse({"error": "The new return date can't be a day that has already passed."}, status=400)
+
+    if item.gown_id:
+        list(Gown.objects.select_for_update().filter(id=item.gown_id))
+        conflict = _schedule_conflict(item, item.rental_date, new_date)
+        if conflict:
+            return JsonResponse({"error": conflict}, status=409)
+
+    old_date = item.return_date
+    if item.original_return_date is None:
+        item.original_return_date = old_date
+    # The event day is the customer's own and doesn't move with the return -- but until it
+    # is saved it is *computed* as return - 2, so freeze it before the return changes.
+    if item.event_date is None:
+        item.event_date = item.effective_event_date
+    item.return_date = new_date
+    item.overdue_date = new_date
+    item.save(update_fields=["return_date", "overdue_date", "original_return_date", "event_date", "updated_at"])
+    if item.gown_id:
+        _resync_cooldown_block(item, new_date)
+    days_late = (new_date - (item.original_return_date or old_date)).days
+    ReservationStatusEvent.record(
+        item.reservation, f"{item.gown_name} return date changed", item=item,
+        detail=(
+            f"Return moved from {old_date:%b %d} to {new_date:%b %d, %Y} at the customer's request "
+            f"({_plural_days(days_late)} later than originally booked)."
+        ),
+        actor=ReservationStatusEvent.Actor.STAFF,
+    )
+    return JsonResponse({"success": True, "return_date": new_date.isoformat(), "days_late": days_late})
 
 
 @require_http_methods(["POST"])
 def reservation_item_undo_pickup_view(request, item_id):
     """Reverses an accidental "Mark Picked Up" click: clears picked_up_on and puts
     the item back at the Pick-up stage, exactly as if it was never clicked. Not
-    owner-gated -- like clearing an actual date above, this only erases a record
-    (logged all the same, below) rather than fabricating one; re-marking it
-    afterwards still goes through Mark Picked Up (stamps today) or
-    reservation_item_set_actual_date_view's own grace-window check above, so
-    nothing here reopens the backdating problem those already close."""
+    owner-gated -- it only erases a record (logged all the same, below) rather than
+    fabricating one; re-marking it afterwards goes through Mark Picked Up, which
+    stamps today and only works on or after the pick-up date."""
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
     try:
@@ -2284,49 +2591,7 @@ def reservation_item_undo_pickup_view(request, item_id):
         actor=ReservationStatusEvent.Actor.STAFF,
     )
 
-    return JsonResponse({
-        "success": True,
-        "stage": item.stage,
-        "rental_date": item.rental_date.isoformat(),
-        "event_date": _event_date(item).isoformat(),
-        "return_date": item.return_date.isoformat(),
-        "overdue_date": _overdue_date(item).isoformat(),
-    })
-
-
-@_require_admin_staff
-def categories_view(request):
-    # One query, grouped by category. Out-of-Stock is excluded -- it's a withdrawn
-    # gown, so it shouldn't count as "in stock" -- matching how every other tally in
-    # this admin already treats it (gown_catalog_view's available_count etc.).
-    rows = (
-        Gown.objects.exclude(status=Gown.Status.OUT_OF_STOCK)
-        .values("category")
-        .annotate(n=Count("id"))
-    )
-    counts_by_category = {row["category"]: row["n"] for row in rows}
-    return render(
-        request,
-        "arabela_admin/categories.html",
-        {
-            "page": "categories",
-            "wedding_gown_count": counts_by_category.get(Gown.Category.WEDDING_GOWN, 0),
-            "ball_gown_count": counts_by_category.get(Gown.Category.BALL_GOWN, 0),
-            "long_gown_count": counts_by_category.get(Gown.Category.LONG_GOWN, 0),
-            "luxury_gown_count": counts_by_category.get(Gown.Category.LUXURY_GOWN, 0),
-            "mother_gown_count": counts_by_category.get(Gown.Category.MOTHER_GOWN, 0),
-            "suit_count": counts_by_category.get(Gown.Category.SUIT, 0),
-            "filipiniana_count": counts_by_category.get(Gown.Category.FILIPINIANA, 0),
-            "guest_gown_count": counts_by_category.get(Gown.Category.GUEST_GOWN, 0),
-            "flower_girl_count": counts_by_category.get(Gown.Category.FLOWER_GIRL, 0),
-            "belo_count": counts_by_category.get(Gown.Category.BELO, 0),
-            "thailand_gown_count": counts_by_category.get(Gown.Category.THAILAND_GOWN, 0),
-            "dresses_count": counts_by_category.get(Gown.Category.DRESSES, 0),
-            "kids_gown_count": counts_by_category.get(Gown.Category.KIDS_GOWN, 0),
-            "barong_count": counts_by_category.get(Gown.Category.BARONG, 0),
-            "ball_gown_tulle_count": counts_by_category.get(Gown.Category.BALL_GOWN_TULLE, 0),
-        },
-    )
+    return JsonResponse({"success": True, "stage": item.stage})
 
 
 @_require_admin_staff

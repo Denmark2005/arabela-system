@@ -85,7 +85,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown' || page === 'condition' || page === 'categories') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits' || page === 'receipt-records' || page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits' || page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -349,15 +349,6 @@
                     Gown Catalog
                   </a>
                 </li>
-                <li>
-                  <a
-                    href="{% url 'arabela_admin:categories' %}"
-                    class="menu-dropdown-item group"
-                    :class="page === 'categories' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Categories
-                  </a>
-                </li>
               </ul>
             </div>
             <!-- Dropdown Menu End -->
@@ -582,15 +573,6 @@
                     :class="page === 'security-deposits' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
                     Security Deposits
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="{% url 'arabela_admin:receipt_records' %}"
-                    class="menu-dropdown-item group"
-                    :class="page === 'receipt-records' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Receipt Records
                   </a>
                 </li>
                 <li>
@@ -1104,7 +1086,7 @@
                       {% for r in reservations %}
                       {% with item_count=r.items.all|length %}
                       {% for item in r.items.all %}
-                      <tr class="bg-gray-50 dark:bg-white/5" x-show="search === '' || '{{ r.display_customer_name|lower|escapejs }} {{ r.reference_code|lower|escapejs }}'.includes(search.toLowerCase())" :class="search !== '' && '{{ r.reference_code|lower|escapejs }}' === search.toLowerCase() ? 'bg-brand-50 dark:bg-brand-500/15' : ''">
+                      <tr class="bg-gray-50 dark:bg-white/5" x-show="search === '' || '{{ r.display_customer_name|lower|escapejs }} {{ r.reference_code|lower|escapejs }}{% for gi in r.items.all %} {{ gi.gown_code|lower|escapejs }}{% endfor %}'.includes(search.toLowerCase())" :class="search !== '' && '{{ r.reference_code|lower|escapejs }}' === search.toLowerCase() ? 'bg-brand-50 dark:bg-brand-500/15' : ''">
                         {% if forloop.first %}
                         <td class="px-5 py-4 sm:px-6" rowspan="{{ item_count }}" style="vertical-align: top;">
                           <div class="flex items-center gap-3">
@@ -1126,6 +1108,12 @@
                             <span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ forloop.counter }} of {{ item_count }}</span>
                             {% endif %}
                           </div>
+                          {% if item.gown_code %}
+                          <p class="mt-1 flex items-center gap-1.5 text-theme-xs text-gray-400 dark:text-gray-500" title="Match this to the tag on the dress">
+                            <span class="admin-tag-dot" style="background-color: {{ item.tag_hex }};"></span>
+                            <span>{{ item.tag_color }} tag &middot; <span class="admin-tag-number font-medium text-gray-600 dark:text-gray-300">{{ item.gown_code }}</span></span>
+                          </p>
+                          {% endif %}
                         </td>
                         <td class="px-5 py-4 sm:px-6">
                           <p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ item.rental_date|date:"M j, Y" }}</p>

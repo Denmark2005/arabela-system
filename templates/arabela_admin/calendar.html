@@ -230,7 +230,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown' || page === 'condition' || page === 'categories') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits' || page === 'receipt-records' || page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits' || page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -494,15 +494,6 @@
                     Gown Catalog
                   </a>
                 </li>
-                <li>
-                  <a
-                    href="{% url 'arabela_admin:categories' %}"
-                    class="menu-dropdown-item group"
-                    :class="page === 'categories' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Categories
-                  </a>
-                </li>
               </ul>
             </div>
             <!-- Dropdown Menu End -->
@@ -727,15 +718,6 @@
                     :class="page === 'security-deposits' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
                     Security Deposits
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="{% url 'arabela_admin:receipt_records' %}"
-                    class="menu-dropdown-item group"
-                    :class="page === 'receipt-records' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Receipt Records
                   </a>
                 </li>
                 <li>
@@ -1267,8 +1249,31 @@
                       Booking Details
                     </h5>
                     <p id="bookingModalSubtitle" class="text-sm text-gray-500 dark:text-gray-400"></p>
+                    <!-- The exact physical gown this booking is matched to, with the color of its
+                         category tag -- so staff at pick-up match it to the tag on the rack.
+                         Filled by the script at the bottom of this page; empty (and hidden) for a
+                         booking with no matched gown. -->
+                    <p id="bookingModalGownTag" class="mt-1 text-xs text-gray-500 dark:text-gray-400" style="display: none; align-items: center; gap: 0.375rem;">
+                      <span id="bookingModalGownTagDot" class="admin-tag-dot"></span>
+                      <span id="bookingModalGownTagText"></span>
+                    </p>
                   </div>
                   <div class="mt-6 modal-body space-y-5">
+                    <!-- READ-ONLY. The Rental Schedule only shows; every change (dates, Mark Picked
+                         Up, Mark Returned) is made in Active Reservations. Filled by the script at
+                         the bottom of this page from the same calendar-events-data JSON. -->
+                    <div id="bookingModalReadOnly" style="display: flex; flex-direction: column; gap: 1rem;">
+                      <div id="bookingModalRemarks" class="flex flex-wrap items-center gap-1.5"></div>
+                      <dl class="text-sm" style="display: flex; flex-direction: column; gap: 0.375rem; margin: 0;">
+                        <div class="flex justify-between gap-4"><dt class="text-gray-500 dark:text-gray-400">Pick-up</dt><dd id="roPickup" class="font-medium text-gray-800 dark:text-white/90"></dd></div>
+                        <div class="flex justify-between gap-4"><dt class="text-gray-500 dark:text-gray-400">Event</dt><dd id="roEvent" class="font-medium text-gray-800 dark:text-white/90"></dd></div>
+                        <div class="flex justify-between gap-4"><dt class="text-gray-500 dark:text-gray-400">Return</dt><dd id="roReturn" class="font-medium text-gray-800 dark:text-white/90"></dd></div>
+                        <div class="flex justify-between gap-4" id="roOriginalRow" style="display: none;"><dt class="text-gray-500 dark:text-gray-400">Originally booked</dt><dd id="roOriginal" class="text-gray-500 dark:text-gray-400"></dd></div>
+                      </dl>
+                      <p class="text-xs text-gray-500 dark:text-gray-400">This calendar is view-only. To change a date or mark a pick-up or return, use Active Reservations.</p>
+                      <a id="bookingModalOpenActive" href="#" class="inline-flex items-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600">Open in Active Reservations</a>
+                    </div>
+                    <div id="bookingModalEditable" style="display: none;" aria-hidden="true">
                     <div>
                       <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-400">Status</label>
                       <div class="flex flex-wrap gap-2" id="bookingModalStatusGroup">
@@ -1324,15 +1329,16 @@
                     </div>
 
                     <p id="bookingModalError" class="hidden text-sm text-error-500"></p>
+                    </div>
                   </div>
                   <div class="flex flex-col gap-3 mt-6 modal-footer sm:flex-row sm:justify-end">
                     <button type="button" class="modal-close-btn flex w-full justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] sm:w-auto">
                       Close
                     </button>
-                    <button type="button" id="bookingModalMarkReturnedBtn" class="flex w-full justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] sm:w-auto">
+                    <button type="button" id="bookingModalMarkReturnedBtn" style="display: none;" tabindex="-1" class="flex w-full justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] sm:w-auto">
                       Mark Returned
                     </button>
-                    <button type="button" id="bookingModalSaveChangesBtn" class="flex w-full justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 sm:w-auto">
+                    <button type="button" id="bookingModalSaveChangesBtn" style="display: none;" tabindex="-1" class="flex w-full justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 sm:w-auto">
                       Save Changes
                     </button>
                   </div>
@@ -1412,6 +1418,9 @@
           var label = (props.customer || '') + ' — ' + (props.gownName || '')
             + (props.reference ? ' · ' + props.reference : '');
           byLabel[label] = {
+            remarks: Array.isArray(props.remarks) ? props.remarks : [], activeUrl: props.activeUrl || '',
+            originalRentalDate: props.originalRentalDate || '', originalReturnDate: props.originalReturnDate || '',
+            gownCode: props.gownCode || '', tagColor: props.tagColor || '', tagHex: props.tagHex || '',
             bookedEventDate: props.bookedEventDate, eventDate: props.eventDate,
             rentalDate: props.rentalDate, returnDate: props.returnDate,
             otherHolds: Array.isArray(props.otherHolds) ? props.otherHolds : []
@@ -1491,8 +1500,57 @@
         }
       }
 
+      var gownTagEl = document.getElementById('bookingModalGownTag');
+      var gownTagDotEl = document.getElementById('bookingModalGownTagDot');
+      var gownTagTextEl = document.getElementById('bookingModalGownTagText');
+
+      function refreshGownTag(entry) {
+        if (!gownTagEl || !gownTagDotEl || !gownTagTextEl) return;
+        if (entry && entry.gownCode) {
+          gownTagDotEl.style.backgroundColor = entry.tagHex || 'transparent';
+          gownTagDotEl.style.display = entry.tagHex ? '' : 'none';
+          gownTagTextEl.textContent = (entry.tagColor ? entry.tagColor + ' tag · ' : '') + entry.gownCode;
+          gownTagEl.style.display = 'flex';
+        } else {
+          gownTagEl.style.display = 'none';
+        }
+      }
+
+      // The read-only summary: same remarks (and tones) Active Reservations shows. Built with
+      // textContent only -- remark text can carry nothing user-typed, but it is cheap to be safe.
+      var REMARK_STYLE = {
+        warning: 'background:#FEF0C7;color:#B54708;', success: 'background:#D1FADF;color:#05603A;',
+        primary: 'background:#D1E9FF;color:#175CD3;', danger: 'background:#FEE4E2;color:#B42318;',
+        muted: 'background:#F2F4F7;color:#475467;'
+      };
+      function refreshReadOnly(entry) {
+        var box = document.getElementById('bookingModalRemarks');
+        if (!box) return;
+        box.textContent = '';
+        if (!entry) return;
+        entry.remarks.forEach(function (remark) {
+          var pill = document.createElement('span');
+          pill.className = 'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium';
+          pill.style.cssText = REMARK_STYLE[remark.tone] || REMARK_STYLE.muted;
+          pill.textContent = remark.text;
+          box.appendChild(pill);
+        });
+        document.getElementById('roPickup').textContent = formatLong(entry.rentalDate);
+        document.getElementById('roEvent').textContent = formatLong(entry.eventDate);
+        document.getElementById('roReturn').textContent = formatLong(entry.returnDate);
+        var changed = entry.originalRentalDate && entry.originalReturnDate
+          && (entry.originalRentalDate !== entry.rentalDate || entry.originalReturnDate !== entry.returnDate);
+        document.getElementById('roOriginalRow').style.display = changed ? '' : 'none';
+        if (changed) {
+          document.getElementById('roOriginal').textContent = formatShort(entry.originalRentalDate) + ' – ' + formatShort(entry.originalReturnDate);
+        }
+        document.getElementById('bookingModalOpenActive').href = entry.activeUrl || '#';
+      }
+
       function refreshNote() {
         var entry = byLabel[subtitleEl.textContent];
+        refreshGownTag(entry);
+        refreshReadOnly(entry);
         if (entry && entry.bookedEventDate !== entry.eventDate) {
           noteEl.textContent = 'Customer chose ' + formatLong(entry.bookedEventDate);
           noteEl.style.display = '';

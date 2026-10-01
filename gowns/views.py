@@ -166,18 +166,6 @@ def collection_guest_gown(request):
     return _render_collection(request, 'guest_gown.html', 'guest-gown')
 
 
-def collection_flower_girl(request):
-    return _render_collection(request, 'flower_girl.html', 'flower-girl')
-
-
-def collection_belo(request):
-    return _render_collection(request, 'belo.html', 'belo')
-
-
-def collection_thailand_gown(request):
-    return _render_collection(request, 'thailand_gown.html', 'thailand-gown')
-
-
 def collection_dresses(request):
     return _render_collection(request, 'dresses.html', 'dresses')
 
@@ -192,6 +180,10 @@ def collection_barong(request):
 
 def collection_ball_gown_tulle(request):
     return _render_collection(request, 'ball_gown_tulle.html', 'ball-gown-tulle')
+
+
+def collection_bridesmaid_dresses(request):
+    return _render_collection(request, 'bridesmaid_dresses.html', 'bridesmaid-dresses')
 
 
 def featured_men_collections(request):

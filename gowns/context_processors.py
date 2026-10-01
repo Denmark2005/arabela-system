@@ -47,13 +47,11 @@ _CATEGORIES = (
     {"key": "suit", "url_name": "collection_suit", "label": "Suit"},
     {"key": "filipiniana", "url_name": "collection_filipiniana", "label": "Filipiniana"},
     {"key": "guest-gown", "url_name": "collection_guest_gown", "label": "Guest Gown"},
-    {"key": "flower-girl", "url_name": "collection_flower_girl", "label": "Flower Girl"},
-    {"key": "belo", "url_name": "collection_belo", "label": "Belo"},
-    {"key": "thailand-gown", "url_name": "collection_thailand_gown", "label": "Thailand Gown"},
     {"key": "dresses", "url_name": "collection_dresses", "label": "Dresses"},
     {"key": "kids-gown", "url_name": "collection_kids_gown", "label": "Kids Gown"},
     {"key": "barong", "url_name": "collection_barong", "label": "Barong"},
     {"key": "ball-gown-tulle", "url_name": "collection_ball_gown_tulle", "label": "Ball Gown Tulle"},
+    {"key": "bridesmaid-dresses", "url_name": "collection_bridesmaid_dresses", "label": "Bridesmaid Dresses"},
 )
 
 # "All" is a synthetic first row (not a real category) prepended wherever the

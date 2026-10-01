@@ -185,6 +185,8 @@
           viewing: null,
           openPhoto: false,
           photo: {},
+          photoReplaceBusy: false,
+          photoReplaceError: '',
           openUpload: false,
           uploadFor: null,
           uploadFile: null,
@@ -201,8 +203,8 @@
             this.darkMode = JSON.parse(localStorage.getItem('darkMode'));
             this.$watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)));
 
-            // Deep links: ?search= from anywhere (e.g. a Receipt Records reference
-            // code), ?customer=<account id> from Client List's "View Reservation History".
+            // Deep links: ?search= from anywhere (e.g. the admin notification bell's
+            // own links), ?customer=<account id> from Client List's "View Reservation History".
             const params = new URLSearchParams(window.location.search);
             const presetSearch = params.get('search');
             if (presetSearch) { this.search = presetSearch; }
@@ -515,13 +517,50 @@
 
           viewPhoto(receipt, record) {
             this.photo = {
+              id: receipt.id || null,
               url: receipt.photoUrl,
               customer: record ? record.customer : receipt.customer,
               reference: record ? record.reference : receipt.reservation,
               uploaded: receipt.uploaded,
               uploadedBy: receipt.uploadedBy || '',
+              record: record || null,
             };
+            this.photoReplaceError = '';
             this.openPhoto = true;
+          },
+
+          // Fix a wrong receipt photo without leaving the booking -- same endpoint
+          // (receipt_replace_view) the old standalone Receipt Records page used.
+          // Updates both the open viewer AND the record's own receipts list, so the
+          // thumbnail is already correct the moment this modal closes (no reload).
+          replacePhoto(file) {
+            if (!file || !this.photo.id) { return; }
+            this.photoReplaceError = '';
+            this.photoReplaceBusy = true;
+            const photoId = this.photo.id;
+            compressImageFile(file)
+              .catch(() => file)
+              .then(ready => {
+                const form = new FormData();
+                form.append('photo', ready || file);
+                return fetch('{% url "arabela_admin:receipt_replace" 999999 %}'.replace('999999', photoId), {
+                  method: 'POST', headers: { 'X-CSRFToken': this.getCsrfToken() }, body: form,
+                });
+              })
+              .then(r => r.json().then(data => ({ ok: r.ok, data })))
+              .then(({ ok, data }) => {
+                this.photoReplaceBusy = false;
+                if (!ok) { this.photoReplaceError = data.error || 'Could not update this receipt.'; return; }
+                if (this.photo.id === photoId) { this.photo.url = data.receipt.photoUrl; }
+                if (this.photo.record) {
+                  const match = this.photo.record.receipts.find(r => r.id === photoId);
+                  if (match) { match.photoUrl = data.receipt.photoUrl; }
+                }
+              })
+              .catch(() => {
+                this.photoReplaceBusy = false;
+                this.photoReplaceError = 'Could not update this receipt. Please try again.';
+              });
           },
 
           startUpload(record) {
@@ -643,7 +682,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown' || page === 'condition' || page === 'categories') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits' || page === 'receipt-records' || page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits' || page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -907,15 +946,6 @@
                     Gown Catalog
                   </a>
                 </li>
-                <li>
-                  <a
-                    href="{% url 'arabela_admin:categories' %}"
-                    class="menu-dropdown-item group"
-                    :class="page === 'categories' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Categories
-                  </a>
-                </li>
               </ul>
             </div>
             <!-- Dropdown Menu End -->
@@ -1140,15 +1170,6 @@
                     :class="page === 'security-deposits' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
                     Security Deposits
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="{% url 'arabela_admin:receipt_records' %}"
-                    class="menu-dropdown-item group"
-                    :class="page === 'receipt-records' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Receipt Records
                   </a>
                 </li>
                 <li>
@@ -1905,7 +1926,10 @@
                       <tr>
                         <td>
                           <span class="font-medium text-gray-800 dark:text-white/90" x-text="item.gown"></span>
-                          <span x-show="item.gownCode" class="text-theme-xs text-gray-400" style="display: block;" x-text="item.gownCode"></span>
+                          <span x-show="item.gownCode" class="text-theme-xs text-gray-400" style="display: flex; align-items: center; gap: 0.375rem;" title="Match this to the tag on the dress">
+                            <span class="admin-tag-dot" :style="'background-color:' + item.tagHex" x-show="item.tagHex"></span>
+                            <span><span x-text="item.tagColor ? item.tagColor + ' tag · ' : ''"></span><span class="admin-tag-number font-medium" x-text="item.gownCode"></span></span>
+                          </span>
                         </td>
                         <td x-text="item.size"></td>
                         <td x-text="item.pickup"></td>
@@ -1953,7 +1977,7 @@
               </div>
               <div class="mt-3 flex flex-wrap items-center gap-4">
                 <a x-show="viewing.paymentProofUrl" :href="viewing.paymentProofUrl" target="_blank" rel="noopener" class="rr-link text-theme-sm">View customer's payment proof</a>
-                <a x-show="viewing.depositLink" :href="viewing.depositLink" class="rr-link text-theme-sm">Open in Security Deposits</a>
+                <a x-show="viewing.depositLink" :href="viewing.depositLink" class="rr-link text-theme-sm" x-text="viewing.depositLinkLabel"></a>
               </div>
             </div>
 
@@ -2021,6 +2045,28 @@
             <a :href="photo.url" target="_blank" rel="noopener" class="rr-link text-theme-xs">View Full Image</a>
           </div>
         </template>
+
+        <!-- Fix a wrong photo without leaving this booking -- only for an already-
+             uploaded receipt (photo.id set); a pending pre-upload preview has nothing
+             to replace yet, it's just "Remove" back in the Upload Receipt modal. -->
+        <template x-if="photo.id">
+          <div>
+            <p x-show="photoReplaceError" x-cloak x-text="photoReplaceError" class="mt-4 rounded-lg bg-error-50 px-4 py-2.5 text-sm text-error-700 dark:bg-error-500/15 dark:text-error-500"></p>
+            <div class="mt-4 flex flex-wrap items-center gap-3">
+              <input type="file" x-ref="rrReplaceFileInput" class="hidden" accept="image/png,image/jpeg,image/webp" @change="replacePhoto($event.target.files[0]); $refs.rrReplaceFileInput.value = ''" />
+              <input type="file" x-ref="rrReplaceCameraInput" class="hidden" accept="image/png,image/jpeg,image/webp" capture="environment" @change="replacePhoto($event.target.files[0]); $refs.rrReplaceCameraInput.value = ''" />
+              <button type="button" @click="$refs.rrReplaceCameraInput.click()" :class="photoReplaceBusy && 'pointer-events-none opacity-60'"
+                class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">
+                Take Photo
+              </button>
+              <button type="button" @click="$refs.rrReplaceFileInput.click()" :class="photoReplaceBusy && 'pointer-events-none opacity-60'"
+                class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">
+                <span x-show="photoReplaceBusy" x-cloak class="animate-spin rounded-full" style="width: 0.875rem; height: 0.875rem; border: 2px solid currentColor; border-top-color: transparent;"></span>
+                <span x-text="photoReplaceBusy ? 'Uploading...' : 'Choose from Gallery'"></span>
+              </button>
+            </div>
+          </div>
+        </template>
       </div>
     </div>
 
@@ -2067,6 +2113,8 @@
                 <div>
                   <img :src="uploadPreviewUrl" alt="Selected receipt" style="display: block; margin: 0 auto .75rem; max-height: 220px; max-width: 100%; border-radius: .5rem;" />
                   <p class="text-sm font-medium text-gray-800 dark:text-white/90" style="overflow-wrap: anywhere;" x-text="uploadFileName"></p>
+                  <a :href="uploadPreviewUrl" target="_blank" rel="noopener" class="mt-2 inline-block text-theme-sm font-medium text-brand-500 underline">View full size</a>
+                  <span class="mx-1 text-gray-300 dark:text-gray-700">&middot;</span>
                   <button type="button" @click="clearUploadFile()" class="mt-2 text-theme-sm font-medium text-error-500 underline">Remove</button>
                 </div>
               </template>

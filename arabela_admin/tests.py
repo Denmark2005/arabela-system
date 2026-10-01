@@ -11,7 +11,11 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import CustomerMessage, UserProfile
-from gowns.models import Gown, GownUnavailability
+from gowns.models import (
+    DEFAULT_CATEGORY_TAG_COLORS, TAG_COLOR_HEX, Gown, GownRemoval, GownUnavailability,
+    SiteSettings, resolve_tag_colors,
+)
+from arabela_admin import views as views_module
 from reservations import reminders
 from reservations.models import ReceiptRecord, Reservation, ReservationItem, ReservationStatusEvent
 
@@ -21,7 +25,7 @@ User = get_user_model()
 def _make_gown(n=1, **overrides):
     defaults = dict(
         gown_id=f"BLOCKTEST-{n:04d}", name=f"Block Test Gown {n}",
-        category=Gown.Category.BELO, color_name="Red", color_code="RD",
+        category=Gown.Category.GUEST_GOWN, color_name="Red", color_code="RD",
         size=Gown.Size.MEDIUM, rental_price=Decimal("3000.00"), status=Gown.Status.AVAILABLE,
     )
     defaults.update(overrides)
@@ -193,7 +197,7 @@ class GownCreateValidationTests(TestCase):
 
     def _create(self, **overrides):
         data = dict(
-            name="New Test Gown", category=Gown.Category.BELO, color_name="Blue",
+            name="New Test Gown", category=Gown.Category.GUEST_GOWN, color_name="Blue",
             color_code="BU", size=Gown.Size.MEDIUM, rental_price="3500",
         )
         data.update(overrides)
@@ -260,9 +264,18 @@ class GownDeleteTests(TestCase):
     def setUp(self):
         self.client.force_login(self.staff)
 
+    def _delete(self, gown, **body):
+        # Every removal now has to say why (see GownRemovalLogTests); these tests are about
+        # the reservation guard, so they just supply a valid reason.
+        payload = {"reason": "Damaged", **body}
+        return self.client.post(
+            reverse("arabela_admin:gown_delete", args=[gown.id]),
+            data=json.dumps(payload), content_type="application/json",
+        )
+
     def test_gown_with_no_reservations_can_be_deleted(self):
         gown = _make_gown()
-        response = self.client.post(reverse("arabela_admin:gown_delete", args=[gown.id]))
+        response = self._delete(gown)
         self.assertEqual(response.status_code, 200, response.content)
         self.assertFalse(Gown.objects.filter(id=gown.id).exists())
 
@@ -274,7 +287,7 @@ class GownDeleteTests(TestCase):
             reservation=reservation, gown=gown, gown_name=gown.name,
             rental_date=date.today(), return_date=date.today() + timedelta(days=3),
         )
-        response = self.client.post(reverse("arabela_admin:gown_delete", args=[gown.id]))
+        response = self._delete(gown)
         self.assertEqual(response.status_code, 400)
         self.assertTrue(Gown.objects.filter(id=gown.id).exists())
 
@@ -287,7 +300,7 @@ class GownDeleteTests(TestCase):
             rental_date=date.today(), return_date=date.today() + timedelta(days=3),
             stage=ReservationItem.Stage.RETURNED,
         )
-        response = self.client.post(reverse("arabela_admin:gown_delete", args=[gown.id]))
+        response = self._delete(gown)
         self.assertEqual(response.status_code, 200, response.content)
 
     def test_gown_on_a_rejected_reservation_CAN_be_deleted(self):
@@ -300,36 +313,156 @@ class GownDeleteTests(TestCase):
             reservation=reservation, gown=gown, gown_name=gown.name,
             rental_date=date.today(), return_date=date.today() + timedelta(days=3),
         )
-        response = self.client.post(reverse("arabela_admin:gown_delete", args=[gown.id]))
+        response = self._delete(gown)
         self.assertEqual(response.status_code, 200, response.content)
 
 
-class CategoriesRealCountsTests(TestCase):
-    """`categories_view` -- bug #9 from the original audit: this page used to show 11
-    hardcoded fake inventory numbers with no connection to the database at all."""
+class CategoryRowsRealCountsTests(TestCase):
+    """`gown_catalog_view`'s `category_rows` -- the browse-by-category chip strip,
+    folded in from the old, now-removed standalone Categories page (bug #9 from the
+    original audit: that page used to show 11 hardcoded fake inventory numbers with
+    no connection to the database at all). One shared list now backs the chip strip
+    AND both category `<select>` dropdowns on this same page, instead of each
+    hardcoding its own copy of every category."""
 
     @classmethod
     def setUpTestData(cls):
-        cls.staff = User.objects.create_user(username="categories_test_staff", password="x", is_staff=True)
+        cls.staff = User.objects.create_user(username="category_rows_test_staff", password="x", is_staff=True)
 
     def setUp(self):
         self.client.force_login(self.staff)
 
+    def _row(self, response, key):
+        return next(r for r in response.context["category_rows"] if r["key"] == key)
+
     def test_counts_reflect_real_gowns_and_exclude_out_of_stock(self):
-        _make_gown(1, category=Gown.Category.BELO, status=Gown.Status.AVAILABLE)
-        _make_gown(2, category=Gown.Category.BELO, status=Gown.Status.RESERVED)
-        _make_gown(3, category=Gown.Category.BELO, status=Gown.Status.OUT_OF_STOCK)
+        _make_gown(1, category=Gown.Category.GUEST_GOWN, status=Gown.Status.AVAILABLE)
+        _make_gown(2, category=Gown.Category.GUEST_GOWN, status=Gown.Status.RESERVED)
+        _make_gown(3, category=Gown.Category.GUEST_GOWN, status=Gown.Status.OUT_OF_STOCK)
         _make_gown(4, category=Gown.Category.SUIT, status=Gown.Status.AVAILABLE)
 
-        response = self.client.get(reverse("arabela_admin:categories"))
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context["belo_count"], 2)  # excludes the Out-of-Stock one
-        self.assertEqual(response.context["suit_count"], 1)
+        self.assertEqual(self._row(response, Gown.Category.GUEST_GOWN)["count"], 2)  # excludes the Out-of-Stock one
+        self.assertEqual(self._row(response, Gown.Category.SUIT)["count"], 1)
 
     def test_category_with_zero_gowns_shows_zero_not_a_fake_number(self):
-        response = self.client.get(reverse("arabela_admin:categories"))
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context["dresses_count"], 0)
+        self.assertEqual(self._row(response, Gown.Category.DRESSES)["count"], 0)
+
+    def test_every_category_appears_exactly_once_in_declaration_order(self):
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        keys = [r["key"] for r in response.context["category_rows"]]
+        self.assertEqual(keys, [key for key, _ in Gown.Category.choices])
+
+
+class GownCatalogBlockedGownsListTests(TestCase):
+    """The "Blocked Gowns" tile/list that replaced the old, unclickable "Needs
+    Attention" tile -- every gown with an active block TODAY, surfaced right here
+    in Inventory (previously only visible on the Rental Schedule calendar)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(username="blocked_list_test_staff", password="x", is_staff=True)
+
+    def setUp(self):
+        self.client.force_login(self.staff)
+        self.today = date.today()
+
+    def test_gown_with_a_block_covering_today_is_listed(self):
+        gown = _make_gown(1)
+        GownUnavailability.objects.create(
+            gown=gown, start_date=self.today - timedelta(days=1),
+            end_date=self.today + timedelta(days=2), reason=GownUnavailability.Reason.CLEANING,
+        )
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        rows = response.context["blocked_gowns_today"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["gown"].id, gown.id)
+        self.assertEqual(rows[0]["block"]["reason"], "Cleaning")
+        self.assertContains(response, "Blocked Gowns")
+        self.assertContains(response, gown.gown_id)
+
+    def test_gown_with_only_a_future_block_is_not_listed(self):
+        gown = _make_gown(2)
+        GownUnavailability.objects.create(
+            gown=gown, start_date=self.today + timedelta(days=5),
+            end_date=self.today + timedelta(days=8), reason=GownUnavailability.Reason.REPAIR,
+        )
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        self.assertEqual(response.context["blocked_gowns_today"], [])
+
+    def test_gown_with_only_an_expired_block_is_not_listed(self):
+        gown = _make_gown(3)
+        GownUnavailability.objects.create(
+            gown=gown, start_date=self.today - timedelta(days=10),
+            end_date=self.today - timedelta(days=1), reason=GownUnavailability.Reason.ALTERATION,
+        )
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        self.assertEqual(response.context["blocked_gowns_today"], [])
+
+    def test_a_block_ending_exactly_today_still_counts_as_active(self):
+        gown = _make_gown(4)
+        GownUnavailability.objects.create(
+            gown=gown, start_date=self.today - timedelta(days=3),
+            end_date=self.today, reason=GownUnavailability.Reason.CLEANING,
+        )
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        self.assertEqual(len(response.context["blocked_gowns_today"]), 1)
+
+    def test_sorted_soonest_to_free_up_first(self):
+        gown_a = _make_gown(5)
+        gown_b = _make_gown(6)
+        GownUnavailability.objects.create(
+            gown=gown_a, start_date=self.today, end_date=self.today + timedelta(days=10),
+            reason=GownUnavailability.Reason.REPAIR,
+        )
+        GownUnavailability.objects.create(
+            gown=gown_b, start_date=self.today, end_date=self.today + timedelta(days=2),
+            reason=GownUnavailability.Reason.CLEANING,
+        )
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        rows = response.context["blocked_gowns_today"]
+        self.assertEqual([r["gown"].id for r in rows], [gown_b.id, gown_a.id])
+
+    def test_zero_blocked_gowns_shows_the_empty_state_not_a_button(self):
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        self.assertEqual(response.context["blocked_gowns_today"], [])
+        self.assertContains(response, "None blocked today")
+
+    def test_old_needs_attention_tile_wording_is_gone(self):
+        # "Needs Attention" itself still legitimately appears in the shared
+        # notifications-bell partial included on every admin page -- only the old
+        # stat tile's own subtitle text is unique to what was just replaced.
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        self.assertNotContains(response, "blocked by date today")
+
+
+class GownCatalogTotalTileTests(TestCase):
+    """The 4th "Total Gowns" stat tile -- unlike Available/Reserved/Needs
+    Attention, this one must count EVERY status, including Out-of-Stock."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(username="total_tile_test_staff", password="x", is_staff=True)
+
+    def setUp(self):
+        self.client.force_login(self.staff)
+
+    def test_total_counts_every_status_including_out_of_stock(self):
+        _make_gown(1, status=Gown.Status.AVAILABLE)
+        _make_gown(2, status=Gown.Status.RESERVED)
+        _make_gown(3, status=Gown.Status.OUT_OF_STOCK)
+
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["total_gowns_count"], 3)
+        self.assertContains(response, "Total Gowns")
+
+    def test_total_matches_the_real_gown_table_count(self):
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        self.assertEqual(response.context["total_gowns_count"], Gown.objects.count())
 
 
 class GlobalSearchGownCoverageTests(TestCase):
@@ -447,11 +580,9 @@ class ReservationApprovalTests(TestCase):
 
 
 class ReservationItemLifecycleTests(TestCase):
-    """`reservation_item_mark_returned_view` / `reservation_item_reschedule_view` --
-    the Booking Details modal's two actions. Mark Returned must cascade the gown's
-    own condition/status (Needs Repair -> Out-of-Stock, everything else -> Available);
-    Reschedule must enforce Pick-up <= Event <= Return <= Overdue and only accept the
-    3 settable stages."""
+    """`reservation_item_mark_returned_view` -- Mark Returned must cascade the gown's
+    own condition/status (Needs Repair -> Out-of-Stock, everything else -> Available),
+    without clobbering a still-active sibling booking of the same gown."""
 
     @classmethod
     def setUpTestData(cls):
@@ -504,7 +635,9 @@ class ReservationItemLifecycleTests(TestCase):
         from reservations.models import Reservation, ReservationItem
         gown = _make_gown(status=Gown.Status.RESERVED)
         still_out = ReservationItem.objects.create(
-            reservation=Reservation.objects.create(customer=self.customer, customer_name="Still Out Customer"),
+            reservation=Reservation.objects.create(
+                customer=self.customer, customer_name="Still Out Customer",
+                status=Reservation.Status.CONFIRMED),
             gown=gown, gown_name=gown.name, stage=ReservationItem.Stage.RESERVED,
             rental_date=date.today() - timedelta(days=3), return_date=date.today() + timedelta(days=2),
         )
@@ -523,72 +656,59 @@ class ReservationItemLifecycleTests(TestCase):
         still_out.refresh_from_db()
         self.assertEqual(still_out.stage, ReservationItem.Stage.RESERVED)
 
+    def test_a_stale_pending_booking_does_not_keep_a_returned_gown_reserved(self):
+        """Real bug (Wedding Gown 14): a Pending booking whose dates had long passed -- never
+        approved, never rejected -- counted as 'still holding' the gown, so returning the
+        real booking left it on Reserved in the catalog forever. Only an APPROVED booking
+        ever made the gown Reserved, so only an approved one may keep it there."""
+        from reservations.models import Reservation, ReservationItem
+        gown = _make_gown(status=Gown.Status.RESERVED)
+        ReservationItem.objects.create(
+            reservation=Reservation.objects.create(customer=self.customer, customer_name="Stale Pending Customer"),
+            gown=gown, gown_name=gown.name,
+            rental_date=date.today() - timedelta(days=5), return_date=date.today() - timedelta(days=1),
+        )
+        real = ReservationItem.objects.create(
+            reservation=Reservation.objects.create(
+                customer=self.customer, customer_name="Real Customer", status=Reservation.Status.CONFIRMED),
+            gown=gown, gown_name=gown.name, stage=ReservationItem.Stage.RESERVED,
+            rental_date=date.today(), return_date=date.today() + timedelta(days=3),
+        )
+        response = self.client.post(
+            reverse("arabela_admin:reservation_item_mark_returned", args=[real.id]),
+            data=json.dumps({"condition": "Good"}), content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        gown.refresh_from_db()
+        self.assertEqual(gown.status, Gown.Status.AVAILABLE)
+
+    def test_an_approved_booking_still_keeps_the_gown_reserved(self):
+        from reservations.models import Reservation, ReservationItem
+        gown = _make_gown(status=Gown.Status.RESERVED)
+        ReservationItem.objects.create(
+            reservation=Reservation.objects.create(
+                customer=self.customer, customer_name="Approved Later", status=Reservation.Status.CONFIRMED),
+            gown=gown, gown_name=gown.name,
+            rental_date=date.today() + timedelta(days=20), return_date=date.today() + timedelta(days=24),
+        )
+        real = ReservationItem.objects.create(
+            reservation=Reservation.objects.create(
+                customer=self.customer, customer_name="Real Customer", status=Reservation.Status.CONFIRMED),
+            gown=gown, gown_name=gown.name, stage=ReservationItem.Stage.RESERVED,
+            rental_date=date.today(), return_date=date.today() + timedelta(days=3),
+        )
+        self.client.post(
+            reverse("arabela_admin:reservation_item_mark_returned", args=[real.id]),
+            data=json.dumps({"condition": "Good"}), content_type="application/json",
+        )
+        gown.refresh_from_db()
+        self.assertEqual(gown.status, Gown.Status.RESERVED)
+
     def test_mark_returned_missing_condition_is_rejected(self):
         item, _ = self._make_item()
         response = self.client.post(
             reverse("arabela_admin:reservation_item_mark_returned", args=[item.id]),
             data=json.dumps({}), content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 400)
-
-    def test_reschedule_valid_dates_succeeds(self):
-        item, gown = self._make_item(gown_status=Gown.Status.AVAILABLE)
-        today = date.today()
-        # _make_item leaves event_date null, so the modal would show the computed
-        # event day (return - 2 = today + 1, see ReservationItem.effective_event_date)
-        # -- sent back here exactly as a real Save Changes would, since this test
-        # isn't about the Event date at all.
-        response = self.client.post(
-            reverse("arabela_admin:reservation_item_reschedule", args=[item.id]),
-            data=json.dumps({
-                "rental_date": today.isoformat(),
-                "event_date": (today + timedelta(days=1)).isoformat(),
-                "return_date": (today + timedelta(days=4)).isoformat(),
-                "overdue_date": (today + timedelta(days=6)).isoformat(),
-                "stage": "Reserved",
-            }),
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 200, response.content)
-        item.refresh_from_db()
-        gown.refresh_from_db()
-        self.assertEqual(item.stage, "Reserved")
-        self.assertEqual(gown.status, Gown.Status.RESERVED)  # leaving Pick-up reserves the gown
-
-    def test_reschedule_out_of_order_dates_is_rejected(self):
-        item, _ = self._make_item()
-        today = date.today()
-        response = self.client.post(
-            reverse("arabela_admin:reservation_item_reschedule", args=[item.id]),
-            data=json.dumps({
-                "rental_date": today.isoformat(),
-                "event_date": (today - timedelta(days=1)).isoformat(),  # before rental_date
-                "return_date": (today + timedelta(days=4)).isoformat(),
-                "overdue_date": (today + timedelta(days=6)).isoformat(),
-                "stage": "Reserved",
-            }),
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 400)
-
-    def test_reschedule_to_returned_stage_directly_is_rejected(self):
-        # "Returned" is only reachable via Mark Returned, never via Reschedule.
-        item, _ = self._make_item()
-        today = date.today()
-        # Every date is sent exactly as it already stands (event_date as the computed
-        # return - 2 = today + 1), so the stage really is the only thing wrong here --
-        # otherwise this could trip one of the four dates' own back-dating checks instead
-        # and stop proving anything about the stage.
-        response = self.client.post(
-            reverse("arabela_admin:reservation_item_reschedule", args=[item.id]),
-            data=json.dumps({
-                "rental_date": today.isoformat(),
-                "event_date": (today + timedelta(days=1)).isoformat(),
-                "return_date": (today + timedelta(days=3)).isoformat(),
-                "overdue_date": (today + timedelta(days=3)).isoformat(),
-                "stage": "Returned",
-            }),
-            content_type="application/json",
         )
         self.assertEqual(response.status_code, 400)
 
@@ -807,7 +927,7 @@ class GownColorCodeConsistencyTests(TestCase):
 
     def _create(self, **overrides):
         data = dict(
-            name="Color Test Gown", category=Gown.Category.BELO, color_name="Blue",
+            name="Color Test Gown", category=Gown.Category.GUEST_GOWN, color_name="Blue",
             color_code="BU", size=Gown.Size.MEDIUM, rental_price="3500",
         )
         data.update(overrides)
@@ -936,7 +1056,7 @@ class GownUpdateTests(TestCase):
 
     def _update(self, **overrides):
         data = dict(
-            name="Updated Name", category=Gown.Category.BELO, color_name="Green",
+            name="Updated Name", category=Gown.Category.GUEST_GOWN, color_name="Green",
             color_code="GR", size=Gown.Size.LARGE, rental_price="4000",
         )
         data.update(overrides)
@@ -973,7 +1093,7 @@ class GownUpdateTests(TestCase):
 
     def test_nonexistent_gown_returns_404(self):
         response = self.client.post(reverse("arabela_admin:gown_update", args=[999999]), data=dict(
-            name="X", category=Gown.Category.BELO, color_name="X", color_code="X",
+            name="X", category=Gown.Category.GUEST_GOWN, color_name="X", color_code="X",
             size=Gown.Size.MEDIUM, rental_price="1000",
         ))
         self.assertEqual(response.status_code, 404)
@@ -1045,7 +1165,7 @@ class GownBulkActionTests(TestCase):
             rental_date=date.today(), return_date=date.today() + timedelta(days=3),
         )
         response = self.client.post(self.url, data=json.dumps({
-            "action": "delete", "ids": [deletable.id, blocked.id],
+            "action": "delete", "ids": [deletable.id, blocked.id], "reason": "Retired",
         }), content_type="application/json")
         self.assertEqual(response.status_code, 200, response.content)
         result = response.json()
@@ -1241,7 +1361,7 @@ class AdminListPageSmokeTests(TestCase):
     def test_all_list_pages_render_with_no_data(self):
         for url_name in (
             "rental_schedule", "calendar", "payment_verification", "rental_history",
-            "security_deposits", "receipt_records", "active_reservations",
+            "security_deposits", "active_reservations",
             "pending_approval", "clients",
         ):
             with self.subTest(page=url_name):
@@ -1276,7 +1396,7 @@ class AdminListPageSmokeTests(TestCase):
 
         for url_name in (
             "rental_schedule", "calendar", "payment_verification", "rental_history",
-            "security_deposits", "receipt_records", "active_reservations",
+            "security_deposits", "active_reservations",
             "pending_approval", "clients",
         ):
             with self.subTest(page=url_name):
@@ -1286,7 +1406,7 @@ class AdminListPageSmokeTests(TestCase):
         self.client.logout()
         for url_name in (
             "rental_schedule", "payment_verification", "rental_history",
-            "security_deposits", "receipt_records", "active_reservations",
+            "security_deposits", "active_reservations",
             "pending_approval", "clients",
         ):
             with self.subTest(page=url_name):
@@ -1321,20 +1441,6 @@ class StatusEventHookTests(TestCase):
 
     def _labels(self):
         return [e.label for e in self.reservation.status_events.all()]
-
-    def _reschedule(self, **overrides):
-        payload = {
-            "rental_date": str(self.today),
-            "event_date": str(self.today + timedelta(days=2)),
-            "return_date": str(self.today + timedelta(days=4)),
-            "overdue_date": str(self.today + timedelta(days=5)),
-            "stage": "Reserved",
-        }
-        payload.update(overrides)
-        return self.client.post(
-            reverse("arabela_admin:reservation_item_reschedule", args=[self.item.id]),
-            data=json.dumps(payload), content_type="application/json",
-        )
 
     def test_approving_records_a_staff_event(self):
         self.client.post(reverse("arabela_admin:reservation_approve", args=[self.reservation.id]))
@@ -1401,52 +1507,34 @@ class StatusEventHookTests(TestCase):
             reverse("arabela_admin:reservation_return_deposit", args=[self.reservation.id]))
         self.assertIn("Security deposit returned", self._labels())
 
-    def test_first_stage_move_records_a_pick_up_not_a_generic_status_line(self):
-        self._reschedule()
+    def _confirm(self):
+        self.reservation.status = Reservation.Status.CONFIRMED
+        self.reservation.save(update_fields=["status"])
+
+    def test_marking_picked_up_records_a_pick_up_event(self):
+        self._confirm()
+        response = self.client.post(reverse("arabela_admin:reservation_item_mark_picked_up", args=[self.item.id]))
+        self.assertEqual(response.status_code, 200, response.content)
         self.assertIn("Hook Gown picked up", self._labels())
-        self.assertFalse([l for l in self._labels() if "status changed to" in l])
 
-    def test_a_save_that_changes_nothing_records_nothing(self):
-        self._reschedule()
-        before = self.reservation.status_events.count()
-        self._reschedule()
-        self.assertEqual(self.reservation.status_events.count(), before)
-
-    def test_changing_only_the_dates_records_a_dates_updated_event(self):
-        self._reschedule()
-        before = self.reservation.status_events.count()
-        self._reschedule(return_date=str(self.today + timedelta(days=9)),
-                         overdue_date=str(self.today + timedelta(days=10)))
-        self.assertEqual(self.reservation.status_events.count(), before + 1)
-        self.assertIn("Hook Gown rental dates updated", self._labels())
-
-    def test_a_later_stage_change_records_the_new_status(self):
-        self._reschedule()
-        # Overdue now requires the return date to have actually passed, and staff may
-        # not back-date the schedule (both in reservation_item_reschedule_view) -- so
-        # the past window is put on the item directly first, as if it had been booked
-        # that way all along, then resubmitted UNCHANGED with only the stage flipped,
-        # exactly like a normal Booking Details resave. That's a genuinely valid
-        # Overdue transition, not staff rewriting history mid-request.
-        self.item.rental_date = self.today - timedelta(days=10)
-        self.item.event_date = self.today - timedelta(days=8)
-        self.item.return_date = self.today - timedelta(days=4)
-        self.item.overdue_date = self.today - timedelta(days=3)
-        self.item.save(update_fields=["rental_date", "event_date", "return_date", "overdue_date"])
-        self._reschedule(
-            stage="Overdue",
-            rental_date=str(self.item.rental_date),
-            event_date=str(self.item.event_date),
-            return_date=str(self.item.return_date),
-            overdue_date=str(self.item.overdue_date),
+    def test_changing_the_pickup_records_a_pick_up_date_changed_event(self):
+        self._confirm()
+        ReservationItem.objects.filter(id=self.item.id).update(rental_date=self.today + timedelta(days=3))
+        response = self.client.post(
+            reverse("arabela_admin:reservation_item_change_pickup", args=[self.item.id]),
+            data=json.dumps({"date": str(self.today + timedelta(days=1))}), content_type="application/json",
         )
-        self.assertIn("Hook Gown status changed to Overdue", self._labels())
+        self.assertEqual(response.status_code, 200, response.content)
+        event = self.reservation.status_events.get(label="Hook Gown pick-up date changed")
+        self.assertIn("2 days earlier than originally booked", event.detail)
 
-    def test_a_rejected_request_records_nothing(self):
+    def test_a_refused_request_records_nothing(self):
         """Validation failures must leave no trace -- a timeline of things that did not
         happen is worse than no timeline."""
-        response = self._reschedule(stage="Returned")
-        self.assertEqual(response.status_code, 400)
+        self._confirm()
+        ReservationItem.objects.filter(id=self.item.id).update(rental_date=self.today + timedelta(days=3))
+        response = self.client.post(reverse("arabela_admin:reservation_item_mark_picked_up", args=[self.item.id]))
+        self.assertEqual(response.status_code, 400)  # pick-up is in 3 days
         self.assertEqual(self.reservation.status_events.count(), 0)
 
     def test_an_unauthorised_request_records_nothing(self):
@@ -1967,14 +2055,17 @@ def _make_jpeg(name="receipt.jpg"):
     return SimpleUploadedFile(name, tiny_jpeg, content_type="image/jpeg")
 
 
-class ReceiptRecordsTests(TestCase):
-    """Receipt Records -- staff attach a photo of a manually-issued receipt (the shop's
-    own paper receipt) to a real reservation. Deliberately the opposite of
-    Reservation.payment_proof_url (the customer's own GCash screenshot, captured
-    automatically at checkout): this is produced by the shop, attached by staff,
-    afterward. _save_receipt_photo is mocked in every test -- this environment's
-    default storage is real Cloudinary, and these tests must never upload anything to
-    that live external account."""
+class ReceiptUploadAndReplaceTests(TestCase):
+    """receipt_upload_view / receipt_replace_view -- staff attach a photo of a
+    manually-issued receipt (the shop's own paper receipt) to a real reservation.
+    Deliberately the opposite of Reservation.payment_proof_url (the customer's own
+    GCash screenshot, captured automatically at checkout): this is produced by the
+    shop, attached by staff, afterward. Both endpoints are page-agnostic -- Reservation
+    Records is the only caller now that the standalone Receipt Records page (which
+    used to own this coverage) is gone, but these tests hit the endpoints directly so
+    they never depend on which page is calling them. _save_receipt_photo is mocked in
+    every test -- this environment's default storage is real Cloudinary, and these
+    tests must never upload anything to that live external account."""
 
     @classmethod
     def setUpTestData(cls):
@@ -1998,18 +2089,6 @@ class ReceiptRecordsTests(TestCase):
         self.addCleanup(patcher.stop)
         patcher.start()
 
-    def test_page_no_longer_shows_leftover_demo_data(self):
-        html = self.client.get(reverse("arabela_admin:receipt_records")).content.decode()
-        self.assertNotIn("RSV-0142", html)
-        self.assertNotIn("Maria Santos", html)
-        self.assertNotIn("Customer Name</label>", html)
-        # The booking is searched for and PICKED (never a typed customer name), and the
-        # receipt is still filed under that reservation's reference code.
-        self.assertIn(reverse("arabela_admin:receipt_reservation_search"), html)
-        self.assertIn("pickReservation(", html)
-        for leak in ("{%", "{{", "{#"):
-            self.assertNotIn(leak, html)
-
     def test_uploading_by_reference_code_resolves_the_real_customer_name(self):
         """The whole point: staff never type a customer name -- it comes from the
         reservation, so it can never drift from the booking it's actually attached to."""
@@ -2022,6 +2101,7 @@ class ReceiptRecordsTests(TestCase):
         self.assertEqual(data["customer"], "Receipt Test Customer")
         self.assertEqual(data["reservation"], self.reservation.reference_code)
         self.assertTrue(data["photoUrl"])
+        self.assertEqual(data["uploadedBy"], "Ana Cruz")
 
     def test_a_real_record_is_created_and_attributed_to_the_uploader(self):
         self.client.post(reverse("arabela_admin:receipt_upload"), data={
@@ -2086,17 +2166,6 @@ class ReceiptRecordsTests(TestCase):
         self.assertIn(response.status_code, (302, 401))
         self.assertEqual(ReceiptRecord.objects.count(), 0)
 
-    def test_stat_cards_reflect_real_counts(self):
-        other = User.objects.create_user(username="receipt_test_other", password="x")
-        other_reservation = Reservation.objects.create(
-            customer=other, customer_name="Other Customer", status=Reservation.Status.CONFIRMED)
-        for reservation, name in ((self.reservation, "a.jpg"), (other_reservation, "b.jpg")):
-            self.client.post(reverse("arabela_admin:receipt_upload"), data={
-                "reference_code": reservation.reference_code, "photo": _make_jpeg(name),
-            })
-        html = self.client.get(reverse("arabela_admin:receipt_records")).content.decode()
-        self.assertIn(">2<", html)  # total receipts and reservations covered both == 2
-
     def test_a_second_receipt_on_the_same_reservation_is_allowed(self):
         """No one-per-booking constraint -- a redo or a second physical receipt for a
         partial payment must not be blocked."""
@@ -2107,22 +2176,6 @@ class ReceiptRecordsTests(TestCase):
             self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(
             ReceiptRecord.objects.filter(reservation=self.reservation).count(), 2)
-
-    def test_view_full_image_link_is_present_and_bound_to_the_real_url(self):
-        self.client.post(reverse("arabela_admin:receipt_upload"), data={
-            "reference_code": self.reservation.reference_code, "photo": _make_jpeg(),
-        })
-        html = self.client.get(reverse("arabela_admin:receipt_records")).content.decode()
-        self.assertIn(':href="viewingReceipt.photoUrl"', html)
-        self.assertIn('target="_blank"', html)
-
-    def test_each_receipt_row_names_the_staff_member_who_uploaded_it(self):
-        response = self.client.post(reverse("arabela_admin:receipt_upload"), data={
-            "reference_code": self.reservation.reference_code, "photo": _make_jpeg(),
-        })
-        self.assertEqual(response.json()["receipt"]["uploadedBy"], "Ana Cruz")
-        html = self.client.get(reverse("arabela_admin:receipt_records")).content.decode()
-        self.assertIn(">Uploaded By<", html)
 
 
 class ReservationRecordsTests(TestCase):
@@ -2183,12 +2236,38 @@ class ReservationRecordsTests(TestCase):
         row = self._records()[self.two_gowns.reference_code]
         self.assertEqual(row["depositStatus"], "Held")
         self.assertEqual(row["deposit"], "₱4,000.00")
+        self.assertTrue(row["depositLink"].startswith(reverse("arabela_admin:security_deposits")))
         self.assertTrue(row["depositLink"].endswith("?search=" + self.two_gowns.reference_code))
+        self.assertEqual(row["depositLinkLabel"], "Open in Security Deposits")
         cancelled = Reservation.objects.create(
             customer=self.customer, customer_name="Maria Records", status=Reservation.Status.CANCELLED)
         row = self._records()[cancelled.reference_code]
         self.assertEqual(row["depositStatus"], "Not held")
         self.assertEqual(row["depositLink"], "")
+        self.assertEqual(row["depositLinkLabel"], "")
+
+    def test_awaiting_verification_links_to_payment_verification_not_security_deposits(self):
+        """Security Deposits only lists Confirmed-and-later bookings, so a Pending one
+        awaiting its payment check isn't on that page at all yet -- send staff to where
+        this booking's payment actually gets reviewed instead."""
+        pending = Reservation.objects.create(
+            customer=self.customer, customer_name="Maria Records",
+            status=Reservation.Status.PENDING, payment_proof_url="https://example.test/proof.jpg",
+        )
+        row = self._records()[pending.reference_code]
+        self.assertEqual(row["depositStatus"], "Awaiting verification")
+        self.assertTrue(row["depositLink"].startswith(reverse("arabela_admin:payment_verification")))
+        self.assertTrue(row["depositLink"].endswith("?search=" + pending.reference_code))
+        self.assertEqual(row["depositLinkLabel"], "Open in Payment Verification")
+
+        # Pending with no proof uploaded yet -- "Not paid", no link to anywhere.
+        no_proof = Reservation.objects.create(
+            customer=self.customer, customer_name="Maria Records", status=Reservation.Status.PENDING,
+        )
+        row = self._records()[no_proof.reference_code]
+        self.assertEqual(row["depositStatus"], "Not paid")
+        self.assertEqual(row["depositLink"], "")
+        self.assertEqual(row["depositLinkLabel"], "")
 
     def test_receipts_show_who_uploaded_them(self):
         self.client.post(reverse("arabela_admin:receipt_upload"), data={
@@ -2197,6 +2276,20 @@ class ReservationRecordsTests(TestCase):
         receipts = self._records()[self.two_gowns.reference_code]["receipts"]
         self.assertEqual(len(receipts), 1)
         self.assertEqual(receipts[0]["uploadedBy"], "Ana Cruz")
+
+    def test_photo_viewer_can_replace_an_uploaded_receipt(self):
+        """The photo viewer (not just the Upload Receipt modal) can fix a wrong upload
+        in place -- the gap this page used to have next to the old, now-removed
+        Receipt Records page, folded in here instead of keeping a second page for it."""
+        html = self.client.get(reverse("arabela_admin:reservation_records")).content.decode()
+        self.assertIn("replacePhoto(", html)
+        self.assertIn("rrReplaceFileInput", html)
+        self.assertIn('x-if="photo.id"', html)
+
+    def test_pending_upload_preview_can_be_viewed_full_size(self):
+        html = self.client.get(reverse("arabela_admin:reservation_records")).content.decode()
+        self.assertIn(':href="uploadPreviewUrl"', html)
+        self.assertIn("View full size", html)
 
     def test_staff_only(self):
         self.client.logout()
@@ -2310,12 +2403,10 @@ class FormsAndUiElementsRemovedTests(TestCase):
         "payment_verification",
         "rental_history",
         "security_deposits",
-        "receipt_records",
         "reservation_records",
         "active_reservations",
         "pending_approval",
         "gown_catalog",
-        "categories",
         "clients",
         "staff_management",
     ]
@@ -2356,3 +2447,1096 @@ class FormsAndUiElementsRemovedTests(TestCase):
             with self.subTest(page=slug):
                 response = self.client.get(reverse("arabela_admin:page", args=[slug]))
                 self.assertEqual(response.status_code, 404)
+
+
+def _owner_and_staff(prefix):
+    """(owner, plain staff) accounts -- the owner by role, the staff with a STAFF profile."""
+    owner = User.objects.create_user(username=f"{prefix}_owner", password="x", is_staff=True)
+    UserProfile.objects.create(user=owner, role=UserProfile.Role.OWNER)
+    staff = User.objects.create_user(username=f"{prefix}_staff", password="x", is_staff=True)
+    UserProfile.objects.create(user=staff, role=UserProfile.Role.STAFF)
+    return owner, staff
+
+
+class TagColorsTests(TestCase):
+    """Tag Colors: one physical-tag color per gown category, changeable by the OWNER only.
+
+    The colors are only ever a category property -- never stored per gown -- so changing
+    one recolors every gown in that category at once, past and future."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner, cls.staff = _owner_and_staff("tagcolors")
+
+    def _save(self, colors):
+        return self.client.post(
+            reverse("arabela_admin:gown_tag_colors_update"),
+            data=json.dumps({"colors": colors}), content_type="application/json",
+        )
+
+    # ---- the data rules -------------------------------------------------------------
+    def test_every_category_has_a_default_tag_color_from_the_palette(self):
+        # Pinned to Gown.Category so a new category can't ship without a tag color.
+        self.assertEqual(set(DEFAULT_CATEGORY_TAG_COLORS), set(Gown.Category.values))
+        for color in DEFAULT_CATEGORY_TAG_COLORS.values():
+            self.assertIn(color, TAG_COLOR_HEX)
+
+    def test_wedding_gown_defaults_to_a_white_tag(self):
+        self.assertEqual(resolve_tag_colors({})["Wedding Gown"], "White")
+
+    def test_saved_colors_win_and_untouched_categories_keep_their_default(self):
+        resolved = resolve_tag_colors({"Wedding Gown": "Red"})
+        self.assertEqual(resolved["Wedding Gown"], "Red")
+        self.assertEqual(resolved["Suit"], DEFAULT_CATEGORY_TAG_COLORS["Suit"])
+
+    def test_a_saved_color_that_left_the_palette_falls_back_to_the_default(self):
+        self.assertEqual(
+            resolve_tag_colors({"Wedding Gown": "Chartreuse"})["Wedding Gown"],
+            DEFAULT_CATEGORY_TAG_COLORS["Wedding Gown"],
+        )
+
+    def test_garbage_saved_settings_never_break_resolution(self):
+        for junk in (None, "nope", ["Wedding Gown"], 5):
+            with self.subTest(junk=junk):
+                self.assertEqual(resolve_tag_colors(junk), dict(DEFAULT_CATEGORY_TAG_COLORS))
+
+    # ---- who may change them ---------------------------------------------------------
+    def test_owner_can_change_a_tag_color(self):
+        self.client.force_login(self.owner)
+        response = self._save({"Wedding Gown": "Blue"})
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(SiteSettings.load().tag_colors()["Wedding Gown"], "Blue")
+        row = next(c for c in response.json()["colors"] if c["category"] == "Wedding Gown")
+        self.assertEqual(row["color"], "Blue")
+        self.assertEqual(row["hex"], TAG_COLOR_HEX["Blue"])
+
+    def test_a_superuser_counts_as_the_owner(self):
+        boss = User.objects.create_superuser(username="tagcolors_super", password="x")
+        self.client.force_login(boss)
+        self.assertEqual(self._save({"Suit": "Red"}).status_code, 200)
+
+    def test_staff_cannot_change_tag_colors_even_by_sending_the_request_directly(self):
+        """Hiding the controls protects nothing on its own -- the endpoint itself refuses."""
+        self.client.force_login(self.staff)
+        response = self._save({"Wedding Gown": "Blue"})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(SiteSettings.load().category_tag_colors, {})
+        self.assertEqual(SiteSettings.load().tag_colors()["Wedding Gown"], "White")
+
+    def test_a_staff_account_with_no_profile_is_not_the_owner(self):
+        bare = User.objects.create_user(username="tagcolors_bare", password="x", is_staff=True)
+        self.client.force_login(bare)
+        self.assertEqual(self._save({"Wedding Gown": "Blue"}).status_code, 403)
+
+    def test_signed_out_request_gets_json_401_not_a_login_redirect(self):
+        response = self._save({"Wedding Gown": "Blue"})
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["error"], "Unauthorized")
+
+    # ---- validation: all-or-nothing --------------------------------------------------
+    def test_an_unknown_category_rejects_the_whole_save(self):
+        self.client.force_login(self.owner)
+        response = self._save({"Wedding Gown": "Blue", "Not A Category": "Red"})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(SiteSettings.load().tag_colors()["Wedding Gown"], "White")
+
+    def test_an_unknown_color_rejects_the_whole_save(self):
+        self.client.force_login(self.owner)
+        response = self._save({"Suit": "Red", "Wedding Gown": "Chartreuse"})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(SiteSettings.load().category_tag_colors, {})
+
+    def test_empty_or_malformed_requests_are_rejected(self):
+        self.client.force_login(self.owner)
+        url = reverse("arabela_admin:gown_tag_colors_update")
+        for body in (b"not json", b"[]", b'{"colors": {}}', b'{"colors": []}', b"{}"):
+            with self.subTest(body=body):
+                response = self.client.post(url, data=body, content_type="application/json")
+                self.assertEqual(response.status_code, 400)
+
+    def test_separate_saves_merge_instead_of_replacing_each_other(self):
+        self.client.force_login(self.owner)
+        self._save({"Wedding Gown": "Blue"})
+        self._save({"Suit": "Red"})
+        saved = SiteSettings.load().tag_colors()
+        self.assertEqual((saved["Wedding Gown"], saved["Suit"]), ("Blue", "Red"))
+
+    def test_two_categories_can_share_a_color_but_it_is_reported(self):
+        self.client.force_login(self.owner)
+        response = self._save({"Suit": "White"})  # Wedding Gown is White by default
+        self.assertEqual(response.status_code, 200)
+        shared = {s["color"]: s["categories"] for s in response.json()["shared"]}
+        self.assertEqual(sorted(shared["White"]), ["Suit", "Wedding Gown"])
+
+    # ---- what the catalog page shows ---------------------------------------------------
+    def test_owner_gets_the_editing_controls(self):
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        self.assertTrue(response.context["can_edit_tag_colors"])
+        self.assertContains(response, "Save tag colors")
+        self.assertNotContains(response, "Only the owner can change tag colors.")
+
+    def test_staff_sees_the_list_but_no_editing_controls(self):
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        self.assertFalse(response.context["can_edit_tag_colors"])
+        self.assertNotContains(response, "Save tag colors")
+        self.assertContains(response, "Only the owner can change tag colors.")
+        # ...but the list itself is right there.
+        self.assertContains(response, "Wedding Gown")
+        self.assertEqual(
+            {row["key"]: row["tag_color"] for row in response.context["category_rows"]}["Wedding Gown"],
+            "White",
+        )
+
+    def test_a_gowns_row_shows_its_categorys_tag_color_and_the_number_to_write_on_it(self):
+        self.client.force_login(self.staff)
+        gown = _make_gown(1, category=Gown.Category.WEDDING_GOWN, gown_id="Wedding Gown-WH-012")
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        row = next(g for g in response.context["gowns"] if g.id == gown.id)
+        self.assertEqual((row.tag_color, row.tag_number), ("White", "012"))
+        self.assertContains(response, "White tag")
+
+    def test_changing_a_category_color_recolors_every_gown_in_it(self):
+        gowns = [_make_gown(n, category=Gown.Category.WEDDING_GOWN) for n in (1, 2, 3)]
+        self.client.force_login(self.owner)
+        self._save({"Wedding Gown": "Red"})
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        for gown in gowns:
+            row = next(g for g in response.context["gowns"] if g.id == gown.id)
+            self.assertEqual(row.tag_color, "Red")
+
+
+class CatalogSearchAndOrderTests(TestCase):
+    """The tag number has to be easy to find and read: searchable in every form staff
+    might type it, and listed in the order the numbers actually run."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(username="catsearch_staff", password="x", is_staff=True)
+
+    def setUp(self):
+        self.client.force_login(self.staff)
+
+    def test_search_text_covers_id_name_colors_and_every_form_of_the_number(self):
+        gown = _make_gown(
+            1, category=Gown.Category.WEDDING_GOWN, gown_id="Wedding Gown-WH-012",
+            name="White", color_name="White", color_code="WH",
+        )
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        hay = next(g for g in response.context["gowns"] if g.id == gown.id).search_hay
+        for needle in ("wedding gown-wh-012", "white", "012", "12", "#12", "medium"):
+            with self.subTest(needle=needle):
+                self.assertIn(needle, hay)
+
+    def test_the_client_side_filter_data_uses_the_same_search_text_as_the_row(self):
+        gown = _make_gown(1, category=Gown.Category.WEDDING_GOWN, gown_id="Wedding Gown-WH-012")
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        row = next(g for g in response.context["gowns"] if g.id == gown.id)
+        mini = next(m for m in response.context["gowns_min"] if m["id"] == gown.id)
+        self.assertEqual(mini["hay"], row.search_hay)
+
+    def test_a_tag_color_word_finds_the_gowns_in_that_category(self):
+        wedding = _make_gown(1, category=Gown.Category.WEDDING_GOWN, gown_id="Wedding Gown-BU-001", color_name="Blue", color_code="BU")
+        suit = _make_gown(2, category=Gown.Category.SUIT, gown_id="Suit-BU-001", color_name="Blue", color_code="BU")
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        hays = {m["id"]: m["hay"] for m in response.context["gowns_min"]}
+        # Wedding Gowns are tagged White, Suits Black -- so "white tag" finds only the former,
+        # even though both gowns are really Blue.
+        self.assertIn("white", hays[wedding.id])
+        self.assertIn("black", hays[suit.id])
+        self.assertNotIn("black", hays[wedding.id])
+
+    def test_gowns_list_by_category_then_number_not_grouped_by_color(self):
+        ids = ["Wedding Gown-WH-001", "Wedding Gown-BU-002", "Wedding Gown-WH-003", "Wedding Gown-BU-004"]
+        for n, gown_id in enumerate(ids, start=1):
+            _make_gown(n, category=Gown.Category.WEDDING_GOWN, gown_id=gown_id,
+                       color_code=gown_id.split("-")[1], color_name="X")
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        listed = [g.gown_id for g in response.context["gowns"]]
+        self.assertEqual(listed, ids)
+
+    def test_a_gown_whose_id_has_no_number_sinks_to_the_end_of_its_category(self):
+        _make_gown(1, category=Gown.Category.WEDDING_GOWN, gown_id="Wedding Gown-WH-005")
+        odd = _make_gown(2, category=Gown.Category.WEDDING_GOWN, gown_id="Wedding Gown-LEGACY")
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        listed = [g.gown_id for g in response.context["gowns"]]
+        self.assertEqual(listed, ["Wedding Gown-WH-005", odd.gown_id])
+        self.assertEqual(next(g for g in response.context["gowns"] if g.id == odd.id).tag_number, "—")
+
+
+class GownRemovalLogTests(TestCase):
+    """Removing a gown always records WHY, in the same atomic step as the delete -- so a
+    number missing from the catalog is either explained by the Removal Log or is exactly
+    the kind of gap worth asking about."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            username="removal_staff", password="x", is_staff=True,
+            first_name="Maria", last_name="Cruz",
+        )
+        cls.customer = User.objects.create_user(username="removal_customer", password="x")
+
+    def setUp(self):
+        self.client.force_login(self.staff)
+
+    def _remove(self, gown, **body):
+        return self.client.post(
+            reverse("arabela_admin:gown_delete", args=[gown.id]),
+            data=json.dumps(body), content_type="application/json",
+        )
+
+    # ---- a reason is mandatory -----------------------------------------------------------
+    def test_no_reason_means_nothing_is_deleted_and_nothing_is_logged(self):
+        gown = _make_gown()
+        for body in ({}, {"reason": ""}, {"reason": "Because"}, {"note": "just a note"}):
+            with self.subTest(body=body):
+                response = self._remove(gown, **body)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("why", response.json()["error"].lower())
+        self.assertTrue(Gown.objects.filter(id=gown.id).exists())
+        self.assertEqual(GownRemoval.objects.count(), 0)
+
+    def test_an_empty_body_is_refused_too(self):
+        gown = _make_gown()
+        response = self.client.post(reverse("arabela_admin:gown_delete", args=[gown.id]))
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(Gown.objects.filter(id=gown.id).exists())
+
+    def test_other_needs_a_note(self):
+        gown = _make_gown()
+        self.assertEqual(self._remove(gown, reason="Other").status_code, 400)
+        self.assertEqual(self._remove(gown, reason="Other", note="   ").status_code, 400)
+        self.assertTrue(Gown.objects.filter(id=gown.id).exists())
+        self.assertEqual(self._remove(gown, reason="Other", note="Donated to the church").status_code, 200)
+
+    def test_an_over_long_note_is_refused(self):
+        gown = _make_gown()
+        self.assertEqual(self._remove(gown, reason="Damaged", note="x" * 301).status_code, 400)
+        self.assertTrue(Gown.objects.filter(id=gown.id).exists())
+
+    # ---- what gets recorded --------------------------------------------------------------
+    def test_a_removal_is_logged_with_everything_needed_to_recognise_the_gown_later(self):
+        gown = _make_gown(
+            3, category=Gown.Category.WEDDING_GOWN, gown_id="Wedding Gown-WH-003",
+            name="White", color_name="White", color_code="WH", size=Gown.Size.LARGE,
+            photo_url="https://example.com/white.jpg",
+        )
+        response = self._remove(gown, reason="Lost or stolen", note="Not on the rack after closing")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertFalse(Gown.objects.filter(id=gown.id).exists())
+
+        entry = GownRemoval.objects.get()
+        self.assertEqual(
+            (entry.gown_id, entry.tracking_number, entry.name, entry.category, entry.color_name, entry.size),
+            ("Wedding Gown-WH-003", 3, "White", "Wedding Gown", "White", "Large"),
+        )
+        self.assertEqual(entry.photo_url, "https://example.com/white.jpg")
+        self.assertEqual((entry.reason, entry.note), ("Lost or stolen", "Not on the rack after closing"))
+        self.assertEqual(entry.removed_by, self.staff)
+        self.assertEqual(entry.removed_by_name, "Maria Cruz")
+        self.assertIsNotNone(entry.removed_at)
+        self.assertIn("retired", response.json()["message"])
+
+    def test_the_log_keeps_saying_who_did_it_after_that_account_is_deleted(self):
+        gown = _make_gown()
+        self._remove(gown, reason="Retired")
+        self.staff.delete()
+        entry = GownRemoval.objects.get()
+        self.assertIsNone(entry.removed_by)
+        self.assertEqual(entry.removed_by_name, "Maria Cruz")
+        self.staff = User.objects.create_user(username="removal_staff2", password="x", is_staff=True)
+
+    # ---- the reservation guard still holds ------------------------------------------------
+    def test_a_gown_on_an_active_reservation_is_refused_and_logs_nothing(self):
+        gown = _make_gown()
+        reservation = Reservation.objects.create(customer=self.customer, customer_name="Booked Customer")
+        ReservationItem.objects.create(
+            reservation=reservation, gown=gown, gown_name=gown.name,
+            rental_date=date.today(), return_date=date.today() + timedelta(days=3),
+        )
+        response = self._remove(gown, reason="Damaged")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(reservation.reference_code, response.json()["error"])
+        self.assertTrue(Gown.objects.filter(id=gown.id).exists())
+        self.assertEqual(GownRemoval.objects.count(), 0)
+
+    def test_the_log_entry_and_the_delete_happen_together_or_not_at_all(self):
+        gown = _make_gown()
+        self.client.raise_request_exception = False
+        with patch.object(Gown, "delete", side_effect=RuntimeError("database went away")):
+            response = self._remove(gown, reason="Damaged")
+        self.assertEqual(response.status_code, 500)
+        self.assertTrue(Gown.objects.filter(id=gown.id).exists())
+        self.assertEqual(GownRemoval.objects.count(), 0, "a failed delete must not leave a log entry claiming it happened")
+
+    # ---- numbers are never reused -----------------------------------------------------------
+    def test_a_removed_gowns_number_is_never_given_to_a_new_gown(self):
+        def add(color_code, color_name="White"):
+            r = self.client.post(reverse("arabela_admin:gown_create"), data={
+                "name": "White", "category": "Wedding Gown", "color_name": color_name, "color_code": color_code,
+                "size": "Medium", "rental_price": "20000", "name_choice": "same",
+            })
+            self.assertEqual(r.status_code, 200, r.content)
+            return r.json()["gown"]
+
+        first, second, third = add("WH"), add("WH"), add("BU", "Blue")
+        self.assertEqual(
+            [g["gown_id"] for g in (first, second, third)],
+            ["Wedding Gown-WH-001", "Wedding Gown-WH-002", "Wedding Gown-BU-003"],
+        )
+        self.assertEqual(self._remove(Gown.objects.get(id=second["id"]), reason="Damaged").status_code, 200)
+        fourth = add("WH")
+        self.assertEqual(fourth["gown_id"], "Wedding Gown-WH-004")
+        # The retired number is still accounted for in the log.
+        self.assertEqual(GownRemoval.objects.get().gown_id, "Wedding Gown-WH-002")
+
+    # ---- bulk ---------------------------------------------------------------------------------
+    def _bulk(self, **body):
+        return self.client.post(
+            reverse("arabela_admin:gown_bulk_action"),
+            data=json.dumps(body), content_type="application/json",
+        )
+
+    def test_bulk_remove_without_a_reason_deletes_nothing(self):
+        gowns = [_make_gown(n) for n in (1, 2)]
+        response = self._bulk(action="delete", ids=[g.id for g in gowns])
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Gown.objects.count(), 2)
+        self.assertEqual(GownRemoval.objects.count(), 0)
+
+    def test_bulk_remove_logs_each_gown_and_skips_the_ones_on_a_reservation(self):
+        free_a, free_b, booked = _make_gown(1), _make_gown(2), _make_gown(3)
+        reservation = Reservation.objects.create(customer=self.customer, customer_name="Bulk Customer")
+        ReservationItem.objects.create(
+            reservation=reservation, gown=booked, gown_name=booked.name,
+            rental_date=date.today(), return_date=date.today() + timedelta(days=3),
+        )
+        response = self._bulk(action="delete", ids=[free_a.id, free_b.id, booked.id], reason="Retired", note="Sold")
+        self.assertEqual(response.status_code, 200, response.content)
+        result = response.json()
+        self.assertEqual((result["deleted"], len(result["skipped"])), (2, 1))
+        self.assertEqual(
+            sorted(GownRemoval.objects.values_list("gown_id", flat=True)),
+            sorted([free_a.gown_id, free_b.gown_id]),
+        )
+        self.assertEqual({r.reason for r in GownRemoval.objects.all()}, {"Retired"})
+        self.assertTrue(Gown.objects.filter(id=booked.id).exists())
+
+    # ---- what staff see ------------------------------------------------------------------------
+    def test_the_catalog_lists_removals_newest_first_with_undated_history_last(self):
+        old = GownRemoval.objects.create(
+            gown_id="Wedding Gown-WH-018", tracking_number=18, category="Wedding Gown",
+            reason="Other", note="Reason not recorded", removed_at=None,
+        )
+        recent = GownRemoval.objects.create(
+            gown_id="Wedding Gown-WH-030", tracking_number=30, name="White", category="Wedding Gown",
+            reason="Damaged", removed_by_name="Maria Cruz", removed_at=timezone.now(),
+        )
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        self.assertEqual([r.id for r in response.context["gown_removals"]], [recent.id, old.id])
+        self.assertContains(response, "Wedding Gown-WH-030")
+        self.assertContains(response, "Damaged beyond repair")
+        self.assertContains(response, "Removed before the Removal Log existed")
+        self.assertEqual(response.context["gown_removals"][1].number_label, "018")
+
+    def test_the_removal_search_text_matches_the_number_in_every_form(self):
+        GownRemoval.objects.create(
+            gown_id="Wedding Gown-WH-003", tracking_number=3, name="White", category="Wedding Gown",
+            reason="Damaged", removed_at=timezone.now(),
+        )
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        hay = response.context["removal_hays"][0]
+        for needle in ("wedding gown-wh-003", "003", "#3", "damaged beyond repair", "white"):
+            with self.subTest(needle=needle):
+                self.assertIn(needle, hay)
+
+    def test_the_remove_modal_offers_every_reason_and_explains_what_will_happen(self):
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        for label in ("Damaged beyond repair", "Lost or stolen", "Retired (sold or no longer offered)", "Other"):
+            self.assertContains(response, label)
+        self.assertContains(response, "retired for good")
+        self.assertContains(response, "Removal Log")
+
+    def test_an_empty_log_says_so(self):
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        self.assertContains(response, "No gowns have been removed yet.")
+
+
+class GownNameConflictTests(TestCase):
+    """Adding a gown whose name is already used in its category. The customer site shows
+    every gown sharing a name as ONE product with a quantity -- right for another size of
+    the same dress, wrong for a different dress that just shares the name -- so the person
+    adding it is asked which it is, and a 'different' one is numbered automatically."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(username="nameconf_staff", password="x", is_staff=True)
+
+    def setUp(self):
+        self.client.force_login(self.staff)
+
+    def _add(self, name="White", category="Wedding Gown", **extra):
+        data = {
+            "name": name, "category": category, "color_name": "White", "color_code": "WH",
+            "size": "Medium", "rental_price": "20000",
+        }
+        data.update(extra)
+        return self.client.post(reverse("arabela_admin:gown_create"), data=data)
+
+    def test_the_first_gown_with_a_name_is_added_without_any_question(self):
+        response = self._add()
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["gown"]["name"], "White")
+
+    def test_a_repeated_name_is_asked_about_and_nothing_is_saved_yet(self):
+        self._add()
+        response = self._add()
+        self.assertEqual(response.status_code, 409)
+        body = response.json()
+        self.assertEqual(body["code"], "name_conflict")
+        self.assertEqual(body["name_conflict"]["name"], "White")
+        self.assertEqual(body["name_conflict"]["count"], 1)
+        self.assertEqual(body["name_conflict"]["existing"][0]["gown_id"], "Wedding Gown-WH-001")
+        self.assertEqual(Gown.objects.count(), 1)
+
+    def test_the_question_comes_before_the_photo_is_uploaded(self):
+        """Answering must not upload the photo twice."""
+        self._add()
+        photo = SimpleUploadedFile("dress.jpg", b"\xff\xd8\xff\xe0fakejpeg", content_type="image/jpeg")
+        with patch("arabela_admin.views._save_gown_photo") as save_photo:
+            response = self._add(photo=photo)
+        self.assertEqual(response.status_code, 409)
+        save_photo.assert_not_called()
+
+    def test_same_gown_keeps_the_identical_name_so_it_groups_into_one_listing(self):
+        first = self._add().json()["gown"]
+        second = self._add(name_choice="same", size="Large")
+        self.assertEqual(second.status_code, 200, second.content)
+        self.assertEqual(second.json()["gown"]["name"], first["name"])
+        # Two gowns, one name -> the customer site's grouping shows them as one product.
+        self.assertEqual(Gown.objects.filter(name="White").count(), 2)
+
+    def test_a_different_gown_is_numbered_automatically(self):
+        self._add()
+        second = self._add(name_choice="different")
+        third = self._add(name_choice="different")
+        self.assertEqual(second.json()["gown"]["name"], "White (2)")
+        self.assertEqual(third.json()["gown"]["name"], "White (3)")
+
+    def test_a_different_gown_still_saves_when_the_plain_names_counter_already_reached_its_number(self):
+        """The real catalog has many gowns named 'White' (slugs white, white-2, white-3...).
+        'White (2)' slugifies to 'white-2' -- taken -- and this used to answer 'Couldn't save
+        that gown just now'."""
+        self._add()
+        self._add(name_choice="same")
+        self._add(name_choice="same")
+        response = self._add(name_choice="different")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["gown"]["name"], "White (2)")
+        slugs = list(Gown.objects.values_list("slug", flat=True))
+        self.assertEqual(len(slugs), len(set(slugs)), slugs)
+
+    def test_the_comparison_ignores_case_and_surrounding_spaces(self):
+        self._add()
+        self.assertEqual(self._add(name="  white ").status_code, 409)
+        response = self._add(name="WHITE", name_choice="different")
+        self.assertEqual(response.json()["gown"]["name"], "WHITE (2)")
+
+    def test_retyping_a_numbered_name_gives_the_next_number_not_a_double_suffix(self):
+        self._add()
+        self._add(name_choice="different")  # White (2)
+        response = self._add(name="White (2)", name_choice="different")
+        self.assertEqual(response.json()["gown"]["name"], "White (3)")
+
+    def test_the_same_name_in_another_category_is_not_a_conflict(self):
+        self._add()
+        response = self._add(category="Long Gown")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["gown"]["name"], "White")
+
+    def test_saying_different_when_the_name_is_free_leaves_it_alone(self):
+        response = self._add(name="Ivory", name_choice="different")
+        self.assertEqual(response.json()["gown"]["name"], "Ivory")
+
+    def test_a_bogus_choice_is_treated_as_no_answer(self):
+        self._add()
+        self.assertEqual(self._add(name_choice="whatever").status_code, 409)
+
+    def test_the_numbered_name_always_fits_the_name_column(self):
+        long_name = "W" * 150
+        self._add(name=long_name)
+        response = self._add(name=long_name, name_choice="different")
+        self.assertEqual(response.status_code, 200, response.content)
+        name = response.json()["gown"]["name"]
+        self.assertEqual(len(name), 150)
+        self.assertTrue(name.endswith(" (2)"))
+
+    def test_the_form_fills_the_name_from_the_color_and_offers_the_choice(self):
+        page = self.client.get(reverse("arabela_admin:gown_catalog"))
+        self.assertContains(page, "syncNameFromColor()")
+        self.assertContains(page, "addGown('same')")
+        self.assertContains(page, "addGown('different')")
+
+
+class GownPhysicalCheckTests(TestCase):
+    """The walkthrough check: someone confirms a gown is physically present, and the gown
+    remembers when and by whom -- what narrows a missing gown to a time window."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            username="check_staff", password="x", is_staff=True, first_name="Ana", last_name="Reyes",
+        )
+
+    def setUp(self):
+        self.client.force_login(self.staff)
+
+    def _bulk(self, **body):
+        return self.client.post(
+            reverse("arabela_admin:gown_bulk_action"),
+            data=json.dumps(body), content_type="application/json",
+        )
+
+    def test_marking_gowns_checked_stamps_when_and_by_whom(self):
+        a, b, untouched = _make_gown(1), _make_gown(2), _make_gown(3)
+        before = timezone.now()
+        response = self._bulk(action="checked", ids=[a.id, b.id])
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["updated"], 2)
+        for gown in (a, b):
+            gown.refresh_from_db()
+            self.assertGreaterEqual(gown.last_checked_at, before)
+            self.assertEqual(gown.last_checked_by, self.staff)
+        untouched.refresh_from_db()
+        self.assertIsNone(untouched.last_checked_at)
+
+    def test_checking_a_gown_bumps_its_updated_at_too(self):
+        gown = _make_gown()
+        original = gown.updated_at
+        self._bulk(action="checked", ids=[gown.id])
+        gown.refresh_from_db()
+        self.assertGreater(gown.updated_at, original)
+
+    def test_the_catalog_reports_never_checked_recent_and_stale(self):
+        never, recent, stale = _make_gown(1), _make_gown(2), _make_gown(3)
+        now = timezone.now()
+        Gown.objects.filter(id=recent.id).update(last_checked_at=now - timedelta(days=2), last_checked_by=self.staff)
+        Gown.objects.filter(id=stale.id).update(last_checked_at=now - timedelta(days=20), last_checked_by=self.staff)
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        rows = {g.id: g for g in response.context["gowns"]}
+        self.assertIsNone(rows[never.id].days_since_check)
+        self.assertEqual(rows[never.id].check_label, "Never checked")
+        self.assertEqual(rows[recent.id].days_since_check, 2)
+        self.assertEqual(rows[stale.id].days_since_check, 20)
+        self.assertIn("by Ana Reyes", rows[recent.id].check_label)
+        self.assertEqual(response.context["checked_recent_count"], 1)
+
+    def test_the_filter_data_marks_never_checked_as_none_so_it_counts_as_due(self):
+        gown = _make_gown()
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        mini = next(m for m in response.context["gowns_min"] if m["id"] == gown.id)
+        self.assertIsNone(mini["check_days"])
+        self.assertEqual(mini["check_label"], "Never checked")
+
+    def test_signed_out_and_unknown_ids_are_handled(self):
+        self.client.logout()
+        self.assertEqual(self._bulk(action="checked", ids=[1]).status_code, 401)
+        self.client.force_login(self.staff)
+        response = self._bulk(action="checked", ids=[999999999])
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["updated"], 0)
+
+
+class BookingScreensShowTheMatchedGownTests(TestCase):
+    """At pick-up several gowns can share a name, so the booking screens name the exact
+    physical gown -- its ID, and the color of its category's tag -- for the staffer to
+    match against the tags on the rack."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(username="booking_tag_staff", password="x", is_staff=True)
+        cls.customer = User.objects.create_user(username="booking_tag_customer", password="x")
+
+    def setUp(self):
+        self.client.force_login(self.staff)
+
+    def _booking(self, status=Reservation.Status.CONFIRMED, gown="make"):
+        if gown == "make":
+            gown = _make_gown(
+                12, category=Gown.Category.WEDDING_GOWN, gown_id="Wedding Gown-WH-012", name="White",
+            )
+        reservation = Reservation.objects.create(
+            customer=self.customer, customer_name="Tag Customer", status=status,
+        )
+        item = ReservationItem.objects.create(
+            reservation=reservation, gown=gown, gown_name="White",
+            rental_date=date.today(), return_date=date.today() + timedelta(days=3),
+        )
+        return reservation, item
+
+    def test_active_reservations_names_the_exact_gown_and_its_tag(self):
+        self._booking()
+        response = self.client.get(reverse("arabela_admin:active_reservations"))
+        self.assertContains(response, "Wedding Gown-WH-012")
+        self.assertContains(response, "White tag")
+
+    def test_active_reservations_can_be_searched_by_gown_id(self):
+        """The reservation's own row filter includes every matched gown's ID (escaped the
+        way this page already escapes customer names, so its hyphens appear as \\u002D)."""
+        self._booking()
+        response = self.client.get(reverse("arabela_admin:active_reservations"))
+        self.assertContains(response, "wedding gown\\u002Dwh\\u002D012")
+
+    def test_an_item_with_no_matched_gown_shows_no_tag_line(self):
+        self._booking(gown=None)
+        response = self.client.get(reverse("arabela_admin:active_reservations"))
+        self.assertNotContains(response, "Match this to the tag on the dress")
+
+    def test_the_tag_follows_the_owners_color_choice(self):
+        self._booking()
+        SiteSettings.load()
+        settings_obj = SiteSettings.load()
+        settings_obj.category_tag_colors = {"Wedding Gown": "Red"}
+        settings_obj.save()
+        response = self.client.get(reverse("arabela_admin:active_reservations"))
+        self.assertContains(response, "Red tag")
+        self.assertNotContains(response, "White tag")
+
+    def test_pending_approval_names_the_exact_gown_and_its_tag(self):
+        self._booking(status=Reservation.Status.PENDING)
+        response = self.client.get(reverse("arabela_admin:pending_approval"))
+        self.assertContains(response, "Wedding Gown-WH-012")
+        self.assertContains(response, "White tag")
+
+    def test_the_calendars_booking_details_get_the_gown_id_and_tag_color(self):
+        self._booking()
+        response = self.client.get(reverse("arabela_admin:rental_schedule"))
+        booking_events = [
+            e for e in response.context["calendar_events"]
+            if e.get("extendedProps", {}).get("gownCode")
+        ]
+        self.assertTrue(booking_events)
+        props = booking_events[0]["extendedProps"]
+        self.assertEqual(props["gownCode"], "Wedding Gown-WH-012")
+        self.assertEqual(props["tagColor"], "White")
+        self.assertEqual(props["tagHex"], TAG_COLOR_HEX["White"])
+        self.assertContains(response, 'id="bookingModalGownTag"')
+
+    def test_a_calendar_booking_with_no_matched_gown_has_empty_tag_fields(self):
+        self._booking(gown=None)
+        response = self.client.get(reverse("arabela_admin:rental_schedule"))
+        props = next(
+            e["extendedProps"] for e in response.context["calendar_events"]
+            if e.get("extendedProps", {}).get("itemId")
+        )
+        self.assertEqual((props["gownCode"], props["tagColor"], props["tagHex"]), ("", "", ""))
+
+    def test_reservation_records_items_carry_the_tag_color_beside_the_gown_id(self):
+        self._booking()
+        response = self.client.get(reverse("arabela_admin:reservation_records"))
+        item = response.context["records"][0]["items"][0]
+        self.assertEqual(item["gownCode"], "Wedding Gown-WH-012")
+        self.assertEqual((item["tagColor"], item["tagHex"]), ("White", TAG_COLOR_HEX["White"]))
+
+
+class MoveGownsBetweenCategoriesWorkflowTests(TestCase):
+    """The procedure for moving gowns to another category -- e.g. four gowns catalogued as
+    Wedding Gowns that are really Ball Gowns: check any open booking on them back in, remove
+    them (a reason, logged), then add them under the new category with the same photo. Runs
+    through the same views staff use, so it doubles as proof the whole path works."""
+
+    MOVES = [
+        ("Wedding Gown-BU-001", "Wedding Gown 18", "Blue", "BU", "Ball Gown 95"),
+        ("Wedding Gown-GD-001", "Wedding Gown 21", "Gold", "GD", "Ball Gown 96"),
+        ("Wedding Gown-GN-001", "Wedding Gown 22", "Green", "GN", "Ball Gown 97"),
+        ("Wedding Gown-PK-001", "Wedding Gown 19", "Pink", "PK", "Ball Gown 98"),
+    ]
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = User.objects.create_user(
+            username="move_owner", password="x", is_staff=True, first_name="Olivia", last_name="Owner",
+        )
+        UserProfile.objects.create(user=cls.owner, role=UserProfile.Role.OWNER)
+        cls.customer = User.objects.create_user(username="move_customer", password="x")
+
+    def setUp(self):
+        self.client.force_login(self.owner)
+        self.gowns = []
+        self.items = []
+        reservation = Reservation.objects.create(
+            customer=self.customer, customer_name="Move Customer", status=Reservation.Status.CONFIRMED,
+        )
+        for n, (gown_id, name, color, code, _new) in enumerate(self.MOVES):
+            gown = Gown.objects.create(
+                gown_id=gown_id, name=name, category="Wedding Gown", color_name=color, color_code=code,
+                size=Gown.Size.MEDIUM, rental_price=Decimal("20000.00"), status=Gown.Status.RESERVED,
+                photo_url=f"https://res.example.com/{code}.jpg",
+            )
+            self.gowns.append(gown)
+            self.items.append(ReservationItem.objects.create(
+                reservation=reservation, gown=gown, gown_name=name,
+                rental_date=date.today(), return_date=date.today() + timedelta(days=4),
+            ))
+        # A neighbouring wedding gown that is NOT moved, holding the highest number.
+        self.stays = Gown.objects.create(
+            gown_id="Wedding Gown-WH-033", name="Wedding Gown 33", category="Wedding Gown",
+            color_name="White", color_code="WH", size=Gown.Size.MEDIUM, rental_price=Decimal("20000.00"),
+        )
+
+    def _remove(self, gown, **body):
+        return self.client.post(
+            reverse("arabela_admin:gown_delete", args=[gown.id]),
+            data=json.dumps(body), content_type="application/json",
+        )
+
+    def _check_in(self, item):
+        return self.client.post(
+            reverse("arabela_admin:reservation_item_mark_returned", args=[item.id]),
+            data=json.dumps({"condition": "Good"}), content_type="application/json",
+        )
+
+    def test_the_whole_move_works_in_order(self):
+        # 1. While the bookings are open the gowns can't be removed -- and nothing is logged.
+        for gown in self.gowns:
+            response = self._remove(gown, reason="Other", note="Moving to Ball Gown")
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("RSV-", response.json()["error"])
+        self.assertEqual(GownRemoval.objects.count(), 0)
+
+        # 2. Check the bookings in through the normal workflow.
+        for item in self.items:
+            self.assertEqual(self._check_in(item).status_code, 200)
+
+        # 3. Remove each gown with a reason; every removal is logged with its number.
+        for gown, (gown_id, name, *_rest) in zip(self.gowns, self.MOVES):
+            response = self._remove(gown, reason="Other", note=f"Moved to Ball Gown (was {name}).")
+            self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(
+            sorted(GownRemoval.objects.values_list("gown_id", flat=True)),
+            sorted(m[0] for m in self.MOVES),
+        )
+        self.assertFalse(Gown.objects.filter(category="Wedding Gown").exclude(id=self.stays.id).exists())
+
+        # The bookings survive, keeping the gown's name, with no gown attached.
+        for item, (_gid, name, *_rest) in zip(self.items, self.MOVES):
+            item.refresh_from_db()
+            self.assertIsNone(item.gown_id)
+            self.assertEqual(item.gown_name, name)
+            self.assertEqual(item.stage, ReservationItem.Stage.RETURNED)
+
+        # 4. Add them as Ball Gowns 95-98 (fresh category -> numbers 001-004), same photos.
+        created = []
+        for _gid, _name, color, code, new_name in self.MOVES:
+            response = self.client.post(reverse("arabela_admin:gown_create"), data={
+                "name": new_name, "category": "Ball Gown", "color_name": color, "color_code": code,
+                "size": "Medium", "rental_price": "20000", "condition": "Good", "status": "Available",
+            })
+            self.assertEqual(response.status_code, 200, response.content)
+            made = Gown.objects.get(id=response.json()["gown"]["id"])
+            made.photo_url = f"https://res.example.com/{code}.jpg"
+            made.save(update_fields=["photo_url", "updated_at"])
+            created.append(made)
+        self.assertEqual(
+            [g.gown_id for g in created],
+            ["Ball Gown-BU-001", "Ball Gown-GD-002", "Ball Gown-GN-003", "Ball Gown-PK-004"],
+        )
+        self.assertEqual([g.name for g in created], [m[4] for m in self.MOVES])
+        self.assertEqual([g.status for g in created], ["Available"] * 4)
+        self.assertTrue(all(g.photo_url for g in created))
+        self.assertEqual(len({g.slug for g in created}), 4)
+
+        # 5. The wedding side keeps counting from its own highest number -- the moved gowns'
+        # numbers are retired, not handed to the next wedding gown.
+        response = self.client.post(reverse("arabela_admin:gown_create"), data={
+            "name": "Ivory", "category": "Wedding Gown", "color_name": "Ivory", "color_code": "IV",
+            "size": "Medium", "rental_price": "20000",
+        })
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["gown"]["gown_id"], "Wedding Gown-IV-034")
+
+
+class ScheduleActionsTests(TestCase):
+    """The scheduling actions now live ONLY in Active Reservations -- Mark Picked Up (on or
+    after the current pick-up date), Change pick-up date (earlier only) and Change return
+    date (later only) -- and the Rental Schedule is view-only. Everything the calendar and
+    the early / late remarks read is the booking's own pick-up / return date, so a change
+    shows in the Rental Schedule colours by itself."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(username="sched_staff", password="x", is_staff=True)
+        cls.customer = User.objects.create_user(username="sched_customer", password="x")
+
+    def setUp(self):
+        self.client.force_login(self.staff)
+        self.today = date.today()
+        self.gown = _make_gown(status=Gown.Status.AVAILABLE)
+
+    def _item(self, start, end, gown=None, status=Reservation.Status.CONFIRMED, name="Sched Customer",
+              stage=ReservationItem.Stage.PICKUP, **extra):
+        gown = gown or self.gown
+        reservation = Reservation.objects.create(
+            customer=self.customer, customer_name=name, status=status, phone="09171234567",
+        )
+        return ReservationItem.objects.create(
+            reservation=reservation, gown=gown, gown_name=gown.name, stage=stage,
+            rental_date=self.today + timedelta(days=start), return_date=self.today + timedelta(days=end), **extra,
+        )
+
+    def _post(self, name, item, date_=None):
+        kwargs = {"data": json.dumps({"date": date_.isoformat()}), "content_type": "application/json"} if date_ else {}
+        return self.client.post(reverse(f"arabela_admin:{name}", args=[item.id]), **kwargs)
+
+    def _remarks(self, item):
+        item.refresh_from_db()
+        return [r["text"] for r in views_module._item_remarks(item, self.today)]
+
+    # ---- the old editing endpoints are gone ------------------------------------------------
+    def test_the_old_free_editing_endpoints_no_longer_exist(self):
+        from django.urls import NoReverseMatch
+        for name in ("reservation_item_reschedule", "reservation_item_set_actual_date"):
+            with self.subTest(name=name), self.assertRaises(NoReverseMatch):
+                reverse(f"arabela_admin:{name}", args=[1])
+
+    # ---- Mark Picked Up -----------------------------------------------------------------------
+    def test_mark_picked_up_is_refused_before_the_pickup_date(self):
+        item = self._item(1, 5)
+        response = self._post("reservation_item_mark_picked_up", item)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("not yet", response.json()["error"])
+        item.refresh_from_db()
+        self.assertEqual((item.stage, item.picked_up_on), (ReservationItem.Stage.PICKUP, None))
+
+    def test_mark_picked_up_works_on_the_pickup_date_and_records_today(self):
+        item = self._item(0, 4)
+        response = self._post("reservation_item_mark_picked_up", item)
+        self.assertEqual(response.status_code, 200, response.content)
+        item.refresh_from_db()
+        self.gown.refresh_from_db()
+        self.assertEqual((item.stage, item.picked_up_on), (ReservationItem.Stage.RESERVED, self.today))
+        self.assertEqual(self.gown.status, Gown.Status.RESERVED)
+
+    def test_a_late_customer_can_still_be_marked_picked_up(self):
+        item = self._item(-3, 1)
+        self.assertEqual(self._post("reservation_item_mark_picked_up", item).status_code, 200)
+
+    def test_it_follows_the_changed_pickup_date_not_the_original(self):
+        item = self._item(6, 10)
+        self.assertEqual(self._post("reservation_item_mark_picked_up", item).status_code, 400)
+        self.assertEqual(self._post("reservation_item_change_pickup", item, self.today + timedelta(days=2)).status_code, 200)
+        self.assertEqual(self._post("reservation_item_mark_picked_up", item).status_code, 400)  # 2 days still to go
+        self.assertEqual(self._post("reservation_item_change_pickup", item, self.today).status_code, 200)
+        self.assertEqual(self._post("reservation_item_mark_picked_up", item).status_code, 200)
+
+    def test_mark_picked_up_twice_and_unapproved_bookings_are_refused(self):
+        item = self._item(0, 4)
+        self._post("reservation_item_mark_picked_up", item)
+        self.assertEqual(self._post("reservation_item_mark_picked_up", item).status_code, 400)
+        pending = self._item(0, 4, status=Reservation.Status.PENDING, name="Pending One", gown=_make_gown(2))
+        self.assertEqual(self._post("reservation_item_mark_picked_up", pending).status_code, 400)
+
+    def test_scheduling_actions_need_a_signed_in_staff_member(self):
+        item = self._item(0, 4)
+        self.client.logout()
+        for name in ("reservation_item_mark_picked_up", "reservation_item_change_pickup", "reservation_item_change_return"):
+            with self.subTest(name=name):
+                self.assertEqual(self._post(name, item, self.today + timedelta(days=9)).status_code, 401)
+
+    # ---- Change pick-up date (earlier only) ------------------------------------------------------
+    def test_pickup_can_move_earlier_and_keeps_what_was_originally_booked(self):
+        item = self._item(6, 10)
+        response = self._post("reservation_item_change_pickup", item, self.today)
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["days_early"], 6)
+        item.refresh_from_db()
+        self.assertEqual(item.rental_date, self.today)
+        self.assertEqual(item.original_rental_date, self.today + timedelta(days=6))
+        self.assertIn("Changed pick-up date by customer · 6 days early", self._remarks(item))
+
+    def test_a_second_pickup_change_still_counts_from_the_original(self):
+        item = self._item(10, 14)
+        self._post("reservation_item_change_pickup", item, self.today + timedelta(days=6))
+        self._post("reservation_item_change_pickup", item, self.today + timedelta(days=3))
+        item.refresh_from_db()
+        self.assertEqual(item.original_rental_date, self.today + timedelta(days=10))
+        self.assertIn("Changed pick-up date by customer · 7 days early", self._remarks(item))
+
+    def test_the_early_remark_survives_the_actual_pickup_and_a_late_one(self):
+        """Booked for the 6th, moved to today (6 days early): collecting it today -- or even
+        3 days after the moved date -- never changes the "6 days early" remark."""
+        item = self._item(6, 10)
+        self._post("reservation_item_change_pickup", item, self.today)
+        self.assertEqual(self._post("reservation_item_mark_picked_up", item).status_code, 200)
+        self.assertIn("Changed pick-up date by customer · 6 days early", self._remarks(item))
+        late = self._item(-3, 1, name="Late Collector", gown=_make_gown(2),
+                          original_rental_date=self.today + timedelta(days=3))
+        self.assertEqual(self._post("reservation_item_mark_picked_up", late).status_code, 200)
+        self.assertIn("Changed pick-up date by customer · 6 days early", self._remarks(late))
+
+    def test_extending_the_return_does_not_move_the_customers_event_date(self):
+        item = self._item(-2, 2, stage=ReservationItem.Stage.RESERVED, picked_up_on=self.today - timedelta(days=2))
+        event_before = item.effective_event_date
+        self.assertEqual(self._post("reservation_item_change_return", item, self.today + timedelta(days=6)).status_code, 200)
+        item.refresh_from_db()
+        self.assertEqual(item.effective_event_date, event_before)
+
+    def test_pickup_cannot_move_later_or_stay_the_same(self):
+        item = self._item(6, 10)
+        for days in (6, 8):
+            with self.subTest(days=days):
+                self.assertEqual(self._post("reservation_item_change_pickup", item, self.today + timedelta(days=days)).status_code, 400)
+
+    def test_pickup_cannot_move_into_the_past(self):
+        item = self._item(6, 10)
+        response = self._post("reservation_item_change_pickup", item, self.today - timedelta(days=1))
+        self.assertEqual(response.status_code, 400)
+        item.refresh_from_db()
+        self.assertEqual(item.rental_date, self.today + timedelta(days=6))
+
+    def test_pickup_cannot_move_onto_days_another_customer_holds(self):
+        item = self._item(10, 14, name="Mover")
+        other = self._item(5, 7, name="Booked First")
+        response = self._post("reservation_item_change_pickup", item, self.today + timedelta(days=6))
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("Booked First", response.json()["error"])
+        self.assertIn(other.reservation.reference_code, response.json()["error"])
+        item.refresh_from_db()
+        self.assertEqual(item.rental_date, self.today + timedelta(days=10))
+
+    def test_pickup_cannot_move_into_another_bookings_cooldown(self):
+        item = self._item(14, 18)
+        before = self._item(0, 2, name="Before", status=Reservation.Status.CONFIRMED, stage=ReservationItem.Stage.RESERVED)
+        GownUnavailability.objects.create(
+            gown=self.gown, start_date=self.today + timedelta(days=3), end_date=self.today + timedelta(days=5),
+            reason=GownUnavailability.Reason.COOLDOWN, auto_for_item=before,
+        )
+        refused = self._post("reservation_item_change_pickup", item, self.today + timedelta(days=4))
+        self.assertEqual(refused.status_code, 409)
+        self.assertIn("blocked", refused.json()["error"])
+        self.assertEqual(self._post("reservation_item_change_pickup", item, self.today + timedelta(days=6)).status_code, 200)
+
+    def test_pickup_cannot_change_once_the_gown_is_out_or_back(self):
+        out = self._item(0, 4, stage=ReservationItem.Stage.RESERVED, picked_up_on=self.today)
+        self.assertEqual(self._post("reservation_item_change_pickup", out, self.today - timedelta(days=0)).status_code, 400)
+        back = self._item(3, 7, stage=ReservationItem.Stage.RETURNED, name="Back", gown=_make_gown(2))
+        self.assertEqual(self._post("reservation_item_change_pickup", back, self.today).status_code, 400)
+
+    # ---- Change return date (later only) ----------------------------------------------------------
+    def test_return_can_move_later_and_the_cooldown_follows(self):
+        item = self._item(0, 4, stage=ReservationItem.Stage.RESERVED, picked_up_on=self.today)
+        block = GownUnavailability.objects.create(
+            gown=self.gown, start_date=self.today + timedelta(days=5), end_date=self.today + timedelta(days=7),
+            reason=GownUnavailability.Reason.COOLDOWN, auto_for_item=item,
+        )
+        response = self._post("reservation_item_change_return", item, self.today + timedelta(days=7))
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["days_late"], 3)
+        item.refresh_from_db()
+        block.refresh_from_db()
+        self.assertEqual(item.return_date, self.today + timedelta(days=7))
+        self.assertEqual(item.original_return_date, self.today + timedelta(days=4))
+        self.assertEqual((block.start_date, block.end_date), (self.today + timedelta(days=8), self.today + timedelta(days=10)))
+        self.assertIn("Changed return date by customer · 3 days late", self._remarks(item))
+
+    def test_return_cannot_move_earlier_or_stay_the_same(self):
+        item = self._item(0, 6)
+        for days in (6, 4):
+            with self.subTest(days=days):
+                self.assertEqual(self._post("reservation_item_change_return", item, self.today + timedelta(days=days)).status_code, 400)
+
+    def test_return_cannot_run_into_the_next_booking(self):
+        item = self._item(0, 4)
+        self._item(8, 10, name="Next Customer")
+        response = self._post("reservation_item_change_return", item, self.today + timedelta(days=9))
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("Next Customer", response.json()["error"])
+        self.assertEqual(self._post("reservation_item_change_return", item, self.today + timedelta(days=7)).status_code, 200)
+
+    def test_a_returned_gown_cannot_have_its_return_changed(self):
+        item = self._item(-5, -1, stage=ReservationItem.Stage.RETURNED)
+        self.assertEqual(self._post("reservation_item_change_return", item, self.today + timedelta(days=3)).status_code, 400)
+
+    # ---- the remarks (one definition for both pages) -----------------------------------------------
+    def test_pickup_remarks_count_down_then_go_late(self):
+        cases = {3: "Pick-up in 3 days", 1: "Pick-up in 1 day", 0: "Pick up today", -2: "2 days late for pick-up"}
+        for offset, text in cases.items():
+            with self.subTest(offset=offset):
+                item = self._item(offset, offset + 4, gown=_make_gown(10 + offset + 5))
+                self.assertIn(text, self._remarks(item))
+
+    def test_a_gown_still_out_after_its_return_date_is_overdue_by_itself(self):
+        item = self._item(-6, -2, stage=ReservationItem.Stage.RESERVED, picked_up_on=self.today - timedelta(days=6))
+        remarks = self._remarks(item)
+        self.assertIn("Out with customer", remarks)
+        self.assertIn("Overdue · 2 days late", remarks)
+        events = self.client.get(reverse("arabela_admin:rental_schedule")).context["calendar_events"]
+        mine = [e for e in events if e["extendedProps"].get("itemId") == item.id]
+        self.assertIn("Danger", [e["extendedProps"]["calendar"] for e in mine])  # the red Overdue marker
+        self.assertEqual(mine[0]["extendedProps"]["stage"], "Overdue")
+
+    def test_overdue_counts_from_the_original_return_date(self):
+        item = self._item(-8, -1, stage=ReservationItem.Stage.RESERVED, picked_up_on=self.today - timedelta(days=8),
+                          original_return_date=self.today - timedelta(days=4))
+        self.assertIn("Overdue · 4 days late", self._remarks(item))
+
+    def test_a_late_return_keeps_its_late_remark_after_it_comes_back(self):
+        item = self._item(-8, -2, stage=ReservationItem.Stage.RETURNED, returned_on=self.today - timedelta(days=1))
+        self.assertIn("1 day late", self._remarks(item))
+
+    # ---- the pages --------------------------------------------------------------------------------
+    def test_active_reservations_shows_remarks_phone_and_the_right_buttons(self):
+        waiting = self._item(6, 10, name="Waiting Customer")
+        self._post("reservation_item_change_pickup", waiting, self.today + timedelta(days=2))
+        out = self._item(-1, 3, stage=ReservationItem.Stage.RESERVED, picked_up_on=self.today - timedelta(days=1),
+                         name="Out Customer", gown=_make_gown(2))
+        response = self.client.get(reverse("arabela_admin:active_reservations"))
+        html = response.content.decode()
+        self.assertContains(response, "Changed pick-up date by customer · 4 days early")
+        self.assertContains(response, "tel:09171234567")
+        self.assertContains(response, f'data-item-id="{waiting.id}"')
+        self.assertEqual(response.context["today_iso"], self.today.isoformat())
+        self.assertIn(f'data-kind="pickup" data-item-id="{waiting.id}"', html)
+        self.assertIn(f'data-kind="return" data-item-id="{waiting.id}"', html)
+        self.assertIn(f'data-item-id="{waiting.id}">Mark Picked Up', html)
+        self.assertNotIn(f'data-kind="pickup" data-item-id="{out.id}"', html)   # already out
+        self.assertIn(f'data-kind="return" data-item-id="{out.id}"', html)
+        self.assertIn(f'data-item-id="{out.id}">Undo', html)
+        self.assertNotIn("data-actual-date-field", html)
+        self.assertNotIn("resv-actual-date-edit-btn", html)
+
+    def test_the_page_hands_each_item_the_other_bookings_of_its_gown(self):
+        mine = self._item(10, 14, name="Mine")
+        other = self._item(20, 24, name="Someone Else")
+        holds = self.client.get(reverse("arabela_admin:active_reservations")).context["item_holds"]
+        self.assertEqual([h["itemId"] for h in holds[mine.id]], [other.id])
+        self.assertNotIn(mine.id, [h["itemId"] for h in holds[mine.id]])
+
+    def test_the_rental_schedule_shows_the_changed_dates_and_is_view_only(self):
+        item = self._item(6, 10)
+        self._post("reservation_item_change_pickup", item, self.today + timedelta(days=1))
+        self._post("reservation_item_change_return", item, self.today + timedelta(days=12))
+        response = self.client.get(reverse("arabela_admin:rental_schedule"))
+        props = next(e["extendedProps"] for e in response.context["calendar_events"]
+                     if e.get("extendedProps", {}).get("itemId") == item.id)
+        self.assertEqual(props["rentalDate"], (self.today + timedelta(days=1)).isoformat())
+        self.assertEqual(props["originalRentalDate"], (self.today + timedelta(days=6)).isoformat())
+        self.assertEqual(props["returnDate"], (self.today + timedelta(days=12)).isoformat())
+        self.assertEqual(props["originalReturnDate"], (self.today + timedelta(days=10)).isoformat())
+        texts = [r["text"] for r in props["remarks"]]
+        self.assertIn("Changed pick-up date by customer · 5 days early", texts)
+        self.assertIn("Changed return date by customer · 2 days late", texts)
+        self.assertIn(item.reservation.reference_code, props["activeUrl"])
+        # The pick-up / return stretches are painted by the same Pick-up / Return markers --
+        # the pick-up starts on the NEW day, the return runs to the NEW end.
+        spans = {e["extendedProps"]["calendar"]: (e["start"], e["end"]) for e in response.context["calendar_events"]
+                 if e.get("extendedProps", {}).get("itemId") == item.id}
+        self.assertEqual(spans["Warning"][0], (self.today + timedelta(days=1)).isoformat())
+        html = response.content.decode()
+        self.assertIn('id="bookingModalReadOnly"', html)
+        self.assertIn("Open in Active Reservations", html)
+        self.assertIn('id="bookingModalSaveChangesBtn" style="display: none;"', html)
+        self.assertIn('id="bookingModalMarkReturnedBtn" style="display: none;"', html)
+        self.assertIn('id="bookingModalEditable" style="display: none;"', html)

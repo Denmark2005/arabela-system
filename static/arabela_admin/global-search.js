@@ -85,7 +85,7 @@
     wrap.appendChild(container);
 
     input.setAttribute("autocomplete", "off");
-    input.setAttribute("placeholder", "Search customer, reference, or gown (e.g. Maria, RSV-2026-0001, Belo-RD-001)...");
+    input.setAttribute("placeholder", "Search customer, reference, or gown (e.g. Maria, RSV-2026-0001, Suit-RD-001)...");
 
     var debounceTimer = null;
     var activeController = null;

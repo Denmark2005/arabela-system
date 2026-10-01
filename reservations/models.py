@@ -318,15 +318,23 @@ class ReservationItem(models.Model):
         cancel). The same physical gown can be booked again for a later, non-overlapping
         date range, so a second ReservationItem pointing at it is normal; finishing THIS
         one must never clobber the status a still-active sibling booking depends on.
-        Excludes Returned items and Rejected/Cancelled reservations -- the same "still
-        holds real stock" rule gowns.views._find_available_unit already uses."""
+        Excludes Returned items and Rejected/Cancelled reservations. Also excludes
+        PENDING ones: Gown.status only becomes Reserved when a booking is APPROVED
+        (reservation_approve_view), so a booking still awaiting approval never made the
+        gown Reserved and must not keep it Reserved either -- before this, one stale
+        Pending booking (dates long past, never approved or rejected) left a returned
+        gown stuck on Reserved in the catalog forever. Approving it later flips the gown
+        to Reserved again, so nothing is lost. (Availability on the website is a
+        separate check, _find_available_unit, which still counts Pending bookings.)"""
         if not self.gown_id:
             return False
         return (
             ReservationItem.objects.filter(gown_id=self.gown_id)
             .exclude(id=self.id)
             .exclude(stage=self.Stage.RETURNED)
-            .exclude(reservation__status__in=[Reservation.Status.REJECTED, Reservation.Status.CANCELLED])
+            .exclude(reservation__status__in=[
+                Reservation.Status.PENDING, Reservation.Status.REJECTED, Reservation.Status.CANCELLED,
+            ])
             .exists()
         )
 

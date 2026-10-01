@@ -142,9 +142,9 @@ class SystemPromptTests(TestCase):
         prompt = views._system_prompt()
         self.assertIn("0917-000-1234", prompt)
 
-    def test_system_prompt_lists_all_eleven_collections(self):
+    def test_system_prompt_lists_the_real_collections(self):
         prompt = views._system_prompt()
-        for label in ["Wedding Gown", "Ball Gown", "Belo", "Dresses"]:
+        for label in ["Wedding Gown", "Ball Gown", "Suit", "Dresses"]:
             self.assertIn(label, prompt)
 
 
