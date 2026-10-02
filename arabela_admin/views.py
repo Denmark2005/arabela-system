@@ -32,10 +32,13 @@ from gowns.models import (
     GownUnavailability,
     SiteSettings,
     TAG_COLOR_HEX,
+    HiddenCategory,
     TAG_COLOR_PALETTE,
     all_category_names,
     custom_category_names,
+    hidden_category_names,
     resolve_tag_colors,
+    visible_builtin_names,
 )
 from reservations import reminders as reservation_reminders
 from reservations import timeline as reservation_timeline
@@ -1246,7 +1249,9 @@ def gown_catalog_view(request):
     # of Gown.Category (the old, easy-to-forget pattern that needed a manual edit in
     # 4 separate places every time a category was added).
     custom_by_name = {c.name: c for c in CustomCategory.objects.all()}
-    category_names = [*Gown.Category.values, *custom_by_name]
+    from gowns.context_processors import _CATEGORIES, _MEN_KEYS
+    category_names = [*visible_builtin_names(), *custom_by_name]
+    builtin_keys = {c["label"]: c["key"] for c in _CATEGORIES}
     category_rows = [
         {
             "key": key,
@@ -1255,6 +1260,11 @@ def gown_catalog_view(request):
             "custom": key in custom_by_name,
             "id": custom_by_name[key].id if key in custom_by_name else None,
             "audience": custom_by_name[key].audience if key in custom_by_name else "",
+            # Where the customer site lists it: the owner's choice for theirs, fixed for built-ins.
+            "audience_label": (
+                CustomCategory.Audience(custom_by_name[key].audience).label if key in custom_by_name
+                else (CustomCategory.Audience.MEN if builtin_keys.get(key) in _MEN_KEYS else CustomCategory.Audience.WOMEN).label
+            ),
             "total": sum(1 for g in gowns if g.category == key),
             "count": sum(
                 1 for g in gowns
@@ -3272,6 +3282,15 @@ def gown_category_create_view(request):
     if not _CATEGORY_NAME_RE.fullmatch(name):
         return JsonResponse({"error": "Use only letters, numbers, spaces and hyphens in the name."}, status=400)
 
+    # Typing the name of a built-in category the owner removed brings it back, as it was.
+    for hidden_name in hidden_category_names():
+        if hidden_name.casefold() == name.casefold():
+            HiddenCategory.objects.filter(name=hidden_name).delete()
+            return JsonResponse({
+                "success": True, "restored": True, "name": hidden_name,
+                "message": f'"{hidden_name}" is back. You can use it again when you add a gown.',
+            })
+
     existing = {n.casefold() for n in all_category_names()}
     if name.casefold() in existing:
         return JsonResponse({"error": f'There is already a category called "{name}".'}, status=400)
@@ -3310,6 +3329,39 @@ def gown_category_audience_view(request, category_id):
     if not updated:
         return JsonResponse({"error": "That category no longer exists. Please refresh the page."}, status=404)
     return JsonResponse({"success": True, "message": f"Moved to the {CustomCategory.Audience(audience).label}."})
+
+
+@require_http_methods(["POST"])
+def gown_builtin_category_remove_view(request):
+    """Remove (hide) one of the 13 original categories -- only while no gown is filed under it,
+    and only the owner. It leaves Add Gown, the catalog, Tag Colors, the customer menu, search, the
+    Women's/Men's page and the All page, and its own page becomes a 404. Adding a category with the
+    same name later brings it back."""
+    refused = _category_owner_error(request)
+    if refused:
+        return refused
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    name = str(data.get("name") or "").strip() if isinstance(data, dict) else ""
+    if name not in Gown.Category.values:
+        return JsonResponse({"error": "That isn't one of the original categories."}, status=404)
+    if name in hidden_category_names():
+        return JsonResponse({"error": f'"{name}" is already removed. Please refresh the page.'}, status=400)
+    in_use = Gown.objects.filter(category=name).count()
+    if in_use:
+        return JsonResponse({
+            "error": (
+                f'"{name}" still has {in_use} gown{"s" if in_use != 1 else ""} in it. '
+                f"Move or remove them first, then you can remove the category."
+            ),
+        }, status=400)
+    HiddenCategory.objects.get_or_create(name=name)
+    return JsonResponse({
+        "success": True,
+        "message": f'"{name}" removed. To bring it back, add a category with the same name.',
+    })
 
 
 @require_http_methods(["POST"])

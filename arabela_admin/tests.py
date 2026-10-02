@@ -13,7 +13,7 @@ from django.utils import timezone
 from accounts.models import CustomerMessage, UserProfile
 from gowns.models import (
     DEFAULT_CATEGORY_TAG_COLORS, TAG_COLOR_HEX, CustomCategory, Gown, GownRemoval, GownUnavailability,
-    SiteSettings, all_category_names, resolve_tag_colors,
+    HiddenCategory, SiteSettings, all_category_names, resolve_tag_colors,
 )
 from arabela_admin import views as views_module
 from reservations import reminders
@@ -3916,7 +3916,7 @@ class CustomCategoryTests(TestCase):
         self.assertEqual(rows["Debut Gown"]["tag_color"], "Gray")
         self.assertIn("Debut Gown", response.context["tag_colors_data"])
         self.assertContains(response, "+ Add Category")
-        self.assertContains(response, "Categories you added")
+        self.assertContains(response, "All categories")
 
     def test_staff_do_not_see_the_add_category_button(self):
         self.client.force_login(self.staff)
@@ -3989,6 +3989,144 @@ class CustomCategoryTests(TestCase):
         response = Client().get(f"/collections/debut-gown/products/{gown.slug}/")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Rose Debut")
+
+
+class BuiltinCategoryRemovalTests(TestCase):
+    """The 13 original categories can be removed too (hidden -- they live in code), only while empty
+    and only by the owner, and come back when a category with the same name is added again."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = User.objects.create_user(username="bi_owner", password="x", is_staff=True)
+        UserProfile.objects.create(user=cls.owner, role=UserProfile.Role.OWNER)
+        cls.staff = User.objects.create_user(username="bi_staff", password="x", is_staff=True)
+        UserProfile.objects.create(user=cls.staff, role=UserProfile.Role.STAFF)
+
+    def setUp(self):
+        self.client.force_login(self.owner)
+
+    def _remove(self, name):
+        return self.client.post(
+            reverse("arabela_admin:gown_builtin_category_remove"), data=json.dumps({"name": name}),
+            content_type="application/json",
+        )
+
+    def _add(self, name):
+        return self.client.post(
+            reverse("arabela_admin:gown_category_create"), data=json.dumps({"name": name}),
+            content_type="application/json",
+        )
+
+    @staticmethod
+    def _grid(path):
+        html = Client().get(path).content.decode()
+        return re.findall(r'drop-shadow-sm">([^<]+)</span>', html)
+
+    def test_an_empty_original_category_can_be_removed_and_leaves_everywhere(self):
+        self.assertIn("Barong", self._grid("/featured/men/"))
+        self.assertEqual(Client().get("/collections/barong/").status_code, 200)
+        response = self._remove("Barong")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(HiddenCategory.objects.filter(name="Barong").exists())
+        self.assertNotIn("Barong", all_category_names())
+        # the customer site
+        self.assertNotIn("Barong", self._grid("/featured/men/"))
+        self.assertEqual(Client().get("/collections/barong/").status_code, 404)
+        self.assertNotIn("/collections/barong/", Client().get("/").content.decode())
+        self.assertEqual(Client().get("/collections/all/").status_code, 200)
+        # the admin side
+        page = self.client.get(reverse("arabela_admin:gown_catalog"))
+        self.assertNotIn("Barong", [r["key"] for r in page.context["category_rows"]])
+        self.assertNotIn("Barong", page.context["tag_colors_data"])
+
+    def test_the_home_page_hides_a_removed_tile_and_keeps_the_rest(self):
+        self.assertIn("/collections/suit/", Client().get("/").content.decode())
+        self._remove("Suit")
+        html = Client().get("/").content.decode()
+        self.assertNotIn("/collections/suit/", html)
+        self.assertIn("/collections/long-gown/", html)
+
+    def test_a_category_with_gowns_cannot_be_removed(self):
+        _make_gown(1, category=Gown.Category.BARONG)
+        response = self._remove("Barong")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("still has 1 gown", response.json()["error"])
+        self.assertFalse(HiddenCategory.objects.exists())
+        self.assertIn("Barong", all_category_names())
+        self.assertEqual(Client().get("/collections/barong/").status_code, 200)
+
+    def test_an_unknown_or_already_removed_category_is_refused(self):
+        self.assertEqual(self._remove("Not A Category").status_code, 404)
+        self.assertEqual(self._remove("").status_code, 404)
+        self.assertEqual(self._remove("Barong").status_code, 200)
+        self.assertEqual(self._remove("Barong").status_code, 400)
+        self.assertEqual(HiddenCategory.objects.count(), 1)
+
+    def test_only_the_owner_can_remove_one(self):
+        self.client.force_login(self.staff)
+        self.assertEqual(self._remove("Barong").status_code, 403)
+        self.client.logout()
+        self.assertEqual(self._remove("Barong").status_code, 401)
+        self.assertFalse(HiddenCategory.objects.exists())
+
+    def test_malformed_requests_are_rejected(self):
+        url = reverse("arabela_admin:gown_builtin_category_remove")
+        for body in (b"not json", b"[]", b"5"):
+            with self.subTest(body=body):
+                self.assertIn(self.client.post(url, data=body, content_type="application/json").status_code, (400, 404))
+        self.assertFalse(HiddenCategory.objects.exists())
+
+    def test_a_removed_category_cannot_be_chosen_for_a_new_gown(self):
+        self._remove("Barong")
+        response = self.client.post(
+            reverse("arabela_admin:gown_create"),
+            data={"name": "Ghost Barong", "category": "Barong", "color_name": "Red", "color_code": "RD",
+                  "size": "M", "rental_price": "1500"},
+        )
+        self.assertNotEqual(response.status_code, 200, response.content)
+        self.assertFalse(Gown.objects.filter(name="Ghost Barong").exists())
+
+    def test_adding_the_same_name_brings_it_back_exactly_as_it_was(self):
+        self._remove("Barong")
+        response = self._add("barong")  # capitals don't matter
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(response.json()["restored"])
+        self.assertEqual(response.json()["name"], "Barong")
+        self.assertFalse(HiddenCategory.objects.exists())
+        self.assertFalse(CustomCategory.objects.exists())  # no duplicate was created
+        self.assertIn("Barong", all_category_names())
+        self.assertIn("Barong", self._grid("/featured/men/"))
+        self.assertEqual(Client().get("/collections/barong/").status_code, 200)
+
+    def test_adding_the_name_of_a_category_still_in_use_is_still_refused(self):
+        self.assertEqual(self._add("Barong").status_code, 400)
+
+    def test_removing_every_original_category_leaves_a_working_site(self):
+        from gowns.models import Gown as G
+        for name in G.Category.values:
+            self.assertEqual(self._remove(name).status_code, 200, name)
+        CustomCategory.objects.create(name="Debut Gown", slug="debut-gown")
+        for path in ("/", "/featured/women/", "/featured/men/", "/collections/all/", "/collections/debut-gown/"):
+            self.assertEqual(Client().get(path).status_code, 200, path)
+        page = self.client.get(reverse("arabela_admin:gown_catalog"))
+        self.assertEqual([r["key"] for r in page.context["category_rows"]], ["Debut Gown"])
+
+    def test_a_product_link_into_a_removed_collection_still_opens(self):
+        gown = _make_gown(2, category=Gown.Category.WEDDING_GOWN)
+        self._remove("Barong")
+        response = Client().get(f"/collections/barong/products/{gown.slug}/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Client().get(f"/collections/wedding/products/{gown.slug}/").status_code, 200)
+
+    def test_the_panel_lists_every_category_with_a_remove_button_for_empty_originals(self):
+        _make_gown(3, category=Gown.Category.BARONG)
+        page = self.client.get(reverse("arabela_admin:gown_catalog"))
+        rows = {r["key"]: r for r in page.context["category_rows"]}
+        self.assertEqual(rows["Barong"]["audience_label"], "Men's collection")
+        self.assertEqual(rows["Wedding Gown"]["audience_label"], "Women's collection")
+        html = page.content.decode()
+        self.assertIn("removeBuiltinCategory('Wedding Gown')", html)
+        self.assertNotIn("removeBuiltinCategory('Barong')", html)  # it has a gown
 
 
 class CategoryAudienceTests(TestCase):

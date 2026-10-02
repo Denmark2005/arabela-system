@@ -8,7 +8,9 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from accounts.models import CustomerMessage, UserProfile
-from gowns.models import CustomCategory, Gown, SiteSettings, group_gowns_by_name, pick_representative_gown
+from gowns.models import (
+    CustomCategory, Gown, SiteSettings, group_gowns_by_name, hidden_category_names, pick_representative_gown,
+)
 from reservations.models import Reservation, ReservationItem
 
 _PRICE_RE = re.compile(r"[^\d]")
@@ -67,7 +69,11 @@ def all_categories() -> list[dict]:
     ({"key", "url_name", "label"}, plus "custom": True for the owner's). Everything that
     lists categories for customers reads this, so a category added in the admin shows up
     in the nav, search, explore drawer, All page and the AI helper without code changes."""
-    rows = [{**row, "audience": "men" if row["key"] in _MEN_KEYS else "women"} for row in _CATEGORIES]
+    hidden = hidden_category_names()  # built-ins the owner removed
+    rows = [
+        {**row, "audience": "men" if row["key"] in _MEN_KEYS else "women"}
+        for row in _CATEGORIES if row["label"] not in hidden
+    ]
     for category in CustomCategory.objects.all():
         rows.append({
             "key": category.slug, "url_name": "collection_custom", "label": category.name,
@@ -97,7 +103,7 @@ def _peso_to_number(value: str) -> int:
         return 0
 
 
-def _build_search_catalog() -> list[dict]:
+def _build_search_catalog(categories: list[dict] | None = None) -> list[dict]:
     """Every real, bookable PRODUCT -- the only thing search is allowed to offer.
     Grouped by name (gowns.models.group_gowns_by_name), so a product with several
     physical units appears once, not once per unit -- the same rule the collection
@@ -107,7 +113,7 @@ def _build_search_catalog() -> list[dict]:
     return items that did not exist and were not orderable. It is now driven entirely
     by Gown rows. Out-of-Stock gowns are left out for the same reason the collection
     grid hides them: they cannot be booked, so offering them wastes a click."""
-    label_to_key = {category["label"]: category["key"] for category in all_categories()}
+    label_to_key = {category["label"]: category["key"] for category in (categories or all_categories())}
     by_category: dict[str, list] = {}
     for gown in (
         Gown.objects.exclude(status=Gown.Status.OUT_OF_STOCK)
@@ -142,7 +148,7 @@ def _build_search_catalog() -> list[dict]:
     return items
 
 
-def _collections_meta() -> list[dict]:
+def _collections_meta(categories: list[dict] | None = None) -> list[dict]:
     return [
         {
             "key": row["key"],
@@ -152,7 +158,7 @@ def _collections_meta() -> list[dict]:
             # 'women' / 'men' decides which collection page lists it ('' for the "All" row).
             "audience": row.get("audience", ""),
         }
-        for row in [_ALL_ROW, *all_categories()]
+        for row in [_ALL_ROW, *(categories if categories is not None else all_categories())]
     ]
 
 
@@ -165,16 +171,20 @@ def featured_search_items(request):
       using a (collection, slug) URL, not a database-backed Product model.
     - We keep this list small and stable to avoid altering UI layout.
     """
-    catalog = _build_search_catalog()
+    categories = all_categories()  # once per request, shared by the catalog, the menu and the home page
+    catalog = _build_search_catalog(categories)
     # "Featured" is simply the first few real gowns -- it used to be four invented
     # "<Category> One" entries that led to products nobody could actually rent.
     featured = catalog[:4]
-    collections_meta = _collections_meta()
+    collections_meta = _collections_meta(categories)
 
     return {
         "featured_search_items": featured,
         "search_overlay_catalog": catalog,
         "search_overlay_collections_meta": collections_meta,
+        # Which categories exist right now -- the home page's fixed tiles check it, so a category
+        # the owner removed never leaves a link to a page that is gone.
+        "site_category_keys": [category["key"] for category in categories],
     }
 
 

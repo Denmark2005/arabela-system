@@ -123,6 +123,9 @@ def collections(request):
 
 
 def _render_collection(request, template_name, collection_key):
+    if _category_by_key(collection_key) is None:
+        # A built-in category the owner removed: its page is gone with it.
+        raise Http404("No such collection")
     paginator = Paginator(_products_for_category(collection_key), _COLLECTION_PAGE_SIZE)
     # get_page() clamps a missing/non-numeric/out-of-range "page" to a valid page
     # instead of raising, so a stale or hand-edited ?page= link can never 404/500.
@@ -547,9 +550,11 @@ def product_detail(request, collection: str, slug: str):
     col = collection.strip().lower()
     category = _category_by_key(col)
     if category is None:
+        # An unknown (or removed) collection in the URL: fall back to Wedding, or to whatever
+        # category still exists, so an old product link still opens the product.
         col = "wedding"
-        category = _category_by_key(col)
-    collection_url = category_url(category)
+        category = _category_by_key(col) or next(iter(all_categories()), None)
+    collection_url = category_url(category) if category else reverse("gowns:collection_all")
 
     # Slugs are auto-generated unique per gown (Gown.save()), so this always resolves
     # to at most one physical unit. Looked up WITHOUT the Out-of-Stock filter: a

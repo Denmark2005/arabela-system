@@ -518,13 +518,37 @@ class CustomCategory(models.Model):
         return self.name
 
 
+class HiddenCategory(models.Model):
+    """A built-in category (one of Gown.Category) the owner removed from Gown Catalog. The 13
+    original categories live in code and can't really be deleted, so removing one just hides it
+    everywhere -- Add Gown, the catalog, the customer site, its page (404) -- and only while no
+    gown is filed under it. Adding a category with the same name brings it back (the row goes)."""
+
+    name = models.CharField(max_length=20, unique=True)  # the built-in's name, e.g. 'Wedding Gown'
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f'{self.name} (hidden)'
+
+
 def custom_category_names():
     return list(CustomCategory.objects.values_list('name', flat=True))
 
 
+def hidden_category_names():
+    return set(HiddenCategory.objects.values_list('name', flat=True))
+
+
+def visible_builtin_names():
+    """The built-in categories the owner hasn't removed, in their usual order."""
+    hidden = hidden_category_names()
+    return [name for name in Gown.Category.values if name not in hidden]
+
+
 def all_category_names():
-    """Every category a gown can be filed under: the built-in ones, then the owner's own."""
-    return list(Gown.Category.values) + custom_category_names()
+    """Every category a gown can be filed under: the built-in ones that are still in use, then
+    the owner's own."""
+    return visible_builtin_names() + custom_category_names()
 
 
 class SiteSettings(models.Model):
