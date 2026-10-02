@@ -7,7 +7,7 @@ from django.http import JsonResponse
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from gowns.context_processors import _CATEGORIES
+from gowns.context_processors import all_categories, category_url
 from gowns.models import SiteSettings
 
 GEMINI_URL_TEMPLATE = (
@@ -122,8 +122,8 @@ def _system_prompt() -> str:
         part for part in [s.shop_street, s.shop_city, s.shop_country, s.shop_postal_code] if part
     )
     collection_rows = []
-    for c in _CATEGORIES:
-        path = reverse(f"gowns:{c['url_name']}")
+    for c in all_categories():
+        path = category_url(c)
         collection_rows.append(f"- {c['label']}: {path}")
     collections_lines = "\n".join(collection_rows)
 

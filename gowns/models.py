@@ -485,6 +485,48 @@ class GownRemoval(models.Model):
         return f'{self.gown_id} removed ({self.reason})'
 
 
+# A category the owner adds without a developer gets this tag colour until they pick another.
+CUSTOM_CATEGORY_DEFAULT_TAG_COLOR = 'Gray'
+
+
+class CustomCategory(models.Model):
+    """A rental category the owner added from Gown Catalog -> Add Category. The 13 original
+    categories live in code (Gown.Category); these sit beside them and are treated the same
+    everywhere: a gown stores the NAME in Gown.category, the customer site gets a collection
+    page at /collections/<slug>/, and the owner can give it a tag colour.
+
+    `name` is capped at 20 characters because that is Gown.category's column size; `slug` is
+    its URL key and is checked against the built-in keys when the category is created."""
+
+    class Audience(models.TextChoices):
+        WOMEN = 'women', "Women's collection"
+        MEN = 'men', "Men's collection"
+
+    name = models.CharField(max_length=20, unique=True)
+    slug = models.SlugField(max_length=40, unique=True)
+    # Which of the customer site's two collection pages (Women's / Men's) lists it. db_default so
+    # code that doesn't know this column yet can still insert a row.
+    audience = models.CharField(
+        max_length=5, choices=Audience.choices, default=Audience.WOMEN, db_default='women',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at', 'id']
+
+    def __str__(self):
+        return self.name
+
+
+def custom_category_names():
+    return list(CustomCategory.objects.values_list('name', flat=True))
+
+
+def all_category_names():
+    """Every category a gown can be filed under: the built-in ones, then the owner's own."""
+    return list(Gown.Category.values) + custom_category_names()
+
+
 class SiteSettings(models.Model):
     """Singleton (always pk=1) holding the business's public contact info -- the
     admin Edit Profile page and every customer-facing template (footer, Contact
@@ -500,6 +542,13 @@ class SiteSettings(models.Model):
     shop_city = models.CharField(max_length=100, blank=True, default='Antipolo')
     shop_country = models.CharField(max_length=100, blank=True, default='Philippines')
     shop_postal_code = models.CharField(max_length=10, blank=True, default='1830')
+    # Where customers pay the security deposit (shown in the checkout's GCash window). Set by
+    # the owner in Edit Profile; empty until then. db_default keeps a database-level default,
+    # so code that doesn't know these columns yet (an older deployment sharing this database)
+    # can still insert a row.
+    gcash_account_name = models.CharField(max_length=100, blank=True, default='', db_default='')
+    gcash_number = models.CharField(max_length=20, blank=True, default='', db_default='')
+    gcash_qr_url = models.URLField(max_length=500, blank=True, default='', db_default='')
     # Only the tag colors the owner has CHANGED from the defaults, keyed by category --
     # see resolve_tag_colors(), which layers these over DEFAULT_CATEGORY_TAG_COLORS.
     # Storing overrides (not a full copy) means a category added later just picks up
@@ -511,8 +560,14 @@ class SiteSettings(models.Model):
         return 'Site settings'
 
     def tag_colors(self):
-        """{category: tag color name} for every category, defaults filled in."""
-        return resolve_tag_colors(self.category_tag_colors)
+        """{category: tag color name} for every category, defaults filled in -- the built-in
+        ones and any the owner added."""
+        resolved = resolve_tag_colors(self.category_tag_colors)
+        saved = self.category_tag_colors if isinstance(self.category_tag_colors, dict) else {}
+        for name in custom_category_names():
+            chosen = saved.get(name)
+            resolved[name] = chosen if chosen in TAG_COLOR_HEX else CUSTOM_CATEGORY_DEFAULT_TAG_COLOR
+        return resolved
 
     @classmethod
     def load(cls):

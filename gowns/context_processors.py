@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from accounts.models import CustomerMessage, UserProfile
-from gowns.models import Gown, SiteSettings, group_gowns_by_name, pick_representative_gown
+from gowns.models import CustomCategory, Gown, SiteSettings, group_gowns_by_name, pick_representative_gown
 from reservations.models import Reservation, ReservationItem
 
 _PRICE_RE = re.compile(r"[^\d]")
@@ -54,11 +54,37 @@ _CATEGORIES = (
     {"key": "bridesmaid-dresses", "url_name": "collection_bridesmaid_dresses", "label": "Bridesmaid Dresses"},
 )
 
+# Categories the owner added from the admin (gowns.models.CustomCategory) share ONE routed
+# page, /collections/<slug>/, so they have no url_name of their own: category_url() builds the
+# link from the key instead.
+# The two categories cut for men; everything else built in is women's. The owner picks
+# for the categories they add (CustomCategory.audience).
+_MEN_KEYS = frozenset({"suit", "barong"})
+
+
+def all_categories() -> list[dict]:
+    """The built-in categories followed by the owner's own, as registry-style rows
+    ({"key", "url_name", "label"}, plus "custom": True for the owner's). Everything that
+    lists categories for customers reads this, so a category added in the admin shows up
+    in the nav, search, explore drawer, All page and the AI helper without code changes."""
+    rows = [{**row, "audience": "men" if row["key"] in _MEN_KEYS else "women"} for row in _CATEGORIES]
+    for category in CustomCategory.objects.all():
+        rows.append({
+            "key": category.slug, "url_name": "collection_custom", "label": category.name,
+            "custom": True, "audience": category.audience,
+        })
+    return rows
+
+
+def category_url(row: dict) -> str:
+    if row.get("custom"):
+        return reverse("gowns:collection_custom", kwargs={"key": row["key"]})
+    return reverse(f"gowns:{row['url_name']}")
+
+
 # "All" is a synthetic first row (not a real category) prepended wherever the
 # full collection list is shown (nav dropdown, search sidebar, explore drawer).
-_COLLECTION_ROWS = (
-    {"key": "all", "url_name": "collection_all", "label": "All"},
-) + _CATEGORIES
+_ALL_ROW = {"key": "all", "url_name": "collection_all", "label": "All"}
 
 
 def _peso_to_number(value: str) -> int:
@@ -81,7 +107,7 @@ def _build_search_catalog() -> list[dict]:
     return items that did not exist and were not orderable. It is now driven entirely
     by Gown rows. Out-of-Stock gowns are left out for the same reason the collection
     grid hides them: they cannot be booked, so offering them wastes a click."""
-    label_to_key = {category["label"]: category["key"] for category in _CATEGORIES}
+    label_to_key = {category["label"]: category["key"] for category in all_categories()}
     by_category: dict[str, list] = {}
     for gown in (
         Gown.objects.exclude(status=Gown.Status.OUT_OF_STOCK)
@@ -122,9 +148,11 @@ def _collections_meta() -> list[dict]:
             "key": row["key"],
             "label": row["label"],
             "url_name": row["url_name"],
-            "url": reverse(f"gowns:{row['url_name']}"),
+            "url": category_url(row),
+            # 'women' / 'men' decides which collection page lists it ('' for the "All" row).
+            "audience": row.get("audience", ""),
         }
-        for row in _COLLECTION_ROWS
+        for row in [_ALL_ROW, *all_categories()]
     ]
 
 
@@ -214,6 +242,10 @@ def site_settings(request):
         "site_shop_city": s.shop_city,
         "site_shop_country": s.shop_country,
         "site_shop_postal_code": s.shop_postal_code,
+        # Where customers pay the security deposit (see the checkout's GCash window).
+        "site_gcash_name": s.gcash_account_name,
+        "site_gcash_number": s.gcash_number,
+        "site_gcash_qr_url": s.gcash_qr_url,
         "site_shop_address_line": address_line,
     }
 

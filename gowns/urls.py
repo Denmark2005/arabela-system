@@ -36,6 +36,9 @@ urlpatterns = [
     path("collections/barong/", views.collection_barong, name="collection_barong"),
     path("collections/ball-gown-tulle/", views.collection_ball_gown_tulle, name="collection_ball_gown_tulle"),
     path("collections/bridesmaid-dresses/", views.collection_bridesmaid_dresses, name="collection_bridesmaid_dresses"),
+    # Categories the owner adds in the admin. LAST of the fixed category paths, so a built-in
+    # one always wins; /collections/<collection>/products/<slug>/ below has more segments.
+    path("collections/<slug:key>/", views.collection_custom, name="collection_custom"),
 
     # Product detail -- legacy (unnamed) route must stay BEFORE the generic one.
     path(

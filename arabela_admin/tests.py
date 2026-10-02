@@ -12,8 +12,8 @@ from django.utils import timezone
 
 from accounts.models import CustomerMessage, UserProfile
 from gowns.models import (
-    DEFAULT_CATEGORY_TAG_COLORS, TAG_COLOR_HEX, Gown, GownRemoval, GownUnavailability,
-    SiteSettings, resolve_tag_colors,
+    DEFAULT_CATEGORY_TAG_COLORS, TAG_COLOR_HEX, CustomCategory, Gown, GownRemoval, GownUnavailability,
+    SiteSettings, all_category_names, resolve_tag_colors,
 )
 from arabela_admin import views as views_module
 from reservations import reminders
@@ -714,9 +714,9 @@ class ReservationItemLifecycleTests(TestCase):
 
 
 class SecurityDepositTests(TestCase):
-    """`reservation_return_deposit_view` -- must refuse to release a deposit until
-    every item on the reservation is actually marked Returned, and must refuse a
-    second release on the same reservation."""
+    """The security deposit follows the gowns: it counts as returned the moment EVERY gown on the
+    booking is Returned -- nothing for staff to press, no total value shown, and the customer's
+    timeline says so once."""
 
     @classmethod
     def setUpTestData(cls):
@@ -726,32 +726,105 @@ class SecurityDepositTests(TestCase):
     def setUp(self):
         self.client.force_login(self.staff)
 
-    def _make_reservation(self, stage):
+    def _reservation(self, *stages, name="Deposit Customer"):
         from reservations.models import Reservation, ReservationItem
-        reservation = Reservation.objects.create(customer=self.customer, customer_name="Deposit Customer")
-        ReservationItem.objects.create(
-            reservation=reservation, gown_name="Deposit Test Gown",
-            rental_date=date.today(), return_date=date.today() + timedelta(days=3), stage=stage,
+        reservation = Reservation.objects.create(
+            customer=self.customer, customer_name=name, status=Reservation.Status.CONFIRMED,
+            security_deposit=Decimal("2000"),
         )
-        return reservation
+        items = [
+            ReservationItem.objects.create(
+                reservation=reservation, gown_name=f"Deposit Gown {n}", stage=stage,
+                rental_date=date.today() - timedelta(days=4), return_date=date.today() - timedelta(days=1),
+            ) for n, stage in enumerate(stages, start=1)
+        ]
+        return reservation, items
 
-    def test_deposit_cannot_be_returned_before_the_item_is_returned(self):
-        reservation = self._make_reservation(stage="Reserved")
-        response = self.client.post(reverse("arabela_admin:reservation_return_deposit", args=[reservation.id]))
-        self.assertEqual(response.status_code, 400)
+    def _return(self, item, condition="Good"):
+        return self.client.post(
+            reverse("arabela_admin:reservation_item_mark_returned", args=[item.id]),
+            data=json.dumps({"condition": condition}), content_type="application/json",
+        )
 
-    def test_deposit_can_be_returned_once_the_item_is_returned(self):
-        reservation = self._make_reservation(stage="Returned")
-        response = self.client.post(reverse("arabela_admin:reservation_return_deposit", args=[reservation.id]))
-        self.assertEqual(response.status_code, 200, response.content)
+    def test_there_is_no_return_deposit_endpoint_any_more(self):
+        from django.urls import NoReverseMatch
+        with self.assertRaises(NoReverseMatch):
+            reverse("arabela_admin:reservation_return_deposit", args=[1])
+
+    def test_the_deposit_is_held_while_any_gown_is_still_out(self):
+        reservation, _ = self._reservation("Returned", "Reserved")
+        self.assertIsNone(reservation.deposit_returned_on)
+        self.assertFalse(reservation.deposit_is_returned)
+
+    def test_the_deposit_is_returned_once_every_gown_is_back_with_the_last_return_date(self):
+        reservation, (first, second) = self._reservation("Returned", "Reserved")
+        self.assertEqual(self._return(second).status_code, 200)
         reservation.refresh_from_db()
-        self.assertIsNotNone(reservation.deposit_returned_at)
+        self.assertTrue(reservation.deposit_is_returned)
+        self.assertEqual(reservation.deposit_returned_on, date.today())
 
-    def test_deposit_cannot_be_returned_twice(self):
-        reservation = self._make_reservation(stage="Returned")
-        self.client.post(reverse("arabela_admin:reservation_return_deposit", args=[reservation.id]))
-        response = self.client.post(reverse("arabela_admin:reservation_return_deposit", args=[reservation.id]))
-        self.assertEqual(response.status_code, 400)
+    def test_a_deposit_already_marked_returned_by_hand_keeps_its_recorded_date(self):
+        reservation, _ = self._reservation("Returned")
+        reservation.deposit_returned_at = timezone.now() - timedelta(days=9)
+        reservation.save(update_fields=["deposit_returned_at"])
+        self.assertEqual(reservation.deposit_returned_on, (timezone.localtime(reservation.deposit_returned_at)).date())
+
+    def test_a_booking_with_no_gowns_never_counts_as_returned(self):
+        reservation, _ = self._reservation()
+        self.assertIsNone(reservation.deposit_returned_on)
+
+    def test_the_customer_timeline_is_told_once_when_the_last_gown_comes_back(self):
+        reservation, (first, second) = self._reservation("Reserved", "Reserved")
+        self._return(first)
+        self.assertFalse(reservation.status_events.filter(label="Security deposit settled").exists())  # one still out
+        self._return(second)
+        event = reservation.status_events.get(label="Security deposit settled")
+        self.assertEqual(event.detail, "Your security deposit has been settled. This reservation is complete.")
+        self.assertFalse(event.staff_only)
+        self.assertEqual(reservation.status_events.filter(label="Security deposit settled").count(), 1)
+
+    def test_a_needs_repair_return_still_settles_the_deposit(self):
+        reservation, (item,) = self._reservation("Reserved")
+        self._return(item, "Needs Repair")
+        self.assertTrue(reservation.status_events.filter(label="Security deposit settled").exists())
+        reservation.refresh_from_db()
+        self.assertTrue(reservation.deposit_is_returned)
+
+    def test_the_page_has_no_button_no_total_and_no_waiting_text(self):
+        self._reservation("Returned", name="Back Customer")
+        self._reservation("Reserved", name="Out Customer")
+        html = self.client.get(reverse("arabela_admin:security_deposits")).content.decode()
+        for gone in ("Return Deposit", "Total Held Value", "Awaiting gown return", "returnDeposit", "return-deposit"):
+            self.assertNotIn(gone, html)
+        self.assertIn("Deposits Held", html)
+        self.assertIn("Returned This Month", html)
+        self.assertIn("View Payment", html)
+
+    def test_the_page_counts_held_and_returned_this_month(self):
+        self._reservation("Returned", name="A")
+        self._reservation("Returned", name="B")
+        self._reservation("Reserved", name="C")
+        response = self.client.get(reverse("arabela_admin:security_deposits"))
+        self.assertEqual(response.context["held_count"], 1)
+        self.assertEqual(response.context["returned_this_month"], 2)
+        self.assertNotIn("total_held_value", response.context)
+        html = response.content.decode()
+        self.assertEqual(html.count(">Returned</p>"), 2)
+        self.assertEqual(html.count(">Held</p>"), 1)
+        self.assertIn(f"Returned on {date.today():%b} {date.today().day}, {date.today().year}", html)
+
+    def test_reservation_records_reports_the_automatic_status(self):
+        reservation, _ = self._reservation("Returned", name="Records Back")
+        html = self.client.get(reverse("arabela_admin:reservation_records")).content.decode()
+        match = re.search(r'<script id="reservation-records-data" type="application/json">(.*?)</script>', html, re.S)
+        row = {r["reference"]: r for r in json.loads(match.group(1))}[reservation.reference_code]
+        self.assertEqual(row["depositStatus"], "Returned")
+        self.assertTrue(row["depositReturnedOn"])
+
+    def test_the_old_still_held_notification_no_longer_exists(self):
+        self._reservation("Returned", name="Notify Customer")
+        html = self.client.get(reverse("arabela_admin:dashboard")).content.decode()
+        self.assertNotIn("deposit still held", html)
 
 
 class CustomerFlagTests(TestCase):
@@ -1498,14 +1571,12 @@ class StatusEventHookTests(TestCase):
         self.assertNotEqual(self.item.stage, "Returned")
         self.assertEqual(self.reservation.status_events.count(), 0)
 
-    def test_releasing_the_deposit_records_an_event(self):
+    def test_returning_the_last_gown_records_a_deposit_settled_event(self):
         self.client.post(
             reverse("arabela_admin:reservation_item_mark_returned", args=[self.item.id]),
             data=json.dumps({"condition": "Good"}), content_type="application/json",
         )
-        self.client.post(
-            reverse("arabela_admin:reservation_return_deposit", args=[self.reservation.id]))
-        self.assertIn("Security deposit returned", self._labels())
+        self.assertIn("Security deposit settled", self._labels())
 
     def _confirm(self):
         self.reservation.status = Reservation.Status.CONFIRMED
@@ -3540,3 +3611,559 @@ class ScheduleActionsTests(TestCase):
         self.assertIn('id="bookingModalSaveChangesBtn" style="display: none;"', html)
         self.assertIn('id="bookingModalMarkReturnedBtn" style="display: none;"', html)
         self.assertIn('id="bookingModalEditable" style="display: none;"', html)
+
+
+class GcashSettingsTests(TestCase):
+    """The owner sets the shop's GCash QR picture, account name and number in Edit Profile; the
+    customer checkout shows them. Owner-only (staff get a plain 403), blank is allowed, and a bad
+    number or file is refused before anything is saved."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = User.objects.create_user(username="gcash_owner", password="x", is_staff=True)
+        UserProfile.objects.create(user=cls.owner, role=UserProfile.Role.OWNER)
+        cls.staff = User.objects.create_user(username="gcash_staff", password="x", is_staff=True)
+        UserProfile.objects.create(user=cls.staff, role=UserProfile.Role.STAFF)
+
+    def setUp(self):
+        self.client.force_login(self.owner)
+
+    def _details(self, **data):
+        return self.client.post(
+            reverse("arabela_admin:gcash_details_update"), data=json.dumps(data), content_type="application/json",
+        )
+
+    @staticmethod
+    def _png(name="qr.png", size=(8, 8)):
+        import io
+        from PIL import Image
+        buf = io.BytesIO()
+        Image.new("RGB", size, "black").save(buf, format="PNG")
+        return SimpleUploadedFile(name, buf.getvalue(), content_type="image/png")
+
+    def _upload(self, upload):
+        return self.client.post(reverse("arabela_admin:gcash_qr_upload"), data={"qr": upload})
+
+    # ---- name + number ---------------------------------------------------------------------------
+    def test_the_owner_can_save_the_name_and_number(self):
+        response = self._details(name="  Arabela Gown Rental ", number="0917 123 4567")
+        self.assertEqual(response.status_code, 200, response.content)
+        saved = SiteSettings.load()
+        self.assertEqual((saved.gcash_account_name, saved.gcash_number), ("Arabela Gown Rental", "09171234567"))
+
+    def test_common_ways_of_writing_a_number_all_normalise(self):
+        for raw in ("09171234567", "0917-123-4567", "+63 917 123 4567", "639171234567", "(0917) 123 4567"):
+            with self.subTest(raw=raw):
+                self.assertEqual(self._details(name="A", number=raw).json()["number"], "09171234567")
+
+    def test_a_bad_number_is_refused_and_nothing_changes(self):
+        self._details(name="Keep Me", number="09171234567")
+        for bad in ("12345", "0817 123 4567", "091712345678", "abcdefghijk", "+1 555 123 4567"):
+            with self.subTest(bad=bad):
+                response = self._details(name="Changed", number=bad)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("11 digits", response.json()["error"])
+        self.assertEqual(SiteSettings.load().gcash_account_name, "Keep Me")
+
+    def test_blank_clears_and_an_over_long_name_is_refused(self):
+        self._details(name="Someone", number="09171234567")
+        self.assertEqual(self._details(name="", number="").status_code, 200)
+        saved = SiteSettings.load()
+        self.assertEqual((saved.gcash_account_name, saved.gcash_number), ("", ""))
+        self.assertEqual(self._details(name="x" * 101, number="").status_code, 400)
+
+    def test_malformed_requests_are_rejected(self):
+        url = reverse("arabela_admin:gcash_details_update")
+        for body in (b"not json", b"[]", b"5"):
+            with self.subTest(body=body):
+                self.assertEqual(self.client.post(url, data=body, content_type="application/json").status_code, 400)
+
+    # ---- who may do it -----------------------------------------------------------------------------
+    def test_staff_who_are_not_the_owner_get_a_plain_403_on_every_endpoint(self):
+        self.client.force_login(self.staff)
+        self.assertEqual(self._details(name="X", number="09171234567").status_code, 403)
+        self.assertEqual(self._upload(self._png()).status_code, 403)
+        self.assertEqual(self.client.post(reverse("arabela_admin:gcash_qr_remove")).status_code, 403)
+        self.assertEqual(SiteSettings.load().gcash_account_name, "")
+
+    def test_signed_out_gets_json_401(self):
+        self.client.logout()
+        self.assertEqual(self._details(name="X", number="").status_code, 401)
+        self.assertEqual(self.client.post(reverse("arabela_admin:gcash_qr_remove")).status_code, 401)
+
+    def test_get_requests_are_not_allowed(self):
+        self.assertEqual(self.client.get(reverse("arabela_admin:gcash_details_update")).status_code, 405)
+
+    # ---- the QR picture ------------------------------------------------------------------------------
+    def test_a_qr_can_be_uploaded_replaced_and_removed(self):
+        with patch("arabela_admin.views.default_storage") as storage:
+            storage.save.return_value = "gcash_qr/abc.png"
+            storage.url.return_value = "https://files.example/gcash_qr/abc.png"
+            storage.exists.return_value = True
+            first = self._upload(self._png())
+            self.assertEqual(first.status_code, 200, first.content)
+            self.assertEqual(first.json()["url"], "https://files.example/gcash_qr/abc.png")
+            self.assertEqual(SiteSettings.load().gcash_qr_url, "https://files.example/gcash_qr/abc.png")
+
+            storage.save.return_value = "gcash_qr/def.png"
+            storage.url.return_value = "https://files.example/gcash_qr/def.png"
+            self.assertEqual(self._upload(self._png("again.png")).status_code, 200)
+            storage.delete.assert_called_with("gcash_qr/abc.png")  # the old file is not left behind
+            self.assertEqual(SiteSettings.load().gcash_qr_url, "https://files.example/gcash_qr/def.png")
+
+            removed = self.client.post(reverse("arabela_admin:gcash_qr_remove"))
+            self.assertEqual(removed.json(), {"success": True, "url": ""})
+            storage.delete.assert_called_with("gcash_qr/def.png")
+        self.assertEqual(SiteSettings.load().gcash_qr_url, "")
+
+    def test_a_bad_upload_is_refused_without_touching_storage(self):
+        with patch("arabela_admin.views.default_storage") as storage:
+            cases = {
+                "no file": None,
+                "wrong type": SimpleUploadedFile("qr.gif", b"GIF89a", content_type="image/gif"),
+                "renamed text file": SimpleUploadedFile("qr.png", b"this is not an image", content_type="image/png"),
+                "too big": SimpleUploadedFile("qr.png", b"x" * (5 * 1024 * 1024 + 1), content_type="image/png"),
+            }
+            for label, upload in cases.items():
+                with self.subTest(case=label):
+                    response = self.client.post(reverse("arabela_admin:gcash_qr_upload"), data={"qr": upload} if upload else {})
+                    self.assertEqual(response.status_code, 400)
+            storage.save.assert_not_called()
+        self.assertEqual(SiteSettings.load().gcash_qr_url, "")
+
+    def test_a_storage_failure_is_a_clean_502_and_keeps_the_old_qr(self):
+        SiteSettings.objects.update_or_create(pk=1, defaults={"gcash_qr_url": "https://files.example/gcash_qr/old.png"})
+        with patch("arabela_admin.views.default_storage") as storage:
+            storage.save.side_effect = RuntimeError("storage down")
+            self.assertEqual(self._upload(self._png()).status_code, 502)
+        self.assertEqual(SiteSettings.load().gcash_qr_url, "https://files.example/gcash_qr/old.png")
+
+    def test_an_outside_url_is_never_deleted_from_storage(self):
+        SiteSettings.objects.update_or_create(pk=1, defaults={"gcash_qr_url": "https://elsewhere.example/qr.png"})
+        with patch("arabela_admin.views.default_storage") as storage:
+            self.client.post(reverse("arabela_admin:gcash_qr_remove"))
+            storage.delete.assert_not_called()
+
+    # ---- the pages -----------------------------------------------------------------------------------
+    def test_the_owner_sees_the_card_with_the_saved_values_and_staff_do_not(self):
+        SiteSettings.objects.update_or_create(pk=1, defaults={
+            "gcash_account_name": "Arabela Gown Rental", "gcash_number": "09171234567",
+            "gcash_qr_url": "https://files.example/gcash_qr/x.png",
+        })
+        html = self.client.get(reverse("arabela_admin:page", args=["profile"])).content.decode()
+        self.assertIn('x-data="gcashCard()"', html)
+        self.assertIn('data-number="09171234567"', html)
+        self.assertIn('data-qr="https://files.example/gcash_qr/x.png"', html)
+        self.assertIn("View Full Image", html)
+        self.client.force_login(self.staff)
+        self.assertNotIn("gcashCard", self.client.get(reverse("arabela_admin:page", args=["profile"])).content.decode())
+
+
+class GcashReferenceTests(TestCase):
+    """The optional GCash reference number: stored as digits, refused when it can't be real, and
+    flagged in Payment Verification / Security Deposits when the same number is on two bookings."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(username="gcash_ref_staff", password="x", is_staff=True)
+        cls.customer = User.objects.create_user(username="gcash_ref_customer", password="x")
+
+    def setUp(self):
+        self.client.force_login(self.staff)
+
+    def _reservation(self, reference, status=Reservation.Status.PENDING):
+        return Reservation.objects.create(
+            customer=self.customer, customer_name="Ref Customer", status=status,
+            gcash_reference=reference, payment_proof_url="https://example.test/p.jpg",
+        )
+
+    def test_no_reference_means_no_duplicates(self):
+        self.assertEqual(self._reservation("").gcash_duplicate_codes, "")
+
+    def test_a_number_used_once_is_not_a_duplicate(self):
+        self.assertEqual(self._reservation("1234567890123").gcash_duplicate_codes, "")
+
+    def test_the_same_number_on_two_bookings_names_the_other_one(self):
+        first = self._reservation("1234567890123")
+        second = self._reservation("1234567890123")
+        self.assertEqual(second.gcash_duplicate_codes, first.reference_code)
+        self.assertEqual(first.gcash_duplicate_codes, second.reference_code)
+
+    def test_a_different_number_is_not_a_duplicate(self):
+        self._reservation("1234567890123")
+        self.assertEqual(self._reservation("9999999999999").gcash_duplicate_codes, "")
+
+    def test_payment_verification_flags_a_reused_number_and_shows_the_number(self):
+        first = self._reservation("1234567890123")
+        second = self._reservation("1234567890123")
+        html = self.client.get(reverse("arabela_admin:payment_verification")).content.decode()
+        self.assertIn("gcashRef: '1234567890123'", html)
+        self.assertIn(f"Same GCash ref as {first.reference_code}", html)
+        self.assertIn(f"Same GCash ref as {second.reference_code}", html)
+        self.assertIn("GCash Reference No.", html)
+
+    def test_payment_verification_shows_no_warning_for_a_unique_number(self):
+        self._reservation("1234567890123")
+        html = self.client.get(reverse("arabela_admin:payment_verification")).content.decode()
+        self.assertNotIn("Same GCash ref as", html)
+
+    def test_security_deposits_shows_the_number_and_the_warning_too(self):
+        first = self._reservation("5555555555555", status=Reservation.Status.CONFIRMED)
+        second = self._reservation("5555555555555", status=Reservation.Status.CONFIRMED)
+        for reservation in (first, second):  # the page lists a booking once per gown on it
+            ReservationItem.objects.create(
+                reservation=reservation, gown_name="Deposit Row Gown",
+                rental_date=date.today(), return_date=date.today() + timedelta(days=3),
+            )
+        html = self.client.get(reverse("arabela_admin:security_deposits")).content.decode()
+        self.assertIn("gcashRef: '5555555555555'", html)
+        self.assertIn(f"Same GCash ref as {first.reference_code}", html)
+
+
+class CustomCategoryTests(TestCase):
+    """The owner adds (and removes) rental categories from Gown Catalog -> Add Category. A new one is
+    treated like a built-in everywhere: Add Gown, Tag Colors, the customer's collection page, the
+    All page, search and the AI helper."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = User.objects.create_user(username="cat_owner", password="x", is_staff=True)
+        UserProfile.objects.create(user=cls.owner, role=UserProfile.Role.OWNER)
+        cls.staff = User.objects.create_user(username="cat_staff", password="x", is_staff=True)
+        UserProfile.objects.create(user=cls.staff, role=UserProfile.Role.STAFF)
+
+    def setUp(self):
+        self.client.force_login(self.owner)
+
+    def _add(self, name):
+        return self.client.post(
+            reverse("arabela_admin:gown_category_create"), data=json.dumps({"name": name}),
+            content_type="application/json",
+        )
+
+    # ---- adding ----------------------------------------------------------------------------------
+    def test_the_owner_can_add_a_category(self):
+        response = self._add("  Debut   Gown ")
+        self.assertEqual(response.status_code, 200, response.content)
+        category = CustomCategory.objects.get()
+        self.assertEqual((category.name, category.slug), ("Debut Gown", "debut-gown"))
+        self.assertIn("Debut Gown", all_category_names())
+
+    def test_bad_names_are_refused_with_a_plain_reason(self):
+        cases = {
+            "": "at least 2",
+            "x": "at least 2",
+            "A" * 21: "20 characters",
+            "Debut <b>": "letters, numbers",
+            "Debut & Co": "letters, numbers",
+            "wedding gown": "already a category",    # a built-in, ignoring capitals
+            "Wedding": "too close",                   # same page address as the built-in Wedding Gown
+            "All": "too close",                       # reserved for the All page
+            "Ball-Gown": "too close",
+        }
+        for name, expected in cases.items():
+            with self.subTest(name=name):
+                response = self._add(name)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn(expected, response.json()["error"])
+        self.assertEqual(CustomCategory.objects.count(), 0)
+
+    def test_the_same_name_twice_is_refused_ignoring_capitals(self):
+        self.assertEqual(self._add("Debut Gown").status_code, 200)
+        self.assertEqual(self._add("DEBUT GOWN").status_code, 400)
+        self.assertEqual(CustomCategory.objects.count(), 1)
+
+    def test_only_the_owner_can_add_or_remove(self):
+        category = CustomCategory.objects.create(name="Debut Gown", slug="debut-gown")
+        self.client.force_login(self.staff)
+        self.assertEqual(self._add("Another One").status_code, 403)
+        self.assertEqual(self.client.post(reverse("arabela_admin:gown_category_delete", args=[category.id])).status_code, 403)
+        self.client.logout()
+        self.assertEqual(self._add("Another One").status_code, 401)
+        self.assertEqual(CustomCategory.objects.count(), 1)
+
+    def test_malformed_requests_are_rejected(self):
+        url = reverse("arabela_admin:gown_category_create")
+        for body in (b"not json", b"[]", b"5"):
+            with self.subTest(body=body):
+                self.assertEqual(self.client.post(url, data=body, content_type="application/json").status_code, 400)
+
+    # ---- removing --------------------------------------------------------------------------------------
+    def test_an_empty_category_can_be_removed(self):
+        category = CustomCategory.objects.create(name="Debut Gown", slug="debut-gown")
+        response = self.client.post(reverse("arabela_admin:gown_category_delete", args=[category.id]))
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertFalse(CustomCategory.objects.exists())
+
+    def test_a_category_with_gowns_cannot_be_removed(self):
+        category = CustomCategory.objects.create(name="Debut Gown", slug="debut-gown")
+        _make_gown(1, category="Debut Gown")
+        response = self.client.post(reverse("arabela_admin:gown_category_delete", args=[category.id]))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("1 gown", response.json()["error"])
+        self.assertTrue(CustomCategory.objects.exists())
+
+    def test_removing_something_already_gone_is_a_clean_404(self):
+        self.assertEqual(self.client.post(reverse("arabela_admin:gown_category_delete", args=[999999])).status_code, 404)
+
+    # ---- the admin side -----------------------------------------------------------------------------------
+    def test_a_new_category_shows_in_the_catalog_add_gown_and_tag_colors(self):
+        CustomCategory.objects.create(name="Debut Gown", slug="debut-gown")
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        rows = {r["key"]: r for r in response.context["category_rows"]}
+        self.assertTrue(rows["Debut Gown"]["custom"])
+        self.assertFalse(rows["Wedding Gown"]["custom"])
+        self.assertEqual(rows["Debut Gown"]["tag_color"], "Gray")
+        self.assertIn("Debut Gown", response.context["tag_colors_data"])
+        self.assertContains(response, "+ Add Category")
+        self.assertContains(response, "Categories you added")
+
+    def test_staff_do_not_see_the_add_category_button(self):
+        self.client.force_login(self.staff)
+        html = self.client.get(reverse("arabela_admin:gown_catalog")).content.decode()
+        self.assertNotIn("+ Add Category", html)
+
+    def test_a_gown_can_be_added_in_a_new_category_and_gets_its_own_numbering(self):
+        CustomCategory.objects.create(name="Debut Gown", slug="debut-gown")
+        response = self.client.post(reverse("arabela_admin:gown_create"), data={
+            "name": "Rose", "category": "Debut Gown", "color_name": "Pink", "color_code": "PK",
+            "size": "Medium", "rental_price": "5000",
+        })
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["gown"]["gown_id"], "Debut Gown-PK-001")
+
+    def test_an_unknown_category_is_still_refused(self):
+        response = self.client.post(reverse("arabela_admin:gown_create"), data={
+            "name": "Rose", "category": "Made Up", "color_name": "Pink", "color_code": "PK",
+            "size": "Medium", "rental_price": "5000",
+        })
+        self.assertEqual(response.status_code, 400)
+
+    def test_the_owner_can_set_a_new_categorys_tag_colour_and_it_is_used(self):
+        CustomCategory.objects.create(name="Debut Gown", slug="debut-gown")
+        response = self.client.post(
+            reverse("arabela_admin:gown_tag_colors_update"),
+            data=json.dumps({"colors": {"Debut Gown": "Purple"}}), content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(SiteSettings.load().tag_colors()["Debut Gown"], "Purple")
+
+    # ---- the customer side ----------------------------------------------------------------------------------
+    def test_the_customer_gets_a_collection_page_for_the_new_category(self):
+        CustomCategory.objects.create(name="Debut Gown", slug="debut-gown")
+        _make_gown(1, category="Debut Gown", name="Rose Debut")
+        anon = Client()
+        response = anon.get("/collections/debut-gown/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Debut Gown")
+        self.assertContains(response, "Rose Debut")
+
+    def test_an_unknown_collection_is_a_404_and_built_in_pages_are_unchanged(self):
+        anon = Client()
+        self.assertEqual(anon.get("/collections/not-a-category/").status_code, 404)
+        for built_in in ("wedding", "ball-gown", "bridesmaid-dresses", "all"):
+            with self.subTest(page=built_in):
+                self.assertEqual(anon.get(f"/collections/{built_in}/").status_code, 200)
+
+    def test_a_removed_category_stops_being_a_page(self):
+        category = CustomCategory.objects.create(name="Debut Gown", slug="debut-gown")
+        self.client.post(reverse("arabela_admin:gown_category_delete", args=[category.id]))
+        self.assertEqual(Client().get("/collections/debut-gown/").status_code, 404)
+
+    def test_the_all_page_search_and_ai_helper_know_the_new_category(self):
+        from ai_recommendation.views import _system_prompt
+        CustomCategory.objects.create(name="Debut Gown", slug="debut-gown")
+        _make_gown(1, category="Debut Gown", name="Rose Debut")
+        anon = Client()
+        self.assertContains(anon.get("/collections/all/"), "Debut Gown")
+        home = anon.get("/")
+        meta = home.context["search_overlay_collections_meta"]
+        self.assertIn(("Debut Gown", "/collections/debut-gown/"), [(m["label"], m["url"]) for m in meta])
+        catalog = home.context["search_overlay_catalog"]
+        self.assertIn("Rose Debut", [i["title"] for i in catalog])
+        self.assertIn("/collections/debut-gown/", _system_prompt())
+
+    def test_a_product_page_works_for_a_gown_in_a_new_category(self):
+        CustomCategory.objects.create(name="Debut Gown", slug="debut-gown")
+        gown = _make_gown(1, category="Debut Gown", name="Rose Debut")
+        response = Client().get(f"/collections/debut-gown/products/{gown.slug}/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Rose Debut")
+
+
+class CategoryAudienceTests(TestCase):
+    """Where an owner-added category shows: the customer's Women's or Men's collection page. The
+    built-in ones are unchanged -- Suit and Barong on the Men's page, the rest on the Women's."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = User.objects.create_user(username="aud_owner", password="x", is_staff=True)
+        UserProfile.objects.create(user=cls.owner, role=UserProfile.Role.OWNER)
+        cls.staff = User.objects.create_user(username="aud_staff", password="x", is_staff=True)
+        UserProfile.objects.create(user=cls.staff, role=UserProfile.Role.STAFF)
+
+    def setUp(self):
+        self.client.force_login(self.owner)
+
+    @staticmethod
+    def _grid(path):
+        """Labels of the tiles in the page's category grid (the nav menu lists every category, so
+        a plain text search of the whole page would prove nothing)."""
+        html = Client().get(path).content.decode()
+        return re.findall(r'drop-shadow-sm">([^<]+)</span>', html)
+
+    def _add(self, name, **extra):
+        return self.client.post(
+            reverse("arabela_admin:gown_category_create"),
+            data=json.dumps({"name": name, **extra}), content_type="application/json",
+        )
+
+    def test_the_built_in_categories_stay_where_they_were(self):
+        women, men = self._grid("/featured/women/"), self._grid("/featured/men/")
+        self.assertEqual(sorted(men), ["Barong", "Suit"])
+        self.assertIn("Wedding Gown", women)
+        self.assertIn("Bridesmaid Dresses", women)
+        self.assertNotIn("Suit", women)
+        self.assertNotIn("Barong", women)
+        self.assertNotIn("All", women)
+
+    def test_a_new_category_defaults_to_the_womens_collection(self):
+        self.assertEqual(self._add("Debut Gown").status_code, 200)
+        self.assertEqual(CustomCategory.objects.get().audience, "women")
+        self.assertIn("Debut Gown", self._grid("/featured/women/"))
+        self.assertNotIn("Debut Gown", self._grid("/featured/men/"))
+
+    def test_a_category_added_to_the_mens_collection_shows_only_there(self):
+        self.assertEqual(self._add("Tuxedo", audience="men").status_code, 200)
+        self.assertEqual(CustomCategory.objects.get().audience, "men")
+        self.assertIn("Tuxedo", self._grid("/featured/men/"))
+        self.assertNotIn("Tuxedo", self._grid("/featured/women/"))
+        self.assertIn("Suit", self._grid("/featured/men/"))  # the built-in ones are still there
+
+    def test_an_invalid_audience_is_refused(self):
+        for bad in ("kids", "MEN", "both"):
+            with self.subTest(bad=bad):
+                self.assertEqual(self._add("Tuxedo", audience=bad).status_code, 400)
+        self.assertEqual(CustomCategory.objects.count(), 0)
+
+    def test_the_owner_can_move_a_category_between_the_two_pages(self):
+        category = CustomCategory.objects.create(name="Tuxedo", slug="tuxedo")
+        url = reverse("arabela_admin:gown_category_audience", args=[category.id])
+        response = self.client.post(url, data=json.dumps({"audience": "men"}), content_type="application/json")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertIn("Men's collection", response.json()["message"])
+        self.assertIn("Tuxedo", self._grid("/featured/men/"))
+        self.assertNotIn("Tuxedo", self._grid("/featured/women/"))
+        self.client.post(url, data=json.dumps({"audience": "women"}), content_type="application/json")
+        self.assertIn("Tuxedo", self._grid("/featured/women/"))
+        self.assertNotIn("Tuxedo", self._grid("/featured/men/"))
+
+    def test_moving_needs_a_valid_audience_an_existing_category_and_the_owner(self):
+        category = CustomCategory.objects.create(name="Tuxedo", slug="tuxedo")
+        url = reverse("arabela_admin:gown_category_audience", args=[category.id])
+        self.assertEqual(self.client.post(url, data=json.dumps({"audience": "kids"}), content_type="application/json").status_code, 400)
+        self.assertEqual(self.client.post(url, data=b"nope", content_type="application/json").status_code, 400)
+        gone = reverse("arabela_admin:gown_category_audience", args=[999999])
+        self.assertEqual(self.client.post(gone, data=json.dumps({"audience": "men"}), content_type="application/json").status_code, 404)
+        self.client.force_login(self.staff)
+        self.assertEqual(self.client.post(url, data=json.dumps({"audience": "men"}), content_type="application/json").status_code, 403)
+        self.client.logout()
+        self.assertEqual(self.client.post(url, data=json.dumps({"audience": "men"}), content_type="application/json").status_code, 401)
+        category.refresh_from_db()
+        self.assertEqual(category.audience, "women")
+
+    def test_the_catalog_panel_offers_the_choice_and_shows_each_categorys_audience(self):
+        CustomCategory.objects.create(name="Tuxedo", slug="tuxedo", audience="men")
+        response = self.client.get(reverse("arabela_admin:gown_catalog"))
+        rows = {r["key"]: r for r in response.context["category_rows"]}
+        self.assertEqual(rows["Tuxedo"]["audience"], "men")
+        self.assertEqual(rows["Wedding Gown"]["audience"], "")
+        html = response.content.decode()
+        self.assertIn("Women's collection", html)
+        self.assertIn("Men's collection", html)
+        self.assertIn("setCategoryAudience(", html)
+        self.assertIn("audience: this.newCategoryAudience", html)
+
+
+class ReceiptDeleteTests(TestCase):
+    """Staff can delete a manual receipt photo: the record and file go, the booking is untouched,
+    and a staff-only line on its timeline records who did it."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            username="receipt_del_staff", password="x", is_staff=True, first_name="Rita", last_name="Reyes",
+        )
+        cls.customer = User.objects.create_user(username="receipt_del_customer", password="x")
+
+    def setUp(self):
+        self.client.force_login(self.staff)
+        self.reservation = Reservation.objects.create(
+            customer=self.customer, customer_name="Receipt Customer", status=Reservation.Status.CONFIRMED,
+        )
+        self.receipt = ReceiptRecord.objects.create(
+            reservation=self.reservation, photo_url="https://files.example/receipt_photos/abc_receipt.jpg",
+            uploaded_by=self.staff,
+        )
+
+    def _delete(self, receipt_id=None):
+        return self.client.post(reverse("arabela_admin:receipt_delete", args=[receipt_id or self.receipt.id]))
+
+    def test_deleting_removes_the_record_and_the_stored_file(self):
+        with patch("arabela_admin.views.default_storage") as storage:
+            storage.exists.return_value = True
+            response = self._delete()
+            storage.delete.assert_called_once_with("receipt_photos/abc_receipt.jpg")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["reference"], self.reservation.reference_code)
+        self.assertFalse(ReceiptRecord.objects.filter(id=self.receipt.id).exists())
+
+    def test_the_booking_is_untouched_and_a_staff_only_line_records_who_did_it(self):
+        with patch("arabela_admin.views.default_storage"):
+            self._delete()
+        self.reservation.refresh_from_db()
+        self.assertEqual(self.reservation.status, Reservation.Status.CONFIRMED)
+        event = self.reservation.status_events.get(label="Receipt photo deleted")
+        self.assertTrue(event.staff_only)
+        self.assertIn("Rita Reyes", event.detail)
+
+    def test_only_that_receipt_goes(self):
+        other = ReceiptRecord.objects.create(reservation=self.reservation, photo_url="https://files.example/receipt_photos/other.jpg")
+        with patch("arabela_admin.views.default_storage"):
+            self._delete()
+        self.assertTrue(ReceiptRecord.objects.filter(id=other.id).exists())
+
+    def test_a_file_that_is_not_ours_is_never_deleted_from_storage(self):
+        ReceiptRecord.objects.filter(id=self.receipt.id).update(photo_url="https://elsewhere.example/r.jpg")
+        with patch("arabela_admin.views.default_storage") as storage:
+            self._delete()
+            storage.delete.assert_not_called()
+        self.assertFalse(ReceiptRecord.objects.filter(id=self.receipt.id).exists())
+
+    def test_a_storage_failure_never_undoes_the_delete(self):
+        with patch("arabela_admin.views.default_storage") as storage:
+            storage.exists.side_effect = RuntimeError("storage down")
+            response = self._delete()
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(ReceiptRecord.objects.filter(id=self.receipt.id).exists())
+
+    def test_deleting_twice_or_a_missing_receipt_is_a_clean_404(self):
+        with patch("arabela_admin.views.default_storage"):
+            self._delete()
+        self.assertEqual(self._delete().status_code, 404)
+        self.assertEqual(self._delete(999999).status_code, 404)
+
+    def test_signed_out_is_refused_and_nothing_is_deleted(self):
+        self.client.logout()
+        self.assertEqual(self._delete().status_code, 401)
+        self.assertTrue(ReceiptRecord.objects.filter(id=self.receipt.id).exists())
+
+    def test_get_is_not_allowed(self):
+        response = self.client.get(reverse("arabela_admin:receipt_delete", args=[self.receipt.id]))
+        self.assertEqual(response.status_code, 405)
+
+    def test_the_records_page_offers_a_two_step_delete(self):
+        html = self.client.get(reverse("arabela_admin:reservation_records")).content.decode()
+        self.assertIn("Delete Receipt", html)
+        self.assertIn("Yes, delete", html)
+        self.assertIn("deleteReceipt()", html)

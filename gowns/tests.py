@@ -17,7 +17,7 @@ from django.utils import formats, timezone
 from django.utils.datastructures import MultiValueDict
 
 from arabela_system.middleware import DatabaseRetryMiddleware
-from gowns.models import Gown, GownRemoval, GownSequence, GownSlugSequence, GownUnavailability
+from gowns.models import Gown, GownRemoval, GownSequence, GownSlugSequence, GownUnavailability, SiteSettings
 from gowns.views import (
     _UNIT_ASSIGNED,
     _UNIT_NO_INVENTORY,
@@ -1640,3 +1640,96 @@ class MultiUnitCalendarScopeTests(TestCase):
         self._book(two, rental, return_date)
         blocked = _blocked_dates_for_category(one.category, one.name)
         self.assertIn(rental.isoformat(), blocked)
+
+
+class CheckoutGcashWindowTests(TestCase):
+    """The checkout's GCash window (step-by-step guide) and the optional reference number box."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.customer = User.objects.create_user(username="gcash_window_customer", password="x")
+
+    def setUp(self):
+        self.client.force_login(self.customer)
+        patcher = patch("gowns.views._save_proof_file", return_value="https://example.test/fake-proof.jpg")
+        self.addCleanup(patcher.stop)
+        patcher.start()
+        self.gown = Gown.objects.create(
+            gown_id="GCASHWIN-0001", name="Gcash Window Gown", category=Gown.Category.GUEST_GOWN,
+            color_name="Red", color_code="RD", size=Gown.Size.MEDIUM, rental_price=Decimal("3000.00"),
+            status=Gown.Status.AVAILABLE,
+        )
+
+    def _submit(self, start="2027-02-10", end="2027-02-13", **overrides):
+        payload = {
+            "items": json.dumps([{
+                "gown_name": self.gown.name, "gown_slug": self.gown.slug, "size": "Medium",
+                "rental_date": start, "return_date": end,
+            }]),
+            "first_name": "Test", "last_name": "Buyer", "phone": "09171234567", "address": "1 St",
+            "city": "City", "postal_code": "1000", "payment_method": "GCash",
+            "proof_of_payment": _make_proof(),
+        }
+        payload.update(overrides)
+        return self.client.post(reverse("gowns:reservation_submit"), data=payload)
+
+    def _saved_reference(self, response):
+        return Reservation.objects.get(reference_code=response.json()["reference_code"]).gcash_reference
+
+    # ---- the reference number ------------------------------------------------------------------------
+    def test_a_booking_without_a_reference_still_works(self):
+        response = self._submit()
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(self._saved_reference(response), "")
+
+    def test_a_typed_reference_is_saved_as_digits_only(self):
+        # one gown, so each booking gets its own dates
+        for n, typed in enumerate(("1234 567 890123", "1234567890123", "  1234 5678 90123  ")):
+            with self.subTest(typed=typed):
+                response = self._submit(start=f"2027-0{n + 3}-10", end=f"2027-0{n + 3}-13", gcash_reference=typed)
+                self.assertEqual(response.status_code, 200, response.content)
+                self.assertEqual(self._saved_reference(response), "1234567890123")
+
+    def test_a_reference_that_cannot_be_real_is_refused_and_no_booking_is_made(self):
+        before = Reservation.objects.count()
+        for bad in ("123", "abc", "1" * 25, "12 34"):
+            with self.subTest(bad=bad):
+                response = self._submit(gcash_reference=bad)
+                self.assertEqual(response.status_code, 400)
+                self.assertFalse(response.json()["success"])
+                self.assertIn("reference number", response.json()["error"])
+        self.assertEqual(Reservation.objects.count(), before)
+
+    # ---- the window ----------------------------------------------------------------------------------------
+    def test_without_a_qr_the_window_says_coming_soon_and_the_old_placeholder_is_gone(self):
+        html = self.client.get(reverse("gowns:reservation")).content.decode()
+        self.assertIn("QR code coming soon", html)
+        self.assertNotIn("googleusercontent", html)
+        self.assertNotIn('id="gcash-qr-img"', html)
+
+    def test_with_a_qr_the_window_shows_it_with_the_name_number_and_steps(self):
+        SiteSettings.objects.update_or_create(pk=1, defaults={
+            "gcash_account_name": "Arabela Gown Rental", "gcash_number": "09171234567",
+            "gcash_qr_url": "https://files.example/gcash_qr/x.png",
+        })
+        html = self.client.get(reverse("gowns:reservation")).content.decode()
+        self.assertIn('src="https://files.example/gcash_qr/x.png"', html)
+        self.assertIn("Arabela Gown Rental", html)
+        self.assertIn('id="gcash-number-text"', html)
+        self.assertIn("Save QR image", html)
+        self.assertNotIn("QR code coming soon", html)
+        for step in ("Pay QR", "Scan the QR code above.", "exact amount", "screenshot of your receipt", "Confirm Rental"):
+            self.assertIn(step, html)
+        # the amount element the checkout script fills keeps its id
+        self.assertIn('id="gcash-deposit-amount"', html)
+
+    def test_with_only_a_number_the_steps_say_to_send_to_the_number(self):
+        SiteSettings.objects.update_or_create(pk=1, defaults={"gcash_number": "09171234567"})
+        html = self.client.get(reverse("gowns:reservation")).content.decode()
+        self.assertIn("Send the money to the GCash number above.", html)
+        self.assertIn("QR code coming soon", html)
+
+    def test_the_reference_box_is_on_the_page_and_sent_with_the_form(self):
+        html = self.client.get(reverse("gowns:reservation")).content.decode()
+        self.assertIn('id="gcash_reference"', html)
+        self.assertIn("formData.append('gcash_reference'", html)

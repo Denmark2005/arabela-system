@@ -1646,6 +1646,141 @@
                 </div>
               </div>
               {% endif %}
+              {% if admin_is_owner %}
+              <!-- GCash payment details = core business setting (shown to customers in the checkout's
+                   GCash window). Owner-only; the three endpoints behind it enforce that too. Its own
+                   Alpine scope (gcashCard, defined just below) so the page-wide x-data is untouched. -->
+              <script>
+                window.gcashCard = function () {
+                  return {
+                    name: '', number: '', qrUrl: '',
+                    busy: false, qrError: '', detailsBusy: false, detailsMsg: '', detailsOk: false, showFull: false,
+                    init() {
+                      var d = this.$el.dataset;
+                      this.name = d.name || '';
+                      this.number = d.number || '';
+                      this.qrUrl = d.qr || '';
+                    },
+                    csrf() {
+                      var m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+                      return m ? decodeURIComponent(m[1]) : '';
+                    },
+                    post(url, options) {
+                      options.method = 'POST';
+                      options.headers = Object.assign({ 'X-CSRFToken': this.csrf() }, options.headers || {});
+                      return fetch(url, options).then(function (res) {
+                        return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+                      });
+                    },
+                    pickQr(event) {
+                      var file = event.target.files && event.target.files[0];
+                      event.target.value = '';
+                      if (!file) return;
+                      this.qrError = '';
+                      if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { this.qrError = 'Use a JPG, PNG or WEBP image.'; return; }
+                      if (file.size > 5 * 1024 * 1024) { this.qrError = 'Image must be 5MB or smaller.'; return; }
+                      var form = new FormData();
+                      form.append('qr', file);
+                      this.busy = true;
+                      this.post('{% url "arabela_admin:gcash_qr_upload" %}', { body: form }).then((r) => {
+                        this.busy = false;
+                        if (!r.ok || !r.data.success) { this.qrError = r.data.error || 'Could not upload the image.'; return; }
+                        this.qrUrl = r.data.url;
+                      }).catch(() => { this.busy = false; this.qrError = 'Network error. Please try again.'; });
+                    },
+                    removeQr() {
+                      adminConfirm({
+                        title: 'Remove the GCash QR?',
+                        message: 'Customers will see "QR code coming soon" until you upload a new one.',
+                        confirmText: 'Remove', danger: true
+                      }).then((ok) => {
+                        if (!ok) return;
+                        this.busy = true;
+                        this.post('{% url "arabela_admin:gcash_qr_remove" %}', {}).then((r) => {
+                          this.busy = false;
+                          if (!r.ok || !r.data.success) { this.qrError = r.data.error || 'Could not remove the image.'; return; }
+                          this.qrUrl = ''; this.showFull = false; this.qrError = '';
+                        }).catch(() => { this.busy = false; this.qrError = 'Network error. Please try again.'; });
+                      });
+                    },
+                    saveDetails() {
+                      this.detailsBusy = true; this.detailsMsg = '';
+                      this.post('{% url "arabela_admin:gcash_details_update" %}', {
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: this.name, number: this.number })
+                      }).then((r) => {
+                        this.detailsBusy = false;
+                        this.detailsOk = !!(r.ok && r.data.success);
+                        if (this.detailsOk) { this.name = r.data.name; this.number = r.data.number; this.detailsMsg = 'Saved. Customers now see these details.'; }
+                        else { this.detailsMsg = r.data.error || 'Could not save.'; }
+                      }).catch(() => { this.detailsBusy = false; this.detailsOk = false; this.detailsMsg = 'Network error. Please try again.'; });
+                    }
+                  };
+                };
+              </script>
+              <div
+                x-data="gcashCard()"
+                data-name="{{ site_gcash_name }}" data-number="{{ site_gcash_number }}" data-qr="{{ site_gcash_qr_url }}"
+                @keydown.escape.window="showFull = false"
+                class="p-5 border border-gray-200 rounded-2xl dark:border-gray-800 lg:p-6"
+                style="margin-top: 1.5rem;"
+              >
+                <h4 class="text-lg font-semibold text-gray-800 dark:text-white/90">GCash Payment</h4>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Shown to customers when they pay the security deposit. The QR is always shown whole, never cropped.</p>
+
+                <div style="display: flex; flex-wrap: wrap; gap: 2rem; margin-top: 1.25rem;">
+                  <div style="width: 208px;">
+                    <div class="rounded-2xl border border-gray-200 bg-white p-3 dark:border-gray-700"
+                         style="width: 208px; height: 208px; display: flex; align-items: center; justify-content: center;">
+                      <template x-if="qrUrl"><img :src="qrUrl" alt="GCash QR code" style="max-width: 100%; max-height: 100%; object-fit: contain;" /></template>
+                      <template x-if="!qrUrl"><p class="px-4 text-center text-sm text-gray-400">No QR uploaded yet</p></template>
+                    </div>
+                    <input type="file" class="hidden" x-ref="qrInput" accept="image/jpeg,image/png,image/webp" @change="pickQr($event)" />
+                    <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem;">
+                      <button type="button" @click="$refs.qrInput.click()" :disabled="busy" :style="busy ? 'opacity: 0.6; cursor: not-allowed;' : ''"
+                              class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200" x-text="busy ? 'Working...' : (qrUrl ? 'Replace QR' : 'Upload QR')"></button>
+                      <button type="button" x-show="qrUrl" x-cloak @click="showFull = true" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View Full Image</button>
+                      <button type="button" x-show="qrUrl" x-cloak @click="removeQr()" :disabled="busy" style="color: #F04438;" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">Remove</button>
+                    </div>
+                    <p x-show="qrError" x-cloak x-text="qrError" class="mt-2 text-xs font-medium text-error-600 dark:text-error-500"></p>
+                    <p class="mt-2 text-xs text-gray-400 dark:text-gray-400">JPG, PNG or WEBP, up to 5MB.</p>
+                  </div>
+
+                  <div style="flex: 1; min-width: 260px;">
+                    <div>
+                      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Account name</label>
+                      <input type="text" x-model="name" maxlength="100" placeholder="e.g. Arabela Gown Rental" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800" />
+                    </div>
+                    <div style="margin-top: 1rem;">
+                      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">GCash number</label>
+                      <input type="tel" inputmode="tel" x-model="number" maxlength="20" placeholder="0917 123 4567" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800" />
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.75rem; margin-top: 1.25rem;">
+                      <button type="button" @click="saveDetails()" :disabled="detailsBusy" :style="detailsBusy ? 'opacity: 0.6; cursor: not-allowed;' : ''"
+                              class="flex justify-center rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs hover:bg-black dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
+                              x-text="detailsBusy ? 'Saving...' : 'Save Details'"></button>
+                      <p x-show="detailsMsg" x-cloak x-text="detailsMsg" class="text-xs font-medium"
+                         :class="detailsOk ? 'text-success-700 dark:text-success-500' : 'text-error-600 dark:text-error-500'"></p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- View Full Image: the QR big, plus a link that opens it in its own tab. -->
+                <div x-show="showFull" x-cloak class="fixed inset-0 flex items-center justify-center p-5 overflow-y-auto z-99999">
+                  <div class="modal-close-btn fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]" @click="showFull = false"></div>
+                  <div class="relative rounded-3xl bg-white p-6 dark:bg-gray-900" style="width: min(560px, 92vw);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem;">
+                      <h4 class="text-lg font-semibold text-gray-800 dark:text-white/90">GCash QR</h4>
+                      <button type="button" @click="showFull = false" class="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Close</button>
+                    </div>
+                    <div class="rounded-2xl bg-white p-3" style="display: flex; justify-content: center;">
+                      <img :src="qrUrl" alt="GCash QR code, full size" style="display: block; max-width: 100%; max-height: 70vh; object-fit: contain;" />
+                    </div>
+                    <a :href="qrUrl" target="_blank" rel="noopener" style="margin-top: 1rem;" class="inline-flex items-center gap-1.5 text-theme-xs font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400">Open in a new tab</a>
+                  </div>
+                </div>
+              </div>
+              {% endif %}
             </div>
           </div>
         </main>

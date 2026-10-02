@@ -282,36 +282,6 @@ def admin_notifications(request):
             "sort": datetime.combine(it.rental_date, time.min),
         })
 
-    # --- Deposits still held on fully-returned rentals -----------------------------
-    for r in (
-        Reservation.objects.filter(
-            status__in=[
-                Reservation.Status.CONFIRMED,
-                Reservation.Status.ACTIVE,
-                Reservation.Status.OVERDUE,
-            ],
-            deposit_returned_at__isnull=True,
-        )
-        .select_related("customer__profile")
-        .prefetch_related("items")
-        .order_by("-updated_at")[:20]
-    ):
-        its = list(r.items.all())
-        if its and all(i.stage == ReservationItem.Stage.RETURNED for i in its):
-            items.append({
-                "kind": "deposit",
-                "level": "info",
-                "icon": "deposit",
-                "actor": r.display_customer_name,
-                "text": "returned everything — deposit still held on",
-                "subject": r.reference_code,
-                "module": "Deposits",
-                "url": _searchable("arabela_admin:security_deposits", r.reference_code),
-                "when": r.updated_at,
-                "ago": _ago(r.updated_at),
-                "sort": r.updated_at,
-            })
-
     # --- Inventory needing attention ----------------------------------------------
     for g in (
         Gown.objects.filter(status=Gown.Status.OUT_OF_STOCK)

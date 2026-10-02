@@ -29,6 +29,7 @@
       canEditTagColors: {% if can_edit_tag_colors %}true{% else %}false{% endif %},
       // Removal Log panel + the Remove modal (reason is required before anything is deleted).
       showRemovalLog: false, removalSearch: '', removalHays: [],
+      showAddCategory: false, newCategoryName: '', newCategoryAudience: 'women', categoryBusy: false, categoryError: '',
       isRemoveModal: false, removeMode: 'single', removeIds: [], removeLabel: '', removeReason: '', removeNote: '', removeError: '', removeBusy: false,
       // Add Gown: the name is filled in from the chosen color until staff type their own;
       // nameConflict holds the server's 'that name already exists' answer so the form can ask
@@ -560,6 +561,65 @@
         this.openRemoveModal(this.selectedGownIds.slice(), n + ' selected gown' + (n === 1 ? '' : 's'), 'bulk');
       },
       // Stamps gowns as physically confirmed present right now (by whoever is signed in).
+      // Add Category / Remove Category (owner only -- the server enforces it). A new category is
+      // listed in Add Gown, in Tag Colors and on the customer site, so the page reloads to show it.
+      addCategory() {
+        const name = this.newCategoryName.trim();
+        this.categoryError = '';
+        if (!name) { this.categoryError = 'Please type a category name.'; return; }
+        this.categoryBusy = true;
+        fetch('/admin-panel/api/categories/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.getCsrfToken() },
+          body: JSON.stringify({ name: name, audience: this.newCategoryAudience }),
+        })
+        .then(r => r.json().then(data => ({ ok: r.ok, data })))
+        .then(({ ok, data }) => {
+          this.categoryBusy = false;
+          if (!ok || !data.success) { this.categoryError = data.error || 'Could not add the category.'; return; }
+          this.newCategoryName = '';
+          this.gownToast(data.message);
+          setTimeout(() => window.location.reload(), 1200);
+        })
+        .catch(() => { this.categoryBusy = false; this.categoryError = 'Network error. Please try again.'; });
+      },
+      setCategoryAudience(id, audience) {
+        this.categoryError = '';
+        fetch('/admin-panel/api/categories/' + id + '/audience/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.getCsrfToken() },
+          body: JSON.stringify({ audience: audience }),
+        })
+        .then(r => r.json().then(data => ({ ok: r.ok, data })))
+        .then(({ ok, data }) => {
+          if (!ok || !data.success) { this.categoryError = data.error || 'Could not move the category.'; return; }
+          this.gownToast(data.message);
+        })
+        .catch(() => { this.categoryError = 'Network error. Please try again.'; });
+      },
+      removeCategory(id, name) {
+        adminConfirm({
+          title: 'Remove ' + name + '?',
+          message: 'Only an empty category can be removed. It disappears from Add Gown and from the customer site.',
+          confirmText: 'Remove', danger: true
+        }).then((ok) => {
+          if (!ok) return;
+          this.categoryError = '';
+          this.categoryBusy = true;
+          fetch('/admin-panel/api/categories/' + id + '/delete/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': this.getCsrfToken() },
+          })
+          .then(r => r.json().then(data => ({ ok: r.ok, data })))
+          .then(({ ok, data }) => {
+            this.categoryBusy = false;
+            if (!ok || !data.success) { this.categoryError = data.error || 'Could not remove the category.'; return; }
+            this.gownToast(data.message);
+            setTimeout(() => window.location.reload(), 900);
+          })
+          .catch(() => { this.categoryBusy = false; this.categoryError = 'Network error. Please try again.'; });
+        });
+      },
       // The walkthrough check: tick what is on the rack, press Mark Checked.
       markChecked(ids) {
         if (this.bulkBusy || !ids || ids.length === 0) { return; }
@@ -1808,16 +1868,24 @@
             <div class="mt-3 flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                @click="showTagColors = !showTagColors; if (showTagColors) { showRemovalLog = false }"
+                @click="showTagColors = !showTagColors; if (showTagColors) { showRemovalLog = false; showAddCategory = false }"
                 :class="showTagColors ? 'border-brand-500 bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.03]'"
                 class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-theme-xs font-medium transition-colors"
               >Tag Colors</button>
               <button
                 type="button"
-                @click="showRemovalLog = !showRemovalLog; if (showRemovalLog) { showTagColors = false }"
+                @click="showRemovalLog = !showRemovalLog; if (showRemovalLog) { showTagColors = false; showAddCategory = false }"
                 :class="showRemovalLog ? 'border-brand-500 bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.03]'"
                 class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-theme-xs font-medium transition-colors"
               >Removal Log ({{ gown_removals|length }})</button>
+              {% if can_edit_tag_colors %}
+              <button
+                type="button"
+                @click="showAddCategory = !showAddCategory; if (showAddCategory) { showTagColors = false; showRemovalLog = false }"
+                :class="showAddCategory ? 'border-brand-500 bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]'"
+                class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-theme-xs font-medium transition-colors"
+              >+ Add Category</button>
+              {% endif %}
             </div>
 
             <!-- Tag Colors: one tag color per category. Everyone sees the list; only the owner
@@ -1922,6 +1990,68 @@
               <p class="mt-5 rounded-lg bg-gray-50 p-4 text-sm text-gray-500 dark:bg-white/[0.03] dark:text-gray-400">No gowns have been removed yet.</p>
               {% endif %}
             </div>
+
+            {% if can_edit_tag_colors %}
+            <!-- Add Category: the owner adds a rental category without a developer. It becomes a
+                 choice in Add Gown and Tag Colors and gets its own page on the customer site.
+                 Only an EMPTY category the owner added can be removed again. -->
+            <div class="mt-3 rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6" x-show="showAddCategory" x-cloak>
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <h3 class="text-base font-semibold text-gray-800 dark:text-white/90">Add Category</h3>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">A new kind of gown or outfit, like &ldquo;Debut Gown&rdquo;. It shows up in Add Gown, in Tag Colors and on the customer website.</p>
+                </div>
+                <button type="button" @click="showAddCategory = false" class="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Close</button>
+              </div>
+              <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.25rem;">
+                <div style="flex: 1; min-width: 220px; max-width: 420px;">
+                  <input type="text" x-model="newCategoryName" maxlength="20" placeholder="Category name, e.g. Debut Gown"
+                         @keydown.enter.prevent="addCategory()" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800" />
+                </div>
+                <div style="width: 200px;">
+                  <select x-model="newCategoryAudience" aria-label="Show this category on" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
+                    <option value="women">Women's collection</option>
+                    <option value="men">Men's collection</option>
+                  </select>
+                </div>
+                <button type="button" @click="addCategory()" :disabled="categoryBusy" :style="categoryBusy ? 'opacity: 0.6; cursor: not-allowed;' : ''"
+                        class="flex justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]"
+                        x-text="categoryBusy ? 'Working...' : 'Add Category'"></button>
+              </div>
+              <p class="mt-2 text-xs text-gray-400 dark:text-gray-400">Up to 20 characters. Letters, numbers, spaces and hyphens.</p>
+              <p x-show="categoryError" x-cloak x-text="categoryError" class="mt-3 rounded-lg bg-error-50 p-3 text-xs font-medium text-error-600"></p>
+
+              <div style="margin-top: 1.5rem;">
+                <p class="text-sm font-medium text-gray-800 dark:text-white/90">Categories you added</p>
+                <div class="mt-3 divide-y divide-gray-100 dark:divide-gray-800">
+                  {% for row in category_rows %}{% if row.custom %}
+                  <div class="flex items-center justify-between gap-3 py-3">
+                    <div>
+                      <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ row.label }}</p>
+                      <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{{ row.total }} gown{{ row.total|pluralize }}</p>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+                    <select aria-label="Show {{ row.label }} on" @change="setCategoryAudience({{ row.id }}, $event.target.value)" style="width: 180px; height: 2.25rem; padding-top: 0; padding-bottom: 0;"
+                            class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
+                      <option value="women"{% if row.audience == 'women' %} selected{% endif %}>Women's collection</option>
+                      <option value="men"{% if row.audience == 'men' %} selected{% endif %}>Men's collection</option>
+                    </select>
+                    {% if row.total == 0 %}
+                    <button type="button" @click="removeCategory({{ row.id }}, '{{ row.label|escapejs }}')" :disabled="categoryBusy" style="color: #F04438;"
+                            class="rounded-lg border border-error-300 bg-error-50 px-3 py-1.5 text-theme-xs font-medium shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-white/[0.03]">Remove</button>
+                    {% else %}
+                    <span class="text-xs text-gray-400 dark:text-gray-400">In use &mdash; move or remove its gowns to delete it</span>
+                    {% endif %}
+                    </div>
+                  </div>
+                  {% endif %}{% endfor %}
+                  {% if not has_custom_categories %}
+                  <p class="py-3 text-sm text-gray-400 dark:text-gray-400">You haven't added any categories yet.</p>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+            {% endif %}
 
             <div class="mt-5 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03] sm:p-5">
               <div class="flex flex-col gap-3 sm:flex-row sm:items-center">

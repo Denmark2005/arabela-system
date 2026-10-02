@@ -38,6 +38,11 @@ class Reservation(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     payment_method = models.CharField(max_length=10, choices=PaymentMethod.choices, blank=True)
     payment_proof_url = models.URLField(blank=True)
+    # The GCash receipt's own reference number (digits only), typed by the customer at checkout.
+    # Optional. Lets staff find the payment in the shop's GCash history, and lets the admin
+    # pages warn when the same number turns up on two bookings (one receipt reused).
+    # db_default: an older deployment that doesn't know this column can still create bookings.
+    gcash_reference = models.CharField(max_length=20, blank=True, default='', db_default='', db_index=True)
     rental_subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     security_deposit = models.DecimalField(max_digits=10, decimal_places=2, default=2000)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -46,6 +51,39 @@ class Reservation(models.Model):
     # Set once staff releases the deposit back to the customer (a separate, later step
     # from marking the gown itself returned -- see reservation_return_deposit_view).
     deposit_returned_at = models.DateTimeField(null=True, blank=True)
+
+    @property
+    def gcash_duplicate_codes(self):
+        """Reference codes of OTHER bookings that carry the same GCash reference number, as a
+        comma-separated string ('' when there are none or no number was given). One cheap
+        indexed query, and only for the few bookings that have a number."""
+        if not self.gcash_reference:
+            return ''
+        others = (
+            Reservation.objects.filter(gcash_reference=self.gcash_reference)
+            .exclude(pk=self.pk).order_by('created_at').values_list('reference_code', flat=True)
+        )
+        return ', '.join(others)
+
+    @property
+    def deposit_returned_on(self):
+        """The day the security deposit counts as returned, or None while it is still held.
+
+        There is no "return deposit" step: the shop settles the deposit in person, so it
+        follows the gowns -- returned the moment every gown on the booking is. Worked out
+        here rather than stored, so it can never disagree with the gowns. A deposit that
+        was already marked returned by hand (deposit_returned_at, from before this was
+        automatic) keeps its recorded date."""
+        if self.deposit_returned_at:
+            return timezone.localtime(self.deposit_returned_at).date()
+        items = list(self.items.all())
+        if not items or any(i.stage != ReservationItem.Stage.RETURNED for i in items):
+            return None
+        return max(i.returned_on or timezone.localtime(i.updated_at).date() for i in items)
+
+    @property
+    def deposit_is_returned(self):
+        return self.deposit_returned_on is not None
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

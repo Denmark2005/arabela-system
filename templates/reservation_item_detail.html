@@ -335,7 +335,7 @@
                 <div class="flex flex-col gap-2 border-l-2 border-emerald-200 bg-emerald-50/40 p-6">
                   <span class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-emerald-700">
                     <span class="material-symbols-outlined text-sm">verified</span>
-                    {% if reservation.deposit_returned_at %}Deposit refunded {{ reservation.deposit_returned_at|date:"M d, Y" }}{% else %}Security deposit refund pending{% endif %}
+                    {% if reservation.deposit_returned_on %}Security deposit settled {{ reservation.deposit_returned_on|date:"M d, Y" }}{% else %}Security deposit settled once every gown is returned{% endif %}
                   </span>
                 </div>
               {% elif variation == "rejected" or variation == "cancelled" %}

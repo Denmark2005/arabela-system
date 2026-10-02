@@ -24,6 +24,7 @@ import json
 from accounts.models import CustomerMessage, UserProfile
 from accounts.services import CANCELLATION_FLAG_THRESHOLD
 from gowns.models import (
+    CustomCategory,
     DEFAULT_CATEGORY_TAG_COLORS,
     GOWN_COLOR_PRESETS,
     Gown,
@@ -32,6 +33,8 @@ from gowns.models import (
     SiteSettings,
     TAG_COLOR_HEX,
     TAG_COLOR_PALETTE,
+    all_category_names,
+    custom_category_names,
     resolve_tag_colors,
 )
 from reservations import reminders as reservation_reminders
@@ -675,15 +678,17 @@ def security_deposits_view(request):
             i.stage == ReservationItem.Stage.RETURNED for i in r.items.all()
         )
 
-    now = timezone.now()
-    held_qs = [r for r in reservations if not r.deposit_returned_at]
+    # The deposit follows the gowns (see Reservation.deposit_returned_on): Returned the
+    # moment every gown is back, with nothing for staff to press. Counts only -- no peso
+    # total is shown anywhere on this page.
+    today = timezone.localdate()
+    for r in reservations:
+        r.returned_on = r.deposit_returned_on
+    held_count = sum(1 for r in reservations if r.returned_on is None)
     returned_this_month = sum(
         1 for r in reservations
-        if r.deposit_returned_at
-        and r.deposit_returned_at.year == now.year
-        and r.deposit_returned_at.month == now.month
+        if r.returned_on and (r.returned_on.year, r.returned_on.month) == (today.year, today.month)
     )
-    total_held_value = sum((r.security_deposit for r in held_qs), Decimal("0"))
 
     return render(
         request,
@@ -691,40 +696,10 @@ def security_deposits_view(request):
         {
             "page": "security-deposits",
             "reservations": reservations,
-            "held_count": len(held_qs),
+            "held_count": held_count,
             "returned_this_month": returned_this_month,
-            "total_held_value": total_held_value,
         },
     )
-
-
-@require_http_methods(["POST"])
-def reservation_return_deposit_view(request, pk):
-    if not _is_admin_staff(request):
-        return JsonResponse({"error": "Unauthorized"}, status=401)
-    try:
-        reservation = Reservation.objects.prefetch_related("items").get(id=pk)
-    except Reservation.DoesNotExist:
-        return JsonResponse({"error": "Reservation not found"}, status=404)
-
-    if reservation.deposit_returned_at:
-        return JsonResponse({"error": "Deposit already returned."}, status=400)
-    if reservation.items.exclude(stage=ReservationItem.Stage.RETURNED).exists():
-        return JsonResponse(
-            {"error": "Gown must be marked returned before releasing the deposit."}, status=400
-        )
-
-    reservation.deposit_returned_at = timezone.now()
-    reservation.save(update_fields=["deposit_returned_at", "updated_at"])
-    ReservationStatusEvent.record(
-        reservation, "Security deposit returned",
-        detail="Your deposit has been released. This reservation is complete.",
-        actor=ReservationStatusEvent.Actor.STAFF,
-    )
-    return JsonResponse({
-        "success": True,
-        "deposit_returned_at": reservation.deposit_returned_at.isoformat(),
-    })
 
 
 @require_http_methods(["POST"])
@@ -800,6 +775,43 @@ def receipt_replace_view(request, receipt_id):
     return JsonResponse({"success": True, "receipt": _receipt_row(receipt)})
 
 
+@require_http_methods(["POST"])
+def receipt_delete_view(request, receipt_id):
+    """Delete a manual receipt photo -- the wrong booking, a duplicate, a bad scan nobody wants.
+    Removes the record and its stored file, and leaves a STAFF-ONLY line on the booking's timeline
+    saying who deleted it and when, so a financial record never vanishes without a trace. The
+    booking itself is untouched."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    try:
+        receipt = ReceiptRecord.objects.select_related("reservation").get(id=receipt_id)
+    except ReceiptRecord.DoesNotExist:
+        return JsonResponse({"error": "That receipt was already deleted. Please refresh the page."}, status=404)
+
+    reservation = receipt.reservation
+    photo_url = receipt.photo_url
+    with transaction.atomic():
+        receipt.delete()
+        ReservationStatusEvent.record(
+            reservation, "Receipt photo deleted",
+            detail=f"Deleted by {_staff_display_name(request.user)}.",
+            actor=ReservationStatusEvent.Actor.STAFF, staff_only=True,
+        )
+
+    # Best effort, only for files this feature saved itself: a leftover file is harmless, a
+    # failed delete must never undo the (already committed) removal of the record.
+    marker = "receipt_photos/"
+    idx = (photo_url or "").find(marker)
+    if idx != -1:
+        try:
+            rel = photo_url[idx:]
+            if default_storage.exists(rel):
+                default_storage.delete(rel)
+        except Exception:
+            pass
+    return JsonResponse({"success": True, "reference": reservation.reference_code})
+
+
 # --- Reservation Records -------------------------------------------------------------
 # One row per reservation, with everything a staff member needs to answer a customer's
 # question in one place: the rental dates, where the booking actually is, the deposit,
@@ -858,10 +870,8 @@ def _reservation_progress(reservation, items, today):
 def _deposit_status(reservation):
     """Where the P2,000 deposit stands. Only Confirmed-and-later bookings actually hold
     one (the same set Security Deposits lists); Pending ones haven't been verified yet."""
-    if reservation.deposit_returned_at:
-        return "Returned"
     if reservation.status in _SCHEDULED_STATUSES:
-        return "Held"
+        return "Returned" if reservation.deposit_is_returned else "Held"
     if reservation.status == Reservation.Status.PENDING:
         return "Awaiting verification" if reservation.payment_proof_url else "Not paid"
     return "Not held"
@@ -941,8 +951,8 @@ def reservation_records_view(request):
             "paymentProofUrl": r.payment_proof_url,
             "depositStatus": deposit_status,
             "depositReturnedOn": (
-                date_format(timezone.localtime(r.deposit_returned_at), "M j, Y")
-                if r.deposit_returned_at else ""
+                date_format(r.deposit_returned_on, "M j, Y")
+                if r.deposit_returned_on else ""
             ),
             # Wherever staff would actually act on this deposit's CURRENT state: Held/
             # Returned bookings live on Security Deposits; a booking still Awaiting
@@ -1235,10 +1245,17 @@ def gown_catalog_view(request):
     # browse-by-category chip strip below, instead of each hardcoding its own copy
     # of Gown.Category (the old, easy-to-forget pattern that needed a manual edit in
     # 4 separate places every time a category was added).
+    custom_by_name = {c.name: c for c in CustomCategory.objects.all()}
+    category_names = [*Gown.Category.values, *custom_by_name]
     category_rows = [
         {
             "key": key,
-            "label": label,
+            "label": key,
+            # The owner's own categories can be removed again (while empty); built-in ones can't.
+            "custom": key in custom_by_name,
+            "id": custom_by_name[key].id if key in custom_by_name else None,
+            "audience": custom_by_name[key].audience if key in custom_by_name else "",
+            "total": sum(1 for g in gowns if g.category == key),
             "count": sum(
                 1 for g in gowns
                 if g.category == key and g.status != Gown.Status.OUT_OF_STOCK
@@ -1248,7 +1265,7 @@ def gown_catalog_view(request):
             "tag_color": tag_colors.get(key, "White"),
             "tag_hex": TAG_COLOR_HEX.get(tag_colors.get(key, "White"), "#FFFFFF"),
         }
-        for key, label in Gown.Category.choices
+        for key in category_names
     ]
 
     # The Removal Log panel -- every gown ever removed and why, newest first. Capped so
@@ -1301,6 +1318,7 @@ def gown_catalog_view(request):
             "reserved_count": sum(1 for g in gowns if g.status == Gown.Status.RESERVED),
             "blocked_gowns_today": blocked_gowns_today,
             "category_rows": category_rows,
+            "has_custom_categories": bool(custom_by_name),
             # Tag Colors: everyone sees the list, only the owner gets the edit controls.
             # Decided HERE from _is_owner(request) -- the same check the save endpoint
             # enforces -- rather than the context-processor's admin_is_owner flag, which
@@ -1308,7 +1326,7 @@ def gown_catalog_view(request):
             "can_edit_tag_colors": _is_owner(request),
             "tag_colors_data": {
                 key: {"color": tag_colors.get(key, "White"), "hex": TAG_COLOR_HEX.get(tag_colors.get(key, "White"), "#FFFFFF")}
-                for key, _label in Gown.Category.choices
+                for key in category_names
             },
             "tag_palette_data": {name: hex_ for name, hex_ in TAG_COLOR_PALETTE},
             "tag_palette": [{"name": name, "hex": hex_} for name, hex_ in TAG_COLOR_PALETTE],
@@ -1592,7 +1610,7 @@ def gown_tag_colors_update_view(request):
         return JsonResponse({"error": "No tag colors were sent."}, status=400)
 
     for category, color in colors.items():
-        if category not in DEFAULT_CATEGORY_TAG_COLORS:
+        if category not in all_category_names():
             return JsonResponse({"error": f"'{category}' isn't a gown category."}, status=400)
         if color not in TAG_COLOR_HEX:
             return JsonResponse({"error": f"'{color}' isn't one of the tag colors."}, status=400)
@@ -1740,7 +1758,7 @@ def _validate_gown_fields(name, category, color_name, color_code, size, design_v
         return "Please enter a gown name."
     if len(name) > 150:
         return "Gown name must be 150 characters or fewer."
-    if category not in Gown.Category.values:
+    if category not in all_category_names():
         return "Please choose a valid category."
     if not color_name:
         return "Please enter a color name."
@@ -2305,6 +2323,17 @@ def reservation_item_mark_returned_view(request, item_id):
             detail="Checked in needing repair — kept off the website until it's set back to Available in Gown Catalog.",
             actor=ReservationStatusEvent.Actor.STAFF,
             staff_only=True,
+        )
+
+    # The security deposit follows the gowns: once the LAST gown on the booking is back it
+    # counts as settled (Reservation.deposit_returned_on), and the customer's timeline says so
+    # once. Neutral wording on purpose -- any deduction (late days, damage) is settled in person.
+    if (not item.reservation.items.exclude(stage=ReservationItem.Stage.RETURNED).exists()
+            and not item.reservation.status_events.filter(label="Security deposit settled").exists()):
+        ReservationStatusEvent.record(
+            item.reservation, "Security deposit settled",
+            detail="Your security deposit has been settled. This reservation is complete.",
+            actor=ReservationStatusEvent.Actor.STAFF,
         )
 
     if item.gown_id:
@@ -3196,6 +3225,236 @@ def remove_profile_picture_view(request):
         return JsonResponse({"success": True, "url": ""})
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
+
+
+# ---- Add Category / Remove Category (owner only) ------------------------------------------------
+# The 13 original categories live in code; the owner can add more here without a developer. They
+# are stored as gowns.models.CustomCategory and treated like the built-in ones everywhere.
+_CATEGORY_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9 \-]*")
+_MAX_CUSTOM_CATEGORIES = 40
+
+
+def _category_owner_error(request):
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    if not _is_owner(request):
+        return JsonResponse({"error": "Only the owner can add or remove categories."}, status=403)
+    return None
+
+
+@require_http_methods(["POST"])
+def gown_category_create_view(request):
+    """Add a category. Name: 2-20 letters, numbers, spaces or hyphens (20 = the size of
+    Gown.category), different from every existing category -- compared ignoring capitals -- and
+    its page address must not collide with a built-in one."""
+    refused = _category_owner_error(request)
+    if refused:
+        return refused
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    if not isinstance(data, dict):
+        return JsonResponse({"error": "Invalid request."}, status=400)
+
+    from django.utils.text import slugify
+    from gowns.context_processors import _CATEGORIES
+
+    audience = str(data.get("audience") or CustomCategory.Audience.WOMEN)
+    if audience not in CustomCategory.Audience.values:
+        return JsonResponse({"error": "Choose Women's collection or Men's collection."}, status=400)
+
+    name = re.sub(r"\s+", " ", str(data.get("name") or "")).strip()
+    if len(name) < 2:
+        return JsonResponse({"error": "Please type a category name (at least 2 letters)."}, status=400)
+    if len(name) > 20:
+        return JsonResponse({"error": "The category name must be 20 characters or fewer."}, status=400)
+    if not _CATEGORY_NAME_RE.fullmatch(name):
+        return JsonResponse({"error": "Use only letters, numbers, spaces and hyphens in the name."}, status=400)
+
+    existing = {n.casefold() for n in all_category_names()}
+    if name.casefold() in existing:
+        return JsonResponse({"error": f'There is already a category called "{name}".'}, status=400)
+    slug = slugify(name)
+    reserved = {c["key"] for c in _CATEGORIES} | {"all"}
+    if not slug or slug in reserved or CustomCategory.objects.filter(slug=slug).exists():
+        return JsonResponse({"error": "That name is too close to an existing category. Try a different name."}, status=400)
+    if CustomCategory.objects.count() >= _MAX_CUSTOM_CATEGORIES:
+        return JsonResponse({"error": "That is the most categories you can add."}, status=400)
+
+    try:
+        with transaction.atomic():
+            category = CustomCategory.objects.create(name=name, slug=slug, audience=audience)
+    except IntegrityError:
+        return JsonResponse({"error": "That category was just added. Please refresh the page."}, status=409)
+    return JsonResponse({
+        "success": True, "id": category.id, "name": category.name,
+        "message": f'"{category.name}" added. You can now choose it when you add a gown.',
+    })
+
+
+@require_http_methods(["POST"])
+def gown_category_audience_view(request, category_id):
+    """Move a category the owner added to the Women's or Men's collection page."""
+    refused = _category_owner_error(request)
+    if refused:
+        return refused
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    audience = str(data.get("audience") or "") if isinstance(data, dict) else ""
+    if audience not in CustomCategory.Audience.values:
+        return JsonResponse({"error": "Choose Women's collection or Men's collection."}, status=400)
+    updated = CustomCategory.objects.filter(id=category_id).update(audience=audience)
+    if not updated:
+        return JsonResponse({"error": "That category no longer exists. Please refresh the page."}, status=404)
+    return JsonResponse({"success": True, "message": f"Moved to the {CustomCategory.Audience(audience).label}."})
+
+
+@require_http_methods(["POST"])
+def gown_category_delete_view(request, category_id):
+    """Remove a category the owner added -- only while no gown is filed under it, so nothing is
+    ever left pointing at a category that no longer exists. Built-in categories can't be removed."""
+    refused = _category_owner_error(request)
+    if refused:
+        return refused
+    try:
+        category = CustomCategory.objects.get(id=category_id)
+    except CustomCategory.DoesNotExist:
+        return JsonResponse({"error": "That category no longer exists. Please refresh the page."}, status=404)
+    in_use = Gown.objects.filter(category=category.name).count()
+    if in_use:
+        return JsonResponse({
+            "error": (
+                f'"{category.name}" still has {in_use} gown{"s" if in_use != 1 else ""} in it. '
+                f"Move or remove them first, then you can remove the category."
+            ),
+        }, status=400)
+    name = category.name
+    category.delete()
+    return JsonResponse({"success": True, "message": f'"{name}" removed.'})
+
+
+# ---- GCash payment details (shown to customers when they pay the security deposit) -----------
+# Owner-only business settings, like the shop address. Answers are always JSON (401 signed out,
+# 403 for staff who aren't the owner) so the Edit Profile card can show a plain message.
+_GCASH_QR_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+def _gcash_owner_error(request):
+    """A JsonResponse when this request may not change the GCash settings, else None."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    if not _is_owner(request):
+        return JsonResponse({"error": "Only the owner can change the GCash details."}, status=403)
+    return None
+
+
+def _normalize_gcash_number(raw):
+    """'09171234567' for any common way of writing a Philippine mobile number ('0917 123 4567',
+    '+63 917 123 4567', '639171234567'), '' for blank, None when it isn't one."""
+    cleaned = re.sub(r"[\s\-().]", "", raw or "")
+    if not cleaned:
+        return ""
+    if cleaned.startswith("+63"):
+        cleaned = "0" + cleaned[3:]
+    elif cleaned.startswith("63") and len(cleaned) == 12:
+        cleaned = "0" + cleaned[2:]
+    return cleaned if re.fullmatch(r"09\d{9}", cleaned) else None
+
+
+def _delete_old_gcash_qr(url):
+    """Remove a QR file this feature saved earlier (and only those -- never an outside URL), so
+    replacing or removing it doesn't leave an orphan. A missing file must never block the change."""
+    marker = "gcash_qr/"
+    idx = (url or "").find(marker)
+    if idx == -1:
+        return
+    try:
+        rel = url[idx:]
+        if default_storage.exists(rel):
+            default_storage.delete(rel)
+    except Exception:
+        pass
+
+
+@require_http_methods(["POST"])
+def gcash_details_update_view(request):
+    """Save the GCash account name and number shown at checkout. Blank clears either one."""
+    refused = _gcash_owner_error(request)
+    if refused:
+        return refused
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    if not isinstance(data, dict):
+        return JsonResponse({"error": "Invalid request."}, status=400)
+
+    name = str(data.get("name") or "").strip()
+    if len(name) > 100:
+        return JsonResponse({"error": "The account name must be 100 characters or fewer."}, status=400)
+    number = _normalize_gcash_number(str(data.get("number") or ""))
+    if number is None:
+        return JsonResponse(
+            {"error": "Enter the GCash number as 11 digits starting with 09, like 0917 123 4567."}, status=400,
+        )
+
+    settings_obj = SiteSettings.load()
+    settings_obj.gcash_account_name = name
+    settings_obj.gcash_number = number
+    settings_obj.save(update_fields=["gcash_account_name", "gcash_number", "updated_at"])
+    return JsonResponse({"success": True, "name": name, "number": number})
+
+
+@require_http_methods(["POST"])
+def gcash_qr_upload_view(request):
+    """Store the shop's GCash QR picture (kept whole -- never cropped, a QR has to scan)."""
+    refused = _gcash_owner_error(request)
+    if refused:
+        return refused
+    upload = request.FILES.get("qr")
+    if not upload:
+        return JsonResponse({"error": "No image was selected."}, status=400)
+    if upload.size > _AVATAR_MAX_BYTES:
+        return JsonResponse({"error": "Image must be 5MB or smaller."}, status=400)
+    ext = os.path.splitext(upload.name)[1].lower()
+    if ext not in _GCASH_QR_EXTENSIONS:
+        return JsonResponse({"error": "Use a JPG, PNG or WEBP image."}, status=400)
+    try:
+        from PIL import Image
+
+        Image.open(upload).verify()  # really an image, not just a renamed file
+    except Exception:
+        return JsonResponse({"error": "That file isn't a valid image."}, status=400)
+    upload.seek(0)
+
+    settings_obj = SiteSettings.load()
+    old_url = settings_obj.gcash_qr_url
+    try:
+        saved_path = default_storage.save(f"gcash_qr/{uuid.uuid4().hex}{ext}", upload)
+        new_url = default_storage.url(saved_path)
+    except Exception:
+        return JsonResponse({"error": "The image couldn't be uploaded just now. Please try again."}, status=502)
+    settings_obj.gcash_qr_url = new_url
+    settings_obj.save(update_fields=["gcash_qr_url", "updated_at"])
+    _delete_old_gcash_qr(old_url)
+    return JsonResponse({"success": True, "url": new_url})
+
+
+@require_http_methods(["POST"])
+def gcash_qr_remove_view(request):
+    """Remove the QR picture; checkout goes back to its 'QR coming soon' message."""
+    refused = _gcash_owner_error(request)
+    if refused:
+        return refused
+    settings_obj = SiteSettings.load()
+    old_url = settings_obj.gcash_qr_url
+    settings_obj.gcash_qr_url = ""
+    settings_obj.save(update_fields=["gcash_qr_url", "updated_at"])
+    _delete_old_gcash_qr(old_url)
+    return JsonResponse({"success": True, "url": ""})
 
 
 @require_http_methods(["POST"])

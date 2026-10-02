@@ -1,4 +1,5 @@
 import json
+import re
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -22,7 +23,8 @@ from accounts.services import (
     sync_cancellation_flag,
 )
 from gowns.context_processors import (
-    _CATEGORIES,
+    all_categories,
+    category_url,
     _FALLBACK_IMG,
     clear_reservation_hold,
     get_reservation_hold_deadline,
@@ -32,10 +34,14 @@ from gowns.models import Gown, GownUnavailability, group_gowns_by_name, pick_rep
 from reservations import timeline
 from reservations.models import Reservation, ReservationItem, ReservationStatusEvent
 
-_VALID_COLLECTIONS = frozenset(category["key"] for category in _CATEGORIES)
-# key -> collection landing-page url name, for the "Back to collection" link on the
-# unavailable product page. Keys are exactly _VALID_COLLECTIONS, so lookups never miss.
-_COLLECTION_URL_NAME = {category["key"]: category["url_name"] for category in _CATEGORIES}
+
+
+def _category_by_key(collection_key: str):
+    """The category row (built-in or the owner's own) for a collection key, or None."""
+    for category in all_categories():
+        if category["key"] == collection_key:
+            return category
+    return None
 
 # How far ahead the product calendar computes availability. Four months is well past
 # any realistic booking lead time and keeps the per-day scan trivially cheap.
@@ -46,10 +52,8 @@ _COLLECTION_PAGE_SIZE = 8
 
 
 def _label_for(collection_key: str) -> str:
-    for category in _CATEGORIES:
-        if category["key"] == collection_key:
-            return category["label"]
-    return "Wedding Gown"
+    category = _category_by_key(collection_key)
+    return category["label"] if category else "Wedding Gown"
 
 
 def _products_for_category(collection_key: str) -> list[dict]:
@@ -186,6 +190,14 @@ def collection_bridesmaid_dresses(request):
     return _render_collection(request, 'bridesmaid_dresses.html', 'bridesmaid-dresses')
 
 
+def collection_custom(request, key):
+    """Collection page for a category the owner added in the admin (see all_categories())."""
+    category = _category_by_key(key)
+    if category is None or not category.get("custom"):
+        raise Http404("No such collection")
+    return _render_collection(request, "collection_custom.html", key)
+
+
 def featured_men_collections(request):
     return render(request, 'featured_men_collections.html', {})
 
@@ -202,7 +214,7 @@ def collection_all(request):
             "label": category["label"],
             "products": _products_for_category(category["key"]),
         }
-        for category in _CATEGORIES
+        for category in all_categories()
     ]
     return render(request, "all.html", {"all_panels": panels})
 
@@ -533,9 +545,11 @@ def _related_gowns(category_label: str, current_slug: str, limit: int = 4) -> li
 
 def product_detail(request, collection: str, slug: str):
     col = collection.strip().lower()
-    if col not in _VALID_COLLECTIONS:
+    category = _category_by_key(col)
+    if category is None:
         col = "wedding"
-    collection_url = reverse("gowns:" + _COLLECTION_URL_NAME[col])
+        category = _category_by_key(col)
+    collection_url = category_url(category)
 
     # Slugs are auto-generated unique per gown (Gown.save()), so this always resolves
     # to at most one physical unit. Looked up WITHOUT the Out-of-Stock filter: a
@@ -742,6 +756,17 @@ def reservation_submit(request):
     if error:
         return JsonResponse({"success": False, "error": error}, status=400)
 
+    # Optional GCash reference number from the receipt: kept as digits only. Leaving it blank is
+    # fine; a value that can't be a real reference is refused so a typo doesn't silently go in.
+    raw_gcash_reference = (request.POST.get("gcash_reference") or "").strip()
+    gcash_reference = re.sub(r"\D", "", raw_gcash_reference)
+    if raw_gcash_reference and not (8 <= len(gcash_reference) <= 20):
+        return JsonResponse({
+            "success": False,
+            "error": "That GCash reference number doesn't look right. Copy it from your receipt "
+                     "(about 13 digits, like 1234 567 890123), or leave it blank.",
+        }, status=400)
+
     with transaction.atomic():
         # Availability pass FIRST -- every item is resolved to a specific free unit
         # (see _find_available_unit) before anything is written and before the
@@ -840,6 +865,7 @@ def reservation_submit(request):
             postal_code=postal_code,
             payment_method=payment_method,
             payment_proof_url=payment_proof_url,
+            gcash_reference=gcash_reference,
             rental_subtotal=rental_subtotal,
             security_deposit=security_deposit,
             total_amount=total_amount,

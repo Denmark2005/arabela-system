@@ -234,6 +234,14 @@
             </div>
             <input class="hidden" id="proof_of_payment" name="proof_of_payment" type="file" accept="image/jpeg,image/png,image/webp">
           </label>
+
+          <!-- Optional: the number printed on the GCash receipt. Helps the shop find your payment
+               faster. Digits and spaces only; the server cleans it up and checks the length. -->
+          <div class="res-field relative">
+            <input class="res-input peer" id="gcash_reference" placeholder=" " type="text" inputmode="numeric" maxlength="24" autocomplete="off">
+            <label class="res-label" for="gcash_reference">GCash reference number (optional)</label>
+          </div>
+          <p class="-mt-1 text-[0.75rem] text-secondary">You can find it on your GCash receipt, for example 1234 567 890123.</p>
         </div>
       </div>
     </section>
@@ -305,22 +313,74 @@
   </aside>
 </div>
 
-<!-- GCash Modal (Required Deposit) -->
-<div class="fixed inset-0 z-[100] flex items-center justify-center p-5 bg-primary/30 backdrop-blur-sm transition-all duration-300 hidden" id="gcash-modal">
+<!-- GCash Modal (Required Deposit): a short step-by-step guide for people who have never paid by QR.
+     The QR picture, account name and number come from the shop settings (owner sets them in the admin's
+     Edit Profile). #gcash-deposit-amount is filled by reservation-flow.js with the deposit for the bag. -->
+<div class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-primary/30 backdrop-blur-sm transition-all duration-300 hidden" id="gcash-modal" role="dialog" aria-modal="true" aria-labelledby="gcash-modal-title">
   <div class="absolute inset-0" onclick="document.getElementById('gcash-modal').classList.add('hidden')"></div>
-  <div class="relative bg-white rounded-[12px] p-8 w-full max-w-sm editorial-shadow flex flex-col items-center gap-5">
+  <div class="relative bg-white rounded-[12px] p-6 sm:p-8 w-full max-w-md editorial-shadow max-h-[92vh] overflow-y-auto">
     <button type="button" class="absolute top-4 right-4 text-secondary hover:text-on-surface transition-colors" aria-label="Close" onclick="document.getElementById('gcash-modal').classList.add('hidden')">
       <span class="material-symbols-outlined text-xl">close</span>
     </button>
-    <div class="text-center">
-      <h3 class="font-headline text-base font-semibold text-on-surface">GCash Payment</h3>
-      <p class="mt-1 text-[0.8rem] text-secondary">Scan to pay security deposit</p>
+    <div class="text-center pr-6 pl-6">
+      <h3 id="gcash-modal-title" class="font-headline text-base font-semibold text-on-surface">Pay Your Security Deposit</h3>
+      <p class="mt-1 text-[0.8rem] text-secondary">Follow these 5 easy steps. It only takes a minute.</p>
     </div>
-    <span id="gcash-deposit-amount" class="font-headline text-lg font-semibold text-on-surface tabular-nums">Amount: ₱0</span>
-    <div class="w-56 h-56 rounded-[8px] border border-black/10 p-3 bg-white">
-      <img alt="GCash QR Code" class="w-full h-full object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCPjwb6QQaJGgMbHP3q-WWNNt_IH2xBWMNSIzhXTdRzqBFPYhXm0UcOtOcWBnUIHbQdWvLfRCHZcpPiO7sXWexekJZHQeoonnsSbLVDOKaopszgaVpOcR0cX0P1Z-2duwoD3RUIIG-5VXI9u-HkTKh7kvwePdp4789lU83JmhzcEZL75DKBfYgPeyToWE96zHcAtTnrsc3IqPqVMztDNRE9nXmNHXroXN58-4mlr0W-wc8U3jh7KHzYZEW_km-CXtUrRD9h-lgigSU">
+
+    <div class="mt-5 rounded-[8px] border border-black/10 bg-gray-50 px-4 py-3 text-center">
+      <span id="gcash-deposit-amount" class="font-headline text-xl font-semibold text-on-surface tabular-nums">Amount: ₱0</span>
+      <p class="mt-0.5 text-[0.75rem] text-secondary">Send exactly this amount, no more and no less.</p>
     </div>
-    <p class="text-center text-[0.75rem] text-secondary leading-relaxed">Screenshot your receipt after paying, then upload it below.</p>
+
+    {% if site_gcash_qr_url %}
+    <div class="mt-5 flex flex-col items-center gap-3">
+      <div class="w-56 h-56 rounded-[8px] border border-black/10 p-3 bg-white">
+        <img id="gcash-qr-img" alt="Arabela GCash QR code" class="w-full h-full object-contain" src="{{ site_gcash_qr_url }}">
+      </div>
+      <button type="button" id="gcash-save-qr" class="inline-flex items-center gap-1.5 rounded-[6px] border border-black/15 bg-white px-3 py-1.5 text-[0.75rem] font-semibold text-on-surface hover:border-primary/60 transition-colors">
+        <span class="material-symbols-outlined" style="font-size: 1rem;">download</span>
+        Save QR image
+      </button>
+    </div>
+    {% else %}
+    <div class="mt-5 rounded-[8px] border border-dashed border-black/20 px-4 py-6 text-center">
+      <span class="material-symbols-outlined text-3xl text-secondary">qr_code_2</span>
+      <p class="mt-1 text-sm font-medium text-on-surface">QR code coming soon</p>
+      <p class="mt-1 text-[0.8rem] text-secondary leading-relaxed">Please message us{% if site_phone %} or call {{ site_phone }}{% endif %} and we will help you pay.</p>
+    </div>
+    {% endif %}
+
+    {% if site_gcash_name or site_gcash_number %}
+    <div class="mt-4 rounded-[8px] border border-black/10 px-4 py-3 text-[0.8rem]">
+      {% if site_gcash_name %}
+      <div class="flex items-center justify-between gap-3">
+        <span class="text-secondary">Account name</span>
+        <span class="font-medium text-on-surface text-right">{{ site_gcash_name }}</span>
+      </div>
+      {% endif %}
+      {% if site_gcash_number %}
+      <div class="flex items-center justify-between gap-3{% if site_gcash_name %} mt-2{% endif %}">
+        <span class="text-secondary">GCash number</span>
+        <span class="flex items-center gap-2">
+          <span id="gcash-number-text" class="font-medium text-on-surface tabular-nums">{{ site_gcash_number }}</span>
+          <button type="button" id="gcash-copy-number" class="rounded-[6px] border border-black/15 bg-white px-2 py-0.5 text-[0.7rem] font-semibold text-on-surface hover:border-primary/60 transition-colors">Copy</button>
+        </span>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <ol class="mt-6 space-y-4 text-[0.85rem] text-on-surface leading-relaxed">
+      <li class="flex gap-3"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-[9999px] border border-black/15 bg-white text-[0.7rem] font-semibold text-on-surface">1</span><span>Open the <strong class="font-semibold">GCash</strong> app on your phone and tap <strong class="font-semibold">Pay QR</strong>.{% if site_gcash_qr_url %} <span class="text-secondary">Using this phone? Tap &ldquo;Save QR image&rdquo; above, then in GCash tap <strong class="font-semibold">Upload QR</strong> and choose it from your photos.</span>{% endif %}</span></li>
+      <li class="flex gap-3"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-[9999px] border border-black/15 bg-white text-[0.7rem] font-semibold text-on-surface">2</span><span>{% if site_gcash_qr_url %}Scan the QR code above.{% elif site_gcash_number %}Send the money to the GCash number above.{% else %}Ask us for the payment details.{% endif %} Check that the account name is correct before you pay.</span></li>
+      <li class="flex gap-3"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-[9999px] border border-black/15 bg-white text-[0.7rem] font-semibold text-on-surface">3</span><span>Type the <strong class="font-semibold">exact amount</strong> shown above, then confirm the payment.</span></li>
+      <li class="flex gap-3"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-[9999px] border border-black/15 bg-white text-[0.7rem] font-semibold text-on-surface">4</span><span>Take a <strong class="font-semibold">screenshot of your receipt</strong>. Make sure the amount and the <strong class="font-semibold">reference number</strong> can be seen.</span></li>
+      <li class="flex gap-3"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-[9999px] border border-black/15 bg-white text-[0.7rem] font-semibold text-on-surface">5</span><span>Close this window, upload your screenshot, then press <strong class="font-semibold">Confirm Rental</strong>.</span></li>
+    </ol>
+
+    <p class="mt-6 rounded-[8px] bg-gray-50 px-4 py-3 text-center text-[0.75rem] text-secondary leading-relaxed">This is a security deposit. You get it back when you return the gown.</p>
+
+    <p class="mt-4 text-center text-[0.75rem] text-secondary">Need help?{% if site_facebook_url %} Message us on <a href="{{ site_facebook_url }}" target="_blank" rel="noopener" class="font-semibold text-on-surface underline underline-offset-2">Facebook</a>{% endif %}{% if site_phone %}{% if site_facebook_url %} or call{% else %} Call{% endif %} <a href="tel:{{ site_phone_tel }}" class="font-semibold text-on-surface underline underline-offset-2">{{ site_phone }}</a>{% endif %}.</p>
   </div>
 </div>
 
@@ -754,6 +814,8 @@
                     formData.append('city', document.getElementById('city').value.trim());
                     formData.append('postal_code', document.getElementById('postal').value.trim());
                     formData.append('phone', document.getElementById('phone').value.trim());
+                    var gcashRefEl = document.getElementById('gcash_reference');
+                    formData.append('gcash_reference', gcashRefEl ? gcashRefEl.value.trim() : '');
                     var proofInputEl = document.getElementById('proof_of_payment');
                     var rawProofFile = (proofInputEl && proofInputEl.files && proofInputEl.files[0]) || null;
 
@@ -794,6 +856,68 @@
                         });
                 });
             }
+
+            // ---- GCash window helpers --------------------------------------------------------
+            (function () {
+                var modal = document.getElementById('gcash-modal');
+                if (!modal) return;
+                document.addEventListener('keydown', function (e) {
+                    if (e.key === 'Escape') modal.classList.add('hidden');
+                });
+
+                var copyBtn = document.getElementById('gcash-copy-number');
+                if (copyBtn) {
+                    copyBtn.addEventListener('click', function () {
+                        var numberEl = document.getElementById('gcash-number-text');
+                        var text = numberEl ? numberEl.textContent.trim() : '';
+                        if (!text) return;
+                        function done() {
+                            copyBtn.textContent = 'Copied';
+                            setTimeout(function () { copyBtn.textContent = 'Copy'; }, 1800);
+                        }
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                            navigator.clipboard.writeText(text).then(done, function () {});
+                        } else {
+                            var tmp = document.createElement('textarea');
+                            tmp.value = text;
+                            document.body.appendChild(tmp);
+                            tmp.select();
+                            try { document.execCommand('copy'); done(); } catch (err) {}
+                            document.body.removeChild(tmp);
+                        }
+                    });
+                }
+
+                var saveBtn = document.getElementById('gcash-save-qr');
+                var qrImg = document.getElementById('gcash-qr-img');
+                if (saveBtn && qrImg) {
+                    saveBtn.addEventListener('click', function () {
+                        // Download as a file; if the browser won't allow that for an image hosted
+                        // elsewhere, open it in its own tab so it can be saved from there.
+                        fetch(qrImg.src, { mode: 'cors' })
+                            .then(function (res) { if (!res.ok) throw new Error('bad response'); return res.blob(); })
+                            .then(function (blob) {
+                                var url = URL.createObjectURL(blob);
+                                var a = document.createElement('a');
+                                a.href = url;
+                                a.download = 'Arabela-GCash-QR.png';
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+                            })
+                            .catch(function () { window.open(qrImg.src, '_blank', 'noopener'); });
+                    });
+                }
+
+                var refInput = document.getElementById('gcash_reference');
+                if (refInput) {
+                    refInput.addEventListener('input', function () {
+                        var cleaned = refInput.value.replace(/[^0-9 ]/g, '');
+                        if (cleaned !== refInput.value) refInput.value = cleaned;
+                    });
+                }
+            })();
 
             RESERVATION_FIELD_IDS.forEach(function (id) {
                 var input = document.getElementById(id);

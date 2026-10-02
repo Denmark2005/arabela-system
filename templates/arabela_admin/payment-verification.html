@@ -1260,11 +1260,14 @@
                         </td>
                         <td class="px-5 py-4 sm:px-6">
                           <div class="flex flex-wrap items-center gap-2">
+                            {% with dup=r.gcash_duplicate_codes %}
                             <button type="button"
-                              @click="viewingPayment = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"&mdash;"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:0 }}', date: '{{ r.created_at|date:"M j, Y" }}', status: status, proofUrl: '{{ r.payment_proof_url|escapejs }}' }; openReceiptModal = true"
+                              @click="viewingPayment = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"&mdash;"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:0 }}', date: '{{ r.created_at|date:"M j, Y" }}', status: status, proofUrl: '{{ r.payment_proof_url|escapejs }}', gcashRef: '{{ r.gcash_reference|escapejs }}', gcashDup: '{{ dup|escapejs }}' }; openReceiptModal = true"
                               class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
                               View Proof
                             </button>
+                            {% if dup %}<span class="inline-flex items-center rounded-full bg-error-50 px-2 py-0.5 text-theme-xs font-medium text-error-700 dark:bg-error-500/15 dark:text-error-500" title="The same GCash reference number is also on {{ dup }}">Same GCash ref as {{ dup }}</span>{% endif %}
+                            {% endwith %}
                             {% if r.status == "Pending" %}
                             <button type="button"
                               data-url="{% url 'arabela_admin:reservation_approve' r.id %}"
@@ -1361,7 +1364,13 @@
                       <p class="text-xs text-gray-500 dark:text-gray-400">Status</p>
                       <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewingPayment.status"></p>
                     </div>
+                    <div x-show="viewingPayment.gcashRef" x-cloak>
+                      <p class="text-xs text-gray-500 dark:text-gray-400">GCash Reference No.</p>
+                      <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewingPayment.gcashRef"></p>
+                    </div>
                   </div>
+                  <p x-show="viewingPayment.gcashDup" x-cloak style="margin-top: 1rem;" class="rounded-lg bg-error-50 px-4 py-3 text-xs font-medium text-error-700 dark:bg-error-500/15 dark:text-error-500"
+                     x-text="'This GCash reference number is also on ' + viewingPayment.gcashDup + '. Check the receipt before approving.'"></p>
                 </div>
                 <div class="mt-6 flex justify-end px-2">
                   <button type="button" @click="openReceiptModal = false" class="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">Close</button>

@@ -609,7 +609,7 @@
   </aside>
   {% endif %}
 
-  {% if url_name == "collection_all" or url_name == "collection_wedding" or url_name == "collection_ball_gown" or url_name == "collection_long_gown" or url_name == "collection_luxury_gown" or url_name == "collection_mother_gown" or url_name == "collection_suit" or url_name == "collection_filipiniana" or url_name == "collection_guest_gown" or url_name == "collection_dresses" or url_name == "collection_kids_gown" or url_name == "collection_barong" or url_name == "collection_ball_gown_tulle" or url_name == "collection_bridesmaid_dresses" %}
+  {% if url_name == "collection_all" or url_name == "collection_wedding" or url_name == "collection_ball_gown" or url_name == "collection_long_gown" or url_name == "collection_luxury_gown" or url_name == "collection_mother_gown" or url_name == "collection_suit" or url_name == "collection_filipiniana" or url_name == "collection_guest_gown" or url_name == "collection_dresses" or url_name == "collection_kids_gown" or url_name == "collection_barong" or url_name == "collection_ball_gown_tulle" or url_name == "collection_bridesmaid_dresses" or url_name == "collection_custom" %}
   {% include "partials/explore_collections_drawer.html" %}
   {% endif %}
 
@@ -688,7 +688,7 @@
   {% endblock %}
 
   <script src="{% static 'js/reservation-flow.js' %}?v={{ site_asset_version }}"></script>
-  {% if url_name == "collection_all" or url_name == "collection_wedding" or url_name == "collection_ball_gown" or url_name == "collection_long_gown" or url_name == "collection_luxury_gown" or url_name == "collection_mother_gown" or url_name == "collection_suit" or url_name == "collection_filipiniana" or url_name == "collection_guest_gown" or url_name == "collection_dresses" or url_name == "collection_kids_gown" or url_name == "collection_barong" or url_name == "collection_ball_gown_tulle" or url_name == "collection_bridesmaid_dresses" %}
+  {% if url_name == "collection_all" or url_name == "collection_wedding" or url_name == "collection_ball_gown" or url_name == "collection_long_gown" or url_name == "collection_luxury_gown" or url_name == "collection_mother_gown" or url_name == "collection_suit" or url_name == "collection_filipiniana" or url_name == "collection_guest_gown" or url_name == "collection_dresses" or url_name == "collection_kids_gown" or url_name == "collection_barong" or url_name == "collection_ball_gown_tulle" or url_name == "collection_bridesmaid_dresses" or url_name == "collection_custom" %}
   <script src="{% static 'js/collection-sort.js' %}?v={{ site_asset_version }}"></script>
   <script src="{% static 'js/collection-reveal.js' %}?v={{ site_asset_version }}"></script>
   {% endif %}
