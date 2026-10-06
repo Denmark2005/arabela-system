@@ -341,6 +341,22 @@ EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'true').lower() == 'true'
 # handling -- socket.timeout is an OSError subclass, so it's already covered
 # once there's actually a timeout to raise one).
 EMAIL_TIMEOUT = int(os.getenv('EMAIL_TIMEOUT', '10'))
+
+# Emails to CUSTOMERS about their own booking (accounts/customer_emails.py) -- approved, rejected, reminders,
+# overdue, deposit settled, account notices, and the "we received your reservation" receipt.
+#
+# OFF unless this is explicitly 'true'. Local development shares the live database, so approving a real
+# booking from a laptop must never email a real customer: only the Render service sets it. The admin's
+# "Send test to me" button works either way (it only ever mails the signed-in owner's own address).
+CUSTOMER_EMAILS_ENABLED = os.getenv('CUSTOMER_EMAILS_ENABLED', 'false').strip().lower() == 'true'
+# Links inside those emails. Blank = built from the Site row (django_site) the deployment points at.
+SITE_BASE_URL = os.getenv('SITE_BASE_URL', '').strip().rstrip('/')
+# Render's FREE web services block outbound SMTP (ports 25/465/587), so Gmail-over-SMTP only works on a paid
+# instance. The free alternative is a small Google Apps Script that sends through the shop's own Gmail over
+# HTTPS: set EMAIL_BACKEND=accounts.email_backends.AppsScriptRelayBackend plus the two values below.
+EMAIL_RELAY_URL = os.getenv('EMAIL_RELAY_URL', '').strip()
+EMAIL_RELAY_SECRET = os.getenv('EMAIL_RELAY_SECRET', '').strip()
+EMAIL_RELAY_TIMEOUT = int(os.getenv('EMAIL_RELAY_TIMEOUT', '25'))
 _env_default_from = os.getenv('DEFAULT_FROM_EMAIL', '').strip()
 if not _env_default_from:
     DEFAULT_FROM_EMAIL = EMAIL_HOST_USER or 'no-reply@arabela.local'
@@ -370,6 +386,12 @@ LOGGING = {
         'django.request': {
             'handlers': ['console'],
             'level': 'ERROR',
+            'propagate': False,
+        },
+        # Why a customer email did or didn't go out (Render's Logs tab).
+        'accounts.customer_emails': {
+            'handlers': ['console'],
+            'level': 'INFO',
             'propagate': False,
         },
     },

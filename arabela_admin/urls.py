@@ -55,6 +55,9 @@ from .views import (
     admin_search_view,
     customer_flag_view,
     customer_unlock_view,
+    email_preview_view,
+    email_preview_render_view,
+    email_test_send_view,
     admin_notifications_feed_view,
 )
 
@@ -98,6 +101,9 @@ urlpatterns = [
     path("clients/", clients_view, name="clients"),
     path("api/customers/<int:user_id>/flag/", customer_flag_view, name="customer_flag"),
     path("api/customers/<int:user_id>/unlock/", customer_unlock_view, name="customer_unlock"),
+    path("email-preview/", email_preview_view, name="email_preview"),
+    path("email-preview/<str:kind>/", email_preview_render_view, name="email_preview_render"),
+    path("api/email-test/", email_test_send_view, name="email_test_send"),
     path("staff-management/", staff_management_view, name="staff_management"),
     path("api/staff/", staff_create_view, name="staff_create"),
     path("api/staff/<int:user_id>/update/", staff_update_view, name="staff_update"),

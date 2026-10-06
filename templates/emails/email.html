@@ -1,0 +1,88 @@
+{% comment %}
+  The one layout every customer email uses (accounts/customer_emails.py fills it in).
+
+  Built the way mail apps need it: tables, inline styles, no web fonts, no external CSS. The few rules in <style>
+  only make it a little tighter on a phone -- everything important is inline, so nothing depends on them.
+  Colors are the website's: black #0b0c0c, grey text #615E57, soft grey #f4f3f1, amber #b45309 for warnings.
+  Everything dynamic goes through Django's auto-escaping on purpose (customers type their own names).
+{% endcomment %}<!doctype html>
+<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="x-apple-disable-message-reformatting">
+<meta name="format-detection" content="telephone=no, date=no, address=no, email=no, url=no">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<title>{{ subject }}</title>
+<style>
+  body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+  table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+  img { -ms-interpolation-mode: bicubic; border: 0; outline: none; text-decoration: none; }
+  body { margin: 0; padding: 0; width: 100% !important; }
+  @media screen and (max-width: 620px) {
+    .outer { padding: 12px 8px !important; }
+    .px { padding-left: 22px !important; padding-right: 22px !important; }
+    .h1 { font-size: 23px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f3f1;">
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#f4f3f1;opacity:0;">{{ preheader }}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</div>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#f4f3f1" style="background-color:#f4f3f1;">
+  <tr>
+    <td align="center" class="outer" style="padding:28px 12px;">
+      <!--[if mso]><table role="presentation" width="600" align="center" cellspacing="0" cellpadding="0" border="0"><tr><td><![endif]-->
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;background-color:#ffffff;border-radius:10px;overflow:hidden;">
+        <tr>
+          <td align="center" bgcolor="#0b0c0c" style="background-color:#0b0c0c;padding:30px 24px 26px;">
+            <a href="{{ home_url }}" target="_blank" style="text-decoration:none;"><img src="{{ logo_url }}" width="132" alt="Arabela" style="display:block;width:132px;max-width:132px;height:auto;border:0;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-weight:700;font-size:30px;line-height:36px;color:#ffffff;"></a>
+          </td>
+        </tr>
+        <tr>
+          <td class="px" style="padding:36px 36px 10px;font-family:Arial,Helvetica,sans-serif;">
+            <h1 class="h1" style="margin:0 0 18px;font-family:Arial,Helvetica,sans-serif;font-size:26px;line-height:1.25;font-weight:700;color:#0b0c0c;">{{ heading }}</h1>
+            <p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#615E57;">{{ greeting }}</p>
+            {% for paragraph in paragraphs_html %}<p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#615E57;">{{ paragraph }}</p>
+            {% endfor %}{% if note %}<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:6px 0 20px;">
+              <tr>
+                <td style="border-left:3px solid {% if note.tone == 'warning' %}#b45309{% else %}#0b0c0c{% endif %};background-color:{% if note.tone == 'warning' %}#fdf6ee{% else %}#f4f3f1{% endif %};padding:14px 18px;font-family:Arial,Helvetica,sans-serif;">
+                  <div style="font-size:11px;line-height:1.3;letter-spacing:1.2px;text-transform:uppercase;font-weight:700;color:{% if note.tone == 'warning' %}#7c3d06{% else %}#3d3b39{% endif %};">{{ note.title }}</div>
+                  <div style="margin-top:6px;font-size:15px;line-height:1.6;color:{% if note.tone == 'warning' %}#5b3a12{% else %}#222222{% endif %};">{{ note.html }}</div>
+                </td>
+              </tr>
+            </table>
+            {% endif %}{% if rows %}<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#faf9f8" style="margin:8px 0 24px;background-color:#faf9f8;border:1px solid #e5e2e1;border-radius:8px;">
+              {% for row in rows %}<tr>
+                <td style="padding:14px 18px;{% if not forloop.first %}border-top:1px solid #ece9e6;{% endif %}font-family:Arial,Helvetica,sans-serif;">
+                  <div style="font-size:11px;line-height:1.3;letter-spacing:1.2px;text-transform:uppercase;color:#6f6c68;">{{ row.label }}</div>
+                  <div style="margin-top:4px;font-size:15px;line-height:1.4;font-weight:700;color:#0b0c0c;">{{ row.value }}</div>
+                  {% if row.sub %}<div style="margin-top:2px;font-size:13px;line-height:1.5;color:#615E57;">{{ row.sub }}</div>{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </table>
+            {% endif %}<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:6px 0 30px;">
+              <tr>
+                <td align="center" bgcolor="#0b0c0c" style="background-color:#0b0c0c;border-radius:6px;">
+                  <a href="{{ button_url }}" target="_blank" style="display:inline-block;padding:14px 30px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.2;font-weight:700;color:#ffffff;text-decoration:none;border-radius:6px;">{{ button_label }}</a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td class="px" style="padding:22px 36px 28px;background-color:#faf9f8;border-top:1px solid #ece9e6;font-family:Arial,Helvetica,sans-serif;">
+            <p style="margin:0 0 10px;font-size:12px;line-height:1.65;color:#6f6c68;">This is an automatic message, so please don't reply to this email.{% if shop.facebook_url or shop.phone %} Need help? {% if shop.facebook_url %}<a href="{{ shop.facebook_url }}" target="_blank" style="color:#0b0c0c;text-decoration:underline;">Message us on Facebook</a>{% endif %}{% if shop.facebook_url and shop.phone %} or {% endif %}{% if shop.phone %}call {{ shop.phone }}{% endif %}.{% endif %}</p>
+            {% if shop.address %}<p style="margin:0 0 10px;font-size:12px;line-height:1.65;color:#6f6c68;">Arabela &middot; {{ shop.address }}</p>
+            {% endif %}<p style="margin:0;font-size:11px;line-height:1.5;letter-spacing:1.4px;text-transform:uppercase;color:#8a8989;">&copy; {{ year }} Arabela. All rights reserved.</p>
+          </td>
+        </tr>
+      </table>
+      <!--[if mso]></td></tr></table><![endif]-->
+    </td>
+  </tr>
+</table>
+</body>
+</html>

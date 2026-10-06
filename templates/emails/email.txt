@@ -1,0 +1,22 @@
+{% autoescape off %}ARABELA
+
+{{ heading }}
+
+{{ greeting }}
+
+{% for paragraph in paragraphs %}{{ paragraph }}
+
+{% endfor %}{% if note %}{{ note.title|upper }}
+{{ note.text }}
+
+{% endif %}{% if rows %}{% for row in rows %}{{ row.label }}: {{ row.value }}{% if row.sub %} ({{ row.sub }}){% endif %}
+{% endfor %}
+{% endif %}{{ button_label }}:
+{{ button_url }}
+
+--
+This is an automatic message, so please don't reply to this email.
+{% if shop.facebook_url or shop.phone %}Need help?{% if shop.facebook_url %} Message us on Facebook: {{ shop.facebook_url }}{% endif %}{% if shop.phone %} Call {{ shop.phone }}.{% endif %}
+{% endif %}{% if shop.address %}Arabela - {{ shop.address }}
+{% endif %}(c) {{ year }} Arabela. All rights reserved.
+{% endautoescape %}

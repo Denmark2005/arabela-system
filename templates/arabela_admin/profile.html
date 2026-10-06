@@ -1793,6 +1793,14 @@
                   </div>
                 </div>
               </div>
+              <!-- Customer emails: preview every email, check delivery, send a test to the owner (owner-only page). -->
+              <div class="p-5 border border-gray-200 rounded-2xl dark:border-gray-800 lg:p-6" style="margin-top: 1.5rem;">
+                <h4 class="text-lg font-semibold text-gray-800 dark:text-white/90">Customer emails</h4>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Customers can be emailed when a reservation is received, approved or rejected, for pick-up and return reminders, overdue notices and account notices. See how each email looks and send a test to yourself first.</p>
+                <div style="margin-top: 1rem;">
+                  <a href="{% url 'arabela_admin:email_preview' %}" class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">Preview and test emails</a>
+                </div>
+              </div>
               {% endif %}
             </div>
           </div>

@@ -13,11 +13,12 @@ from django.core.files.storage import default_storage
 from django.db import DataError, IntegrityError, transaction
 from django.db.models import Q, Count, Min, Prefetch
 from django.shortcuts import redirect, render
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.formats import date_format
 from django.utils.http import urlencode
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_http_methods
 import json
 
@@ -2875,6 +2876,62 @@ def customer_unlock_view(request, user_id):
         body="The shop has lifted the temporary lock on your account, so you can make reservations again.",
     )
     return JsonResponse({"success": True})
+
+
+# ---- Customer emails: preview + test (owner only; the emails themselves are accounts/customer_emails.py) ----
+_EMAIL_TEST_MIN_SECONDS = 5
+
+
+@_require_owner
+def email_preview_view(request):
+    """The owner's "Customer emails" page: how every email looks, how emails would go out right now, and a
+    button that sends a sample to the signed-in owner (and nobody else)."""
+    from accounts import customer_emails
+    return render(request, "arabela_admin/email-preview.html", {
+        "email_kinds": [{"key": key, "label": label} for key, label in customer_emails.KIND_LABELS.items()],
+        "email_status": customer_emails.delivery_status(),
+        "owner_email": request.user.email,
+    })
+
+
+@xframe_options_sameorigin
+@_require_owner
+def email_preview_render_view(request, kind):
+    """One sample email as the exact HTML a customer would get -- shown inside the preview page's frame."""
+    from accounts import customer_emails
+    if kind not in customer_emails.KIND_LABELS:
+        raise Http404("Unknown email type")
+    return HttpResponse(customer_emails.sample_email(kind).html)
+
+
+@require_http_methods(["POST"])
+@_require_owner
+def email_test_send_view(request):
+    """Send a sample of one email to the signed-in owner's own address, right now, and say what happened.
+
+    Works whether or not customer emails are switched on: it is how the owner proves that delivery works
+    BEFORE turning them on. It can only ever mail the owner's own address, never a customer."""
+    from accounts import customer_emails
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid request."}, status=400)
+    kind = data.get("kind") if isinstance(data, dict) else None
+    if kind not in customer_emails.KIND_LABELS:
+        return JsonResponse({"error": "Choose which email to send."}, status=400)
+    if "@" not in (request.user.email or ""):
+        return JsonResponse(
+            {"error": "Your admin account has no email address. Add one in Edit Profile, then try again."}, status=400)
+
+    now = timezone.now().timestamp()
+    if now - float(request.session.get("email_test_sent_at") or 0) < _EMAIL_TEST_MIN_SECONDS:
+        return JsonResponse({"error": "Please wait a few seconds between tests."}, status=429)
+    request.session["email_test_sent_at"] = now
+
+    ok, message = customer_emails.send_test_email(kind, request.user.email)
+    if not ok:
+        return JsonResponse({"error": message}, status=502)
+    return JsonResponse({"success": True, "message": message})
 
 
 def _staff_display_name(user):

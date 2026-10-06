@@ -1,0 +1,207 @@
+<!doctype html>
+{% comment %}
+  Owner-only "Customer emails" page (arabela_admin.views.email_preview_view).
+
+  Deliberately self-contained (its own small stylesheet, no admin Tailwind classes): the admin's compiled CSS only
+  contains the classes the existing pages use, so anything new has to bring its own. Look follows the admin panel:
+  Outfit, brand blue #465fff, light + dark.
+{% endcomment %}
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Customer emails | Arabela Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('dark');}catch(e){}</script>
+<style>
+  :root {
+    --bg: #f9fafb; --card: #ffffff; --border: #e4e7ec; --text: #1d2939; --muted: #667085; --soft: #f2f4f7;
+    --brand: #465fff; --brand-hover: #3641f5; --ok: #027a48; --ok-bg: #ecfdf3; --warn: #b54708; --warn-bg: #fffaeb;
+    --err: #b42318; --err-bg: #fef3f2; --off: #475467; --off-bg: #f2f4f7;
+  }
+  html.dark {
+    --bg: #0c111d; --card: #101828; --border: #1d2939; --text: #f2f4f7; --muted: #98a2b3; --soft: #1d2939;
+    --ok: #6ce9a6; --ok-bg: rgba(18,183,106,.16); --warn: #fec84b; --warn-bg: rgba(247,144,9,.16);
+    --err: #fda29b; --err-bg: rgba(240,68,56,.16); --off: #d0d5dd; --off-bg: #1d2939;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Outfit', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif; font-size: 15px; line-height: 1.5; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 28px 16px 56px; }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+  h1 { margin: 0; font-size: 26px; font-weight: 600; }
+  .back { color: var(--brand); text-decoration: none; font-weight: 500; font-size: 14px; }
+  .back:hover { text-decoration: underline; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 20px 22px; margin-bottom: 18px; }
+  .card h2 { margin: 0 0 4px; font-size: 18px; font-weight: 600; }
+  .sub { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
+  .row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid var(--border); flex-wrap: wrap; }
+  .row:first-of-type { border-top: 0; }
+  .label { color: var(--muted); font-size: 13px; }
+  .value { font-weight: 500; word-break: break-word; }
+  .note { color: var(--muted); font-size: 13px; margin-top: 2px; max-width: 560px; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .pill.ok { color: var(--ok); background: var(--ok-bg); }
+  .pill.off { color: var(--off); background: var(--off-bg); }
+  .pill.warn { color: var(--warn); background: var(--warn-bg); }
+  .alert { margin: 12px 0 0; padding: 10px 14px; border-radius: 10px; font-size: 14px; color: var(--warn); background: var(--warn-bg); }
+  .controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  select, .btn { font: inherit; border-radius: 10px; }
+  select { padding: 9px 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); min-width: 240px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .seg button { font: inherit; padding: 8px 14px; border: 0; background: var(--card); color: var(--muted); cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--brand); color: #fff; }
+  .stage { background: var(--soft); border-radius: 12px; padding: 16px; overflow-x: auto; text-align: center; }
+  iframe { width: 660px; max-width: 100%; height: 760px; border: 0; background: #f4f3f1; border-radius: 8px; transition: width .2s ease, opacity .15s ease; }
+  iframe.loading { opacity: .35; }
+  .actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 16px; }
+  .btn { padding: 10px 18px; border: 0; background: var(--brand); color: #fff; font-weight: 600; cursor: pointer; }
+  .btn:hover { background: var(--brand-hover); }
+  .btn[disabled] { opacity: .55; cursor: wait; }
+  #result { font-size: 14px; padding: 8px 12px; border-radius: 10px; display: none; max-width: 640px; }
+  #result.ok { display: block; color: var(--ok); background: var(--ok-bg); }
+  #result.err { display: block; color: var(--err); background: var(--err-bg); }
+  details summary { cursor: pointer; font-size: 18px; font-weight: 600; }
+  details ol, details ul { margin: 10px 0 0; padding-left: 22px; color: var(--text); }
+  details li { margin: 6px 0; }
+  code { background: var(--soft); padding: 1px 6px; border-radius: 6px; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1>Customer emails</h1>
+    <a class="back" href="{% url 'arabela_admin:page' 'profile' %}">&larr; Back to Edit Profile</a>
+  </div>
+
+  <section class="card" aria-labelledby="status-title">
+    <h2 id="status-title">Status</h2>
+    <p class="sub">How customer emails would go out right now.</p>
+
+    <div class="row">
+      <div>
+        <div class="label">Customer emails</div>
+        <div class="note">{% if email_status.enabled %}Customers are emailed when their reservation changes, and for reminders.{% else %}Customers are <strong>not</strong> being emailed yet. Turn this on last, with <code>CUSTOMER_EMAILS_ENABLED=true</code> on Render. The test button below works either way.{% endif %}</div>
+      </div>
+      <div>{% if email_status.enabled %}<span class="pill ok">On</span>{% else %}<span class="pill off">Off</span>{% endif %}</div>
+    </div>
+    <div class="row">
+      <div>
+        <div class="label">Sending method</div>
+        <div class="value">{{ email_status.method }}</div>
+      </div>
+      <div>{% if email_status.configured %}<span class="pill ok">Set up</span>{% else %}<span class="pill warn">Not set up</span>{% endif %}</div>
+    </div>
+    <div class="row">
+      <div>
+        <div class="label">Sends from</div>
+        <div class="value">{{ email_status.from_address }}</div>
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <div class="label">Links in emails point to</div>
+        <div class="value">{{ email_status.base_url }}</div>
+      </div>
+    </div>
+    {% for warning in email_status.warnings %}<div class="alert">{{ warning }}</div>{% endfor %}
+  </section>
+
+  <section class="card" aria-labelledby="preview-title">
+    <h2 id="preview-title">Preview and test</h2>
+    <p class="sub">Every email uses sample details (not a real customer). Pick one, check how it looks on a computer and on a phone, then send it to yourself.</p>
+
+    <div class="controls">
+      <label class="label" for="kind">Email</label>
+      <select id="kind">
+        {% for kind in email_kinds %}<option value="{{ kind.key }}">{{ kind.label }}</option>
+        {% endfor %}
+      </select>
+      <div class="seg" role="group" aria-label="Preview size">
+        <button type="button" id="size-desktop" aria-pressed="true">Computer</button>
+        <button type="button" id="size-phone" aria-pressed="false">Phone</button>
+      </div>
+    </div>
+
+    <div class="stage">
+      <iframe id="frame" title="Email preview" src="{% url 'arabela_admin:email_preview_render' email_kinds.0.key %}"></iframe>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn" id="send-test"{% if not owner_email %} disabled{% endif %}>Send test to me</button>
+      <span class="label">{% if owner_email %}Goes only to <strong>{{ owner_email }}</strong>.{% else %}Your admin account has no email address &mdash; add one in Edit Profile first.{% endif %}</span>
+    </div>
+    <div class="actions"><div id="result" role="status" aria-live="polite"></div></div>
+  </section>
+
+  <section class="card">
+    <details>
+      <summary>Setup help</summary>
+      <p class="sub" style="margin-top:10px;">Render's <strong>Free</strong> plan blocks the normal Gmail connection (SMTP), so the site needs one of these to send real email:</p>
+      <ol>
+        <li><strong>Paid Render plan.</strong> Upgrade the service to any paid instance. Gmail then works as is, with <code>EMAIL_HOST_USER</code> (the shop's Gmail address) and <code>EMAIL_HOST_PASSWORD</code> (a Gmail App Password) set on Render.</li>
+        <li><strong>Free: the Google relay.</strong> Open <code>apps_script/mail_relay.gs</code> in the project and follow the steps at the top of that file (about 5 minutes in your Google account). Then set on Render: <code>EMAIL_BACKEND=accounts.email_backends.AppsScriptRelayBackend</code>, <code>EMAIL_RELAY_URL</code> and <code>EMAIL_RELAY_SECRET</code>.</li>
+      </ol>
+      <p class="sub" style="margin-top:12px;">Then press <strong>Send test to me</strong>. When the test arrives in your inbox, set <code>CUSTOMER_EMAILS_ENABLED=true</code> on Render to start emailing customers. Google lets a normal Gmail account send about 100 emails a day through the relay (500 through SMTP), which is plenty for this shop.</p>
+    </details>
+  </section>
+</div>
+
+<script>
+(function () {
+  var RENDER_URL = "{% url 'arabela_admin:email_preview_render' 'KIND' %}";
+  var TEST_URL = "{% url 'arabela_admin:email_test_send' %}";
+  var CSRF = "{{ csrf_token }}";
+  var kind = document.getElementById('kind');
+  var frame = document.getElementById('frame');
+  var desktop = document.getElementById('size-desktop');
+  var phone = document.getElementById('size-phone');
+  var button = document.getElementById('send-test');
+  var result = document.getElementById('result');
+
+  function fitFrame() {
+    try { frame.style.height = (frame.contentDocument.documentElement.scrollHeight + 4) + 'px'; } catch (err) { /* keep the default height */ }
+  }
+  // The new email takes a moment to arrive; dim the old one meanwhile so the dropdown and the preview never seem to disagree.
+  function loadKind() {
+    frame.classList.add('loading');
+    frame.src = RENDER_URL.replace('KIND', encodeURIComponent(kind.value));
+  }
+  function setSize(isPhone) {
+    frame.style.width = isPhone ? '390px' : '660px';
+    desktop.setAttribute('aria-pressed', String(!isPhone));
+    phone.setAttribute('aria-pressed', String(isPhone));
+    window.setTimeout(fitFrame, 250);
+  }
+  function showResult(ok, text) {
+    result.className = ok ? 'ok' : 'err';
+    result.textContent = text;
+  }
+
+  frame.addEventListener('load', function () { frame.classList.remove('loading'); fitFrame(); });
+  kind.addEventListener('change', function () { result.className = ''; loadKind(); });
+  desktop.addEventListener('click', function () { setSize(false); });
+  phone.addEventListener('click', function () { setSize(true); });
+
+  button.addEventListener('click', function () {
+    button.disabled = true;
+    result.className = '';
+    var original = button.textContent;
+    button.textContent = 'Sending...';
+    fetch(TEST_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+      body: JSON.stringify({ kind: kind.value })
+    })
+      .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+      .then(function (r) {
+        if (r.ok && r.data.success) { showResult(true, r.data.message); }
+        else { showResult(false, r.data.error || 'The test email could not be sent.'); }
+      })
+      .catch(function () { showResult(false, 'Could not reach the server. Check your connection and try again.'); })
+      .then(function () { button.disabled = false; button.textContent = original; });
+  });
+})();
+</script>
+</body>
+</html>

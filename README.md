@@ -140,6 +140,33 @@ The AI chatbot is a separate case: it describes gowns by name and price from a f
 - **"Overdue" is not automatic.** The system will message a customer automatically once their return is late, but the visible Overdue status on the staff calendar has to be set by hand.
 - **No missing/lost gown tracking, and no audit log for inventory edits** — see Section 6.
 - Two unused, leftover dependencies sit in the project's requirements: `mssql-django`/`pyodbc` (the project only ever connects to PostgreSQL or SQLite) and `anthropic` (the real AI feature runs entirely on Google Gemini).
-- **There is no real email notification feature.** Two empty, unused template folders (`templates/emails/`, `templates/socialaccount/`) suggest one may have been planned; all current reminders and notices are in-app inbox messages only.
+- **Customer emails are built but stay off until they are set up** — see Section 10. Until then, every reminder and notice is an in-app message only.
 - A separate vendor UI-kit source project (`arabela_admin_panel_template/`) sits in the repository but is not part of the running application at all — it's not installed, not routed, and any "Coming Soon" text inside it does not describe a gap in the real product.
 - Minor: the customer profile template file is misspelled `profile.htmls` instead of `.html`. It works correctly, but it's inconsistent with every other template in the project.
+
+## 10. Customer emails
+
+Customers are also emailed about their own booking. The in-app notices (Messages page and reservation timeline) are always still there; the email is an extra.
+
+| Email | When it is sent |
+| --- | --- |
+| We received your reservation | right after checkout |
+| Reservation approved / rejected (with the reason) | staff approve or reject it |
+| Pick-up and return reminders, overdue notice | the daily reminder sweep, and a reminder staff send by hand |
+| Security deposit settled | the last gown on the booking is checked back in |
+| Account flagged / unflagged | staff flag or unflag it, or the automatic flag at 15 attempts |
+
+Not emailed on purpose: the temporary-lock notice, the "lock removed" message, check-ins (picked up / returned), date changes, and anything the customer did themselves (cancelling).
+
+**How it works** (`accounts/customer_emails.py`): hooks on the two places notices already come from (`CustomerMessage` and `ReservationStatusEvent`), so no existing screen was rewritten. An email is sent only after the database transaction commits, by one background thread that never touches the database. Any failure is logged (Render's Logs tab, `accounts.customer_emails`) and swallowed, so an email can never break an approval, a reminder or a timeline entry. Staff accounts and placeholder addresses (`.invalid`, `example.com`, ...) are never emailed, and a double-clicked Approve sends one email, not two. The look is `templates/emails/email.html` (tables and inline styles, the only thing every mail app agrees on); the logo is attached inside each email, so it shows even while a free Render service is asleep. The shop's address, phone and Facebook link come from Edit Profile.
+
+**Setting it up** (environment variables on Render; no migration):
+
+1. **A way to send.** Render's **Free** plan blocks the normal Gmail connection (SMTP, ports 25/465/587), so pick one:
+   - *Paid Render plan:* keep `EMAIL_BACKEND` as is and set `EMAIL_HOST_USER` (the shop's Gmail address) and `EMAIL_HOST_PASSWORD` (a Gmail App Password).
+   - *Free — the Google relay:* open `apps_script/mail_relay.gs`, follow the steps at the top of that file (about 5 minutes in the shop's Google account), then set `EMAIL_BACKEND=accounts.email_backends.AppsScriptRelayBackend`, `EMAIL_RELAY_URL` and `EMAIL_RELAY_SECRET`. Emails are then sent by Gmail itself over HTTPS.
+2. **Check delivery.** Admin → Edit Profile → *Customer emails* → *Preview and test emails*. It shows the current status and lets the owner preview every email at computer and phone width and press **Send test to me** (it only ever mails the signed-in owner's own address, and works even while the switch below is off).
+3. **Switch it on, last.** Set `CUSTOMER_EMAILS_ENABLED=true`. It is **off by default** on purpose: local development shares the live database, so approving a real booking from a laptop must never email a real customer.
+4. Optional: `SITE_BASE_URL` (for the links and logo in emails). When blank it is taken from the Site row the deployment uses (`SITE_ID=3` on Render, `arabela-gown-rental.onrender.com`).
+
+**Limits:** Gmail allows about 500 emails a day over SMTP (some sources say 100) and the relay about 100 a day on a normal Gmail account; both are far above this shop's volume. Mail from a Gmail address that is not on an owned domain can land in a customer's Spam folder now and then — the owner's test email is the best check.
