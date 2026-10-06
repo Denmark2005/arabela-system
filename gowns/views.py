@@ -1,3 +1,4 @@
+import hashlib
 import json
 import re
 import uuid
@@ -14,11 +15,12 @@ from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.http import Http404, JsonResponse
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import CustomerMessage, UserProfile
 from accounts.services import (
-    get_cancel_lockout_remaining_seconds,
+    cancel_lockout_notice,
     record_abandoned_hold,
     sync_cancellation_flag,
 )
@@ -28,7 +30,9 @@ from gowns.context_processors import (
     _FALLBACK_IMG,
     clear_reservation_hold,
     get_reservation_hold_deadline,
+    reservations_with_news_count,
     start_reservation_hold,
+    unread_messages_total,
 )
 from gowns.models import Gown, GownUnavailability, group_gowns_by_name, pick_representative_gown
 from reservations import timeline
@@ -620,6 +624,7 @@ def reservation(request):
     profile_display_name = ""
     profile_first_name = ""
     profile_last_name = ""
+    lockout_seconds, lockout_message = 0, ""
 
     if request.user.is_authenticated:
         profile, _ = UserProfile.objects.get_or_create(user=request.user)
@@ -627,6 +632,8 @@ def reservation(request):
         name_parts = profile_display_name.split(maxsplit=1) if profile_display_name else []
         profile_first_name = name_parts[0] if len(name_parts) > 0 else ""
         profile_last_name = name_parts[1] if len(name_parts) > 1 else ""
+        # A locked account sees why, and until when, before filling in anything (Confirm is switched off).
+        lockout_seconds, lockout_message = cancel_lockout_notice(request.user)
 
     # NOTE: the hold is deliberately NOT started here. Opening this page proves
     # nothing about whether the customer actually has a selection (the bag lives
@@ -643,6 +650,8 @@ def reservation(request):
             "profile_display_name": profile_display_name,
             "profile_first_name": profile_first_name,
             "profile_last_name": profile_last_name,
+            "checkout_lockout_seconds": lockout_seconds,
+            "checkout_lockout_message": lockout_message,
         },
     )
 
@@ -694,6 +703,37 @@ def _parse_date(value):
     return None
 
 
+_LAST_SUBMISSION_SESSION_KEY = "reservation_last_submission"
+_REPEAT_SUBMISSION_WINDOW = timedelta(minutes=15)
+
+
+def _submission_fingerprint(parsed_items, proof_file) -> str:
+    """Identifies one checkout attempt: which gowns, which dates, and which receipt photo. A genuinely new
+    booking comes with its own deposit receipt, so it never matches an earlier attempt."""
+    lines = sorted(
+        "|".join([item["gown_name"].casefold(), item["gown_slug"], item["size"],
+                  item["rental_date"].isoformat(), item["return_date"].isoformat()])
+        for item in parsed_items
+    )
+    lines.append(f"{getattr(proof_file, 'name', '')}|{getattr(proof_file, 'size', 0)}")
+    return hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
+
+
+def _recently_submitted(request, fingerprint):
+    """The reservation this same login saved for this exact attempt in the last few minutes, or None."""
+    last = request.session.get(_LAST_SUBMISSION_SESSION_KEY)
+    if not isinstance(last, dict) or last.get("fingerprint") != fingerprint:
+        return None
+    saved_at = parse_datetime(last.get("at") or "")
+    if saved_at is None or timezone.now() - saved_at > _REPEAT_SUBMISSION_WINDOW:
+        return None
+    return (
+        Reservation.objects.filter(customer=request.user, reference_code=last.get("reference_code"))
+        .exclude(status__in=[Reservation.Status.CANCELLED, Reservation.Status.REJECTED])
+        .first()
+    )
+
+
 @login_required(login_url='accounts:login')
 @require_http_methods(["POST"])
 def reservation_submit(request):
@@ -704,6 +744,16 @@ def reservation_submit(request):
         raw_items = json.loads(request.POST.get("items") or "[]")
     except json.JSONDecodeError:
         return JsonResponse({"success": False, "error": "Invalid request data."}, status=400)
+
+    # The temporary cancellation lockout used to be checked only when a hold STARTED, so a checkout page
+    # that was already open still let a locked account book. Checked here too (after the body has been
+    # read, so the phone gets this answer rather than a dropped connection). A hold can only still be
+    # alive if the lock began after it did -- it is released WITHOUT another strike, since the customer
+    # did not walk away from it.
+    lockout_seconds, lockout_message = cancel_lockout_notice(request.user)
+    if lockout_seconds:
+        clear_reservation_hold(request)
+        return JsonResponse({"success": False, "locked": True, "error": lockout_message}, status=403)
 
     if not isinstance(raw_items, list) or not raw_items:
         return JsonResponse({"success": False, "error": "Your bag is empty."}, status=400)
@@ -771,6 +821,17 @@ def reservation_submit(request):
             "error": "That GCash reference number doesn't look right. Copy it from your receipt "
                      "(about 13 digits, like 1234 567 890123), or leave it blank.",
         }, status=400)
+
+    # Pressing Confirm Rental again after a dropped connection must not book twice: when the first try
+    # was saved but its answer never reached the phone, the retry is the exact same request. Recognised
+    # by the same gowns, dates and receipt photo from this same login within a few minutes, and answered
+    # with the reservation already saved -- instead of a second booking, or a confusing "no longer
+    # available" because the customer's own first booking now holds the gown.
+    fingerprint = _submission_fingerprint(parsed_items, proof_file)
+    already_saved = _recently_submitted(request, fingerprint)
+    if already_saved is not None:
+        clear_reservation_hold(request)
+        return JsonResponse({"success": True, "reference_code": already_saved.reference_code, "already_submitted": True})
 
     with transaction.atomic():
         # Availability pass FIRST -- every item is resolved to a specific free unit
@@ -918,6 +979,11 @@ def reservation_submit(request):
     # The reservation exists now, so the checkout hold is over -- drop the
     # countdown banner instead of leaving it ticking on the confirmation page.
     clear_reservation_hold(request)
+    request.session[_LAST_SUBMISSION_SESSION_KEY] = {
+        "fingerprint": fingerprint,
+        "reference_code": reservation_obj.reference_code,
+        "at": timezone.now().isoformat(),
+    }
 
     return JsonResponse({"success": True, "reference_code": reservation_obj.reference_code})
 
@@ -1092,17 +1158,9 @@ def reservation_hold_start(request):
     "you're about to silently replace an existing held selection" and confirm
     with the customer before swapping it, rather than the countdown quietly
     outliving whatever it was originally holding."""
-    remaining_lockout = get_cancel_lockout_remaining_seconds(request.user)
-    if remaining_lockout > 0:
-        minutes = (remaining_lockout + 59) // 60
-        return JsonResponse({
-            "success": False,
-            "locked": True,
-            "error": (
-                f"Too many cancelled or abandoned reservations. Please try again in "
-                f"{minutes} minute{'s' if minutes != 1 else ''}."
-            ),
-        }, status=403)
+    lockout_seconds, lockout_message = cancel_lockout_notice(request.user)
+    if lockout_seconds:
+        return JsonResponse({"success": False, "locked": True, "error": lockout_message}, status=403)
 
     was_already_active = get_reservation_hold_deadline(request) is not None
     deadline = start_reservation_hold(request)
@@ -1172,6 +1230,23 @@ def cart_save_view(request):
     profile.cart_snapshot = cart
     profile.save(update_fields=["cart_snapshot"])
     return JsonResponse({"success": True})
+
+
+@require_http_methods(["GET"])
+def notification_badges(request):
+    """The two numbers on the customer navigation -- the bell (unread messages) and the person icon
+    (reservations with news) -- for static/js/customer-badges-live.js to poll, so a page that stays open
+    (the homepage, say) shows a new notification without the customer having to click to another page.
+    Counted by the same functions as the badges drawn into each page. A signed-out visitor gets a JSON
+    401, which tells the script to stop asking. Never marks anything as read."""
+    if not request.user.is_authenticated:
+        return JsonResponse({"error": "login"}, status=401)
+    response = JsonResponse({
+        "messages": unread_messages_total(request.user),
+        "reservations": reservations_with_news_count(request.user),
+    })
+    response["Cache-Control"] = "no-store"
+    return response
 
 
 @login_required(login_url='accounts:login')

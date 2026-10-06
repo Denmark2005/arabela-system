@@ -115,6 +115,7 @@
       50% { box-shadow: inset 0 0 0 2px rgba(180, 83, 9, 0.55); }
     }
     #reservation-date-warning { border-left: 2px solid #b45309; background-color: rgba(180, 83, 9, 0.07); }
+    #reservation-lockout-notice { border-left: 2px solid #b91c1c; background-color: rgba(185, 28, 28, 0.06); }
     #confirm-rental-btn[disabled] { opacity: 0.45; cursor: not-allowed; }
 
     @media (prefers-reduced-motion: reduce) {
@@ -280,6 +281,18 @@
             <div id="reservation-total-investment" class="font-headline text-2xl font-semibold text-on-surface tracking-tight tabular-nums">₱ 0</div>
           </div>
 
+          {% if checkout_lockout_message %}
+          <!-- The account is temporarily locked (accounts.services.cancel_lockout_notice): say why and until
+               when before anything is filled in. Confirm stays off until the lock's own end time. -->
+          <div id="reservation-lockout-notice" class="mb-4 rounded-[6px] px-4 py-3" data-seconds-left="{{ checkout_lockout_seconds }}">
+            <p class="flex items-center gap-2 text-[0.8125rem] font-semibold text-[#991b1b]">
+              <span class="material-symbols-outlined shrink-0" style="font-size: 1rem;">lock_clock</span>
+              Your account is temporarily locked
+            </p>
+            <p id="reservation-lockout-notice-text" class="mt-1 text-[0.8125rem] leading-relaxed text-secondary">{{ checkout_lockout_message }}</p>
+          </div>
+          {% endif %}
+
           <!-- Shown on load when a gown still has no rental date, so the customer
                finds out before filling the form -- not after uploading payment. -->
           <div id="reservation-date-warning" class="hidden mb-4 rounded-[6px] px-4 py-3">
@@ -405,6 +418,11 @@
         var PROFILE_DISPLAY_NAME = "{{ profile_display_name|default:''|escapejs }}";
         var SUBMIT_URL = "{% url 'gowns:reservation_submit' %}";
         var CONFIRMATION_URL = "{% url 'gowns:confirmation' %}";
+        var LOCKED_TITLE = 'Your account is temporarily locked';
+
+        // Set before reservation-flow.js draws the Order Summary, which is what switches Confirm on again.
+        var lockoutNotice = document.getElementById('reservation-lockout-notice');
+        window.arabelaCheckoutLocked = !!lockoutNotice;
 
         function getCsrfToken() {
             var match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
@@ -597,64 +615,11 @@
             if (emptyState) emptyState.classList.remove('hidden');
         }
 
-        // A phone camera photo is routinely 5-15MB -- well over the server's 5MB
-        // limit -- while a screenshot of a GCash receipt is usually under 1MB and
-        // already fine. Rather than reject real camera photos, shrink anything
-        // large enough to matter before it's ever sent. Screenshots are left
-        // completely untouched (skipped below the threshold), so the already-working
-        // path is not changed at all. Always resolves to SOME usable file --
-        // any failure along the way just falls back to the original, so a photo
-        // can never be blocked by compression itself misbehaving.
-        var PROOF_COMPRESS_SKIP_BELOW_BYTES = 1.5 * 1024 * 1024; // 1.5MB
-        var PROOF_COMPRESS_MAX_DIMENSION = 1600; // px, longest side
-        var PROOF_COMPRESS_QUALITY = 0.82;
-
-        function compressImageFile(file) {
-            return new Promise(function (resolve) {
-                if (!file || !file.type || file.type.indexOf('image/') !== 0) {
-                    resolve(file);
-                    return;
-                }
-                if (file.size <= PROOF_COMPRESS_SKIP_BELOW_BYTES) {
-                    resolve(file);
-                    return;
-                }
-                var objectUrl = URL.createObjectURL(file);
-                var img = new Image();
-                img.onload = function () {
-                    URL.revokeObjectURL(objectUrl);
-                    var scale = Math.min(1, PROOF_COMPRESS_MAX_DIMENSION / Math.max(img.width, img.height));
-                    var w = Math.max(1, Math.round(img.width * scale));
-                    var h = Math.max(1, Math.round(img.height * scale));
-                    var canvas = document.createElement('canvas');
-                    canvas.width = w;
-                    canvas.height = h;
-                    var ctx = canvas.getContext('2d');
-                    if (!ctx) { resolve(file); return; }
-                    ctx.drawImage(img, 0, 0, w, h);
-                    canvas.toBlob(function (blob) {
-                        if (!blob || blob.size >= file.size) {
-                            resolve(file); // compression didn't actually help -- keep the original
-                            return;
-                        }
-                        var newName = file.name.replace(/\.\w+$/, '') + '.jpg';
-                        resolve(new File([blob], newName, { type: 'image/jpeg' }));
-                    }, 'image/jpeg', PROOF_COMPRESS_QUALITY);
-                };
-                img.onerror = function () {
-                    URL.revokeObjectURL(objectUrl);
-                    resolve(file); // couldn't decode it (e.g. an unsupported format) -- let the
-                                    // server's own extension/type check give the real error
-                };
-                img.src = objectUrl;
-            });
-        }
-
-        // Resolves to the exact File that should actually be uploaded -- the
-        // compressed version once it's ready, or the original while compression is
-        // still running / for a file too small to need it. The submit handler awaits
-        // this instead of reading proof_of_payment.files[0] directly, so a click that
-        // lands before compression finishes can never send the oversized original.
+        // Resolves to the exact File that should be uploaded: the in-memory copy made the moment the
+        // photo was picked (shrunk if it is a large camera photo -- see static/js/picked-file.js), or
+        // null when there is none. The submit handler awaits this instead of reading
+        // proof_of_payment.files[0]: sending the phone's own file is exactly what made Confirm Rental
+        // fail with "Failed to fetch" on Android phones.
         var proofUploadFilePromise = Promise.resolve(null);
 
         function triggerReservationInvalidShake(el) {
@@ -733,9 +698,14 @@
                 localStorage.removeItem(BOOK_NOW_CONTEXT_KEY);
                 if (typeof syncCartToServer === 'function') syncCartToServer([]);
             } catch (err) {}
-            try {
-                sessionStorage.removeItem(RESERVATION_STORAGE_KEY);
-            } catch (err2) {}
+            // Both copies of the held selection (this tab's and the backup other tabs would restore from).
+            if (typeof window.arabelaClearReservationSnapshot === 'function') {
+                window.arabelaClearReservationSnapshot(RESERVATION_STORAGE_KEY);
+            } else {
+                try {
+                    sessionStorage.removeItem(RESERVATION_STORAGE_KEY);
+                } catch (err2) {}
+            }
         }
 
         // Gowns still missing a rental date, as reported by the Order Summary
@@ -755,7 +725,7 @@
 
             if (!reservationDateGaps.length) {
                 warn.classList.add('hidden');
-                if (confirmBtn) confirmBtn.disabled = false;
+                if (confirmBtn) confirmBtn.disabled = !!window.arabelaCheckoutLocked;
                 return;
             }
 
@@ -770,12 +740,51 @@
             if (confirmBtn) confirmBtn.disabled = true;
         };
 
+        // Why a Confirm Rental attempt failed, in words a customer understands -- never the browser's raw
+        // "Failed to fetch". A lock that began after this page opened reloads it, so the page shows the
+        // lock notice (and no stale countdown) in place of the form's Confirm button.
+        function showSubmitError(err) {
+            if (err && err.data && err.data.locked) {
+                var reload = function () { window.location.reload(); };
+                arabelaAlert({ title: LOCKED_TITLE, message: err.data.error, danger: true }).then(reload, reload);
+                return;
+            }
+            var fallback = 'Unable to submit your reservation. Please try again.';
+            var described = window.arabelaDescribeRequestError
+                ? window.arabelaDescribeRequestError(err, fallback)
+                : { kind: 'message', message: (err && err.message) || fallback };
+            var titles = { network: 'Connection problem', server: 'Server busy', photo: 'Receipt photo problem' };
+            var message = described.message;
+            if (described.kind === 'network' || described.kind === 'server') {
+                message += ' Your details are still filled in, so just tap Confirm Rental again. You will not be booked twice.';
+            }
+            arabelaAlert({ title: titles[described.kind] || 'Reservation not submitted', message: message, danger: true });
+        }
+
         document.addEventListener('DOMContentLoaded', function () {
             prefillReservationFromProfile();
 
             var btn = document.getElementById('confirm-rental-btn');
+
+            if (lockoutNotice) {
+                if (btn) btn.disabled = true;
+                // When the lock runs out, the notice goes and Confirm follows the usual rules again.
+                var lockSecondsLeft = Number(lockoutNotice.getAttribute('data-seconds-left')) || 0;
+                window.setTimeout(function () {
+                    window.arabelaCheckoutLocked = false;
+                    lockoutNotice.classList.add('hidden');
+                    if (typeof window.onReservationDateGaps === 'function') window.onReservationDateGaps(reservationDateGaps);
+                }, (lockSecondsLeft + 1) * 1000);
+            }
+
             if (btn) {
                 btn.addEventListener('click', function () {
+                    if (window.arabelaCheckoutLocked) {
+                        var lockText = document.getElementById('reservation-lockout-notice-text');
+                        arabelaAlert({ title: LOCKED_TITLE, message: lockText ? lockText.textContent : '', danger: true });
+                        return;
+                    }
+
                     // Backstop for anything the on-load check missed (a stale
                     // snapshot, storage that failed to read). Unlike the old
                     // dead-end alert, this names the gown and offers the way there.
@@ -787,6 +796,17 @@
                     if (!validateReservationForm()) return;
 
                     var payload = readReservationPayload();
+                    if (!payload.items || !payload.items.length) {
+                        // Not a date problem: there is nothing left to book (the selection was released,
+                        // or this tab lost it). Say so, and don't leave them on a dead page.
+                        if (typeof window.arabelaLeaveCheckout === 'function') {
+                            window.arabelaLeaveCheckout('Your selection is empty',
+                                'There is nothing to reserve right now. Browse the gowns and add what you like first.');
+                        } else {
+                            arabelaAlert({ title: 'Your selection is empty', message: 'There is nothing to reserve right now. Browse the gowns and add what you like first.' });
+                        }
+                        return;
+                    }
                     var submitItems = buildSubmitItems(payload);
                     if (!submitItems) {
                         arabelaAlert({
@@ -816,18 +836,18 @@
                     formData.append('phone', document.getElementById('phone').value.trim());
                     var gcashRefEl = document.getElementById('gcash_reference');
                     formData.append('gcash_reference', gcashRefEl ? gcashRefEl.value.trim() : '');
-                    var proofInputEl = document.getElementById('proof_of_payment');
-                    var rawProofFile = (proofInputEl && proofInputEl.files && proofInputEl.files[0]) || null;
 
-                    // Wait for the compressed version (see compressImageFile above) so a
-                    // click that lands before it's ready still sends the shrunk file, not
-                    // the original multi-MB camera photo.
+                    // Wait for the in-memory copy (a click can land while a large photo is still being
+                    // shrunk) and send only that -- never the phone's original file.
                     proofUploadFilePromise
                         .catch(function () { return null; })
-                        .then(function (compressedFile) {
-                            if (rawProofFile) {
-                                formData.append('proof_of_payment', compressedFile || rawProofFile);
+                        .then(function (preparedFile) {
+                            if (!preparedFile) {
+                                var photoErr = new Error('Please choose your receipt photo again. We could not read the one you picked.');
+                                photoErr.code = 'unreadable_photo';
+                                throw photoErr;
                             }
+                            formData.append('proof_of_payment', preparedFile);
 
                             return fetch(SUBMIT_URL, {
                                 method: 'POST',
@@ -844,15 +864,17 @@
                         })
                         .then(function (result) {
                             if (!result.ok || !result.data.success) {
-                                throw new Error(result.data.error || 'Something went wrong. Please try again.');
+                                var serverErr = new Error(result.data.error || 'Something went wrong. Please try again.');
+                                serverErr.data = result.data;
+                                throw serverErr;
                             }
                             clearReservationSelections();
                             window.location.href = CONFIRMATION_URL;
                         })
                         .catch(function (err) {
                             if (loadingOverlay) loadingOverlay.classList.remove('show');
-                            btn.disabled = false;
-                            arabelaAlert({ title: 'Reservation not submitted', message: err.message || 'Unable to submit your reservation. Please try again.', danger: true });
+                            btn.disabled = !!window.arabelaCheckoutLocked;
+                            showSubmitError(err);
                         });
                 });
             }
@@ -936,9 +958,19 @@
                     var z = document.getElementById('proof-payment-dropzone');
                     if (z) z.classList.remove('reservation-proof-invalid');
                     if (proofInput.files && proofInput.files[0]) {
-                        var rawFile = proofInput.files[0];
-                        showProofPreview(rawFile);
-                        proofUploadFilePromise = compressImageFile(rawFile);
+                        // Copied into memory right now; the copy is what is previewed and sent, so the
+                        // phone's own file can't make Confirm Rental fail later (static/js/picked-file.js).
+                        var prepared = window.arabelaPreparePhotoForUpload(proofInput.files[0]);
+                        proofUploadFilePromise = prepared;
+                        prepared.then(function (file) {
+                            if (proofUploadFilePromise === prepared) showProofPreview(file);
+                        }, function (err) {
+                            if (proofUploadFilePromise !== prepared) return;
+                            proofInput.value = '';
+                            clearProofPreview();
+                            proofUploadFilePromise = Promise.resolve(null);
+                            setProofError(err.message);
+                        });
                     } else {
                         clearProofPreview();
                         proofUploadFilePromise = Promise.resolve(null);

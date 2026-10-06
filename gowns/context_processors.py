@@ -113,7 +113,7 @@ def _build_search_catalog(categories: list[dict] | None = None) -> list[dict]:
     return items that did not exist and were not orderable. It is now driven entirely
     by Gown rows. Out-of-Stock gowns are left out for the same reason the collection
     grid hides them: they cannot be booked, so offering them wastes a click."""
-    label_to_key = {category["label"]: category["key"] for category in (categories or all_categories())}
+    label_to_key = {category["label"]: category["key"] for category in (all_categories() if categories is None else categories)}
     by_category: dict[str, list] = {}
     for gown in (
         Gown.objects.exclude(status=Gown.Status.OUT_OF_STOCK)
@@ -188,41 +188,51 @@ def featured_search_items(request):
     }
 
 
-def active_reservations_count(request):
+def reservations_with_news_count(user):
     """
-    Badge count for the Reservations nav row: how many active items are new or
-    changed (created, or had their stage/dates edited by staff) since the customer
-    last opened their Reservations page. Dismissible like the Messages badge --
-    clears the moment they visit /reservations/ (`gowns.views.orders` stamps
-    `UserProfile.reservations_last_seen_at`), and comes back the next time
-    something about an active booking changes.
-    """
-    if not request.user.is_authenticated:
-        return {"active_reservations_count": 0}
+    How many of this customer's active reservation items are new or changed (created,
+    or had their stage/dates edited by staff) since they last opened their Reservations
+    page. Dismissible like the Messages badge -- clears the moment they visit
+    /reservations/ (`gowns.views.orders` stamps `UserProfile.reservations_last_seen_at`),
+    and comes back the next time something about an active booking changes.
 
+    The ONE place this is counted: the badge drawn into each page (the context processor
+    below) and the live badge endpoint (`gowns.views.notification_badges`) both call it,
+    so the number on a page that stays open can never differ from a fresh load.
+    """
     active_items = (
         ReservationItem.objects
-        .filter(reservation__customer=request.user)
+        .filter(reservation__customer=user)
         .exclude(stage=ReservationItem.Stage.RETURNED)
         .exclude(reservation__status__in=[Reservation.Status.REJECTED, Reservation.Status.CANCELLED])
     )
 
-    profile = UserProfile.objects.filter(user=request.user).first()
+    profile = UserProfile.objects.filter(user=user).first()
     last_seen = profile.reservations_last_seen_at if profile else None
     if last_seen:
         active_items = active_items.filter(updated_at__gt=last_seen)
 
-    return {"active_reservations_count": active_items.count()}
+    return active_items.count()
+
+
+def unread_messages_total(user):
+    """How many messages from staff this customer hasn't opened the Messages page to see
+    yet -- shared by the page badge and the live badge endpoint, like the count above."""
+    return CustomerMessage.objects.filter(recipient=user, is_read=False).count()
+
+
+def active_reservations_count(request):
+    """Badge count for the Reservations nav row -- see reservations_with_news_count."""
+    if not request.user.is_authenticated:
+        return {"active_reservations_count": 0}
+    return {"active_reservations_count": reservations_with_news_count(request.user)}
 
 
 def unread_messages_count(request):
-    """Badge count for the Messages nav link: how many messages from staff this
-    customer hasn't opened the Messages page to see yet."""
+    """Badge count for the Messages nav link -- see unread_messages_total."""
     if not request.user.is_authenticated:
         return {"unread_messages_count": 0}
-
-    count = CustomerMessage.objects.filter(recipient=request.user, is_read=False).count()
-    return {"unread_messages_count": count}
+    return {"unread_messages_count": unread_messages_total(request.user)}
 
 
 def _phone_tel_href(phone: str) -> str:

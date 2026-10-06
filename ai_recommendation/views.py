@@ -1,4 +1,6 @@
 import json
+import re
+from urllib.parse import urlparse
 
 import requests
 from django.conf import settings
@@ -7,7 +9,7 @@ from django.http import JsonResponse
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from gowns.context_processors import all_categories, category_url
+from gowns.context_processors import _build_search_catalog, all_categories, category_url
 from gowns.models import SiteSettings
 
 GEMINI_URL_TEMPLATE = (
@@ -116,30 +118,79 @@ def _ai_chat_rate_limit_reply(request):
     return None
 
 
-def _system_prompt() -> str:
+# Gowns listed to the AI per category before the rest is left to the category's browse link --
+# keeps the prompt small if the catalog ever grows large.
+MAX_GOWNS_PER_CATEGORY = 25
+
+_ALL_COLLECTIONS_PATH = "/collections/all/"
+
+
+def _link_label(text: str) -> str:
+    """A gown's name made safe to use as a markdown link label."""
+    return re.sub(r"[\[\]()]", " ", text).strip()
+
+
+def _live_catalog() -> tuple[str, set[str]]:
+    """The AI's catalog, read from the database right now (so it is never out of date): every
+    category that currently exists, marked Women's or Men's, and under it every real, bookable gown
+    with its real price and its own product-page link. Also returns the set of site paths that are
+    real, which `_sanitize_reply` uses to throw away any link the AI makes up."""
+    categories = all_categories()
+    by_collection: dict[str, list[dict]] = {}
+    for item in _build_search_catalog(categories):
+        by_collection.setdefault(item["collection_key"], []).append(item)
+
+    allowed = {"/collections/", _ALL_COLLECTIONS_PATH}
+    lines = []
+    for category in categories:
+        path = category_url(category)
+        allowed.add(path)
+        audience = "men's" if category.get("audience") == "men" else "women's"
+        label = _link_label(category["label"])
+        header = f"- {category['label']} ({audience} collection) -- browse all: [{label}]({path})"
+        items = by_collection.get(category["key"], [])
+        if not items:
+            lines.append(f"{header} -- NO GOWNS LISTED YET: never recommend anything from this collection")
+            continue
+        lines.append(header)
+        for item in items[:MAX_GOWNS_PER_CATEGORY]:
+            allowed.add(item["url"])
+            lines.append(f"    - {item['title']} | {item['price_label']} | [{_link_label(item['title'])}]({item['url']})")
+        if len(items) > MAX_GOWNS_PER_CATEGORY:
+            lines.append(f"    - ...and {len(items) - MAX_GOWNS_PER_CATEGORY} more (use the browse-all link above)")
+    if not lines:
+        lines.append("- (There are no collections on the website right now.)")
+    return "\n".join(lines), allowed
+
+
+def _system_prompt(catalog: tuple[str, set[str]] | None = None) -> str:
     s = SiteSettings.load()
     address = ", ".join(
         part for part in [s.shop_street, s.shop_city, s.shop_country, s.shop_postal_code] if part
     )
-    collection_rows = []
-    for c in all_categories():
-        path = category_url(c)
-        collection_rows.append(f"- {c['label']}: {path}")
-    collections_lines = "\n".join(collection_rows)
+    catalog_lines, _allowed = catalog or _live_catalog()
 
     return f"""You are "Arabela Recommends," the friendly AI stylist built into the Arabela Gown Rental website. You reply inside a small chat bubble, so keep answers short and warm: 2-4 sentences, plain language, no long lists unless asked. Answer ONLY using the information below, which is the real, current state of the website. Never invent facts, brands, sizes, exact stock counts, or policies that aren't stated here -- if you don't know, say so and point the user to Facebook or the phone number below instead of guessing.
 
 SHOP INFO
 - Address: {address}
 - Phone: {s.phone}
-- Facebook: {s.facebook_url}
+- Facebook (only for contacting the shop -- never use it as a link to a gown or collection): {s.facebook_url}
 - General shop hours: Monday-Sunday, 10:00am-7:00pm
 - Pickup/return hours specifically: 1:00pm-5:00pm daily, in person at the shop only (no delivery/courier)
 
-GOWN & SUIT CATALOG (this is a demo/thesis catalog, not a live warehouse count)
-There are 11 collections, each with 8 items named "{{Collection}} One" through "{{Collection}} Eight" (e.g. "Wedding Gown Three"). Prices go in order by number: One=P1,600, Two=P1,800, Three=P2,000, Four=P2,200, Five=P2,400, Six=P2,600, Seven=P2,800, Eight=P3,000. The item numbered "Two" in every collection is currently Reserved; all others are Available Now. There are no brand names and no long per-item descriptions -- just a name, a price, and a category. The 11 collections and their browse links:
-{collections_lines}
-When you recommend an item, name it exactly (e.g. "Wedding Gown Five -- P2,400") and you may include its collection browse link so the user can look at the full set.
+LIVE CATALOG -- THIS IS THE ONLY LIST OF GOWNS AND COLLECTIONS THAT EXIST
+This list was read from the shop's database at the moment the customer sent this message, so it is always current. Anything that is not on it does not exist: never recommend, name, or quote a price for any gown or collection that is not on this list, even if an earlier message in this chat mentioned it (earlier messages may be out of date). Each collection is marked as the women's or the men's collection. Each gown line is: name | rental price | link to that gown's own page.
+{catalog_lines}
+Whole catalog: [All collections]({_ALL_COLLECTIONS_PATH})
+
+HOW TO RECOMMEND
+- Recommend at most 3 gowns, by their exact name and exact price as listed, and link each one with ITS OWN link from the list, written exactly as shown, like [Name](/collections/.../products/.../). Use a collection's browse-all link only when the customer wants to look through a whole collection.
+- Copy every link exactly as it is written in the list. Links start with "/collections/". NEVER put a website address in front of them, never combine them with the Facebook address, and never make up a link.
+- Before you recommend anything you need to know whether the customer wants a women's gown or a men's outfit. If they have not said so and it is not obvious from the chat, ask ONE short question first (for example: "Are you looking for a women's gown or a men's outfit?") and do not recommend yet. Once you know, remember it for the rest of the chat and only recommend from the collections marked for that audience (men's collections for men, women's collections for women).
+- Match the customer's occasion and words to the collections and gown names on the list. The list has no colours, fabrics, sizes or style descriptions, so never make any up.
+- If the best matching collection has no gowns listed, or nothing on the list fits, say so honestly and suggest the closest collection that does have gowns, or the shop's phone or Facebook. Never invent a gown.
+- Prices are the rental prices shown on the list. Whether a gown is free on a certain date depends on the calendar, so never say a gown is available or booked on a given day -- tell the customer to open the gown's page and check the date calendar.
 
 HOW RENTING WORKS
 1. Create an account and browse the collection online -- each gown shows Available, Reserved, or On Rent in real time.
@@ -160,6 +211,57 @@ ABOUT ARABELA
 Arabela Gown Rental dresses people for weddings, debuts, graduations, and other celebrations. It replaced the old walk-in/Facebook-message process with an online system: browse the full collection, see real-time availability, and reserve online instead of calling or messaging to check. Core values: effortless reservations, full transparency on availability, and accessible, quality gowns and suits for every formal occasion.
 
 If asked who you are: you are Arabela's AI stylist, here to help pick an outfit and answer questions about how the site and rental process work."""
+
+
+_MD_LINK_RE = re.compile(r"\[([^\[\]]+)\]\(([^()\s]+)\)")
+_BARE_URL_RE = re.compile(r"(?:https?://[^\s<>()\[\]]+|/collections/[^\s<>()\[\]]*)")
+_TRAILING_PUNCTUATION = ".,;:!?*_'\""
+
+
+def _classify_link(url: str, allowed: set[str], host: str):
+    """("other", url) for a link that isn't about our collections (left alone), ("keep", path) for
+    a real collection/product page of this site, ("bad", None) for a collection-looking link that
+    isn't real -- an invented page, or the shop's Facebook address glued in front of a path."""
+    parsed = urlparse(url)
+    if "/collections" not in parsed.path.lower():
+        return "other", url
+    own_site = not parsed.netloc or parsed.netloc.lower() == host.lower()
+    path = parsed.path if parsed.path.endswith("/") else parsed.path + "/"
+    if own_site and path in allowed:
+        return "keep", path
+    return "bad", None
+
+
+def _sanitize_reply(reply: str, allowed: set[str], host: str) -> str:
+    """The AI is told to copy links exactly, but it is still a language model. So every link in its
+    reply that points at a collection or gown page is checked against the real pages: a real one is
+    kept (made a clean site path), an invented one is removed, so a customer is never sent to a
+    page that doesn't exist or to the wrong website. Contact links (Facebook) are left alone."""
+    kept: list[str] = []
+
+    def markdown_link(match):
+        label, url = match.group(1), match.group(2)
+        verdict, value = _classify_link(url, allowed, host)
+        if verdict == "bad":
+            return label  # keep the words, drop the broken link
+        token = f"@@ARABELALINK{len(kept)}@@"
+        kept.append(f"[{label}]({value})")
+        return token
+
+    def bare_link(match):
+        raw = match.group(0)
+        url = raw.rstrip(_TRAILING_PUNCTUATION)
+        tail = raw[len(url):]
+        verdict, value = _classify_link(url, allowed, host)
+        if verdict == "other":
+            return raw
+        return (value if verdict == "keep" else _ALL_COLLECTIONS_PATH) + tail
+
+    text = _MD_LINK_RE.sub(markdown_link, reply)
+    text = _BARE_URL_RE.sub(bare_link, text)
+    for i, link in enumerate(kept):
+        text = text.replace(f"@@ARABELALINK{i}@@", link)
+    return text
 
 
 def _extract_reply(data: dict) -> str | None:
@@ -199,8 +301,11 @@ def chat(request):
             contents.append({"role": role, "parts": [{"text": text}]})
     contents.append({"role": "user", "parts": [{"text": message}]})
 
+    # Rebuilt from the database on every message, so what staff add, change or delete is what the
+    # AI knows on the very next message.
+    catalog = _live_catalog()
     body = {
-        "systemInstruction": {"parts": [{"text": _system_prompt()}]},
+        "systemInstruction": {"parts": [{"text": _system_prompt(catalog)}]},
         "contents": contents,
         "generationConfig": {"temperature": 0.7, "maxOutputTokens": MAX_OUTPUT_TOKENS},
     }
@@ -232,7 +337,7 @@ def chat(request):
 
     reply = _extract_reply(data)
     if reply:
-        return JsonResponse({"reply": reply})
+        return JsonResponse({"reply": _sanitize_reply(reply, catalog[1], request.get_host())})
     # No visible text: almost always the reasoning budget ran out before the
     # answer began (finishReason MAX_TOKENS) -- see MAX_OUTPUT_TOKENS above.
     finish = ""

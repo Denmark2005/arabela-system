@@ -7,6 +7,7 @@ creating an import cycle (reservations.models only imports settings/auth).
 from datetime import timedelta
 
 from django.utils import timezone
+from django.utils.dateformat import format as format_datetime
 
 from .models import CustomerMessage, UserProfile
 
@@ -165,3 +166,48 @@ def get_cancel_lockout_remaining_seconds(user) -> int:
     if not until:
         return 0
     return max(int((until - timezone.now()).total_seconds()), 0)
+
+
+def _plural(number, word):
+    return f"{number} {word}{'' if number == 1 else 's'}"
+
+
+def cancel_lockout_notice(user):
+    """`(seconds_left, message)` for an active temporary lockout, or `(0, "")` when there is none.
+
+    The one wording every step uses -- Proceed (reservation_hold_start), the checkout page and Confirm
+    Rental (reservation_submit) -- so a locked customer is told why, for how long and until when, instead
+    of a vague "try again later". Only ever reads THIS account's own row: a lock never touches anyone else.
+    """
+    profile = (
+        UserProfile.objects.filter(user=user)
+        .values('cancel_lockout_until', 'cancel_tier2_lockout_sent')
+        .first()
+    )
+    until = profile['cancel_lockout_until'] if profile else None
+    if not until:
+        return 0, ""
+    seconds = int((until - timezone.now()).total_seconds())
+    if seconds <= 0:
+        return 0, ""
+
+    # The 2-hour lock is the second step; it can only have been set after the 30-minute one.
+    length = (
+        _plural(CANCELLATION_LOCKOUT_TIER_2_HOURS, "hour") if profile['cancel_tier2_lockout_sent']
+        else _plural(CANCELLATION_LOCKOUT_TIER_1_MINUTES, "minute")
+    )
+    local_until = timezone.localtime(until)
+    when = format_datetime(local_until, "g:i A")
+    if local_until.date() != timezone.localdate():
+        when = format_datetime(local_until, "M j, g:i A")
+    minutes_left = -(-seconds // 60)  # rounded up, so it never says "0 minutes left"
+    hours, minutes = divmod(minutes_left, 60)
+    left = _plural(minutes, "minute") if not hours else (
+        _plural(hours, "hour") + (f" {_plural(minutes, 'minute')}" if minutes else "")
+    )
+    message = (
+        f"You've reached {count_cancellation_attempts(user)} cancelled or abandoned reservations, so new "
+        f"reservations are paused for {length}, until {when} (about {left} left). You can still browse "
+        f"the gowns in the meantime."
+    )
+    return seconds, message

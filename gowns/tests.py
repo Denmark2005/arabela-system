@@ -1733,3 +1733,393 @@ class CheckoutGcashWindowTests(TestCase):
         html = self.client.get(reverse("gowns:reservation")).content.decode()
         self.assertIn('id="gcash_reference"', html)
         self.assertIn("formData.append('gcash_reference'", html)
+
+
+class LiveNavBadgeTests(TestCase):
+    """The bell (unread messages) and person icon (reservations with news) on the customer navigation.
+    The numbers used to be worked out only when a page was built, so a page that stayed open -- the
+    homepage -- never showed a message that arrived later until the customer clicked through to another
+    page. `notification_badges` (polled by static/js/customer-badges-live.js) answers with the very same
+    counts the pages draw, and every badge on every customer page is marked so the script can redraw it."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from accounts.models import CustomerMessage, UserProfile
+        cls.CustomerMessage = CustomerMessage
+        cls.UserProfile = UserProfile
+        cls.customer = User.objects.create_user(username="badge_customer", password="x")
+        cls.url = reverse("gowns:notification_badges")
+
+    def setUp(self):
+        self.client.force_login(self.customer)
+
+    def _message(self, body="From the shop"):
+        return self.CustomerMessage.objects.create(recipient=self.customer, body=body)
+
+    def _item(self):
+        today = date.today()
+        reservation = Reservation.objects.create(
+            customer=self.customer, customer_name="Badge Customer", status=Reservation.Status.CONFIRMED)
+        return ReservationItem.objects.create(
+            reservation=reservation, gown_name="Badge Gown", rental_date=today + timedelta(days=5),
+            return_date=today + timedelta(days=8))
+
+    def _feed(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        return response.json()
+
+    # ---- the endpoint -----------------------------------------------------------------------------
+    def test_a_signed_out_visitor_gets_a_json_401(self):
+        self.client.logout()
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response["Content-Type"], "application/json")
+
+    def test_it_only_answers_get_and_is_never_cached(self):
+        self.assertEqual(self.client.post(self.url).status_code, 405)
+        self.assertIn("no-store", self.client.get(self.url)["Cache-Control"])
+
+    def test_it_counts_exactly_what_the_page_badges_count(self):
+        self._message("one")
+        self._message("two")
+        self._item()
+        feed = self._feed()
+        self.assertEqual(feed, {"messages": 2, "reservations": 1})
+        page = self.client.get("/collections/")
+        self.assertEqual(page.context["unread_messages_count"], feed["messages"])
+        self.assertEqual(page.context["active_reservations_count"], feed["reservations"])
+
+    def test_a_new_message_shows_up_in_the_next_check_and_is_not_marked_read(self):
+        self.assertEqual(self._feed(), {"messages": 0, "reservations": 0})
+        self._message()
+        self.assertEqual(self._feed()["messages"], 1)
+        self.assertEqual(self._feed()["messages"], 1)  # asking never reads it for them
+        self.assertFalse(self.CustomerMessage.objects.get().is_read)
+        self.client.get(reverse("gowns:messages"))      # opening the Messages page does
+        self.assertEqual(self._feed()["messages"], 0)
+
+    def test_the_reservations_badge_clears_on_opening_reservations_and_comes_back_on_a_change(self):
+        item = self._item()
+        self.assertEqual(self._feed()["reservations"], 1)
+        self.client.get(reverse("gowns:orders"))
+        self.assertEqual(self._feed()["reservations"], 0)
+        item.return_date = item.return_date + timedelta(days=1)
+        item.save()  # staff change the booking
+        self.assertEqual(self._feed()["reservations"], 1)
+
+    def test_someone_elses_messages_are_not_counted(self):
+        other = User.objects.create_user(username="badge_other", password="x")
+        self.CustomerMessage.objects.create(recipient=other, body="not yours")
+        self.assertEqual(self._feed()["messages"], 0)
+
+    def test_the_check_costs_a_small_fixed_number_of_queries(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        for n in range(5):
+            self._message(str(n))
+        with CaptureQueriesContext(connection) as queries:
+            self._feed()
+        self.assertLessEqual(len(queries), 8, [q["sql"][:70] for q in queries])
+
+    # ---- every badge is marked, on every customer page ------------------------------------------------
+    def test_every_customer_page_marks_its_badges_and_loads_the_script(self):
+        self._message()
+        item = self._item()
+        base_pages = ["/", "/collections/", "/pages/about/", "/pages/faqs/", "/collections/wedding/"]
+        standalone = [reverse("gowns:messages"), reverse("gowns:orders"), reverse("gowns:reservation_item_detail", args=[item.id])]
+        for path in base_pages + standalone:
+            html = self.client.get(path).content.decode()
+            self.assertIn('data-live-badges-url="/notifications/badges/"', html, path)
+            self.assertIn("customer-badges-live.js", html, path)
+            self.assertEqual(html.count('data-live-badge="messages"') >= 1 and html.count('data-live-badge="reservations"') >= 1, True, path)
+        for path in base_pages:  # one bell + one person icon
+            html = self.client.get(path).content.decode()
+            self.assertEqual((html.count('data-live-badge="messages"'), html.count('data-live-badge="reservations"')), (1, 1), path)
+        for path in standalone:  # top-bar Messages link + person icon + the two phone-menu links
+            html = self.client.get(path).content.decode()
+            self.assertEqual((html.count('data-live-badge="messages"'), html.count('data-live-badge="reservations"')), (2, 2), path)
+
+    def test_the_positions_of_the_badges_in_the_top_bar_and_phone_menu_are_kept(self):
+        html = self.client.get(reverse("gowns:messages")).content.decode()
+        self.assertIn('data-live-badge="messages" data-live-badge-style="top: -8px; right: -14px;"', html)
+        self.assertEqual(html.count('data-live-badge-style="top: 8px; right: auto; left: 34px;"'), 2)
+
+    def test_the_numbers_are_still_drawn_into_the_page_when_it_loads(self):
+        self._message("one")
+        self._message("two")
+        self._item()
+        html = self.client.get("/collections/").content.decode()
+        self.assertRegex(html, r'aria-label="Open messages"[^>]*data-live-badge="messages">\s*<span[^>]*>notifications</span>\s*<span class="icon-count-badge badge-pop">2</span>')
+        self.assertRegex(html, r'data-live-badge="reservations">\s*<span[^>]*>person</span>\s*<span class="icon-count-badge badge-pop">1</span>')
+
+    def test_signed_out_visitors_get_no_script_and_no_polling(self):
+        self.client.logout()
+        html = self.client.get("/").content.decode()
+        self.assertNotIn("customer-badges-live.js", html)
+        self.assertNotIn("data-live-badge", html)
+
+    def test_the_script_is_a_real_file(self):
+        from django.contrib.staticfiles import finders
+        self.assertTrue(finders.find("js/customer-badges-live.js"))
+
+
+class CheckoutHoldBannerTests(TestCase):
+    """The 20-minute hold lives on the server, but the selection it holds lives in the browser. When the two
+    came apart the checkout was left open on an empty order (zero price, "Missing rental dates"), and Cancel never
+    cleared the selection. That is fixed in the browser (static/js/reservation-flow.js and the countdown
+    bar's own script), so what the server owes it is the markup it reads: where the held selection is kept,
+    where "home" is, and whether the page showing the bar IS the checkout."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.customer = User.objects.create_user(username="hold_customer", password="x")
+
+    def setUp(self):
+        self.client.force_login(self.customer)
+
+    def _start_hold(self):
+        response = self.client.post(reverse("gowns:reservation_hold_start"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["success"])
+
+    def test_the_bar_knows_where_the_held_selection_is_kept_and_where_home_is(self):
+        self._start_hold()
+        html = self.client.get("/collections/").content.decode()
+        self.assertIn('id="hold-banner"', html)
+        self.assertIn(f'data-snapshot-key="arabela_reservation_cart_{self.customer.id}"', html)
+        self.assertIn('data-home-url="/"', html)
+
+    def test_the_bar_says_it_is_not_the_checkout_on_every_other_page(self):
+        self._start_hold()
+        for path in ("/", "/collections/", reverse("gowns:messages"), reverse("gowns:orders")):
+            html = self.client.get(path).content.decode()
+            self.assertIn('id="hold-banner"', html, path)
+            self.assertIn('data-on-checkout="0"', html, path)
+            self.assertNotIn('data-on-checkout="1"', html, path)
+
+    def test_the_bar_says_it_is_the_checkout_on_the_checkout_page(self):
+        self._start_hold()
+        html = self.client.get(reverse("gowns:reservation")).content.decode()
+        self.assertIn('data-on-checkout="1"', html)
+        self.assertNotIn('data-on-checkout="0"', html)
+
+    def test_every_page_built_on_base_knows_the_home_url_signed_in_or_not(self):
+        for signed_in in (True, False):
+            if not signed_in:
+                self.client.logout()
+            html = self.client.get("/collections/").content.decode()
+            self.assertTrue(re.search(r'<body[^>]*data-home-url="/"', html), f"signed_in={signed_in}")
+
+    def test_with_no_hold_there_is_no_bar_and_the_checkout_still_loads(self):
+        for path in ("/collections/", reverse("gowns:reservation")):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200, path)
+            self.assertNotIn('id="hold-banner"', response.content.decode(), path)
+
+    def test_cancelling_counts_one_abandoned_hold_and_the_bar_does_not_come_back(self):
+        from accounts.models import UserProfile
+        self._start_hold()
+        release = reverse("gowns:reservation_hold_release")
+        self.assertTrue(self.client.post(release).json()["success"])
+        self.assertEqual(UserProfile.objects.get(user=self.customer).hold_abandon_count, 1)
+        self.client.post(release)  # a stale tab pressing Cancel again must not add a second strike
+        self.assertEqual(UserProfile.objects.get(user=self.customer).hold_abandon_count, 1)
+        self.assertNotIn('id="hold-banner"', self.client.get("/collections/").content.decode())
+
+    def test_the_checkout_page_tells_an_empty_selection_from_an_undated_one(self):
+        html = self.client.get(reverse("gowns:reservation")).content.decode()
+        self.assertIn("arabelaLeaveCheckout('Your selection is empty'", html)   # nothing to book -> home
+        self.assertIn("Missing rental dates", html)                              # a gown without a date keeps its message
+
+    def test_the_checkout_script_exposes_what_the_pages_call(self):
+        from django.contrib.staticfiles import finders
+        with open(finders.find("js/reservation-flow.js"), encoding="utf-8") as script:
+            source = script.read()
+        for name in ("arabelaSaveReservationSnapshot", "arabelaClearReservationSnapshot",
+                     "arabelaLeaveCheckout", "arabelaGoHome"):
+            self.assertIn(f"window.{name} = ", source)
+
+
+class CheckoutLockoutAndRetryTests(TestCase):
+    """The "Reservation not submitted -- Failed to fetch" report (Oct 2026). The failure itself was the phone:
+    Chrome on Android cancelled the upload of the picked receipt photo before it reached the server (fixed in
+    static/js/picked-file.js). Tracing it found three server-side gaps, locked here:
+      - the temporary cancellation lock was only checked when a hold STARTED, so an already-open checkout still
+        booked for a locked account, and the wording never said for how long or until when;
+      - a lock must only ever touch that one account, never other customers;
+      - pressing Confirm Rental again after a dropped connection could book twice."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from accounts.models import UserProfile
+        cls.UserProfile = UserProfile
+        cls.locked = User.objects.create_user(username="lockout_customer", password="x")
+        cls.other = User.objects.create_user(username="lockout_other_customer", password="x")
+        cls.gown = Gown.objects.create(
+            gown_id="LOCKTEST-0001", name="Lockout Test Gown", category=Gown.Category.GUEST_GOWN,
+            color_name="Red", color_code="RD", size=Gown.Size.MEDIUM, rental_price=Decimal("4500.00"))
+
+    def setUp(self):
+        # Never upload to the real Cloudinary account from a test (see ReservationSubmitPriceTrustTests).
+        patcher = patch("gowns.views._save_proof_file", return_value="https://example.test/fake-proof.jpg")
+        self.addCleanup(patcher.stop)
+        patcher.start()
+
+    def _lock(self, user):
+        from accounts.services import sync_cancellation_flag
+        self.UserProfile.objects.update_or_create(user=user, defaults={"hold_abandon_count": 5})
+        sync_cancellation_flag(user)
+
+    def _submit(self, start="2027-03-10", end="2027-03-13", proof=None):
+        return self.client.post(reverse("gowns:reservation_submit"), data={
+            "items": json.dumps([{"gown_name": self.gown.name, "gown_slug": self.gown.slug, "size": "Medium",
+                                  "rental_date": start, "return_date": end}]),
+            "first_name": "Test", "last_name": "Buyer", "phone": "09171234567",
+            "address": "123 Test St", "city": "Test City", "postal_code": "1000",
+            "payment_method": "GCash", "proof_of_payment": proof or _make_proof(),
+        })
+
+    # ---- the lock -----------------------------------------------------------------------------------------------
+    def test_proceed_says_the_account_is_locked_for_how_long_and_until_when(self):
+        self._lock(self.locked)
+        self.client.force_login(self.locked)
+        response = self.client.post(reverse("gowns:reservation_hold_start"))
+        self.assertEqual(response.status_code, 403)
+        data = response.json()
+        self.assertTrue(data["locked"])
+        self.assertIn("paused for 30 minutes, until", data["error"])
+        self.assertIn("minutes left", data["error"])
+
+    def test_confirm_rental_is_refused_while_locked_and_books_nothing(self):
+        self._lock(self.locked)
+        self.client.force_login(self.locked)
+        session = self.client.session
+        session["reservation_hold_until"] = (timezone.now() + timedelta(minutes=10)).isoformat()
+        session.save()
+
+        response = self._submit()
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(response.json()["locked"])
+        self.assertIn("paused for 30 minutes", response.json()["error"])
+        self.assertFalse(Reservation.objects.filter(customer=self.locked).exists())
+        # The hold goes, but without another strike -- the customer didn't walk away from it.
+        self.assertNotIn("reservation_hold_until", self.client.session)
+        self.assertEqual(self.UserProfile.objects.get(user=self.locked).hold_abandon_count, 5)
+
+    def test_the_checkout_page_shows_the_lock_before_anything_is_filled_in(self):
+        self._lock(self.locked)
+        self.client.force_login(self.locked)
+        html = self.client.get(reverse("gowns:reservation")).content.decode()
+        self.assertIn('id="reservation-lockout-notice"', html)
+        self.assertIn("Your account is temporarily locked", html)
+        self.assertIn("paused for 30 minutes", html)
+
+        self.client.force_login(self.other)
+        self.assertNotIn('id="reservation-lockout-notice"', self.client.get(reverse("gowns:reservation")).content.decode())
+
+    def test_one_locked_customer_never_blocks_another(self):
+        self._lock(self.locked)
+        self.client.force_login(self.other)
+        self.assertEqual(self.client.post(reverse("gowns:reservation_hold_start")).status_code, 200)
+        response = self._submit()
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(Reservation.objects.filter(customer=self.other).exists())
+
+    def test_the_lock_ends_on_time(self):
+        self._lock(self.locked)
+        self.UserProfile.objects.filter(user=self.locked).update(cancel_lockout_until=timezone.now() - timedelta(seconds=1))
+        self.client.force_login(self.locked)
+        self.assertEqual(self.client.post(reverse("gowns:reservation_hold_start")).status_code, 200)
+        self.assertEqual(self._submit().status_code, 200)
+
+    # ---- pressing Confirm Rental again ---------------------------------------------------------------------------
+    def test_pressing_confirm_again_after_a_lost_answer_does_not_book_twice(self):
+        self.client.force_login(self.other)
+        first = self._submit()
+        self.assertEqual(first.status_code, 200, first.content)
+        again = self._submit()  # same gowns, dates and receipt: the phone never saw the first answer
+        self.assertEqual(again.status_code, 200, again.content)
+        self.assertEqual(again.json()["reference_code"], first.json()["reference_code"])
+        self.assertTrue(again.json()["already_submitted"])
+        self.assertEqual(Reservation.objects.filter(customer=self.other).count(), 1)
+
+    def test_a_new_booking_is_never_mistaken_for_a_repeat(self):
+        self.client.force_login(self.other)
+        self.assertEqual(self._submit().status_code, 200)
+        # Other dates: a different booking.
+        self.assertEqual(self._submit(start="2027-04-10", end="2027-04-13").status_code, 200)
+        # Same dates but its own new receipt: a real second attempt, so it goes through the normal checks
+        # (this single gown is now taken for those dates).
+        second_receipt = SimpleUploadedFile("second-receipt.jpg", _TINY_JPEG, content_type="image/jpeg")
+        response = self._submit(proof=second_receipt)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("no longer available", response.json()["error"])
+        self.assertEqual(Reservation.objects.filter(customer=self.other).count(), 2)
+
+    def test_a_repeat_long_after_the_first_is_not_folded_into_it(self):
+        self.client.force_login(self.other)
+        self.assertEqual(self._submit().status_code, 200)
+        session = self.client.session
+        last = session["reservation_last_submission"]
+        last["at"] = (timezone.now() - timedelta(minutes=16)).isoformat()
+        session["reservation_last_submission"] = last
+        session.save()
+        self.assertEqual(self._submit().status_code, 400)  # checked like any new booking (the gown is taken)
+
+    def test_a_cancelled_first_booking_is_not_handed_back_as_the_repeat(self):
+        self.client.force_login(self.other)
+        first = self._submit()
+        Reservation.objects.filter(reference_code=first.json()["reference_code"]).update(status=Reservation.Status.CANCELLED)
+        again = self._submit()
+        self.assertEqual(again.status_code, 200, again.content)
+        self.assertNotEqual(again.json()["reference_code"], first.json()["reference_code"])
+        self.assertNotIn("already_submitted", again.json())
+
+    # ---- the phone upload fix is loaded wherever a photo can be picked ----------------------------------------
+    def test_every_page_with_a_photo_upload_loads_the_phone_upload_fix(self):
+        self.client.force_login(self.other)
+        reservation = Reservation.objects.create(customer=self.other, customer_name="Upload Later",
+                                                 status=Reservation.Status.PENDING)
+        item = ReservationItem.objects.create(reservation=reservation, gown_name="Upload Later Gown",
+                                              rental_date=date(2027, 5, 10), return_date=date(2027, 5, 13))
+        customer_pages = [reverse("gowns:reservation"), reverse("gowns:orders"),
+                          reverse("gowns:reservation_item_detail", args=[item.id])]
+        for path in customer_pages:
+            html = self.client.get(path).content.decode()
+            self.assertIn("js/picked-file.js", html, path)
+        staff = User.objects.create_user(username="lockout_test_staff", password="x", is_staff=True)
+        self.client.force_login(staff)
+        admin_pages = [reverse("arabela_admin:gown_catalog"), reverse("arabela_admin:reservation_records"),
+                       reverse("arabela_admin:page", args=["profile"])]
+        for path in admin_pages:
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200, path)
+            self.assertIn("js/picked-file.js", response.content.decode(), path)
+
+    def test_no_upload_on_these_pages_still_sends_the_phones_own_file(self):
+        pages = {
+            "templates/reservation.html": "window.arabelaPreparePhotoForUpload(",
+            "templates/reservations.html": "window.arabelaPreparePhotoForUpload(",
+            "templates/reservation_item_detail.html": "window.arabelaPreparePhotoForUpload(",
+            "templates/arabela_admin/gown-catalog.html": "window.arabelaReadPickedFile(",
+            "templates/arabela_admin/reservation-records.html": "window.arabelaReadPickedFile(",
+            "templates/arabela_admin/profile.html": "window.arabelaReadPickedFile(",
+        }
+        from django.conf import settings
+        for rel, call in pages.items():
+            with open(settings.BASE_DIR / rel, encoding="utf-8") as template:
+                source = template.read()
+            self.assertIn(call, source, rel)
+        with open(settings.BASE_DIR / "templates/reservation.html", encoding="utf-8") as template:
+            checkout = template.read()
+        self.assertNotIn("rawProofFile", checkout)        # the old "send the original if needed" fallback
+        self.assertNotIn("compressImageFile", checkout)   # one shared copy now, in picked-file.js
+
+    def test_the_upload_fix_script_exposes_what_the_pages_call(self):
+        from django.contrib.staticfiles import finders
+        with open(finders.find("js/picked-file.js"), encoding="utf-8") as script:
+            source = script.read()
+        for name in ("arabelaReadPickedFile", "arabelaPreparePhotoForUpload", "arabelaDescribeRequestError"):
+            self.assertIn(f"window.{name} = ", source)
+        self.assertIn("application/x-arabela-upload", source)

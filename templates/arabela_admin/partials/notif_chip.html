@@ -1,0 +1,1 @@
+{% comment %}The small count next to "Needs Attention" in the dropdown header.{% endcomment %}{% if admin_notification_count %}<span class="rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-400">{% if admin_notification_count > 99 %}99+{% else %}{{ admin_notification_count }}{% endif %}</span>{% endif %}

@@ -64,6 +64,7 @@ urlpatterns = [
     path("reservations/<int:item_id>/cancel/", views.reservation_item_cancel, name="reservation_item_cancel"),
     path("reservations/<int:item_id>/upload-proof/", views.reservation_upload_proof, name="reservation_upload_proof"),
     path("messages/", views.messages_view, name="messages"),
+    path("notifications/badges/", views.notification_badges, name="notification_badges"),
     path("profile/", views.profile, name="profile"),
 ]
 

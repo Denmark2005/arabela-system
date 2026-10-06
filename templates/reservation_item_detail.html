@@ -201,7 +201,7 @@
         </button>
         <div class="hidden items-center gap-6 md:flex">
           <a class="js-page-link text-[0.6875rem] uppercase tracking-[0.1rem] text-[#615E57] transition-colors hover:text-secondary" href="{% url 'gowns:orders' %}">Reservations</a>
-          <a class="js-page-link icon-badge-btn text-[0.6875rem] uppercase tracking-[0.1rem] text-[#615E57] transition-colors hover:text-secondary" href="{% url 'gowns:messages' %}">
+          <a class="js-page-link icon-badge-btn text-[0.6875rem] uppercase tracking-[0.1rem] text-[#615E57] transition-colors hover:text-secondary" href="{% url 'gowns:messages' %}" data-live-badge="messages" data-live-badge-style="top: -8px; right: -14px;">
             Messages
             {% if unread_messages_count > 0 %}
               <span class="icon-count-badge" style="top: -8px; right: -14px;">{{ unread_messages_count }}</span>
@@ -209,7 +209,7 @@
           </a>
           <a class="js-page-link text-[0.6875rem] uppercase tracking-[0.1rem] text-[#615E57] transition-colors hover:text-secondary" href="{% url 'gowns:profile' %}" id="open-profile-link">Profile</a>
         </div>
-        <button class="icon-badge-btn scale-95 active:scale-90 transition-all text-secondary" id="user-icon-btn">
+        <button class="icon-badge-btn scale-95 active:scale-90 transition-all text-secondary" id="user-icon-btn" data-live-badge="reservations">
           <span class="material-symbols-outlined">person</span>
           {% if active_reservations_count > 0 %}
             <span class="icon-count-badge">{{ active_reservations_count }}</span>
@@ -574,14 +574,14 @@
             <span class="material-symbols-outlined text-neutral-400 transition-colors group-hover:text-secondary">person_outline</span>
             <span class="text-sm font-medium text-neutral-600 transition-colors group-hover:text-secondary">Profile</span>
           </a>
-          <a class="js-page-link icon-badge-btn group flex items-center gap-4 rounded-lg px-2 py-4 transition-all hover:bg-neutral-50" href="{% url 'gowns:orders' %}">
+          <a class="js-page-link icon-badge-btn group flex items-center gap-4 rounded-lg px-2 py-4 transition-all hover:bg-neutral-50" href="{% url 'gowns:orders' %}" data-live-badge="reservations" data-live-badge-style="top: 8px; right: auto; left: 34px;">
             <span class="material-symbols-outlined text-neutral-400 transition-colors group-hover:text-secondary">calendar_month</span>
             <span class="text-sm font-medium text-neutral-600 transition-colors group-hover:text-secondary">Reservations</span>
             {% if active_reservations_count > 0 %}
               <span class="icon-count-badge" style="top: 8px; right: auto; left: 34px;">{{ active_reservations_count }}</span>
             {% endif %}
           </a>
-          <a class="js-page-link icon-badge-btn group flex items-center gap-4 rounded-lg px-2 py-4 transition-all hover:bg-neutral-50" href="{% url 'gowns:messages' %}">
+          <a class="js-page-link icon-badge-btn group flex items-center gap-4 rounded-lg px-2 py-4 transition-all hover:bg-neutral-50" href="{% url 'gowns:messages' %}" data-live-badge="messages" data-live-badge-style="top: 8px; right: auto; left: 34px;">
             <span class="material-symbols-outlined text-neutral-400 transition-colors group-hover:text-secondary">notifications</span>
             <span class="text-sm font-medium text-neutral-600 transition-colors group-hover:text-secondary">Messages</span>
             {% if unread_messages_count > 0 %}
@@ -734,59 +734,17 @@
         });
       }
 
-      // A phone camera photo is routinely 5-15MB -- well over the server's 5MB
-      // limit -- while a screenshot of a GCash receipt is usually under 1MB and
-      // already fine. Shrink anything large enough to matter before it's sent;
-      // screenshots stay under the skip threshold and are untouched. Any failure
-      // along the way (unsupported format, decode error) just falls back to the
-      // original file, so a photo can never be blocked by compression itself.
-      // Same helper as reservation.html's checkout upload -- kept as its own copy
-      // here since this page doesn't load that page's script.
-      function compressImageFile(file) {
-        var SKIP_BELOW_BYTES = 1.5 * 1024 * 1024; // 1.5MB
-        var MAX_DIMENSION = 1600; // px, longest side
-        var QUALITY = 0.82;
-        return new Promise(function (resolve) {
-          if (!file || !file.type || file.type.indexOf('image/') !== 0 || file.size <= SKIP_BELOW_BYTES) {
-            resolve(file);
-            return;
-          }
-          var objectUrl = URL.createObjectURL(file);
-          var img = new Image();
-          img.onload = function () {
-            URL.revokeObjectURL(objectUrl);
-            var scale = Math.min(1, MAX_DIMENSION / Math.max(img.width, img.height));
-            var w = Math.max(1, Math.round(img.width * scale));
-            var h = Math.max(1, Math.round(img.height * scale));
-            var canvas = document.createElement('canvas');
-            canvas.width = w;
-            canvas.height = h;
-            var ctx = canvas.getContext('2d');
-            if (!ctx) { resolve(file); return; }
-            ctx.drawImage(img, 0, 0, w, h);
-            canvas.toBlob(function (blob) {
-              if (!blob || blob.size >= file.size) { resolve(file); return; }
-              var newName = file.name.replace(/\.\w+$/, '') + '.jpg';
-              resolve(new File([blob], newName, { type: 'image/jpeg' }));
-            }, 'image/jpeg', QUALITY);
-          };
-          img.onerror = function () {
-            URL.revokeObjectURL(objectUrl);
-            resolve(file);
-          };
-          img.src = objectUrl;
-        });
-      }
-
       function uploadPaymentProof(url, input) {
         if (!input.files || !input.files[0]) return;
-        var rawFile = input.files[0];
+        var pickedFile = input.files[0];
         input.disabled = true;
-        compressImageFile(rawFile)
-          .catch(function () { return rawFile; })
+        // Copied into memory (and shrunk if it is a large camera photo) before sending: sending the
+        // phone's own file is what made uploads fail with "Failed to fetch" on Android phones
+        // (static/js/picked-file.js).
+        window.arabelaPreparePhotoForUpload(pickedFile)
           .then(function (fileToUpload) {
             var formData = new FormData();
-            formData.append('proof_of_payment', fileToUpload || rawFile);
+            formData.append('proof_of_payment', fileToUpload);
             // No 'Content-Type' header: the browser must set it so the multipart
             // boundary is included. Setting it by hand breaks the upload.
             return fetch(url, {
@@ -803,10 +761,14 @@
           .catch(function (err) {
             input.disabled = false;
             input.value = '';
-            arabelaAlert({ title: 'Upload failed', message: err.message || 'Could not upload your proof of payment.', danger: true });
+            var described = window.arabelaDescribeRequestError(err, 'Could not upload your proof of payment.');
+            arabelaAlert({ title: 'Upload failed', message: described.message, danger: true });
           });
       }
     </script>
+  <!-- Keeps the badges above current on a page that stays open (see the script's own header). -->
+  {% load static %}<script defer src="{% static 'js/customer-badges-live.js' %}?v={{ site_asset_version }}" data-live-badges-url="{% url 'gowns:notification_badges' %}"></script>
+  <script defer src="{% static 'js/picked-file.js' %}?v={{ site_asset_version }}"></script>
   {% include "partials/reservation_hold_banner.html" %}
 {% include "partials/dialog.html" %}
 </body>

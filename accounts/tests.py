@@ -269,3 +269,76 @@ class CancellationAutoFlagTests(TestCase):
         UserProfile.objects.create(user=self.user, hold_abandon_count=CANCELLATION_FLAG_THRESHOLD - 1)
         record_abandoned_hold(self.user)
         self.assertTrue(UserProfile.objects.get(user=self.user).is_flagged)
+
+    def test_a_lock_and_a_flag_only_ever_touch_that_one_account(self):
+        # Reported as "when one customer is locked, every account is locked". It isn't: every write is
+        # keyed to the one account that crossed the line. Kept as a guard so it can never become true.
+        from accounts.models import CustomerMessage
+        from accounts.services import (
+            CANCELLATION_FLAG_THRESHOLD, CANCELLATION_LOCKOUT_TIER_1, cancel_lockout_notice, record_abandoned_hold,
+        )
+        bystander = User.objects.create_user(username="flag_policy_bystander", password="x")
+        UserProfile.objects.create(user=bystander)
+        UserProfile.objects.create(user=self.user, hold_abandon_count=CANCELLATION_LOCKOUT_TIER_1 - 1)
+        record_abandoned_hold(self.user)
+        self.assertGreater(cancel_lockout_notice(self.user)[0], 0)
+        UserProfile.objects.filter(user=self.user).update(hold_abandon_count=CANCELLATION_FLAG_THRESHOLD - 1)
+        record_abandoned_hold(self.user)
+        self.assertTrue(UserProfile.objects.get(user=self.user).is_flagged)
+
+        untouched = UserProfile.objects.get(user=bystander)
+        self.assertEqual((untouched.is_flagged, untouched.cancel_lockout_until, untouched.hold_abandon_count), (False, None, 0))
+        self.assertFalse(untouched.cancel_tier1_lockout_sent)
+        self.assertEqual(cancel_lockout_notice(bystander), (0, ""))
+        self.assertFalse(CustomerMessage.objects.filter(recipient=bystander).exists())
+
+
+class CancelLockoutNoticeTests(TestCase):
+    """`cancel_lockout_notice` -- the one wording Proceed, the checkout page and Confirm Rental all show a
+    locked customer: why, for how long, and until when (it used to say only "try again in N minutes")."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="lockout_notice_test", password="x")
+
+    def _lock(self, attempts):
+        from accounts.services import sync_cancellation_flag
+        UserProfile.objects.update_or_create(user=self.user, defaults={"hold_abandon_count": attempts})
+        sync_cancellation_flag(self.user)
+
+    def test_no_lock_means_no_message(self):
+        from accounts.services import cancel_lockout_notice
+        self.assertEqual(cancel_lockout_notice(self.user), (0, ""))  # no profile at all
+        UserProfile.objects.create(user=self.user)
+        self.assertEqual(cancel_lockout_notice(self.user), (0, ""))
+
+    def test_the_30_minute_lock_says_why_how_long_and_until_when(self):
+        from accounts.services import cancel_lockout_notice
+        self._lock(5)
+        seconds, message = cancel_lockout_notice(self.user)
+        self.assertTrue(1790 <= seconds <= 1800, seconds)
+        self.assertIn("You've reached 5 cancelled or abandoned reservations", message)
+        self.assertIn("paused for 30 minutes", message)
+        self.assertRegex(message, r"until \d{1,2}:\d{2} [AP]M \(about 30 minutes left\)")
+        self.assertIn("You can still browse the gowns", message)
+
+    def test_the_2_hour_lock_says_2_hours(self):
+        from accounts.services import cancel_lockout_notice
+        self._lock(10)
+        message = cancel_lockout_notice(self.user)[1]
+        self.assertIn("You've reached 10 cancelled or abandoned reservations", message)
+        self.assertIn("paused for 2 hours", message)
+        self.assertIn("(about 2 hours left)", message)
+
+    def test_a_lock_ending_on_another_day_names_the_day(self):
+        from datetime import timedelta
+        from accounts.services import cancel_lockout_notice
+        self._lock(5)
+        UserProfile.objects.filter(user=self.user).update(cancel_lockout_until=timezone.now() + timedelta(hours=25))
+        self.assertRegex(cancel_lockout_notice(self.user)[1], r"until [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} [AP]M")
+
+    def test_a_lock_that_has_run_out_is_gone(self):
+        from datetime import timedelta
+        from accounts.services import cancel_lockout_notice
+        self._lock(5)
+        UserProfile.objects.filter(user=self.user).update(cancel_lockout_until=timezone.now() - timedelta(seconds=1))
+        self.assertEqual(cancel_lockout_notice(self.user), (0, ""))

@@ -1060,7 +1060,7 @@
 
             <div class="mt-5 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03] sm:p-5">
               <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div class="relative sm:flex-1">
+                <div class="relative sm:flex-1" style="min-width: min(430px, 100%);">
                   <span class="absolute left-4 top-1/2 -translate-y-1/2">
                     <div x-show="searching" class="h-4 w-4 animate-spin rounded-full border-2 border-solid border-gray-300 border-t-transparent dark:border-gray-600"></div>
                     <svg x-show="!searching" class="fill-gray-400 dark:fill-gray-500" width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1071,7 +1071,7 @@
                     type="text"
                     x-model="search"
                     @input="searching = true; clearTimeout(searchTimeout); searchTimeout = setTimeout(() => searching = false, 400); filtering = true; clearTimeout(filterTimeout); filterTimeout = setTimeout(() => filtering = false, 500)"
-                    placeholder="Search by customer name or email..."
+                    placeholder="Search by account name, reservation name or email..."
                     class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none py-2.5 pr-4 pl-11 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
                   />
                 </div>
@@ -1128,13 +1128,23 @@
                     </thead>
                     <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
                     {% for c in customers %}
-                    <tr x-data="{ status: '{% if c.is_flagged %}Flagged{% elif not c.is_active %}Inactive{% else %}Active{% endif %}' }" x-show="(customerFilter === 'All' || (customerFilter === 'Flagged' && status === 'Flagged') || (customerFilter === 'New' && {{ c.is_new_this_month|yesno:'true,false' }})) && (search === '' || '{{ c.display_name|lower|escapejs }} {{ c.email|lower|escapejs }}'.includes(search.toLowerCase()))" :class="search !== '' && '{{ c.email|lower|escapejs }}' === search.toLowerCase() ? 'bg-brand-50 dark:bg-brand-500/15' : ''">
+                    <tr x-data="{ status: '{% if c.is_flagged %}Flagged{% elif not c.is_active %}Inactive{% else %}Active{% endif %}' }" x-show="(customerFilter === 'All' || (customerFilter === 'Flagged' && status === 'Flagged') || (customerFilter === 'New' && {{ c.is_new_this_month|yesno:'true,false' }})) && (search === '' || '{{ c.display_name|lower|escapejs }} {{ c.email|lower|escapejs }} {{ c.reservation_names_search|escapejs }}'.includes(search.toLowerCase()))" :class="search !== '' && '{{ c.email|lower|escapejs }}' === search.toLowerCase() ? 'bg-brand-50 dark:bg-brand-500/15' : ''">
                       <td class="px-5 py-4 sm:px-6">
                         <div class="flex items-center gap-3">
-                          <div class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-gray-400 dark:bg-gray-800">
+                          <div class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-gray-400 dark:bg-gray-800" style="flex-shrink: 0;">
                             <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>
                           </div>
-                          <span class="block font-medium text-gray-800 text-theme-sm dark:text-white/90">{{ c.display_name }}</span>
+                          <div style="min-width: 0;">
+                            <span class="block font-medium text-gray-800 text-theme-sm dark:text-white/90">{{ c.display_name }}</span>
+                            {% if c.reservation_name %}
+                            <!-- The name they typed on their reservations (the one on their receipt), same "Booked as" wording as the reservation pages.
+                                 Highlighted when it is not the account's own name, so a receipt name is easy to connect to the right account. It wraps
+                                 instead of cutting off, and adds no width, so the table fits exactly as before. -->
+                            <span class="mt-1 block text-theme-xs text-gray-500 dark:text-gray-400" style="line-height: 1.6; overflow-wrap: anywhere;">Booked as
+                              {% if c.reservation_name_differs %}<span data-reservation-name data-differs="1" class="rounded-full bg-brand-50 px-2 py-0.5 font-medium text-brand-500 dark:bg-brand-500/15 dark:text-brand-400" style="-webkit-box-decoration-break: clone; box-decoration-break: clone;" title="{{ c.reservation_name }}">{{ c.reservation_name }}</span>{% else %}<span data-reservation-name data-differs="0" class="font-medium text-gray-800 dark:text-white/90" title="{{ c.reservation_name }}">{{ c.reservation_name }}</span>{% endif %}{% if c.reservation_name_extra %} <span style="white-space: nowrap;" title="Also used: {{ c.reservation_other_names }}">+{{ c.reservation_name_extra }} more</span>{% endif %}
+                            </span>
+                            {% endif %}
+                          </div>
                         </div>
                       </td>
                       <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ c.email|default:"—" }}</p></td>
@@ -1157,7 +1167,7 @@
                       <td class="px-5 py-4 sm:px-6">
                         <button
                           type="button"
-                          @click="viewingCustomer = { userId: {{ c.id }}, name: '{{ c.display_name|escapejs }}', email: '{{ c.email|default:"—"|escapejs }}', phone: '{{ c.contact_phone|default:"Not provided"|escapejs }}', address: '{{ c.contact_address|escapejs }}', city: '{{ c.contact_city|escapejs }}', postal: '{{ c.contact_postal|escapejs }}', registered: '{{ c.date_joined|date:"M j, Y"|escapejs }}', reservations: '{{ c.reservation_count }}', cancellations: '{{ c.cancellation_count }}', submittedCancellations: '{{ c.submitted_cancellations }}', abandonedHolds: '{{ c.abandoned_holds }}', atCancellationLimit: {{ c.at_cancellation_limit|yesno:'true,false' }}, cancelLockedNow: {{ c.cancel_locked_now|yesno:'true,false' }}, cancelLockoutUntil: '{{ c.cancel_lockout_until|date:"M j, g:i A"|default:""|escapejs }}', status: status }; pendingFlagAction = null; flagReasonText = ''; flagReasonError = ''; isViewCustomerModal = true"
+                          @click="viewingCustomer = { userId: {{ c.id }}, name: '{{ c.display_name|escapejs }}', email: '{{ c.email|default:"—"|escapejs }}', phone: '{{ c.contact_phone|default:"Not provided"|escapejs }}', address: '{{ c.contact_address|escapejs }}', city: '{{ c.contact_city|escapejs }}', postal: '{{ c.contact_postal|escapejs }}', registered: '{{ c.date_joined|date:"M j, Y"|escapejs }}', reservations: '{{ c.reservation_count }}', cancellations: '{{ c.cancellation_count }}', submittedCancellations: '{{ c.submitted_cancellations }}', abandonedHolds: '{{ c.abandoned_holds }}', atCancellationLimit: {{ c.at_cancellation_limit|yesno:'true,false' }}, cancelLockedNow: {{ c.cancel_locked_now|yesno:'true,false' }}, cancelLockoutUntil: '{{ c.cancel_lockout_until|date:"M j, g:i A"|default:""|escapejs }}', reservationName: '{{ c.reservation_name|escapejs }}', names: JSON.parse('{{ c.reservation_names_json|escapejs }}'), status: status }; pendingFlagAction = null; flagReasonText = ''; flagReasonError = ''; isViewCustomerModal = true"
                           class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
                         >
                           View
@@ -1216,6 +1226,16 @@
       </div>
     </div>
     <div class="mt-6 grid grid-cols-1 gap-4 px-2 sm:grid-cols-2">
+      <div style="grid-column: 1 / -1; min-width: 0; overflow-wrap: break-word;">
+        <p class="text-xs text-gray-500 dark:text-gray-400" title="The name they typed when reserving a gown &mdash; the one on their receipt">Name on reservations</p>
+        <p x-show="!(viewingCustomer.names || []).length" class="mt-1 text-sm text-gray-500 dark:text-gray-400">No reservations yet.</p>
+        <template x-for="entry in (viewingCustomer.names || [])" :key="entry.name">
+          <div class="mt-1 flex flex-wrap items-center gap-2">
+            <p class="text-sm font-medium text-gray-800 dark:text-white/90" x-text="entry.name"></p>
+            <p class="text-xs text-gray-500 dark:text-gray-400" x-text="entry.count + (entry.count === 1 ? ' reservation' : ' reservations') + ' &middot; last ' + entry.last"></p>
+          </div>
+        </template>
+      </div>
       <div style="min-width: 0; overflow-wrap: break-word;">
         <p class="text-xs text-gray-500 dark:text-gray-400">Email</p>
         <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewingCustomer.email"></p>
@@ -1246,6 +1266,15 @@
         <p class="mt-1 text-xs font-medium text-warning-600 dark:text-warning-400"
            x-show="viewingCustomer.cancelLockedNow"
            x-text="'Temporarily locked out of starting a new reservation until ' + viewingCustomer.cancelLockoutUntil"></p>
+        <!-- Lifts the lock early (e.g. it came from a site problem, not real cancelling). The attempt count stays. -->
+        <button
+          type="button"
+          x-show="viewingCustomer.cancelLockedNow"
+          @click="unlockCustomer(viewingCustomer.userId, viewingCustomer.name)"
+          class="mt-2 inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
+        >
+          Remove lock
+        </button>
       </div>
     </div>
     <div x-show="pendingFlagAction" x-cloak class="mt-6 border-t border-gray-100 px-2 pt-6 dark:border-gray-800">
@@ -1352,6 +1381,36 @@
         .catch(function (err) {
           adminAlert({ title: 'Something went wrong', message: err.message || 'Could not update this customer.', danger: true });
         });
+    }
+
+    // Lifts a temporary cancellation lockout early (customer_unlock_view). The customer gets a message saying
+    // they can book again; their attempt count is unchanged.
+    function unlockCustomer(userId, name) {
+      if (!userId) return;
+      adminConfirm({
+        title: 'Remove the lock?',
+        message: (name || 'This customer') + ' will be able to make reservations again right away. Their cancellation attempt count stays the same.',
+        confirmText: 'Remove lock'
+      }).then(function (ok) {
+        if (!ok) return;
+        fetch('{% url "arabela_admin:customer_unlock" 999999 %}'.replace('999999', userId), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+          body: '{}'
+        })
+          .then(function (res) {
+            return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+          })
+          .then(function (result) {
+            if (!result.ok || !result.data.success) {
+              throw new Error(result.data.error || 'Could not remove the lock.');
+            }
+            window.location.reload();
+          })
+          .catch(function (err) {
+            adminAlert({ title: 'Something went wrong', message: err.message || 'Could not remove the lock.', danger: true });
+          });
+      });
     }
   </script>
 

@@ -379,6 +379,7 @@
       data-login-url="{% url 'accounts:login' %}"
       data-hold-start-url="{% url 'gowns:reservation_hold_start' %}"
       data-hold-release-url="{% url 'gowns:reservation_hold_release' %}"
+      data-home-url="{% url 'gowns:homepage' %}"
       data-cart-fetch-url="{% url 'gowns:cart_fetch' %}"
       data-cart-save-url="{% url 'gowns:cart_save' %}">
 
@@ -439,13 +440,13 @@
             <span class="icon-count-badge" id="cart-count-badge" style="display: none;">0</span>
           </button>
           {% if request.user.is_authenticated %}
-            <a href="{% url 'gowns:messages' %}" class="icon-badge-btn scale-95 active:scale-90 transition-all text-secondary dark:text-[#FAF4EB]" aria-label="Open messages">
+            <a href="{% url 'gowns:messages' %}" class="icon-badge-btn scale-95 active:scale-90 transition-all text-secondary dark:text-[#FAF4EB]" aria-label="Open messages" data-live-badge="messages">
               <span class="material-symbols-outlined">notifications</span>
               {% if unread_messages_count > 0 %}
                 <span class="icon-count-badge badge-pop">{{ unread_messages_count }}</span>
               {% endif %}
             </a>
-            <button type="button" class="user-orders-redirect-btn icon-badge-btn scale-95 active:scale-90 transition-all text-secondary dark:text-[#FAF4EB]" aria-label="Open account menu">
+            <button type="button" class="user-orders-redirect-btn icon-badge-btn scale-95 active:scale-90 transition-all text-secondary dark:text-[#FAF4EB]" aria-label="Open account menu" data-live-badge="reservations">
               <span class="material-symbols-outlined">person</span>
               {% if active_reservations_count > 0 %}
                 <span class="icon-count-badge badge-pop">{{ active_reservations_count }}</span>
@@ -464,13 +465,13 @@
             <span class="icon-count-badge" id="cart-count-badge" style="display: none;">0</span>
           </button>
           {% if request.user.is_authenticated %}
-            <a href="{% url 'gowns:messages' %}" class="icon-badge-btn scale-95 active:scale-90 transition-all text-secondary dark:text-[#FAF4EB]" aria-label="Open messages">
+            <a href="{% url 'gowns:messages' %}" class="icon-badge-btn scale-95 active:scale-90 transition-all text-secondary dark:text-[#FAF4EB]" aria-label="Open messages" data-live-badge="messages">
               <span class="material-symbols-outlined">notifications</span>
               {% if unread_messages_count > 0 %}
                 <span class="icon-count-badge badge-pop">{{ unread_messages_count }}</span>
               {% endif %}
             </a>
-            <button type="button" class="user-orders-redirect-btn icon-badge-btn scale-95 active:scale-90 transition-all text-secondary dark:text-[#FAF4EB]" aria-label="Open account menu">
+            <button type="button" class="user-orders-redirect-btn icon-badge-btn scale-95 active:scale-90 transition-all text-secondary dark:text-[#FAF4EB]" aria-label="Open account menu" data-live-badge="reservations">
               <span class="material-symbols-outlined">person</span>
               {% if active_reservations_count > 0 %}
                 <span class="icon-count-badge badge-pop">{{ active_reservations_count }}</span>
@@ -687,6 +688,7 @@
     {% endif %}
   {% endblock %}
 
+  <script src="{% static 'js/picked-file.js' %}?v={{ site_asset_version }}"></script>
   <script src="{% static 'js/reservation-flow.js' %}?v={{ site_asset_version }}"></script>
   {% if url_name == "collection_all" or url_name == "collection_wedding" or url_name == "collection_ball_gown" or url_name == "collection_long_gown" or url_name == "collection_luxury_gown" or url_name == "collection_mother_gown" or url_name == "collection_suit" or url_name == "collection_filipiniana" or url_name == "collection_guest_gown" or url_name == "collection_dresses" or url_name == "collection_kids_gown" or url_name == "collection_barong" or url_name == "collection_ball_gown_tulle" or url_name == "collection_bridesmaid_dresses" or url_name == "collection_custom" %}
   <script src="{% static 'js/collection-sort.js' %}?v={{ site_asset_version }}"></script>
@@ -1779,6 +1781,8 @@
       });
     })();
   </script>
+  <!-- Keeps the bell / person badges current on a page that stays open (see the script's own header). -->
+  {% load static %}<script defer src="{% static 'js/customer-badges-live.js' %}?v={{ site_asset_version }}" data-live-badges-url="{% url 'gowns:notification_badges' %}"></script>
   {% endif %}
 
   <script>

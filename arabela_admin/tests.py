@@ -1411,6 +1411,445 @@ class AdminNotificationsTests(TestCase):
         self.assertEqual(notifications[0]["level"], "critical")
 
 
+class LiveNotificationFeedTests(TestCase):
+    """The bell's live feed (api/notifications/): the same work-queue the page draws, as JSON plus
+    ready-made HTML, so a customer's reservation appears in an open admin page without a refresh.
+    The page and the feed come from ONE builder (arabela_admin.notifications), so they must agree."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(username="feed_staff", password="x", is_staff=True)
+        UserProfile.objects.create(user=cls.staff, role=UserProfile.Role.STAFF)
+        cls.owner = User.objects.create_user(username="feed_owner", password="x", is_staff=True)
+        UserProfile.objects.create(user=cls.owner, role=UserProfile.Role.OWNER)
+        cls.customer = User.objects.create_user(username="feed_customer", password="x")
+
+    def setUp(self):
+        self.url = reverse("arabela_admin:admin_notifications_feed")
+        self.client.force_login(self.staff)
+
+    def _feed(self, user=None, **params):
+        if user is not None:
+            self.client.force_login(user)
+        return self.client.get(self.url, params)
+
+    def _reserve(self, name="Feed Customer", proof=""):
+        return Reservation.objects.create(customer=self.customer, customer_name=name, payment_proof_url=proof)
+
+    def _overdue(self, name="Overdue Feed Customer"):
+        reservation = Reservation.objects.create(
+            customer=self.customer, customer_name=name, status=Reservation.Status.ACTIVE,
+        )
+        return ReservationItem.objects.create(
+            reservation=reservation, gown_name="Overdue Feed Gown", stage=ReservationItem.Stage.RESERVED,
+            rental_date=date.today() - timedelta(days=10), return_date=date.today() - timedelta(days=3),
+        )
+
+    # ---- who may ask --------------------------------------------------------------------------
+    def test_a_signed_out_visitor_gets_a_json_401_not_a_login_page(self):
+        self.client.logout()
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response["Content-Type"], "application/json")
+
+    def test_a_customer_account_is_refused(self):
+        self.client.force_login(self.customer)
+        self.assertEqual(self.client.get(self.url).status_code, 401)
+
+    def test_the_feed_only_answers_get(self):
+        self.assertEqual(self.client.post(self.url).status_code, 405)
+
+    def test_the_answer_is_never_cached(self):
+        self.assertIn("no-store", self._feed()["Cache-Control"])
+
+    # ---- same data as the page ------------------------------------------------------------------
+    def test_the_feed_lists_exactly_what_the_page_bell_lists(self):
+        self._reserve("Page Match One", proof="https://example.test/p.jpg")
+        self._overdue()
+        _make_gown(status=Gown.Status.OUT_OF_STOCK)
+        page = self.client.get(reverse("arabela_admin:dashboard"))
+        data = self._feed().json()
+        self.assertEqual([i["key"] for i in data["items"]], page.context["admin_notification_keys"])
+        self.assertEqual(data["count"], page.context["admin_notification_count"])
+        self.assertEqual(data["urgent"], page.context["admin_notification_urgent"])
+        self.assertEqual(data["version"], page.context["admin_notification_version"])
+
+    def test_every_notification_has_a_unique_key_that_stays_the_same(self):
+        reservation = self._reserve("Key Customer", proof="https://example.test/p.jpg")
+        self._overdue()
+        first = [i["key"] for i in self._feed().json()["items"]]
+        second = [i["key"] for i in self._feed().json()["items"]]
+        self.assertEqual(first, second)
+        self.assertEqual(len(first), len(set(first)))
+        self.assertIn(f"reservation:{reservation.reference_code}", first)
+        self.assertIn(f"payment:{reservation.reference_code}", first)
+        self.assertTrue(any(k.startswith("overdue:") for k in first))
+
+    def test_only_things_other_people_cause_alert(self):
+        self._reserve("Alert Customer", proof="https://example.test/p.jpg")
+        self._overdue()
+        _make_gown(status=Gown.Status.OUT_OF_STOCK)
+        inactive = User.objects.create_user(username="feed_inactive", password="x", is_staff=True, is_active=False)
+        UserProfile.objects.create(user=inactive, role=UserProfile.Role.STAFF)
+        UserProfile.objects.create(user=User.objects.create_user(username="feed_flagged", password="x"), is_flagged=True)
+        alerts = {i["kind"]: i["alert"] for i in self._feed(self.owner).json()["items"]}
+        for kind in ("reservation", "payment", "overdue", "customer"):
+            self.assertTrue(alerts[kind], kind)
+        for kind in ("inventory", "staff"):  # staff-caused: shown in the bell, never announced
+            self.assertFalse(alerts[kind], kind)
+
+    def test_staff_do_not_get_the_owner_only_roster_items(self):
+        inactive = User.objects.create_user(username="feed_inactive2", password="x", is_staff=True, is_active=False)
+        UserProfile.objects.create(user=inactive, role=UserProfile.Role.STAFF)
+        self.assertIn("staff", [i["kind"] for i in self._feed(self.owner).json()["items"]])
+        self.assertNotIn("staff", [i["kind"] for i in self._feed(self.staff).json()["items"]])
+
+    # ---- live behaviour --------------------------------------------------------------------------
+    def test_an_unchanged_bell_gets_a_tiny_answer(self):
+        self._reserve()
+        version = self._feed().json()["version"]
+        again = self._feed(v=version).json()
+        self.assertEqual(again, {"version": version, "unchanged": True})
+        stale = self._feed(v="not-the-current-version").json()
+        self.assertNotIn("unchanged", stale)
+        self.assertIn("html", stale)
+
+    def test_a_new_reservation_shows_up_in_the_next_check(self):
+        version = self._feed().json()["version"]
+        reservation = self._reserve("Brand New Customer")
+        data = self._feed(v=version).json()
+        self.assertNotEqual(data["version"], version)
+        self.assertIn(f"reservation:{reservation.reference_code}", [i["key"] for i in data["items"]])
+        self.assertIn("Brand New Customer", data["items"][0]["title"])
+        self.assertEqual(data["count"], 1)
+
+    def test_a_handled_notification_disappears(self):
+        reservation = self._reserve()
+        key = f"reservation:{reservation.reference_code}"
+        self.assertIn(key, [i["key"] for i in self._feed().json()["items"]])
+        reservation.status = Reservation.Status.CONFIRMED
+        reservation.save(update_fields=["status"])
+        data = self._feed().json()
+        self.assertNotIn(key, [i["key"] for i in data["items"]])
+        self.assertEqual(data["count"], 0)
+        self.assertIn("All caught up", data["html"]["list"])
+
+    def test_the_ages_tick_over_by_themselves(self):
+        from unittest.mock import patch
+        from django.utils import timezone as dj_timezone
+        self._reserve()
+        version = self._feed().json()["version"]
+        with patch.object(dj_timezone, "now", return_value=dj_timezone.now() + timedelta(minutes=7)):
+            data = self._feed(v=version).json()
+        self.assertNotEqual(data["version"], version)  # "just now" became "7 min ago"
+        self.assertIn("7 min ago", data["html"]["list"])
+
+    # ---- the HTML the feed hands over -------------------------------------------------------------
+    def test_the_feed_html_is_drawn_from_the_same_templates_as_the_page(self):
+        reservation = self._reserve("Same Markup Customer")
+        page = self.client.get(reverse("arabela_admin:dashboard")).content.decode()
+        html = self._feed().json()["html"]
+        row = f'<li data-key="reservation:{reservation.reference_code}"'
+        self.assertIn(row, page)
+        self.assertIn(row, html["list"])
+        self.assertIn(row, html["modal"])
+        self.assertIn("Same Markup Customer", html["modal"])
+        self.assertIn(">1<", html["badge"])
+        self.assertIn(">1<", html["chip"])
+        self.assertIn("View all notifications", html["footer"])
+
+    def test_only_six_rows_show_in_the_dropdown_but_all_are_there_to_be_pinned(self):
+        for n in range(8):
+            self._reserve(f"Many Customer {n}")
+        data = self._feed().json()
+        self.assertEqual(data["count"], 8)
+        rows = re.findall(r'<li data-key="[^"]*"[^>]*>', data["html"]["list"])
+        self.assertEqual(len(rows), 8)
+        self.assertEqual(sum(1 for r in rows if " hidden" in r), 2)
+        modal_rows = re.findall(r'<li data-key="[^"]*"[^>]*>', data["html"]["modal"])
+        self.assertEqual(len(modal_rows), 8)
+        self.assertEqual(sum(1 for r in modal_rows if " hidden" in r), 0)
+        self.assertIn("View all 8 notifications", data["html"]["footer"])
+
+    def test_the_view_all_window_offers_a_tab_per_kind_with_counts(self):
+        self._reserve("Tab Customer", proof="https://example.test/p.jpg")
+        self._overdue()
+        modal = self._feed().json()["html"]["modal"]
+        for label in ("Reservations", "Payments", "Returns &amp; pick-ups"):
+            self.assertIn(label, modal)
+        self.assertIn('data-notif-filter="all"', modal)
+        self.assertIn('data-notif-filter="returns"', modal)
+        self.assertNotIn('data-notif-filter="inventory"', modal)  # nothing of that kind -> no tab
+
+    def test_one_kind_of_notification_needs_no_tabs(self):
+        self._reserve("Single Kind Customer")
+        self.assertNotIn("data-notif-filter", self._feed().json()["html"]["modal"])
+
+    def test_nothing_to_do_shows_the_all_caught_up_state(self):
+        html = self._feed().json()["html"]
+        self.assertEqual(html["badge"].strip(), "")
+        self.assertEqual(html["chip"].strip(), "")
+        self.assertEqual(html["footer"].strip(), "")
+        self.assertIn("All caught up", html["list"])
+        self.assertIn("Nothing is waiting on you right now", html["modal"])
+
+    def test_a_customer_name_can_never_become_markup(self):
+        self._reserve("<img src=x onerror=alert(1)>")
+        data = self._feed().json()
+        for region in ("list", "modal"):
+            self.assertNotIn("<img src=x", data["html"][region])
+            self.assertIn("&lt;img src=x onerror=alert(1)&gt;", data["html"][region])
+        self.assertIn("<img src=x onerror=alert(1)>", data["items"][0]["title"])  # plain text: the script uses textContent
+
+    def test_the_badge_stops_at_99_plus_and_goes_red_when_urgent(self):
+        from django.template.loader import render_to_string
+        big = render_to_string("arabela_admin/partials/notif_badge.html", {"admin_notification_count": 150, "admin_notification_urgent": 0})
+        self.assertIn("99+", big)
+        self.assertIn("bg-brand-500", big)
+        urgent = render_to_string("arabela_admin/partials/notif_badge.html", {"admin_notification_count": 3, "admin_notification_urgent": 1})
+        self.assertIn("bg-error-500", urgent)
+        self.assertIn("animate-ping", urgent)
+
+    def test_the_shared_feed_costs_a_small_fixed_number_of_queries(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        for n in range(5):
+            self._reserve(f"Query Customer {n}", proof="https://example.test/p.jpg")
+        with CaptureQueriesContext(connection) as queries:
+            self.assertEqual(self._feed().status_code, 200)
+        self.assertLessEqual(len(queries), 12, [q["sql"][:80] for q in queries])
+
+    # ---- the page ---------------------------------------------------------------------------------
+    def test_every_admin_page_carries_what_the_bell_script_needs(self):
+        reservation = self._reserve("Page Carries Customer")
+        for name in ("dashboard", "gown_catalog", "pending_approval", "payment_verification", "active_reservations", "clients"):
+            html = self.client.get(reverse(f"arabela_admin:{name}")).content.decode()
+            self.assertIn('id="arabela-notifier"', html, name)
+            self.assertIn(f'data-notif-feed="{self.url}"', html, name)
+            self.assertIn("data-notif-version=", html, name)
+            self.assertIn("notifications-live.js", html, name)
+            self.assertIn('id="arabela-notif-keys"', html, name)
+            for region in ("badge", "chip", "list", "footer", "modal"):
+                self.assertIn(f'data-notif-region="{region}"', html, f"{name}: {region}")
+            self.assertIn(f"reservation:{reservation.reference_code}", html, name)
+
+    def test_the_page_and_the_feed_agree_on_the_version(self):
+        self._reserve("Version Customer")
+        page = self.client.get(reverse("arabela_admin:dashboard"))
+        version = page.context["admin_notification_version"]
+        self.assertIn(f'data-notif-version="{version}"', page.content.decode())
+        self.assertEqual(self._feed(v=version).json(), {"version": version, "unchanged": True})
+
+    def test_customers_and_visitors_get_a_blank_bell(self):
+        from arabela_admin import notifications
+        blank = notifications.empty_context()
+        self.assertEqual(blank["admin_notifications"], [])
+        self.assertEqual(blank["admin_notification_count"], 0)
+        self.assertEqual(blank["admin_notification_keys"], [])
+
+    def test_the_chime_and_the_script_are_real_files(self):
+        import wave
+        from django.contrib.staticfiles import finders
+        sound = finders.find("arabela_admin/sounds/new-notification.wav")
+        self.assertTrue(sound)
+        with wave.open(sound, "rb") as w:
+            seconds = w.getnframes() / w.getframerate()
+        self.assertTrue(0.5 <= seconds <= 3.0, seconds)  # a short chime, not a song
+        script = finders.find("arabela_admin/notifications-live.js")
+        self.assertTrue(script)
+        self.assertIn("api/notifications", self.url)
+
+
+class ClientListReservationNameTests(TestCase):
+    """Client List: under each account's own name, "Booked as <name>" -- the name that customer typed on
+    their reservations, the one on their receipt -- so staff can tell whose account a receipt name belongs
+    to without opening anyone's history. Derived from the reservations the page already loads (no new
+    column, no extra queries, no extra table width); no reservations -> nothing extra, like before."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(username="cn_staff", password="x", is_staff=True)
+        UserProfile.objects.create(user=cls.staff, role=UserProfile.Role.STAFF)
+
+    def setUp(self):
+        self.client.force_login(self.staff)
+
+    def _customer(self, username, first="", last="", email=None):
+        return User.objects.create_user(
+            username=username, password="x", first_name=first, last_name=last,
+            email=email or f"{username}@example.test",
+        )
+
+    def _book(self, customer, name, status=Reservation.Status.PENDING):
+        return Reservation.objects.create(customer=customer, customer_name=name, status=status)
+
+    def _page(self):
+        response = self.client.get(reverse("arabela_admin:clients"))
+        self.assertEqual(response.status_code, 200)
+        return response, {c.username: c for c in response.context["customers"]}
+
+    @staticmethod
+    def _table(response):
+        """Just the customer table's rows -- a customer's name also shows up in the notification bell."""
+        return response.content.decode().split("<tbody", 1)[1].split("</tbody>", 1)[0]
+
+    # ---- which name is shown --------------------------------------------------------------------
+    def test_a_customer_with_no_reservations_shows_nothing_extra(self):
+        self._customer("cn_none", "Nora", "None")
+        response, rows = self._page()
+        row = rows["cn_none"]
+        self.assertEqual((row.reservation_name, row.reservation_names, row.reservation_name_extra), ("", [], 0))
+        self.assertFalse(row.reservation_name_differs)
+        table = self._table(response)
+        self.assertNotIn("Booked as", table)
+        self.assertNotIn("data-reservation-name", table)
+
+    def test_the_name_typed_on_a_reservation_is_shown_and_highlighted_when_it_differs(self):
+        customer = self._customer("cn_differs", "France", "Concepcion")
+        self._book(customer, "Rainer Pepito")
+        response, rows = self._page()
+        row = rows["cn_differs"]
+        self.assertEqual(row.display_name, "France Concepcion")
+        self.assertEqual(row.reservation_name, "Rainer Pepito")
+        self.assertTrue(row.reservation_name_differs)
+        table = self._table(response)
+        self.assertIn("Booked as", table)
+        self.assertIn('data-reservation-name data-differs="1"', table)  # the highlighted one
+        self.assertIn('>Rainer Pepito</span>', table)
+
+    def test_a_name_that_matches_the_account_is_still_shown_but_not_highlighted(self):
+        customer = self._customer("cn_same", "Sam", "Same")
+        self._book(customer, "Sam Same")
+        response, rows = self._page()
+        row = rows["cn_same"]
+        self.assertEqual(row.reservation_name, "Sam Same")
+        self.assertFalse(row.reservation_name_differs)
+        table = self._table(response)
+        self.assertEqual(table.count('>Sam Same</span>'), 2)  # the account name AND the booked-as name
+        self.assertIn('data-reservation-name data-differs="0"', table)  # shown, but plain -- nothing to flag
+
+    def test_capitals_and_extra_spaces_do_not_make_a_different_name(self):
+        customer = self._customer("cn_case", "Gina", "Gmail")
+        self._book(customer, "  gina    GMAIL ")
+        _, rows = self._page()
+        row = rows["cn_case"]
+        self.assertFalse(row.reservation_name_differs)
+        self.assertEqual(row.reservation_name, "gina GMAIL")  # spacing tidied, the typed capitals kept
+        self.assertEqual(len(row.reservation_names), 1)
+
+    def test_a_cancelled_attempt_does_not_hide_the_name_on_the_booking_that_went_through(self):
+        customer = self._customer("cn_cancel", "Cara", "Cancelled")
+        self._book(customer, "Real Name", status=Reservation.Status.CONFIRMED)
+        self._book(customer, "Typo Nmae", status=Reservation.Status.CANCELLED)  # newer
+        _, rows = self._page()
+        row = rows["cn_cancel"]
+        self.assertEqual(row.reservation_name, "Real Name")
+        self.assertEqual([n["name"] for n in row.reservation_names], ["Real Name", "Typo Nmae"])
+
+    def test_when_every_reservation_was_cancelled_the_latest_name_is_still_shown(self):
+        customer = self._customer("cn_allcancel", "Al", "Cancelled")
+        self._book(customer, "Older Name", status=Reservation.Status.CANCELLED)
+        self._book(customer, "Newer Name", status=Reservation.Status.REJECTED)
+        _, rows = self._page()
+        self.assertEqual(rows["cn_allcancel"].reservation_name, "Newer Name")
+
+    def test_several_names_show_the_newest_and_how_many_more(self):
+        customer = self._customer("cn_many", "Many", "Names")
+        for name in ("First Name", "Second Name", "Third Name"):
+            self._book(customer, name)
+        response, rows = self._page()
+        row = rows["cn_many"]
+        self.assertEqual([n["name"] for n in row.reservation_names], ["Third Name", "Second Name", "First Name"])
+        self.assertEqual(row.reservation_name_extra, 2)
+        html = response.content.decode()
+        self.assertIn("+2 more", html)
+        self.assertIn('title="Also used: Second Name, First Name"', html)
+
+    def test_one_name_used_twice_is_counted_once_with_its_count(self):
+        customer = self._customer("cn_twice", "Pia", "Twice")
+        self._book(customer, "pia  pending")
+        self._book(customer, "Pia Pending")
+        _, rows = self._page()
+        names = rows["cn_twice"].reservation_names
+        self.assertEqual(len(names), 1)
+        self.assertEqual((names[0]["name"], names[0]["count"]), ("Pia Pending", 2))  # the newest spelling
+
+    def test_two_accounts_can_share_a_reservation_name(self):
+        for username in ("cn_share_a", "cn_share_b"):
+            self._book(self._customer(username, "Denmark", "Concepcion"), "Rainer Pepito")
+        response, rows = self._page()
+        self.assertEqual(rows["cn_share_a"].reservation_name, rows["cn_share_b"].reservation_name)
+        self.assertEqual(self._table(response).count("data-reservation-name"), 2)
+
+    # ---- searching -------------------------------------------------------------------------------
+    def test_search_matches_every_name_they_used_and_says_so(self):
+        customer = self._customer("cn_search", "Sara", "Search")
+        self._book(customer, "Alpha One")
+        self._book(customer, "Beta Two")
+        response, rows = self._page()
+        self.assertEqual(rows["cn_search"].reservation_names_search, "beta two alpha one")
+        html = response.content.decode()
+        self.assertIn("beta two alpha one", html)  # inside the row's search text
+        self.assertIn("Search by account name, reservation name or email", html)
+
+    # ---- safety ------------------------------------------------------------------------------------
+    def test_a_name_with_quotes_and_markup_can_never_break_the_page_or_run(self):
+        customer = self._customer("cn_evil", "Eve", "Evil")
+        evil = "O'Brien \"Ace\" </script><b>x</b>"
+        self._book(customer, evil)
+        response, rows = self._page()
+        html = response.content.decode()
+        self.assertNotIn("</script><b>x</b>", html)
+        self.assertIn("&lt;/script&gt;&lt;b&gt;x&lt;/b&gt;", html)         # shown as text
+        self.assertNotIn("'O'Brien", html)                                  # never an unescaped quote in a script string
+        self.assertEqual(json.loads(rows["cn_evil"].reservation_names_json)[0]["name"], evil)  # the window's data round-trips
+
+    # ---- the View window and the rest of the page ----------------------------------------------------
+    def test_the_view_window_lists_the_names_and_keeps_its_history_link(self):
+        customer = self._customer("cn_window", "Win", "Dow")
+        self._book(customer, "Window Name")
+        response, _ = self._page()
+        html = response.content.decode()
+        self.assertIn("Name on reservations", html)
+        self.assertIn("names: JSON.parse(", html)
+        self.assertIn("No reservations yet.", html)
+        self.assertIn(reverse("arabela_admin:reservation_records") + "?customer=' + viewingCustomer.userId", html)
+
+    def test_the_table_keeps_exactly_the_columns_it_had(self):
+        # An extra column pushed the View button off-screen on 1366-1500px laptops, so the name sits
+        # under the account name instead. Same 8 columns, same empty-state width.
+        html = self.client.get(reverse("arabela_admin:clients")).content.decode()
+        self.assertEqual(html.count("<th "), 8)
+        self.assertIn(">Customer</p>", html)
+        self.assertNotIn(">Reservation Name</p>", html)
+        self.assertIn('colspan="8"', html)
+
+    def test_the_names_cost_no_extra_queries(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        first = self._customer("cn_q1", "Q", "One")
+        self._book(first, "Q Name")
+        self._page()  # warm-up: the first request of a run does one-off work (settings row, caches)
+        with CaptureQueriesContext(connection) as small:
+            self._page()
+        for n in range(2, 7):
+            other = self._customer(f"cn_q{n}", "Q", str(n))
+            for k in range(3):
+                self._book(other, f"Q Name {n} {k}")
+        with CaptureQueriesContext(connection) as big:
+            self._page()
+        self.assertEqual(len(small), len(big), (len(small), len(big)))
+
+    # ---- the name picker on its own -------------------------------------------------------------------
+    def test_the_picker_ignores_blank_names_and_handles_no_reservations(self):
+        from types import SimpleNamespace
+        now = timezone.now()
+        blank = SimpleNamespace(customer_name="   ", status=Reservation.Status.PENDING, created_at=now)
+        self.assertEqual(views_module._reservation_names([]), [])
+        self.assertEqual(views_module._reservation_names([blank]), [])
+        self.assertEqual(views_module._name_key("  Mañana   SOL "), "mañana sol")
+
+
 class AdminListPageSmokeTests(TestCase):
     """Every remaining admin list page that had zero test coverage: confirms each one
     actually renders (200) for a signed-in staff member, both with no data at all
@@ -3991,6 +4430,162 @@ class CustomCategoryTests(TestCase):
         self.assertContains(response, "Rose Debut")
 
 
+class GownCatalogReservedHolderTests(TestCase):
+    """Gown Catalog says WHO a Reserved gown is reserved for, and links to that booking: Active
+    Reservations for a confirmed / picked-up / overdue one, Pending Approval for one still awaiting
+    payment approval. A Reserved gown with no live booking is labelled as set by hand."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(username="holder_staff", password="x", is_staff=True)
+        cls.customer = User.objects.create_user(username="holder_customer", password="x")
+        today = timezone.localdate()
+        cls.start = date(today.year, 12, 20)
+        cls.end = date(today.year, 12, 23)
+
+    def setUp(self):
+        self.client.force_login(self.staff)
+
+    def _book(self, gown, status=Reservation.Status.CONFIRMED, name="Maria Santos", start=None, end=None,
+              stage=None):
+        reservation = Reservation.objects.create(customer=self.customer, customer_name=name, status=status)
+        extra = {"stage": stage} if stage else {}
+        item = ReservationItem.objects.create(
+            reservation=reservation, gown=gown, gown_name=gown.name,
+            rental_date=start or self.start, return_date=end or self.end, **extra,
+        )
+        return reservation, item
+
+    def _page(self):
+        return self.client.get(reverse("arabela_admin:gown_catalog"))
+
+    def test_a_confirmed_booking_is_named_and_links_to_active_reservations(self):
+        gown = _make_gown(1, status=Gown.Status.RESERVED)
+        reservation, _ = self._book(gown)
+        response = self._page()
+        html = response.content.decode()
+        link = reverse("arabela_admin:active_reservations") + "?search=" + reservation.reference_code
+        self.assertIn(f'href="{link}"', html)
+        self.assertIn("Maria Santos &middot; Dec 20\u201323", html)
+        holders = response.context["gown_holders"][gown.id]
+        self.assertEqual(len(holders), 1)
+        self.assertEqual(holders[0]["reference"], reservation.reference_code)
+        self.assertEqual(holders[0]["url"], link)
+        self.assertFalse(holders[0]["pending"])
+        self.assertNotIn("Set manually", html)
+
+    def test_a_booking_awaiting_payment_approval_links_to_pending_approval(self):
+        gown = _make_gown(1, status=Gown.Status.RESERVED)
+        reservation, _ = self._book(gown, status=Reservation.Status.PENDING)
+        response = self._page()
+        html = response.content.decode()
+        link = reverse("arabela_admin:pending_approval") + "?search=" + reservation.reference_code
+        self.assertIn(f'href="{link}"', html)
+        self.assertIn("awaiting payment approval", html)
+        self.assertTrue(response.context["gown_holders"][gown.id][0]["pending"])
+
+    def test_picked_up_and_overdue_bookings_link_to_active_reservations(self):
+        for n, status in enumerate((Reservation.Status.ACTIVE, Reservation.Status.OVERDUE), start=1):
+            gown = _make_gown(n, status=Gown.Status.RESERVED)
+            self._book(gown, status=status)
+        for holders in self._page().context["gown_holders"].values():
+            self.assertIn(reverse("arabela_admin:active_reservations"), holders[0]["url"])
+
+    def test_a_reserved_gown_with_no_booking_is_labelled_as_set_by_hand(self):
+        gown = _make_gown(1, status=Gown.Status.RESERVED)
+        response = self._page()
+        self.assertIn("Set manually", response.content.decode())
+        self.assertNotIn(gown.id, response.context["gown_holders"])
+        self.assertEqual(response.context["gown_holders"], {})
+
+    def test_returned_cancelled_and_rejected_bookings_do_not_count(self):
+        returned = _make_gown(1, status=Gown.Status.RESERVED)
+        cancelled = _make_gown(2, status=Gown.Status.RESERVED)
+        rejected = _make_gown(3, status=Gown.Status.RESERVED)
+        self._book(returned, stage=ReservationItem.Stage.RETURNED)
+        self._book(cancelled, status=Reservation.Status.CANCELLED)
+        self._book(rejected, status=Reservation.Status.REJECTED)
+        response = self._page()
+        self.assertEqual(response.context["gown_holders"], {})
+        self.assertEqual(response.content.decode().count("Set manually"), 3)
+
+    def test_an_available_gown_shows_no_booking_line_even_with_a_pending_booking(self):
+        gown = _make_gown(1, status=Gown.Status.AVAILABLE)
+        self._book(gown, status=Reservation.Status.PENDING)
+        response = self._page()
+        self.assertEqual(response.context["gown_holders"], {})
+        self.assertNotIn("Set manually", response.content.decode())
+        self.assertNotIn("awaiting payment approval", response.content.decode().split("Booked by")[0])
+
+    def test_several_bookings_show_the_nearest_first_with_a_count_and_all_in_the_window(self):
+        gown = _make_gown(1, status=Gown.Status.RESERVED)
+        later, _ = self._book(gown, name="Later Customer", start=date(self.start.year, 12, 28), end=date(self.start.year, 12, 30))
+        sooner, _ = self._book(gown, name="Sooner Customer")
+        response = self._page()
+        holders = response.context["gown_holders"][gown.id]
+        self.assertEqual([h["reference"] for h in holders], [sooner.reference_code, later.reference_code])
+        html = response.content.decode()
+        row = html.split("<tr data-gown-row")[1]
+        self.assertIn("Sooner Customer", row)
+        self.assertIn("+1 more", row)
+        self.assertNotIn("Later Customer", row.split("Never checked")[0])
+        self.assertIn("Later Customer", html)  # still listed in the gown's View window data
+
+    def test_two_gowns_each_name_their_own_customer(self):
+        a = _make_gown(1, status=Gown.Status.RESERVED)
+        b = _make_gown(2, status=Gown.Status.RESERVED)
+        ra, _ = self._book(a, name="Alice Customer")
+        rb, _ = self._book(b, name="Bruno Customer")
+        holders = self._page().context["gown_holders"]
+        self.assertEqual(holders[a.id][0]["reference"], ra.reference_code)
+        self.assertEqual(holders[b.id][0]["reference"], rb.reference_code)
+
+    def test_a_customer_name_is_escaped_not_injected(self):
+        gown = _make_gown(1, status=Gown.Status.RESERVED)
+        self._book(gown, name="<b>Sneaky</b>")
+        html = self._page().content.decode()
+        self.assertNotIn("<b>Sneaky</b>", html)
+        self.assertIn("&lt;b&gt;Sneaky&lt;/b&gt;", html)
+
+    def test_the_view_window_has_a_booked_by_section(self):
+        _make_gown(1, status=Gown.Status.RESERVED)
+        html = self._page().content.decode()
+        self.assertIn("Booked by", html)
+        self.assertIn("currentHolders()", html)
+        self.assertIn('id="gown-holders-data"', html)
+        self.assertIn("Open in Active Reservations", html)
+
+    def test_it_costs_one_query_however_many_gowns_are_reserved(self):
+        gowns = [_make_gown(n, status=Gown.Status.RESERVED) for n in range(1, 6)]
+        for gown in gowns:
+            self._book(gown)
+        today = timezone.localdate()
+        every_gown = list(Gown.objects.all())
+        with self.assertNumQueries(1):
+            holders = views_module._reserved_gown_holders(every_gown, today)
+        self.assertEqual(len(holders), 5)
+        with self.assertNumQueries(0):  # nothing Reserved -> nothing to look up
+            views_module._reserved_gown_holders([], today)
+
+    def test_the_booking_link_actually_opens_the_filtered_page(self):
+        gown = _make_gown(1, status=Gown.Status.RESERVED)
+        reservation, _ = self._book(gown, name="Findable Customer")
+        url = self._page().context["gown_holders"][gown.id][0]["url"]
+        page = self.client.get(url)
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, reservation.reference_code)
+        self.assertContains(page, "Findable Customer")
+
+    def test_date_ranges_read_short(self):
+        today = date(2026, 10, 6)
+        rng = views_module._holder_range
+        self.assertEqual(rng(date(2026, 10, 12), date(2026, 10, 12), today), "Oct 12")
+        self.assertEqual(rng(date(2026, 10, 12), date(2026, 10, 15), today), "Oct 12\u201315")
+        self.assertEqual(rng(date(2026, 10, 30), date(2026, 11, 2), today), "Oct 30 \u2013 Nov 2")
+        self.assertEqual(rng(date(2026, 12, 30), date(2027, 1, 2), today), "Dec 30 \u2013 Jan 2, 2027")
+        self.assertEqual(rng(date(2027, 3, 4), date(2027, 3, 6), today), "Mar 4\u20136, 2027")
+
+
 class BuiltinCategoryRemovalTests(TestCase):
     """The 13 original categories can be removed too (hidden -- they live in code), only while empty
     and only by the owner, and come back when a category with the same name is added again."""
@@ -4305,3 +4900,85 @@ class ReceiptDeleteTests(TestCase):
         self.assertIn("Delete Receipt", html)
         self.assertIn("Yes, delete", html)
         self.assertIn("deleteReceipt()", html)
+
+
+class CustomerUnlockTests(TestCase):
+    """`customer_unlock_view` -- Client List's "Remove lock": lifts one customer's temporary cancellation lock
+    early (e.g. when it came from a site problem, not real cancelling). Only that account; the count stays."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(username="unlock_test_staff", password="x", is_staff=True)
+        cls.customer = User.objects.create_user(username="unlock_test_customer", password="x")
+        cls.other = User.objects.create_user(username="unlock_test_other", password="x")
+
+    def setUp(self):
+        self.client.force_login(self.staff)
+        self.url = reverse("arabela_admin:customer_unlock", args=[self.customer.id])
+        later = timezone.now() + timedelta(minutes=30)
+        for user in (self.customer, self.other):
+            UserProfile.objects.update_or_create(user=user, defaults={
+                "hold_abandon_count": 5, "cancel_tier1_lockout_sent": True, "cancel_lockout_until": later})
+
+    def test_removing_the_lock_frees_only_that_customer_and_tells_them(self):
+        response = self.client.post(self.url, data="{}", content_type="application/json")
+        self.assertEqual(response.status_code, 200, response.content)
+        profile = UserProfile.objects.get(user=self.customer)
+        self.assertIsNone(profile.cancel_lockout_until)
+        self.assertEqual(profile.hold_abandon_count, 5)        # the attempt count stays
+        self.assertTrue(profile.cancel_tier1_lockout_sent)     # so the 30-minute step doesn't fire again at 6
+        self.assertIsNotNone(UserProfile.objects.get(user=self.other).cancel_lockout_until)
+        message = CustomerMessage.objects.get(recipient=self.customer)
+        self.assertIn("lifted the temporary lock", message.body)
+        self.assertFalse(CustomerMessage.objects.filter(recipient=self.other).exists())
+
+        self.client.force_login(self.customer)
+        self.assertEqual(self.client.post(reverse("gowns:reservation_hold_start")).status_code, 200)
+
+    def test_an_account_that_is_not_locked_is_refused(self):
+        UserProfile.objects.filter(user=self.customer).update(cancel_lockout_until=timezone.now() - timedelta(minutes=1))
+        response = self.client.post(self.url, data="{}", content_type="application/json")
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(CustomerMessage.objects.filter(recipient=self.customer).exists())
+
+    def test_only_staff_can_remove_a_lock_and_only_from_customers(self):
+        self.client.force_login(self.other)
+        self.assertEqual(self.client.post(self.url, data="{}", content_type="application/json").status_code, 401)
+        self.assertIsNotNone(UserProfile.objects.get(user=self.customer).cancel_lockout_until)
+        self.client.force_login(self.staff)
+        other_staff = User.objects.create_user(username="unlock_not_a_customer", password="x", is_staff=True)
+        response = self.client.post(reverse("arabela_admin:customer_unlock", args=[other_staff.id]),
+                                    data="{}", content_type="application/json")
+        self.assertEqual(response.status_code, 404)
+
+    def test_client_list_offers_remove_lock_for_a_locked_customer(self):
+        html = self.client.get(reverse("arabela_admin:clients")).content.decode()
+        self.assertIn("unlockCustomer(viewingCustomer.userId, viewingCustomer.name)", html)
+        self.assertIn("Remove lock", html)
+        self.assertIn("/admin-panel/api/customers/999999/unlock/", html)
+
+
+class GownCatalogComponentIntactTests(TestCase):
+    """The whole Gown Catalog page is one Alpine component written inside a double-quoted x-data attribute. A
+    stray double quote in that code silently cuts the attribute short and every button on the page stops
+    working (found by the browser check while adding the phone photo fix). Parsed as real HTML here, so the
+    methods must still be INSIDE the attribute, not spilled out after it."""
+
+    def test_the_photo_handlers_are_still_inside_the_component(self):
+        from html.parser import HTMLParser
+
+        class ComponentFinder(HTMLParser):
+            component = ""
+
+            def handle_starttag(self, tag, attrs):
+                for name, value in attrs:
+                    if name == "x-data" and value and "isAddGownModal" in value:
+                        self.component = value
+
+        staff = User.objects.create_user(username="gc_intact_staff", password="x", is_staff=True)
+        self.client.force_login(staff)
+        finder = ComponentFinder()
+        finder.feed(self.client.get(reverse("arabela_admin:gown_catalog")).content.decode())
+        for method in ("onGownPhotoChosen(file)", "updateGownPhoto(file)", "addGown(nameChoice)", "resetAddGownForm()"):
+            self.assertIn(method, finder.component, method)
+        self.assertIn("window.arabelaReadPickedFile(file)", finder.component)

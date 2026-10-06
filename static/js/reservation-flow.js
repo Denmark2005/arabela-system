@@ -6,6 +6,69 @@
     var GUEST_CART_KEY = 'arabela_cart_guest';
     var DEPOSIT_PER_ITEM = 2000;
 
+    // ---- the held selection (the checkout snapshot) ---------------------------------------------------------
+    // The 20-minute hold lives in the SERVER session; the selection it holds lives in this TAB's
+    // sessionStorage. Anything that gave the customer a tab without that storage -- a second tab, the
+    // "Your selection is held" bar opened in a new tab, a phone restoring a tab it unloaded while they
+    // were away -- found the hold alive and the selection missing: an empty checkout with a countdown.
+    // So the selection is also kept in localStorage (shared by every tab, survives a restored tab) and
+    // used ONLY while the hold is still alive. Whatever ends the hold (Cancel, expiry, submitting) removes
+    // both copies, so a released selection can never come back.
+    var SNAPSHOT_PREFIX = 'arabela_reservation_cart_';
+    var BACKUP_PREFIX = 'arabela_reservation_backup_';
+    var BACKUP_MAX_AGE_MS = 25 * 60 * 1000;   // the hold lasts 20 minutes
+
+    function backupKeyFor(storageKey) {
+        return String(storageKey).replace(SNAPSHOT_PREFIX, BACKUP_PREFIX);
+    }
+
+    // A hold is alive exactly when the server drew its countdown bar into this page.
+    function holdIsAlive() {
+        return !!document.getElementById('hold-banner');
+    }
+
+    // Writes the selection to both places. Returns nothing; storage that is unavailable just means no backup.
+    window.arabelaSaveReservationSnapshot = function (storageKey, payload) {
+        var raw = JSON.stringify(payload);
+        try { sessionStorage.setItem(storageKey, raw); } catch (err) {}
+        try { localStorage.setItem(backupKeyFor(storageKey), JSON.stringify({ savedAt: Date.now(), raw: raw })); } catch (err2) {}
+    };
+
+    // Removes both copies (the hold ended: cancelled, expired or submitted).
+    window.arabelaClearReservationSnapshot = function (storageKey) {
+        try { sessionStorage.removeItem(storageKey); } catch (err) {}
+        try { localStorage.removeItem(backupKeyFor(storageKey)); } catch (err2) {}
+    };
+
+    // The backed-up selection as a raw JSON string, or '' when there is none, it is stale, or no hold is alive.
+    function readBackup(storageKey) {
+        if (!holdIsAlive()) { return ''; }
+        try {
+            var saved = JSON.parse(localStorage.getItem(backupKeyFor(storageKey)) || 'null');
+            if (!saved || typeof saved.raw !== 'string') { return ''; }
+            if (!(Date.now() - Number(saved.savedAt) < BACKUP_MAX_AGE_MS)) { return ''; }
+            return saved.raw;
+        } catch (err) {
+            return '';
+        }
+    }
+
+    window.arabelaGoHome = function () {
+        var url = (document.body && document.body.dataset && document.body.dataset.homeUrl) || '/';
+        window.location.replace(url);   // replace, so Back doesn't return to a checkout that no longer exists
+    };
+
+    // Tells the customer plainly why this checkout cannot continue, then takes them to the homepage.
+    window.arabelaLeaveCheckout = function (title, message) {
+        var go = function () { window.arabelaGoHome(); };
+        if (window.arabelaAlert) {
+            window.arabelaAlert({ title: title, message: message, confirmText: 'Back to home' }).then(go, go);
+        } else {
+            window.alert(message);
+            go();
+        }
+    };
+
     function formatPesoInt(n) {
         return '₱' + Math.round(Number(n)).toLocaleString('en-PH');
     }
@@ -243,6 +306,11 @@
         });
     };
 
+    // Proceed refused because the account is temporarily locked: the server's message says why and until when.
+    function holdRefusedTitle(result) {
+        return result && result.locked ? 'Your account is temporarily locked' : 'Please wait before trying again';
+    }
+
     function alertMessage(title, message) {
         if (window.arabelaAlert) {
             window.arabelaAlert({ title: title, message: message });
@@ -291,12 +359,13 @@
     window.beginReservationHold = function (storageKey, payload) {
         var oldPayload = null;
         try {
-            var parsed = JSON.parse(sessionStorage.getItem(storageKey) || 'null');
+            // This tab's copy, else the backup (a hold can have been started from another tab).
+            var parsed = JSON.parse(sessionStorage.getItem(storageKey) || readBackup(storageKey) || 'null');
             if (parsed && Array.isArray(parsed.items)) oldPayload = parsed;
         } catch (err) {}
 
         function commit() {
-            try { sessionStorage.setItem(storageKey, JSON.stringify(payload)); } catch (err) {}
+            window.arabelaSaveReservationSnapshot(storageKey, payload);
             return true;
         }
 
@@ -306,7 +375,7 @@
             var releasePromise = releaseUrl ? postJson(releaseUrl).catch(function () {}) : Promise.resolve();
             return releasePromise.then(window.startReservationHold).then(function (fresh) {
                 if (!fresh.success) {
-                    alertMessage('Please wait before trying again', fresh.error || 'Please try again later.');
+                    alertMessage(holdRefusedTitle(fresh), fresh.error || 'Please try again later.');
                     return false;
                 }
                 return commit();
@@ -315,7 +384,7 @@
 
         return window.startReservationHold().then(function (result) {
             if (!result.success) {
-                alertMessage('Please wait before trying again', result.error || 'Too many cancelled or abandoned reservations. Please try again later.');
+                alertMessage(holdRefusedTitle(result), result.error || 'Too many cancelled or abandoned reservations. Please try again later.');
                 return false;
             }
 
@@ -475,6 +544,13 @@
         try {
             raw = sessionStorage.getItem(STORAGE_KEY);
         } catch (e) {}
+        if (!raw) {
+            // This tab has no copy but the hold may still be alive (another tab / a restored tab).
+            raw = readBackup(STORAGE_KEY);
+            if (raw) {
+                try { sessionStorage.setItem(STORAGE_KEY, raw); } catch (eRestore) {}
+            }
+        }
 
         function setTotals(subtotal, deposit, total, itemCount) {
             if (subEl) subEl.textContent = formatPesoSummary(subtotal);
@@ -489,17 +565,30 @@
             if (gcashDep) gcashDep.textContent = 'Amount: ' + formatPesoInt(deposit);
         }
 
-        if (!raw) {
+        var data = null;
+        if (raw) {
+            try {
+                data = JSON.parse(raw);
+            } catch (e2) {
+                return;
+            }
+        }
+
+        if (!data || !Array.isArray(data.items) || !data.items.length) {
+            // Nothing to check out. Never leave the customer on a form with a zero total and a Confirm
+            // button that cannot work -- say what happened and take them home.
             root.innerHTML =
                 '<p class="text-sm text-secondary">No items in your selection. Return to the shop and add pieces first.</p>';
             setTotals(0, 0, 0, 0);
-            return;
-        }
-
-        var data;
-        try {
-            data = JSON.parse(raw);
-        } catch (e2) {
+            var confirmBtn = document.getElementById('confirm-rental-btn');
+            if (confirmBtn) confirmBtn.disabled = true;
+            if (holdIsAlive()) {
+                window.arabelaLeaveCheckout('We could not find your selection',
+                    'Your gowns are no longer saved on this page, so there is nothing to confirm. Please pick your gowns again -- your timer keeps running, and picking them again continues it.');
+            } else {
+                window.arabelaLeaveCheckout('Your selection is empty',
+                    'There is nothing to reserve right now. Browse the gowns and add what you like first.');
+            }
             return;
         }
 
@@ -581,4 +670,24 @@
     } else {
         window.initReservationOrderSummary();
     }
+
+    // A checkout page restored with the Back button is the page as it was, not as it is now: look again,
+    // so a selection that was released in the meantime is not still sitting there ready to submit.
+    window.addEventListener('pageshow', function (event) {
+        if (event.persisted && document.getElementById('reservation-items-root')) {
+            window.initReservationOrderSummary();
+        }
+    });
+
+    // The held selection's backup disappears when the hold ends in ANOTHER tab (cancelled, expired or
+    // submitted there). Any checkout still open here is now showing something that no longer exists.
+    window.addEventListener('storage', function (event) {
+        if (!document.getElementById('reservation-items-root')) return;
+        if (event.key !== backupKeyFor(STORAGE_KEY) || event.newValue !== null) return;
+        try { sessionStorage.removeItem(STORAGE_KEY); } catch (err) {}
+        var confirmBtn = document.getElementById('confirm-rental-btn');
+        if (confirmBtn) confirmBtn.disabled = true;
+        window.arabelaLeaveCheckout('This selection was already released',
+            'It was cancelled, expired or submitted in another tab, so there is nothing left to book here.');
+    });
 })();

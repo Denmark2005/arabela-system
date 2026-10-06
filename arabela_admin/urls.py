@@ -54,6 +54,8 @@ from .views import (
     update_avatar_position_view,
     admin_search_view,
     customer_flag_view,
+    customer_unlock_view,
+    admin_notifications_feed_view,
 )
 
 app_name = "arabela_admin"
@@ -67,6 +69,7 @@ urlpatterns = [
     path("payment-verification/", payment_verification_view, name="payment_verification"),
     path("rental-history/", rental_history_view, name="rental_history"),
     path("security-deposits/", security_deposits_view, name="security_deposits"),
+    path("api/notifications/", admin_notifications_feed_view, name="admin_notifications_feed"),
     path("api/receipts/upload/", receipt_upload_view, name="receipt_upload"),
     path("api/receipts/<int:receipt_id>/replace/", receipt_replace_view, name="receipt_replace"),
     path("api/receipts/<int:receipt_id>/delete/", receipt_delete_view, name="receipt_delete"),
@@ -94,6 +97,7 @@ urlpatterns = [
     path("api/reservation-items/<int:item_id>/undo-pickup/", reservation_item_undo_pickup_view, name="reservation_item_undo_pickup"),
     path("clients/", clients_view, name="clients"),
     path("api/customers/<int:user_id>/flag/", customer_flag_view, name="customer_flag"),
+    path("api/customers/<int:user_id>/unlock/", customer_unlock_view, name="customer_unlock"),
     path("staff-management/", staff_management_view, name="staff_management"),
     path("api/staff/", staff_create_view, name="staff_create"),
     path("api/staff/<int:user_id>/update/", staff_update_view, name="staff_update"),

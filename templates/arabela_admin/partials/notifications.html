@@ -1,4 +1,4 @@
-{% comment %}
+{% load static %}{% comment %}
 Admin header notifications: bell + dropdown + "All Notifications" modal.
 
 Single source of truth -- this markup used to be duplicated byte-for-byte across all 18
@@ -8,27 +8,155 @@ the header instead:  {% include "arabela_admin/partials/notifications.html" %}
 Data comes from arabela_admin.context_processors.admin_notifications (registered
 globally), so no view needs to pass anything. Every entry links to the module where the
 work is actually done.
+
+LIVE: the parts that change (badge, count chip, list, footer, "View all" body) are small
+partials -- notif_*.html -- drawn here on page load AND re-rendered by the live feed
+(arabela_admin.notifications.feed_payload, api/notifications/). static/arabela_admin/
+notifications-live.js polls that feed, swaps the fresh HTML into the data-notif-region
+containers below, and announces anything new (chime, toast, tab title, optional desktop
+pop-up). Everything the script needs is in the data-notif-* attributes on the root.
 {% endcomment %}
+<style>
+  .anf-contents { display: contents; }
+  /* ---- dropdown ---- */
+  .anf-dropdown { width: 350px; max-height: min(700px, calc(100vh - 96px)); }
+  @media (min-width: 640px) { .anf-dropdown { width: 384px; } }
+  .anf-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-bottom: 0.25rem; }
+  /* Scroll shadows: a soft edge appears at the top/bottom ONLY while there is more to scroll to. */
+  .anf-scroll {
+    background:
+      linear-gradient(#fff 30%, rgba(255,255,255,0)) center top,
+      linear-gradient(rgba(255,255,255,0), #fff 70%) center bottom,
+      radial-gradient(farthest-side at 50% 0, rgba(16,24,40,.14), rgba(16,24,40,0)) center top,
+      radial-gradient(farthest-side at 50% 100%, rgba(16,24,40,.14), rgba(16,24,40,0)) center bottom;
+    background-repeat: no-repeat;
+    background-size: 100% 36px, 100% 36px, 100% 12px, 100% 12px;
+    background-attachment: local, local, scroll, scroll;
+  }
+  .dark .anf-scroll {
+    background:
+      linear-gradient(#101828 30%, rgba(16,24,40,0)) center top,
+      linear-gradient(rgba(16,24,40,0), #101828 70%) center bottom,
+      radial-gradient(farthest-side at 50% 0, rgba(0,0,0,.5), rgba(0,0,0,0)) center top,
+      radial-gradient(farthest-side at 50% 100%, rgba(0,0,0,.5), rgba(0,0,0,0)) center bottom;
+    background-repeat: no-repeat;
+    background-size: 100% 36px, 100% 36px, 100% 12px, 100% 12px;
+    background-attachment: local, local, scroll, scroll;
+  }
+  .anf-modal-scroll { max-height: min(56vh, 520px); overflow-y: auto; padding-bottom: 0.5rem; }
+  /* ---- rows ---- */
+  .anf-row { padding: 10px 12px; }
+  .anf-text { display: block; font-size: 13.5px; line-height: 19px; margin-bottom: 4px; }
+  .anf-meta { font-size: 12px; line-height: 16px; }
+  .anf-new-pill {
+    display: none; align-items: center; margin-left: auto; height: 18px; padding: 0 8px;
+    border-radius: 9999px; background: #465fff; color: #fff; font-size: 10px; font-weight: 600; letter-spacing: .02em;
+  }
+  li[data-new="1"] > a { background: rgba(70, 95, 255, .07); }
+  .dark li[data-new="1"] > a { background: rgba(70, 95, 255, .18); }
+  li[data-new="1"] .anf-new-pill { display: inline-flex; }
+  .anf-status {
+    margin: -4px 0 10px; padding: 8px 10px; border-radius: 8px; background: #f9fafb; color: #475467;
+    font-size: 12px; line-height: 16px;
+  }
+  .dark .anf-status { background: rgba(255,255,255,.05); color: #d0d5dd; }
+  /* ---- header switches ---- */
+  .anf-icon-btn {
+    display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px;
+    border-radius: 8px; color: #98a2b3; background: transparent; border: 0; cursor: pointer;
+  }
+  .anf-icon-btn[hidden] { display: none; }
+  .anf-icon-btn:hover { background: #f2f4f7; color: #475467; }
+  .dark .anf-icon-btn:hover { background: rgba(255,255,255,.06); color: #d0d5dd; }
+  .anf-icon-btn[aria-pressed="true"] { color: #465fff; }
+  .anf-icon-btn .anf-off { display: none; }
+  .anf-icon-btn[aria-pressed="false"] .anf-on { display: none; }
+  .anf-icon-btn[aria-pressed="false"] .anf-off { display: inline; }
+  /* ---- filter tabs ---- */
+  .anf-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .anf-tab {
+    border: 1px solid #d0d5dd; background: #fff; color: #344054; border-radius: 9999px;
+    padding: 5px 12px; font-size: 12px; font-weight: 500; line-height: 16px; cursor: pointer;
+  }
+  .anf-tab:hover { background: #f9fafb; }
+  .anf-tab[aria-pressed="true"] { background: #101828; border-color: #101828; color: #fff; }
+  .anf-tab-n { margin-left: 6px; opacity: .7; font-variant-numeric: tabular-nums; }
+  .dark .anf-tab { background: #1d2939; border-color: #344054; color: #d0d5dd; }
+  .dark .anf-tab:hover { background: #344054; }
+  .dark .anf-tab[aria-pressed="true"] { background: #465fff; border-color: #465fff; color: #fff; }
+  /* ---- the bell rings when something new arrives ---- */
+  @keyframes anf-ring {
+    0%, 70%, 100% { transform: rotate(0); }
+    10% { transform: rotate(14deg); } 20% { transform: rotate(-12deg); } 30% { transform: rotate(9deg); }
+    40% { transform: rotate(-7deg); } 50% { transform: rotate(4deg); } 60% { transform: rotate(-2deg); }
+  }
+  .anf-ring svg { transform-origin: 50% 12%; animation: anf-ring 1.1s ease-in-out; }
+  /* ---- phone: the bell hides behind the "..." button, so that button gets a dot ---- */
+  .anf-dot {
+    position: absolute; top: 7px; right: 7px; width: 9px; height: 9px; border-radius: 9999px;
+    background: #465fff; box-shadow: 0 0 0 2px #fff; pointer-events: none;
+  }
+  .anf-dot[data-urgent="1"] { background: #f04438; }
+  .dark .anf-dot { box-shadow: 0 0 0 2px #101828; }
+  /* ---- toasts (created by the script, appended to <body>) ---- */
+  .anf-toast-wrap {
+    position: fixed; top: 84px; right: 16px; z-index: 100000; display: flex; flex-direction: column; gap: 10px;
+    width: min(380px, calc(100vw - 32px)); pointer-events: none;
+  }
+  .anf-toast {
+    pointer-events: auto; display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px;
+    background: #fff; color: #344054; border: 1px solid #e4e7ec; border-radius: 16px;
+    box-shadow: 0 12px 32px rgba(16, 24, 40, .16); animation: anf-in .28s ease-out;
+  }
+  .dark .anf-toast { background: #101828; color: #d0d5dd; border-color: #344054; box-shadow: 0 12px 32px rgba(0, 0, 0, .5); }
+  .anf-toast-body { flex: 1 1 auto; min-width: 0; }
+  .anf-toast-kicker { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #667085; }
+  .anf-toast-text { margin-top: 2px; font-size: 13.5px; line-height: 19px; word-break: break-word; }
+  .anf-toast-note { margin-top: 6px; font-size: 11.5px; line-height: 15px; color: #98a2b3; }
+  .anf-toast-actions { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+  .anf-toast-btn {
+    display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border-radius: 8px;
+    border: 1px solid #d0d5dd; background: #fff; color: #344054; font-size: 12px; font-weight: 500; cursor: pointer; text-decoration: none;
+  }
+  .anf-toast-btn:hover { background: #f9fafb; }
+  .dark .anf-toast-btn { background: #1d2939; border-color: #344054; color: #d0d5dd; }
+  .dark .anf-toast-btn:hover { background: #344054; }
+  .anf-toast-x {
+    flex: none; width: 24px; height: 24px; border: 0; border-radius: 6px; background: transparent; color: #98a2b3;
+    font-size: 18px; line-height: 1; cursor: pointer;
+  }
+  .anf-toast-x:hover { background: #f2f4f7; color: #475467; }
+  .dark .anf-toast-x:hover { background: rgba(255,255,255,.08); }
+  @keyframes anf-in { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .anf-ring svg, .anf-toast { animation: none; }
+  }
+</style>
+
 <!-- Notification Menu Area -->
 <div
+  id="arabela-notifier"
   class="relative"
   x-data="{ dropdownOpen: false, isAllNotificationsModal: false }"
+  x-init="$watch('dropdownOpen', v => window.ArabelaNotifier && window.ArabelaNotifier.onToggle('dropdown', v)); $watch('isAllNotificationsModal', v => window.ArabelaNotifier && window.ArabelaNotifier.onToggle('modal', v));"
   @click.outside="dropdownOpen = false"
+  @arabela-open-bell.window="dropdownOpen = true"
+  @arabela-open-all.window="dropdownOpen = false; isAllNotificationsModal = true"
+  data-notif-feed="{% url 'arabela_admin:admin_notifications_feed' %}"
+  data-notif-login="{% url 'arabela_admin:admin_login' %}"
+  data-notif-user="{{ admin_notification_user }}"
+  data-notif-version="{{ admin_notification_version }}"
+  data-notif-count="{{ admin_notification_count }}"
+  data-notif-urgent="{{ admin_notification_urgent }}"
+  data-notif-sound="{% static 'arabela_admin/sounds/new-notification.wav' %}"
+  data-notif-icon="{% static 'arabela_admin/favicon.ico' %}"
 >
   <button
     class="relative flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
     @click.prevent="dropdownOpen = ! dropdownOpen"
     aria-label="Notifications"
   >
-    {% if admin_notification_count %}
-    <span
-      class="absolute z-1 flex items-center justify-center rounded-full font-semibold text-white {% if admin_notification_urgent %}bg-error-500{% else %}bg-brand-500{% endif %}"
-      style="top:-3px; right:-3px; min-width:18px; height:18px; padding:0 5px; font-size:10px; line-height:1;"
-    >{{ admin_notification_count }}</span>
-    {% if admin_notification_urgent %}
-    <span class="absolute z-1 rounded-full bg-error-500 opacity-75 animate-ping" style="top:-3px; right:-3px; width:18px; height:18px;"></span>
-    {% endif %}
-    {% endif %}
+    <span class="anf-contents" data-notif-region="badge">{% include "arabela_admin/partials/notif_badge.html" %}</span>
     <svg class="fill-current" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path fill-rule="evenodd" clip-rule="evenodd" d="M10.75 2.29248C10.75 1.87827 10.4143 1.54248 10 1.54248C9.58583 1.54248 9.25004 1.87827 9.25004 2.29248V2.83613C6.08266 3.20733 3.62504 5.9004 3.62504 9.16748V14.4591H3.33337C2.91916 14.4591 2.58337 14.7949 2.58337 15.2091C2.58337 15.6234 2.91916 15.9591 3.33337 15.9591H4.37504H15.625H16.6667C17.0809 15.9591 17.4167 15.6234 17.4167 15.2091C17.4167 14.7949 17.0809 14.4591 16.6667 14.4591H16.375V9.16748C16.375 5.9004 13.9174 3.20733 10.75 2.83613V2.29248ZM14.875 14.4591V9.16748C14.875 6.47509 12.6924 4.29248 10 4.29248C7.30765 4.29248 5.12504 6.47509 5.12504 9.16748V14.4591H14.875ZM8.00004 17.7085C8.00004 18.1228 8.33583 18.4585 8.75004 18.4585H11.25C11.6643 18.4585 12 18.1228 12 17.7085C12 17.2943 11.6643 16.9585 11.25 16.9585H8.75004C8.33583 16.9585 8.00004 17.2943 8.00004 17.7085Z" fill=""/>
     </svg>
@@ -38,56 +166,41 @@ work is actually done.
   <div
     x-show="dropdownOpen"
     x-cloak
-    class="shadow-theme-lg absolute -right-[240px] mt-[17px] flex flex-col rounded-2xl border border-gray-200 bg-white p-3 sm:w-[361px] lg:right-0 dark:border-gray-800 dark:bg-gray-900"
-    style="width:350px; max-height:480px;"
+    class="anf-dropdown shadow-theme-lg absolute -right-[240px] mt-[17px] flex flex-col rounded-2xl border border-gray-200 bg-white p-3 lg:right-0 dark:border-gray-800 dark:bg-gray-900"
   >
     <div class="mb-3 flex items-center justify-between border-b border-gray-100 pb-3 dark:border-gray-800">
       <div class="flex items-center gap-2">
         <h5 class="text-lg font-semibold text-gray-800 dark:text-white/90">Needs Attention</h5>
-        {% if admin_notification_count %}
-        <span class="rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ admin_notification_count }}</span>
-        {% endif %}
+        <span data-notif-region="chip">{% include "arabela_admin/partials/notif_chip.html" %}</span>
       </div>
-      <button @click="dropdownOpen = false" class="text-gray-500 dark:text-gray-400" aria-label="Close notifications">
-        <svg class="fill-current" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path fill-rule="evenodd" clip-rule="evenodd" d="M6.21967 7.28131C5.92678 6.98841 5.92678 6.51354 6.21967 6.22065C6.51256 5.92775 6.98744 5.92775 7.28033 6.22065L11.999 10.9393L16.7176 6.22078C17.0105 5.92789 17.4854 5.92788 17.7782 6.22078C18.0711 6.51367 18.0711 6.98855 17.7782 7.28144L13.0597 12L17.7782 16.7186C18.0711 17.0115 18.0711 17.4863 17.7782 17.7792C17.4854 18.0721 17.0105 18.0721 16.7176 17.7792L11.999 13.0607L7.28033 17.7794C6.98744 18.0722 6.51256 18.0722 6.21967 17.7794C5.92678 17.4865 5.92678 17.0116 6.21967 16.7187L10.9384 12L6.21967 7.28131Z" fill=""/>
-        </svg>
-      </button>
+      <div class="flex items-center gap-1">
+        <button type="button" class="anf-icon-btn" data-notif-action="toggle-sound" aria-pressed="true" aria-label="Notification sound" title="Notification sound: on">
+          <svg class="anf-on" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z"/>
+          </svg>
+          <svg class="anf-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17.25 9.75L19.5 12m0 0l2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z"/>
+          </svg>
+        </button>
+        <button type="button" class="anf-icon-btn" data-notif-action="toggle-desktop" aria-pressed="false" aria-label="Desktop alerts" title="Desktop alerts: off" hidden>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25"/>
+            <path class="anf-off" d="M3.5 3.5l17 17"/>
+          </svg>
+        </button>
+        <button @click="dropdownOpen = false" class="text-gray-500 dark:text-gray-400" style="margin-left:2px;" aria-label="Close notifications">
+          <svg class="fill-current" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M6.21967 7.28131C5.92678 6.98841 5.92678 6.51354 6.21967 6.22065C6.51256 5.92775 6.98744 5.92775 7.28033 6.22065L11.999 10.9393L16.7176 6.22078C17.0105 5.92789 17.4854 5.92788 17.7782 6.22078C18.0711 6.51367 18.0711 6.98855 17.7782 7.28144L13.0597 12L17.7782 16.7186C18.0711 17.0115 18.0711 17.4863 17.7782 17.7792C17.4854 18.0721 17.0105 18.0721 16.7176 17.7792L11.999 13.0607L7.28033 17.7794C6.98744 18.0722 6.51256 18.0722 6.21967 17.7794C5.92678 17.4865 5.92678 17.0116 6.21967 16.7187L10.9384 12L6.21967 7.28131Z" fill=""/>
+          </svg>
+        </button>
+      </div>
     </div>
 
-    <ul class="custom-scrollbar flex flex-col overflow-y-auto" style="min-height:0; padding-bottom:0.25rem;">
-      {% for n in admin_notifications|slice:":6" %}
-      {% include "arabela_admin/partials/notification_row.html" with n=n %}
-      {% empty %}
-      <li class="flex flex-col items-center justify-center px-4" style="padding-top:2.5rem; padding-bottom:2.5rem;">
-        <span class="mb-3 flex items-center justify-center rounded-full bg-success-50 dark:bg-success-500/15" style="width:44px; height:44px;">
-          <svg class="text-success-500" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
-          </svg>
-        </span>
-        <p class="text-sm font-medium text-gray-800 dark:text-white/90">All caught up</p>
-        <p class="mt-1 text-center text-xs text-gray-500 dark:text-gray-400">No reservations, payments or returns need you right now.</p>
-      </li>
-      {% endfor %}
-    </ul>
+    <p class="anf-status" data-notif-status role="status" hidden></p>
 
-    {% if admin_notification_count > 6 %}
-    <button
-      type="button"
-      @click="dropdownOpen = false; isAllNotificationsModal = true"
-      class="text-theme-sm shadow-theme-xs mt-3 flex w-full justify-center rounded-lg border border-gray-300 bg-white p-3 font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
-    >
-      View all {{ admin_notification_count }} notifications
-    </button>
-    {% elif admin_notification_count %}
-    <button
-      type="button"
-      @click="dropdownOpen = false; isAllNotificationsModal = true"
-      class="text-theme-sm shadow-theme-xs mt-3 flex w-full justify-center rounded-lg border border-gray-300 bg-white p-3 font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
-    >
-      View all notifications
-    </button>
-    {% endif %}
+    <ul class="anf-list anf-scroll custom-scrollbar flex flex-col" data-notif-region="list">{% include "arabela_admin/partials/notif_list.html" %}</ul>
+
+    <div data-notif-region="footer">{% include "arabela_admin/partials/notif_footer.html" %}</div>
   </div>
   <!-- Dropdown End -->
 
@@ -112,45 +225,9 @@ work is actually done.
 
       <div class="px-2 pr-14">
         <h4 class="mb-2 text-2xl font-semibold text-gray-800 dark:text-white/90">Needs Attention</h4>
-        <p class="mb-6 text-sm text-gray-500 dark:text-gray-400">
-          {% if admin_notification_count %}
-            Everything waiting on you right now, most urgent first. Each one opens the page where you can act on it.
-          {% else %}
-            Nothing is waiting on you right now.
-          {% endif %}
-        </p>
       </div>
 
-      {% if admin_notification_count %}
-      <div class="mb-6 flex flex-wrap gap-2 px-2">
-        {% if admin_notification_urgent %}
-        <span class="rounded-full bg-error-50 px-3 py-1 text-xs font-semibold text-error-700 dark:bg-error-500/15 dark:text-error-500">{{ admin_notification_urgent }} urgent</span>
-        {% endif %}
-        <span class="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ admin_notification_count }} total</span>
-      </div>
-      {% endif %}
-
-      <div class="px-2">
-        <!-- Small bottom padding so the last row doesn't sit flush against the footer
-             when the list is scrolled to the end. -->
-        <div class="custom-scrollbar overflow-y-auto" style="max-height:420px; padding-bottom:0.5rem;">
-          <ul class="flex flex-col">
-            {% for n in admin_notifications %}
-            {% include "arabela_admin/partials/notification_row.html" with n=n %}
-            {% empty %}
-            <li class="flex flex-col items-center justify-center" style="padding-top:3rem; padding-bottom:3rem;">
-              <span class="mb-4 flex items-center justify-center rounded-full bg-success-50 dark:bg-success-500/15" style="width:56px; height:56px;">
-                <svg class="text-success-500" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
-                </svg>
-              </span>
-              <p class="text-base font-medium text-gray-800 dark:text-white/90">All caught up</p>
-              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">No pending approvals, payments or overdue returns.</p>
-            </li>
-            {% endfor %}
-          </ul>
-        </div>
-      </div>
+      <div data-notif-region="modal">{% include "arabela_admin/partials/notif_modal_body.html" %}</div>
 
       <div class="mt-6 flex justify-end border-t border-gray-100 px-2 dark:border-gray-800" style="padding-top:1.25rem;">
         <button type="button" @click="isAllNotificationsModal = false" class="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">Close</button>
@@ -158,5 +235,7 @@ work is actually done.
     </div>
   </div>
   <!-- All Notifications Modal End -->
+  {{ admin_notification_keys|json_script:"arabela-notif-keys" }}
 </div>
 <!-- Notification Menu Area -->
+<script defer src="{% static 'arabela_admin/notifications-live.js' %}?v={{ admin_asset_version }}"></script>

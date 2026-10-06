@@ -62,19 +62,22 @@
           this.avatarError = 'Image must be 5MB or smaller.';
           return;
         }
-        if (!/^image\/(png|jpeg|jpg|webp|gif)$/.test(file.type)) {
-          this.avatarError = 'Use a JPG, PNG, WEBP or GIF image.';
-          return;
-        }
-        if (this.pendingPreviewUrl) {
-          URL.revokeObjectURL(this.pendingPreviewUrl);
-        }
-        this.pendingFile = file;
-        this.pendingPreviewUrl = URL.createObjectURL(file);
-        this.positionMode = 'upload';
-        this.dragPositionX = 50;
-        this.dragPositionY = 50;
-        this.isPositionModal = true;
+        // In-memory copy first (static/js/picked-file.js), so the phone's own file can't break the upload.
+        window.arabelaReadPickedFile(file).then((copy) => {
+          if (!/^image\/(png|jpeg|jpg|webp|gif)$/.test(copy.type)) {
+            this.avatarError = 'Use a JPG, PNG, WEBP or GIF image.';
+            return;
+          }
+          if (this.pendingPreviewUrl) {
+            URL.revokeObjectURL(this.pendingPreviewUrl);
+          }
+          this.pendingFile = copy;
+          this.pendingPreviewUrl = URL.createObjectURL(copy);
+          this.positionMode = 'upload';
+          this.dragPositionX = 50;
+          this.dragPositionY = 50;
+          this.isPositionModal = true;
+        }, (err) => { this.avatarError = err.message; });
       },
       openReposition() {
         if (!this.avatarUrl || this.avatarBusy) return;
@@ -1677,16 +1680,26 @@
                       event.target.value = '';
                       if (!file) return;
                       this.qrError = '';
-                      if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { this.qrError = 'Use a JPG, PNG or WEBP image.'; return; }
                       if (file.size > 5 * 1024 * 1024) { this.qrError = 'Image must be 5MB or smaller.'; return; }
-                      var form = new FormData();
-                      form.append('qr', file);
                       this.busy = true;
-                      this.post('{% url "arabela_admin:gcash_qr_upload" %}', { body: form }).then((r) => {
+                      // In-memory copy first (static/js/picked-file.js), so the phone's own file can't break the upload.
+                      window.arabelaReadPickedFile(file).then((copy) => {
+                        if (!/^image\/(jpeg|png|webp)$/.test(copy.type)) {
+                          var typeErr = new Error('Use a JPG, PNG or WEBP image.');
+                          typeErr.code = 'unreadable_photo';
+                          throw typeErr;
+                        }
+                        var form = new FormData();
+                        form.append('qr', copy);
+                        return this.post('{% url "arabela_admin:gcash_qr_upload" %}', { body: form });
+                      }).then((r) => {
                         this.busy = false;
                         if (!r.ok || !r.data.success) { this.qrError = r.data.error || 'Could not upload the image.'; return; }
                         this.qrUrl = r.data.url;
-                      }).catch(() => { this.busy = false; this.qrError = 'Network error. Please try again.'; });
+                      }).catch((err) => {
+                        this.busy = false;
+                        this.qrError = (err && err.code === 'unreadable_photo') ? err.message : 'Network error. Please try again.';
+                      });
                     },
                     removeQr() {
                       adminConfirm({
@@ -2220,6 +2233,7 @@
 </div>
 <!-- END MODAL -->
   <script defer src="{% static 'arabela_admin/bundle.js' %}?v={{ admin_asset_version }}"></script>
+  <script defer src="{% static 'js/picked-file.js' %}?v={{ site_asset_version }}"></script>
   <script defer src="{% static 'arabela_admin/global-search.js' %}"></script>
 
 {% include "arabela_admin/partials/dialog.html" %}

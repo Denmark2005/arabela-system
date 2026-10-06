@@ -1,0 +1,7 @@
+{% comment %}
+The number on the bell. Rendered by the page AND by the live feed (arabela_admin.notifications),
+so it always matches. Red when anything is urgent, blue otherwise.
+{% endcomment %}{% if admin_notification_count %}<span
+  class="absolute z-1 flex items-center justify-center rounded-full font-semibold text-white {% if admin_notification_urgent %}bg-error-500{% else %}bg-brand-500{% endif %}"
+  style="top:-3px; right:-3px; min-width:18px; height:18px; padding:0 5px; font-size:10px; line-height:1;"
+>{% if admin_notification_count > 99 %}99+{% else %}{{ admin_notification_count }}{% endif %}</span>{% if admin_notification_urgent %}<span class="absolute z-1 rounded-full bg-error-500 opacity-75 animate-ping" style="top:-3px; right:-3px; width:18px; height:18px;"></span>{% endif %}{% endif %}

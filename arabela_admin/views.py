@@ -1180,6 +1180,70 @@ def _decorate_gowns_for_catalog(gowns, tag_colors, now):
             g.check_label = f"Checked {when:%b} {when.day}" + (f" by {who}" if who else "")
 
 
+def _holder_range(start, end, today):
+    """A booking's pick-up to return window, short enough for a table cell: 'Oct 12', 'Oct 12–15',
+    'Oct 30 – Nov 2'. The year only appears when it isn't this year."""
+    def day(d, with_month=True):
+        return f"{d:%b} {d.day}" if with_month else str(d.day)
+
+    year = f", {end.year}" if end.year != today.year or start.year != today.year else ""
+    if start == end:
+        return day(start) + year
+    if (start.year, start.month) == (end.year, end.month):
+        return f"{day(start)}\u2013{day(end, with_month=False)}{year}"
+    return f"{day(start)} \u2013 {day(end)}{year}"
+
+
+def _reserved_gown_holders(gowns, today):
+    """For every Reserved gown, who it is held for: the live bookings on that physical gown,
+    nearest first, each with the page that booking can be opened on. Uses the same rule as the
+    delete guard and the availability calendars (_holding_items), so Gown Catalog can never name a
+    booking those pages don't count. A booking still awaiting payment approval links to Pending
+    Approval (Active Reservations doesn't list it yet); a confirmed / picked-up / overdue one links
+    to Active Reservations, filtered to its reference code -- the same link Booking Details uses.
+    A Reserved gown with NO live booking (status set by hand) simply has an empty list."""
+    reserved_ids = [g.id for g in gowns if g.status == Gown.Status.RESERVED]
+    holders = defaultdict(list)
+    if not reserved_ids:
+        return holders
+    items = (
+        _holding_items(reserved_ids)
+        .select_related("reservation__customer__profile")
+        .order_by("rental_date", "id")
+    )
+    for item in items:
+        reservation = item.reservation
+        if reservation.status == Reservation.Status.PENDING:
+            page = "arabela_admin:pending_approval"
+        elif reservation.status in _SCHEDULED_STATUSES:
+            page = "arabela_admin:active_reservations"
+        else:
+            page = ""  # no admin page lists it, so there is nothing honest to link to
+        holders[item.gown_id].append({
+            "customer": reservation.display_customer_name,
+            "reference": reservation.reference_code,
+            "range": _holder_range(item.rental_date, item.return_date, today),
+            "pending": reservation.status == Reservation.Status.PENDING,
+            "url": reverse(page) + "?" + urlencode({"search": reservation.reference_code}) if page else "",
+        })
+    return holders
+
+
+@require_http_methods(["GET"])
+def admin_notifications_feed_view(request):
+    """The header bell's live feed: what needs attention right now, as JSON, for the bell's script
+    to poll. `?v=` is the version the browser already shows; if nothing changed the answer is a
+    tiny {"unchanged": true}. A signed-out or expired session gets a JSON 401 (not a redirect to a
+    login page the script would mistake for data), which tells the bell to say so and stop."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    from arabela_admin.notifications import feed_payload
+
+    response = JsonResponse(feed_payload(request.user, request.GET.get("v", "")))
+    response["Cache-Control"] = "no-store"
+    return response
+
+
 @_require_admin_staff
 def gown_catalog_view(request):
     today = timezone.localdate()
@@ -1198,6 +1262,10 @@ def gown_catalog_view(request):
         g.gown_id,
     ))
     _decorate_gowns_for_catalog(gowns, tag_colors, now)
+    # Who each Reserved gown is reserved for -- shown under its status and in its View window.
+    holders_by_gown = _reserved_gown_holders(gowns, today)
+    for g in gowns:
+        g.holders = holders_by_gown.get(g.id, [])
 
     # Minimal per-gown data the catalog's Alpine layer needs for the client-side
     # "no gowns match your filters" count and the select-all-visible checkbox. Kept
@@ -1318,6 +1386,7 @@ def gown_catalog_view(request):
             # live suggestion all read -- see GOWN_COLOR_PRESETS's own docstring.
             "color_presets": [{"name": n, "code": c} for n, c in GOWN_COLOR_PRESETS],
             "gown_blocks": dict(blocks_by_gown),
+            "gown_holders": dict(holders_by_gown),
             # Cooldown is left out on purpose -- it's the label the system uses for
             # its own auto-added post-rental blocks (see reservation_submit), not a
             # reason a staff member would ever pick by hand for a new one.
@@ -2633,6 +2702,44 @@ def reservation_item_undo_pickup_view(request, item_id):
     return JsonResponse({"success": True, "stage": item.stage})
 
 
+def _name_key(name):
+    """A name the way a person compares it: capitals and extra spaces don't make a different name."""
+    return " ".join((name or "").split()).casefold()
+
+
+def _reservation_names(reservations):
+    """The distinct names typed on one customer's reservations -- the name that ends up on their
+    receipt, which can be quite different from the name on their account (Gmail). `reservations`
+    must be newest first. Each entry is {"name", "count", "last"}: the newest spelling of that name,
+    how many reservations used it, and when it was last used.
+
+    The FIRST entry is the one to show: the name on their most recent reservation that is still a real
+    booking (not cancelled or rejected -- a typo on a cancelled attempt shouldn't hide the name on the
+    one that went through); if every reservation was cancelled or rejected, simply the most recent
+    one. Reservation.customer_name is a snapshot taken at submission (see its docstring), so this is
+    always what the customer actually typed, never what their account is called today."""
+    groups = {}
+    primary = None
+    for r in reservations:
+        key = _name_key(r.customer_name)
+        if not key:
+            continue
+        group = groups.get(key)
+        if group is None:
+            group = groups[key] = {
+                "name": " ".join(r.customer_name.split()), "count": 0,
+                "last": date_format(timezone.localtime(r.created_at), "M j, Y"),
+            }
+        group["count"] += 1
+        if primary is None and r.status not in _NON_RENTAL_STATUSES:
+            primary = key
+    if not groups:
+        return []
+    if primary is None:
+        primary = next(iter(groups))
+    return [groups[primary]] + [g for key, g in groups.items() if key != primary]
+
+
 @_require_admin_staff
 def clients_view(request):
     now = timezone.now()
@@ -2679,6 +2786,18 @@ def clients_view(request):
         c.cancel_lockout_until = lockout_until
         c.cancel_locked_now = bool(lockout_until and lockout_until > now)
         c.display_name = UserProfile.customer_display_name(c)
+        # The name(s) they typed on their reservations, shown beside the account name so staff can
+        # tell at a glance whose account a receipt name belongs to. Built from the reservations
+        # already loaded above -- no extra query.
+        names = _reservation_names(c.ordered_reservations)
+        c.reservation_names = names
+        c.reservation_name = names[0]["name"] if names else ""
+        c.reservation_name_differs = bool(names) and _name_key(names[0]["name"]) != _name_key(c.display_name)
+        c.reservation_name_extra = max(len(names) - 1, 0)
+        c.reservation_other_names = ", ".join(n["name"] for n in names[1:])
+        # Everything the search box should match, lower-cased once here.
+        c.reservation_names_search = " ".join(n["name"] for n in names).lower()
+        c.reservation_names_json = json.dumps(names)
         c.is_new_this_month = (
             c.date_joined.year == now.year and c.date_joined.month == now.month
         )
@@ -2729,6 +2848,33 @@ def customer_flag_view(request, user_id):
     CustomerMessage.objects.create(recipient=customer, category=category, body=body)
 
     return JsonResponse({"success": True, "flagged": profile.is_flagged})
+
+
+@require_http_methods(["POST"])
+def customer_unlock_view(request, user_id):
+    """Lift a customer's temporary cancellation lockout early (Client List's "Remove lock").
+
+    For a lock that came from a site problem rather than real cancelling. Only the lock goes: the
+    attempt count stays, and since each lock step fires once, the next one is still the 2-hour lock at 10
+    attempts. Same permission as flagging -- any admin staff -- and only ever this one account's row."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    try:
+        customer = User.objects.get(id=user_id, is_staff=False, is_superuser=False)
+    except User.DoesNotExist:
+        return JsonResponse({"error": "Customer not found"}, status=404)
+
+    profile, _ = UserProfile.objects.get_or_create(user=customer)
+    if not (profile.cancel_lockout_until and profile.cancel_lockout_until > timezone.now()):
+        return JsonResponse({"error": "This account is not locked right now."}, status=400)
+    profile.cancel_lockout_until = None
+    profile.save(update_fields=["cancel_lockout_until"])
+    CustomerMessage.objects.create(
+        recipient=customer,
+        category=CustomerMessage.Category.GENERAL,
+        body="The shop has lifted the temporary lock on your account, so you can make reservations again.",
+    )
+    return JsonResponse({"success": True})
 
 
 def _staff_display_name(user):

@@ -26,6 +26,9 @@
 <div id="hold-banner" data-deadline="{{ reservation_hold_until }}" data-remaining="{{ reservation_hold_seconds }}"
      data-cart-key="arabela_cart_{{ request.user.id }}"
      data-release-url="{% url 'gowns:reservation_hold_release' %}"
+     data-snapshot-key="arabela_reservation_cart_{{ request.user.id }}"
+     data-home-url="{% url 'gowns:homepage' %}"
+     data-on-checkout="{% if url_name == 'reservation' %}1{% else %}0{% endif %}"
      class="fixed bottom-0 inset-x-0 z-[79] bg-primary text-white border-t border-white/10"
      role="status" aria-live="polite">
   <div class="max-w-6xl mx-auto flex items-center gap-3 px-4 sm:px-6 py-3">
@@ -107,6 +110,28 @@
       }
     }
 
+    // The held selection itself (the checkout's gown list, and the backup copy other tabs restore from)
+    // goes with the hold. Without this, Cancel / expiry left it behind: the checkout page kept showing
+    // it, and Confirm Rental still worked on a selection that had been released.
+    function clearHeldSnapshot() {
+      try {
+        const key = banner.dataset.snapshotKey;
+        if (!key) return;
+        sessionStorage.removeItem(key);
+        localStorage.removeItem(key.replace('arabela_reservation_cart_', 'arabela_reservation_backup_'));
+      } catch (err) {
+        /* storage unavailable -- nothing was kept there to begin with */
+      }
+    }
+
+    // On the checkout page the selection is gone once the hold ends, so staying would leave an empty
+    // order and a Confirm button that cannot work. Replace (not push) the page so Back doesn't return here.
+    function leaveCheckout() {
+      if (banner.dataset.onCheckout !== '1') return false;
+      window.location.replace(banner.dataset.homeUrl || '/');
+      return true;
+    }
+
     function readCsrfToken() {
       const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
       return match ? decodeURIComponent(match[1]) : '';
@@ -115,9 +140,24 @@
     function onExpired() {
       stopTicking();
       clearHeldSelection();
+      clearHeldSnapshot();
       if (clock) clock.textContent = '00:00';
       if (label) label.textContent = 'Hold expired -- your selection was released.';
       if (cta) cta.textContent = 'Browse';
+      if (banner.dataset.onCheckout === '1') {
+        // The 20 minutes are up and the selection was released: don't leave the checkout open on it.
+        const goHome = function () { leaveCheckout(); };
+        if (typeof arabelaAlert === 'function') {
+          arabelaAlert({
+            title: 'Your hold expired',
+            message: 'The 20 minutes are up, so your selection was released. Pick your gowns again whenever you are ready.',
+            confirmText: 'Back to home',
+          }).then(goHome, goHome);
+        } else {
+          goHome();
+        }
+        return;
+      }
       window.setTimeout(hideBanner, 8000);
     }
 
@@ -183,7 +223,9 @@
             if (!result.ok || !result.data.success) throw new Error(result.data.error || 'Could not release your selection.');
             stopTicking();
             clearHeldSelection();
+            clearHeldSnapshot();
             hideBanner();
+            leaveCheckout();   // on the checkout page: straight back to the homepage
           })
           .catch(function (err) {
             cancelBtn.disabled = false;

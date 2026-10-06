@@ -52,6 +52,7 @@
       isGownImageModal: false, viewingGownImage: {},
       isViewModal: false, viewingGown: {},
       photoUpdateError: '', photoUpdateBusy: false,
+      gownHolders: {},
       gownBlocks: {}, newBlockStart: '', newBlockEnd: '', newBlockReason: 'Cleaning', newBlockNote: '', blockError: '', blockBusy: false, releasingBlockId: null,
       showGownToast: false, gownToastMessage: '', gownToastTimeout: null,
       getCsrfToken() {
@@ -199,17 +200,21 @@
       },
       onGownPhotoChosen(file) {
         if (!file) return;
-        if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
-          this.addGownError = 'Gown photo must be a JPG, PNG, or WEBP image.';
-          return;
-        }
         if (file.size > 5 * 1024 * 1024) {
           this.addGownError = 'Gown photo must be 5MB or smaller.';
           return;
         }
-        this.addGownError = '';
-        this.newGownPhotoFile = file;
-        this.newGownPhotoPreview = URL.createObjectURL(file);
+        // Kept as an in-memory copy, not the phone's own file: a photo picked on Android can change
+        // before Save and make the upload fail silently (static/js/picked-file.js).
+        window.arabelaReadPickedFile(file).then((copy) => {
+          if (!/^image\/(jpeg|png|webp)$/.test(copy.type)) {
+            this.addGownError = 'Gown photo must be a JPG, PNG, or WEBP image.';
+            return;
+          }
+          this.addGownError = '';
+          this.newGownPhotoFile = copy;
+          this.newGownPhotoPreview = URL.createObjectURL(copy);
+        }, (err) => { this.addGownError = err.message; });
       },
       // `nameChoice` is only ever passed by the two buttons of the 'name already exists'
       // prompt ('same' = another unit of that gown, 'different' = a different gown that
@@ -293,22 +298,27 @@
       },
       updateGownPhoto(file) {
         if (!file) return;
-        if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
-          this.photoUpdateError = 'Gown photo must be a JPG, PNG, or WEBP image.';
-          return;
-        }
         if (file.size > 5 * 1024 * 1024) {
           this.photoUpdateError = 'Gown photo must be 5MB or smaller.';
           return;
         }
         this.photoUpdateError = '';
         this.photoUpdateBusy = true;
-        const form = new FormData();
-        form.append('photo', file);
-        fetch(this.gownApiBase + this.viewingGownImage.id + '/photo/', {
-          method: 'POST',
-          headers: { 'X-CSRFToken': this.getCsrfToken() },
-          body: form,
+        // In-memory copy first (static/js/picked-file.js), so the phone's own file can't break the upload.
+        window.arabelaReadPickedFile(file)
+        .then((copy) => {
+          if (!/^image\/(jpeg|png|webp)$/.test(copy.type)) {
+            const typeErr = new Error('Gown photo must be a JPG, PNG, or WEBP image.');
+            typeErr.code = 'unreadable_photo';
+            throw typeErr;
+          }
+          const form = new FormData();
+          form.append('photo', copy);
+          return fetch(this.gownApiBase + this.viewingGownImage.id + '/photo/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': this.getCsrfToken() },
+            body: form,
+          });
         })
         .then(r => r.json().then(data => ({ ok: r.ok, data })))
         .then(({ ok, data }) => {
@@ -317,7 +327,10 @@
           this.gownToast('Photo updated for ' + this.viewingGownImage.gownId);
           setTimeout(() => window.location.reload(), 700);
         })
-        .catch(() => { this.photoUpdateBusy = false; this.photoUpdateError = 'Network error. Please try again.'; });
+        .catch((err) => {
+          this.photoUpdateBusy = false;
+          this.photoUpdateError = (err && err.code === 'unreadable_photo') ? err.message : 'Network error. Please try again.';
+        });
       },
       changeGownStatus(newStatus) {
         fetch(this.gownApiBase + this.viewingGown.id + '/status/', {
@@ -336,6 +349,10 @@
       },
       currentBlocks() {
         return this.gownBlocks[this.viewingGown.id] || [];
+      },
+      // Who the open Reserved gown is reserved for (empty = its status was set by hand).
+      currentHolders() {
+        return this.gownHolders[this.viewingGown.id] || [];
       },
       // Runs on every View-modal open (the View button's @click, alongside
       // isViewModal = true) -- it's the one place per-gown modal state gets reset.
@@ -730,6 +747,8 @@
     x-init="
          darkMode = JSON.parse(localStorage.getItem('darkMode'));
          $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)));
+         const holdersEl = document.getElementById('gown-holders-data');
+         if (holdersEl) { try { gownHolders = JSON.parse(holdersEl.textContent || '{}'); } catch (e) { gownHolders = {}; } }
          const blocksEl = document.getElementById('gown-blocks-data');
          if (blocksEl) { try { gownBlocks = JSON.parse(blocksEl.textContent || '{}'); } catch (e) { gownBlocks = {}; } }
          const minEl = document.getElementById('gowns-min-data');
@@ -2208,6 +2227,18 @@
                       <td class="px-5 py-4 sm:px-6"><p class="text-sm font-semibold text-brand-500">&#8369; {{ gown.rental_price|floatformat:0 }}</p></td>
                       <td class="px-5 py-4 sm:px-6">
                         <p class="inline-flex rounded-full px-2 py-0.5 text-theme-xs font-medium {% if gown.status == 'Available' %}bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500{% elif gown.status == 'Reserved' %}bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400{% else %}bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500{% endif %}">{{ gown.status }}</p>
+                        {% if gown.status == 'Reserved' %}
+                        {% if gown.holders %}
+                        {% with holder=gown.holders.0 %}
+                        <p class="mt-1 text-theme-xs text-gray-500 dark:text-gray-400" style="word-break: break-word;">
+                          {% if holder.url %}<a href="{{ holder.url }}" class="font-medium text-brand-500" style="text-decoration: underline;" title="Open {{ holder.reference }} in {% if holder.pending %}Pending Approval{% else %}Active Reservations{% endif %}">{{ holder.customer }} &middot; {{ holder.range }}</a>{% else %}<span class="font-medium">{{ holder.customer }} &middot; {{ holder.range }}</span>{% endif %}{% if gown.holders|length > 1 %} <span>+{{ gown.holders|length|add:"-1" }} more</span>{% endif %}
+                        </p>
+                        {% if holder.pending %}<p class="text-theme-xs text-gray-400 dark:text-gray-500">awaiting payment approval</p>{% endif %}
+                        {% endwith %}
+                        {% else %}
+                        <p class="mt-1 text-theme-xs text-gray-400 dark:text-gray-500" title="No booking is holding this gown &mdash; its status was set by hand in the View window.">Set manually &middot; no booking</p>
+                        {% endif %}
+                        {% endif %}
                         <p class="mt-1 text-theme-xs {% if gown.days_since_check is None or gown.days_since_check >= check_stale_days %}text-warning-700 dark:text-warning-400{% else %}text-gray-400 dark:text-gray-500{% endif %}" title="When someone last confirmed this gown is physically here">{{ gown.check_label }}</p>
                       </td>
                       <td class="px-5 py-4 sm:px-6">
@@ -2708,6 +2739,31 @@
         <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">Damaged or otherwise unavailable? Use "Mark Out-of-Stock" — it hides the gown from availability without deleting its record. For a scheduled cleaning or repair gap with a known end date, add a range under Blocked Dates below instead — it frees itself when the dates pass.</p>
       </div>
 
+      <!-- Booked by: who a Reserved gown is reserved for, each booking with a link to open it. -->
+      <div class="mt-6 border-t border-gray-100 pt-5 dark:border-gray-800" x-show="viewingGown.status === 'Reserved'">
+        <p class="mb-2 text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Booked by</p>
+        <template x-if="currentHolders().length === 0">
+          <p class="rounded-lg bg-gray-50 p-3 text-xs text-gray-500 dark:bg-white/[0.03] dark:text-gray-400">
+            No booking is holding this gown &mdash; its status was set to Reserved by hand. Use "Mark Available" above if it should be free.
+          </p>
+        </template>
+        <div style="display:flex; flex-direction:column; gap:0.5rem;">
+          <template x-for="(holder, holderIndex) in currentHolders()" :key="holderIndex">
+            <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-800" style="display:flex; align-items:center; justify-content:space-between; gap:0.75rem; flex-wrap:wrap;">
+              <div>
+                <p class="text-sm font-medium text-gray-800 dark:text-white/90" x-text="holder.customer"></p>
+                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  <span x-text="holder.reference"></span> &middot; <span x-text="holder.range"></span><span x-show="holder.pending"> &middot; awaiting payment approval</span>
+                </p>
+              </div>
+              <a x-show="holder.url" :href="holder.url" style="text-decoration: none;"
+                 class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]"
+                 x-text="holder.pending ? 'Open in Pending Approval' : 'Open in Active Reservations'"></a>
+            </div>
+          </template>
+        </div>
+      </div>
+
       <!-- Blocked Dates: staff-declared days this unit is out of the pool. Status above is
            a right-now switch; this is the dated version -- the gap after a return while the
            gown is being washed or repaired, which nothing else in the system can express. -->
@@ -2842,6 +2898,7 @@
     <!-- ===== Page Wrapper End ===== -->
 
 {{ gown_blocks|json_script:"gown-blocks-data" }}
+{{ gown_holders|json_script:"gown-holders-data" }}
 {{ gowns_min|json_script:"gowns-min-data" }}
 {{ color_presets|json_script:"color-presets-data" }}
 {{ tag_colors_data|json_script:"tag-colors-data" }}
@@ -2955,6 +3012,7 @@
 </div>
 
   <script defer src="{% static 'arabela_admin/bundle.js' %}?v={{ admin_asset_version }}"></script>
+  <script defer src="{% static 'js/picked-file.js' %}?v={{ site_asset_version }}"></script>
   <script defer src="{% static 'arabela_admin/global-search.js' %}"></script>
 
 {% include "arabela_admin/partials/dialog.html" %}

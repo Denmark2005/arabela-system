@@ -1,0 +1,16 @@
+{% comment %}
+The rows inside the bell's dropdown. EVERY notification is rendered (not just the first six):
+only the first six are shown -- the rest carry `hidden` -- because the bell's script moves the
+ones that are new to you to the top first, and a new reservation must never be stuck below
+rows the list cuts off. Without the script this still reads exactly like before: six rows.
+{% endcomment %}{% for n in admin_notifications %}{% include "arabela_admin/partials/notification_row.html" with n=n index=forloop.counter %}{% empty %}
+<li class="flex flex-col items-center justify-center px-4" style="padding-top:2.5rem; padding-bottom:2.5rem;">
+  <span class="mb-3 flex items-center justify-center rounded-full bg-success-50 dark:bg-success-500/15" style="width:44px; height:44px;">
+    <svg class="text-success-500" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+    </svg>
+  </span>
+  <p class="text-sm font-medium text-gray-800 dark:text-white/90">All caught up</p>
+  <p class="mt-1 text-center text-xs text-gray-500 dark:text-gray-400">No reservations, payments or returns need you right now.</p>
+</li>
+{% endfor %}

@@ -56,7 +56,7 @@ Notes:
 - **Clients** — the customer list, with a flag/unflag action for accounts under review.
 - **Staff Management** *(Owner only)* — create, edit, deactivate, or delete staff/manager accounts.
 - **Account Settings** *(Owner only)* — change the owner's own login password.
-- **Notifications** — a header dropdown of live work items (pending approvals, unverified payments, overdue returns, late pick-ups, deposits still held, out-of-stock gowns, flagged customers, and, for the owner, deactivated staff accounts). Nothing here is stored — it's recalculated from real data on every page load, so it can never fall out of sync, but that also means there's no history of past notifications.
+- **Notifications** — a header dropdown of live work items (pending approvals, unverified payments, overdue returns, late pick-ups, deposits still held, out-of-stock gowns, flagged customers, and, for the owner, deactivated staff accounts). Nothing here is stored — it's recalculated from real data (on every page load, and again every ~15 seconds while an admin page is open, through a small JSON feed at `api/notifications/`), so it can never fall out of sync, but that also means there's no history of past notifications. While a page is open the bell updates by itself and announces anything new with a chime, a toast, the tab title and (opt-in) a desktop pop-up; what each person has already seen is remembered only in their own browser.
 
 ## 4. Gown data
 
@@ -111,7 +111,7 @@ Every gown is one row (one physical unit) with these fields:
 - Every meaningful thing that happens to a reservation — submitted, approved, rejected, cancelled, picked up, stage changed, marked returned, deposit released, reminder sent — is written to an append-only event log, tagged with who did it (Customer / Staff / System) and when. Nothing in this log is ever edited or deleted after the fact.
 - Some log entries are marked staff-only (e.g. an internal note that a gown came back needing repair) and are hidden from the customer's own order timeline; the admin panel's timelines always show everything.
 - **This logging only covers reservations, not gowns.** There's no equivalent log for inventory changes — no record of who edited a gown's price, condition, or status, or when.
-- The admin notification bell is **not** a log either — it's a live list recalculated from current data on every page load (see Section 3), so there's no historical record of past notifications, only what's currently outstanding.
+- The admin notification bell is **not** a log either — it's a live list recalculated from current data on every page load and every ~15 seconds after that (see Section 3), so there's no historical record of past notifications, only what's currently outstanding.
 
 ## 8. Search and display
 

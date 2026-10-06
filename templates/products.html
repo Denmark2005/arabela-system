@@ -1320,9 +1320,13 @@
           if (target) {
             target.rental = item.rental;
             target.size = selectedSize;
-            try {
-              sessionStorage.setItem(RESERVATION_SNAPSHOT_KEY, JSON.stringify(snapshot));
-            } catch (err) {}
+            if (typeof window.arabelaSaveReservationSnapshot === 'function') {
+              window.arabelaSaveReservationSnapshot(RESERVATION_SNAPSHOT_KEY, snapshot);   // this tab + the backup
+            } else {
+              try {
+                sessionStorage.setItem(RESERVATION_SNAPSHOT_KEY, JSON.stringify(snapshot));
+              } catch (err) {}
+            }
           }
           window.location.href = "{% url 'gowns:reservation' %}";
           return;

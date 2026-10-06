@@ -1,15 +1,9 @@
 import os
-from datetime import datetime, time
-from urllib.parse import urlencode
 
 from django.conf import settings
-from django.urls import reverse
-from django.utils import timezone
 
 from accounts.models import UserProfile
-from arabela_admin.views import _SCHEDULED_STATUSES, _staff_display_name
-from gowns.models import Gown
-from reservations.models import Reservation, ReservationItem
+from arabela_admin import notifications
 
 
 def admin_asset_version(request):
@@ -22,14 +16,18 @@ def admin_asset_version(request):
     means the URL changes automatically on every edit; there is no version constant
     for anyone to forget to bump.
 
-    Falls back to a fixed value if the file is missing (e.g. a fresh checkout before
+    Also covers notifications-live.js (the live bell), for the same reason.
+
+    Falls back to a fixed value if the files are missing (e.g. a fresh checkout before
     static assets are in place) so a template render can never blow up over this.
     """
-    path = os.path.join(settings.BASE_DIR, "static", "arabela_admin", "bundle.js")
-    try:
-        return {"admin_asset_version": int(os.path.getmtime(path))}
-    except OSError:
-        return {"admin_asset_version": "0"}
+    newest = 0
+    for name in ("bundle.js", "notifications-live.js"):
+        try:
+            newest = max(newest, int(os.path.getmtime(os.path.join(settings.BASE_DIR, "static", "arabela_admin", name))))
+        except OSError:
+            continue
+    return {"admin_asset_version": newest or "0"}
 
 
 def site_asset_version(request):
@@ -41,7 +39,7 @@ def site_asset_version(request):
     the newest mtime across the scripts base.html loads, so touching any of them
     invalidates the URL.
     """
-    names = ("reservation-flow.js", "collection-sort.js")
+    names = ("reservation-flow.js", "collection-sort.js", "customer-badges-live.js", "picked-file.js")
     newest = 0
     for name in names:
         try:
@@ -104,271 +102,10 @@ def admin_user(request):
     }
 
 
-def _ago(when):
-    """Compact relative age ('5 min ago', '3 days ago') for a datetime OR a date."""
-    if when is None:
-        return ""
-    now = timezone.now()
-    if not hasattr(when, "hour"):  # a plain date -- compare at day granularity
-        days = (timezone.localdate() - when).days
-        if days <= 0:
-            return "today"
-        if days == 1:
-            return "yesterday"
-        return f"{days} days ago"
-    seconds = (now - when).total_seconds()
-    if seconds < 60:
-        return "just now"
-    minutes = int(seconds // 60)
-    if minutes < 60:
-        return f"{minutes} min ago"
-    hours = minutes // 60
-    if hours < 24:
-        return f"{hours} hr ago"
-    days = hours // 24
-    if days == 1:
-        return "yesterday"
-    if days < 30:
-        return f"{days} days ago"
-    return when.strftime("%b %d, %Y")
-
-
-def _searchable(url_name, value):
-    """A destination URL that lands on the exact row, not just the right page.
-
-    `pending-approval.html`/`payment-verification.html` already read `?search=` on
-    load and filter rows against it (proven, pre-existing); this round adds the same
-    read to clients.html/security-deposits.html/staff-management.html and extends
-    gown-catalog.html's existing `?category=` read. `value` MUST be something unique
-    per row on that page (reference_code, gown_id, username, email) -- a display NAME
-    is not safe here since more than one real account can share one (confirmed in
-    this shop's own data: several customer rows are all named 'Denmark Concepcion').
-    Each target template also highlights the row whose own unique field exactly
-    matches this value, so there's no ambiguity even if the text search still leaves
-    more than one row visible."""
-    return f"{reverse(url_name)}?{urlencode({'search': value})}"
-
-
 def admin_notifications(request):
-    """Live work-queue notifications for the admin panel header.
-
-    Deliberately DERIVED from current data rather than stored as rows: every entry is
-    something that still needs doing, so the badge count falls on its own as staff work
-    through it (approve a reservation and it disappears) and can never drift out of sync
-    with reality. There is no per-user read state for the same reason -- 'unread' here
-    means 'unhandled', which is the more useful signal for a shop floor.
-
-    Each notification carries the URL of the module it belongs to, so clicking one lands
-    on the page where the work is actually done.
-
-    Role-aware: staff/manager accounts see the operational queues they can act on; the
-    owner additionally sees staff-account items, mirroring the existing rule that staff
-    get every module except Staff Management (see _is_owner / _require_owner in views).
-    """
-    empty = {
-        "admin_notifications": [],
-        "admin_notification_count": 0,
-        "admin_notification_urgent": 0,
-    }
-
+    """The header bell's data -- see arabela_admin.notifications, which also serves the live feed
+    that keeps the bell current without a refresh. Blank for anonymous or customer sessions."""
     user = getattr(request, "user", None)
     if not (user and user.is_authenticated and (user.is_staff or user.is_superuser)):
-        return empty
-
-    profile = UserProfile.objects.filter(user=user).first()
-    role = profile.role if profile else UserProfile.Role.OWNER
-    is_owner = bool(user.is_superuser or role == UserProfile.Role.OWNER)
-
-    today = timezone.localdate()
-    items = []
-
-    # --- Reservations awaiting approval -------------------------------------------
-    for r in (
-        Reservation.objects.filter(status=Reservation.Status.PENDING)
-        .select_related("customer__profile")
-        .order_by("-created_at")[:10]
-    ):
-        items.append({
-            "kind": "reservation",
-            "level": "info",
-            "icon": "reservation",
-            "actor": r.display_customer_name,
-            "text": "is waiting for approval on",
-            "subject": r.reference_code,
-            "module": "Reservations",
-            "url": _searchable("arabela_admin:pending_approval", r.reference_code),
-            "when": r.created_at,
-            "ago": _ago(r.created_at),
-            "sort": r.created_at,
-        })
-
-    # --- Payment proofs uploaded but not yet verified ------------------------------
-    for r in (
-        Reservation.objects.filter(status=Reservation.Status.PENDING)
-        .exclude(payment_proof_url="")
-        .select_related("customer__profile")
-        .order_by("-created_at")[:10]
-    ):
-        items.append({
-            "kind": "payment",
-            "level": "warning",
-            "icon": "payment",
-            "actor": r.display_customer_name,
-            "text": "uploaded payment proof for",
-            "subject": r.reference_code,
-            "module": "Payments",
-            "url": _searchable("arabela_admin:payment_verification", r.reference_code),
-            "when": r.created_at,
-            "ago": _ago(r.created_at),
-            "sort": r.created_at,
-        })
-
-    # --- Overdue returns (the most time-critical queue) ----------------------------
-    overdue_items = (
-        ReservationItem.objects.filter(return_date__lt=today)
-        .exclude(stage=ReservationItem.Stage.RETURNED)
-        .exclude(reservation__status__in=[
-            Reservation.Status.REJECTED,
-            Reservation.Status.CANCELLED,
-        ])
-        .select_related("reservation__customer__profile")
-        .order_by("return_date")[:10]
-    )
-    for it in overdue_items:
-        days_late = (today - it.return_date).days
-        items.append({
-            "kind": "overdue",
-            "level": "critical",
-            "icon": "overdue",
-            "actor": it.gown_name,
-            "text": f"is {days_late} day{'s' if days_late != 1 else ''} overdue for return from",
-            "subject": it.reservation.display_customer_name,
-            "module": "Schedule",
-            "url": reverse("arabela_admin:rental_schedule"),
-            "when": it.return_date,
-            "ago": _ago(it.return_date),
-            # A plain date has no time; midnight is close enough for ordering, and the
-            # sort only ever calls .timestamp() on each key in isolation.
-            "sort": datetime.combine(it.return_date, time.min),
-        })
-
-    # --- Missed pick-ups (approved, still sitting in the shop past the pick-up date) --
-    # Deliberately just a staff-facing nudge, no customer message -- unlike the overdue-
-    # return reminder, nothing automatically contacts the customer for this one. Scoped
-    # to _SCHEDULED_STATUSES (the same filter Active Reservations itself queries on) so
-    # a click always lands on a row that's actually visible there.
-    late_pickup_items = (
-        ReservationItem.objects.filter(
-            stage=ReservationItem.Stage.PICKUP,
-            rental_date__lt=today,
-            reservation__status__in=_SCHEDULED_STATUSES,
-        )
-        .select_related("reservation__customer__profile")
-        .order_by("rental_date")[:10]
-    )
-    for it in late_pickup_items:
-        days_late = (today - it.rental_date).days
-        items.append({
-            "kind": "late_pickup",
-            "level": "warning",
-            "icon": "late_pickup",
-            "actor": it.gown_name,
-            "text": f"is {days_late} day{'s' if days_late != 1 else ''} late for pick-up by",
-            "subject": it.reservation.display_customer_name,
-            "module": "Reservations",
-            "url": _searchable("arabela_admin:active_reservations", it.reservation.reference_code),
-            "when": it.rental_date,
-            "ago": _ago(it.rental_date),
-            "sort": datetime.combine(it.rental_date, time.min),
-        })
-
-    # --- Inventory needing attention ----------------------------------------------
-    for g in (
-        Gown.objects.filter(status=Gown.Status.OUT_OF_STOCK)
-        .order_by("-updated_at")[:6]
-    ):
-        items.append({
-            "kind": "inventory",
-            "level": "critical",
-            "icon": "inventory",
-            "actor": g.gown_id,
-            "text": "is marked",
-            "subject": g.status,
-            "module": "Inventory",
-            "url": _searchable("arabela_admin:gown_catalog", g.gown_id),
-            "when": g.updated_at,
-            "ago": _ago(g.updated_at),
-            "sort": g.updated_at,
-        })
-
-    # --- Flagged customers ---------------------------------------------------------
-    for p in (
-        UserProfile.objects.filter(is_flagged=True)
-        .select_related("user")[:6]
-    ):
-        items.append({
-            "kind": "customer",
-            "level": "warning",
-            "icon": "customer",
-            # Same resolution Client List itself uses for this row -- otherwise the
-            # notification can name the account something that never appears on the
-            # page it links to (this is the exact bug being fixed here: a blank
-            # display_name plus a real first/last name showed as the username here
-            # but as the full name on Client List, for the very same account).
-            "actor": UserProfile.customer_display_name(p.user),
-            "text": "is flagged for review in",
-            "subject": "Client List",
-            "module": "Customers",
-            # Search by email, not name: this shop's own data already has several
-            # different customer accounts sharing the exact display name "Denmark
-            # Concepcion" (different emails), so a name search would not narrow the
-            # list to the one flagged account it's actually about.
-            "url": _searchable("arabela_admin:clients", p.user.email),
-            "when": None,
-            "ago": "",
-            "sort": None,
-        })
-
-    # --- Owner-only: staff roster ---------------------------------------------------
-    # Staff accounts are managed solely by the owner (Staff Management is owner-gated),
-    # so surfacing roster items to a staff member would just link them somewhere they
-    # can't go.
-    if is_owner:
-        inactive_staff = UserProfile.objects.filter(
-            role__in=[UserProfile.Role.MANAGER, UserProfile.Role.STAFF],
-            user__is_staff=True,
-            user__is_active=False,
-        ).select_related("user")[:5]
-        for p in inactive_staff:
-            items.append({
-                "kind": "staff",
-                "level": "info",
-                "icon": "staff",
-                # Same resolution Staff Management's own table uses (_staff_row) --
-                # deliberately not customer_display_name; that one is a customer
-                # concept (checks profile.display_name), staff are named from their
-                # real name instead. See _staff_display_name's own docstring.
-                "actor": _staff_display_name(p.user),
-                "text": "is a deactivated staff account in",
-                "subject": "Staff Management",
-                "module": "Staff",
-                # Username is unique, unlike a name -- narrows to exactly one row.
-                "url": _searchable("arabela_admin:staff_management", p.user.username),
-                "when": None,
-                "ago": "",
-                "sort": None,
-            })
-
-    # Critical first, then newest -- an overdue gown should never sit below a routine
-    # approval just because the approval happens to be more recent.
-    level_rank = {"critical": 0, "warning": 1, "info": 2}
-    items.sort(key=lambda n: (
-        level_rank.get(n["level"], 3),
-        -(n["sort"].timestamp() if n["sort"] is not None else 0),
-    ))
-
-    return {
-        "admin_notifications": items,
-        "admin_notification_count": len(items),
-        "admin_notification_urgent": sum(1 for n in items if n["level"] == "critical"),
-    }
+        return notifications.empty_context()
+    return notifications.build_context(user)

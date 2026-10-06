@@ -238,7 +238,7 @@
         </button>
         <div class="hidden items-center gap-6 md:flex">
           <a class="js-page-link text-[0.6875rem] uppercase tracking-[0.1rem] text-[#615E57] transition-colors hover:text-secondary" href="{% url 'gowns:orders' %}">Reservations</a>
-          <a class="js-page-link icon-badge-btn border-b border-[#222222] text-[0.6875rem] uppercase tracking-[0.1rem] text-secondary transition-colors font-semibold" href="{% url 'gowns:messages' %}">
+          <a class="js-page-link icon-badge-btn border-b border-[#222222] text-[0.6875rem] uppercase tracking-[0.1rem] text-secondary transition-colors font-semibold" href="{% url 'gowns:messages' %}" data-live-badge="messages" data-live-badge-style="top: -8px; right: -14px;">
             Messages
             {% if unread_messages_count > 0 %}
               <span class="icon-count-badge" style="top: -8px; right: -14px;">{{ unread_messages_count }}</span>
@@ -246,7 +246,7 @@
           </a>
           <a class="js-page-link text-[0.6875rem] uppercase tracking-[0.1rem] text-[#615E57] transition-colors hover:text-secondary" href="{% url 'gowns:profile' %}" id="open-profile-link">Profile</a>
         </div>
-        <button class="icon-badge-btn scale-95 active:scale-90 transition-all text-secondary" id="user-icon-btn">
+        <button class="icon-badge-btn scale-95 active:scale-90 transition-all text-secondary" id="user-icon-btn" data-live-badge="reservations">
           <span class="material-symbols-outlined">person</span>
           {% if active_reservations_count > 0 %}
             <span class="icon-count-badge">{{ active_reservations_count }}</span>
@@ -379,14 +379,14 @@
             <span class="material-symbols-outlined text-neutral-400 transition-colors group-hover:text-secondary">person_outline</span>
             <span class="text-sm font-medium text-neutral-600 transition-colors group-hover:text-secondary">Profile</span>
           </a>
-          <a class="js-page-link icon-badge-btn group flex items-center gap-4 rounded-lg px-2 py-4 transition-all hover:bg-neutral-50" href="{% url 'gowns:orders' %}">
+          <a class="js-page-link icon-badge-btn group flex items-center gap-4 rounded-lg px-2 py-4 transition-all hover:bg-neutral-50" href="{% url 'gowns:orders' %}" data-live-badge="reservations" data-live-badge-style="top: 8px; right: auto; left: 34px;">
             <span class="material-symbols-outlined text-neutral-400 transition-colors group-hover:text-secondary">calendar_month</span>
             <span class="text-sm font-medium text-neutral-600 transition-colors group-hover:text-secondary">Reservations</span>
             {% if active_reservations_count > 0 %}
               <span class="icon-count-badge" style="top: 8px; right: auto; left: 34px;">{{ active_reservations_count }}</span>
             {% endif %}
           </a>
-          <a class="js-page-link icon-badge-btn group flex items-center gap-4 rounded-lg px-2 py-4 transition-all hover:bg-neutral-50" href="{% url 'gowns:messages' %}">
+          <a class="js-page-link icon-badge-btn group flex items-center gap-4 rounded-lg px-2 py-4 transition-all hover:bg-neutral-50" href="{% url 'gowns:messages' %}" data-live-badge="messages" data-live-badge-style="top: 8px; right: auto; left: 34px;">
             <span class="material-symbols-outlined text-neutral-400 transition-colors group-hover:text-secondary">notifications</span>
             <span class="text-sm font-medium text-neutral-600 transition-colors group-hover:text-secondary">Messages</span>
             {% if unread_messages_count > 0 %}
@@ -484,6 +484,8 @@
         });
       });
     </script>
+  <!-- Keeps the badges above current on a page that stays open (see the script's own header). -->
+  {% load static %}<script defer src="{% static 'js/customer-badges-live.js' %}?v={{ site_asset_version }}" data-live-badges-url="{% url 'gowns:notification_badges' %}"></script>
   {% include "partials/reservation_hold_banner.html" %}
 </body>
 </html>

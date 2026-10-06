@@ -574,11 +574,12 @@
             this.photoReplaceError = '';
             this.photoReplaceBusy = true;
             const photoId = this.photo.id;
-            compressImageFile(file)
-              .catch(() => file)
+            // In-memory copy first (static/js/picked-file.js), so the phone's own file can't break the upload.
+            window.arabelaReadPickedFile(file)
+              .then(copy => compressImageFile(copy).catch(() => copy))
               .then(ready => {
                 const form = new FormData();
-                form.append('photo', ready || file);
+                form.append('photo', ready);
                 return fetch('{% url "arabela_admin:receipt_replace" 999999 %}'.replace('999999', photoId), {
                   method: 'POST', headers: { 'X-CSRFToken': this.getCsrfToken() }, body: form,
                 });
@@ -593,9 +594,9 @@
                   if (match) { match.photoUrl = data.receipt.photoUrl; }
                 }
               })
-              .catch(() => {
+              .catch((err) => {
                 this.photoReplaceBusy = false;
-                this.photoReplaceError = 'Could not update this receipt. Please try again.';
+                this.photoReplaceError = (err && err.code === 'unreadable_photo') ? err.message : 'Could not update this receipt. Please try again.';
               });
           },
 
@@ -610,14 +611,19 @@
             if (!file) { return; }
             this.uploadError = '';
             this.uploadPreparing = true;
-            compressImageFile(file)
-              .catch(() => file)
+            // In-memory copy first (static/js/picked-file.js), so the phone's own file can't break the upload.
+            window.arabelaReadPickedFile(file)
+              .then(copy => compressImageFile(copy).catch(() => copy))
               .then(ready => {
                 this.uploadPreparing = false;
                 if (this.uploadPreviewUrl) { URL.revokeObjectURL(this.uploadPreviewUrl); }
-                this.uploadFile = ready || file;
+                this.uploadFile = ready;
                 this.uploadFileName = file.name;
                 this.uploadPreviewUrl = URL.createObjectURL(this.uploadFile);
+              }, err => {
+                this.uploadPreparing = false;
+                this.clearUploadFile();
+                this.uploadError = err.message;
               });
           },
 
@@ -2209,6 +2215,7 @@
     </div>
 
   <script defer src="{% static 'arabela_admin/bundle.js' %}?v={{ admin_asset_version }}"></script>
+  <script defer src="{% static 'js/picked-file.js' %}?v={{ site_asset_version }}"></script>
   <script defer src="{% static 'arabela_admin/global-search.js' %}"></script>
 
 </body>

@@ -64,6 +64,7 @@
     try {
       localStorage.removeItem('arabela_cart_' + userKey);
       localStorage.removeItem('arabela_book_now_context');
+      localStorage.removeItem('arabela_reservation_backup_' + userKey);   // the held selection's backup copy
       if (typeof syncCartToServer === 'function') syncCartToServer([]);
     } catch (err) {}
     try {
