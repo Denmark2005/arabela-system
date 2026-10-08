@@ -6,11 +6,13 @@ from datetime import timedelta
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from django.utils.functional import SimpleLazyObject
 
 from accounts.models import CustomerMessage, UserProfile
 from gowns.models import (
     CustomCategory, Gown, SiteSettings, group_gowns_by_name, hidden_category_names, pick_representative_gown,
 )
+from gowns.covers import cover_for, owner_cover_urls
 from reservations.models import Reservation, ReservationItem
 
 _PRICE_RE = re.compile(r"[^\d]")
@@ -42,7 +44,7 @@ _FALLBACK_IMG = (
 # ever needs to happen here.
 _CATEGORIES = (
     {"key": "wedding", "url_name": "collection_wedding", "label": "Wedding Gown"},
-    {"key": "ball-gown", "url_name": "collection_ball_gown", "label": "Ball Gown"},
+    {"key": "evening-gown", "url_name": "collection_evening_gown", "label": "Evening Gown"},
     {"key": "long-gown", "url_name": "collection_long_gown", "label": "Long Gown"},
     {"key": "luxury-gown", "url_name": "collection_luxury_gown", "label": "Luxury Gown"},
     {"key": "mother-gown", "url_name": "collection_mother_gown", "label": "Mother Gown"},
@@ -55,6 +57,11 @@ _CATEGORIES = (
     {"key": "ball-gown-tulle", "url_name": "collection_ball_gown_tulle", "label": "Ball Gown Tulle"},
     {"key": "bridesmaid-dresses", "url_name": "collection_bridesmaid_dresses", "label": "Bridesmaid Dresses"},
 )
+
+# A category that was renamed keeps its old address working: old key -> current key. Ball Gown became
+# Evening Gown; links, bookmarks and shopping bags saved before the rename still point at /collections/ball-gown/.
+# The old key is also never available to a category the owner adds (see gown_category_create_view).
+_RENAMED_COLLECTION_KEYS = {"ball-gown": "evening-gown"}
 
 # Categories the owner added from the admin (gowns.models.CustomCategory) share ONE routed
 # page, /collections/<slug>/, so they have no url_name of their own: category_url() builds the
@@ -162,6 +169,34 @@ def _collections_meta(categories: list[dict] | None = None) -> list[dict]:
     ]
 
 
+# The four category tiles the home page shows, in this order (each one only while that category exists).
+HOME_TILE_KEYS = ("long-gown", "filipiniana", "evening-gown", "suit")
+
+
+def _category_tile_lists(collections_meta: list[dict]):
+    """(all tiles, home tiles) as lazy lists: a tile is a category row plus its `cover` (see gowns.covers).
+
+    Lazy on purpose -- only the pages that draw category tiles (Rentals, Women's, Men's, home) ever read
+    them, so every other page costs nothing, and the owner's pictures are read once for all of them. They
+    are NOT part of search_overlay_collections_meta because every page serialises that list to JSON."""
+    built: list[list[dict]] = []
+
+    def tiles() -> list[dict]:
+        if not built:
+            owner_urls = owner_cover_urls()
+            built.append([
+                {**row, "cover": cover_for(row["key"], owner_urls)}
+                for row in collections_meta if row["key"] != _ALL_ROW["key"]
+            ])
+        return built[0]
+
+    def home_tiles() -> list[dict]:
+        by_key = {tile["key"]: tile for tile in tiles()}
+        return [by_key[key] for key in HOME_TILE_KEYS if key in by_key]
+
+    return SimpleLazyObject(tiles), SimpleLazyObject(home_tiles)
+
+
 def featured_search_items(request):
     """
     Items for the search overlay "Featured" section.
@@ -177,13 +212,17 @@ def featured_search_items(request):
     # "<Category> One" entries that led to products nobody could actually rent.
     featured = catalog[:4]
     collections_meta = _collections_meta(categories)
+    category_tiles, home_category_tiles = _category_tile_lists(collections_meta)
 
     return {
         "featured_search_items": featured,
         "search_overlay_catalog": catalog,
         "search_overlay_collections_meta": collections_meta,
-        # Which categories exist right now -- the home page's fixed tiles check it, so a category
-        # the owner removed never leaves a link to a page that is gone.
+        "category_tiles": category_tiles,
+        "home_category_tiles": home_category_tiles,
+        # Which categories exist right now -- the home page's Wedding band checks it, so a category
+        # the owner removed never leaves a link to a page that is gone. (The home page's four category
+        # tiles come from home_category_tiles above, which only lists categories that still exist.)
         "site_category_keys": [category["key"] for category in categories],
     }
 

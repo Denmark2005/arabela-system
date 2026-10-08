@@ -24,7 +24,7 @@ urlpatterns = [
     path("collections/", views.collections, name="collections"),
     path("collections/all/", views.collection_all, name="collection_all"),
     path("collections/wedding/", views.collection_wedding, name="collection_wedding"),
-    path("collections/ball-gown/", views.collection_ball_gown, name="collection_ball_gown"),
+    path("collections/evening-gown/", views.collection_evening_gown, name="collection_evening_gown"),
     path("collections/long-gown/", views.collection_long_gown, name="collection_long_gown"),
     path("collections/luxury-gown/", views.collection_luxury_gown, name="collection_luxury_gown"),
     path("collections/mother-gown/", views.collection_mother_gown, name="collection_mother_gown"),
@@ -36,6 +36,12 @@ urlpatterns = [
     path("collections/barong/", views.collection_barong, name="collection_barong"),
     path("collections/ball-gown-tulle/", views.collection_ball_gown_tulle, name="collection_ball_gown_tulle"),
     path("collections/bridesmaid-dresses/", views.collection_bridesmaid_dresses, name="collection_bridesmaid_dresses"),
+    # Ball Gown was renamed Evening Gown: the old address (and its ?page=) still lands on the right page. Before the
+    # owner's-category route below, which would otherwise answer 404 for it.
+    path(
+        "collections/ball-gown/",
+        RedirectView.as_view(pattern_name="gowns:collection_evening_gown", permanent=False, query_string=True),
+    ),
     # Categories the owner adds in the admin. LAST of the fixed category paths, so a built-in
     # one always wins; /collections/<collection>/products/<slug>/ below has more segments.
     path("collections/<slug:key>/", views.collection_custom, name="collection_custom"),
@@ -80,7 +86,7 @@ _LEGACY_REDIRECTS = [
     ("faqs/", "gowns:faqs"),
     ("all/", "gowns:collection_all"),
     ("wedding/", "gowns:collection_wedding"),
-    ("ball-gown/", "gowns:collection_ball_gown"),
+    ("ball-gown/", "gowns:collection_evening_gown"),
     ("suit/", "gowns:collection_suit"),
     ("filipiniana/", "gowns:collection_filipiniana"),
     ("guest-gown/", "gowns:collection_guest_gown"),

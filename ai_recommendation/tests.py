@@ -144,7 +144,7 @@ class SystemPromptTests(TestCase):
 
     def test_system_prompt_lists_the_real_collections(self):
         prompt = views._system_prompt()
-        for label in ["Wedding Gown", "Ball Gown", "Suit", "Dresses"]:
+        for label in ["Wedding Gown", "Evening Gown", "Suit", "Dresses"]:
             self.assertIn(label, prompt)
 
 

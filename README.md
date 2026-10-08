@@ -32,7 +32,7 @@ Notes:
 
 ### Customer-facing site
 - **Homepage & info pages** — About, How It Works, Contact, Terms & Conditions, FAQs (static content pages).
-- **Collections / catalog** — 13 fixed categories (Wedding Gown, Ball Gown, Long Gown, Luxury Gown, Mother Gown, Suit, Filipiniana, Guest Gown, Dresses, Kids Gown, Barong, Ball Gown Tulle, Bridesmaid Dresses), plus an "All" tab that shows every category together. Multiple physical units of the same gown are shown as one product card with an "available count," not one card per unit.
+- **Collections / catalog** — 13 fixed categories (Wedding Gown, Evening Gown, Long Gown, Luxury Gown, Mother Gown, Suit, Filipiniana, Guest Gown, Dresses, Kids Gown, Barong, Ball Gown Tulle, Bridesmaid Dresses), plus an "All" tab that shows every category together. Multiple physical units of the same gown are shown as one product card with an "available count," not one card per unit. Each category tile shows a picture of a gown on the shop's grey, which the owner manages in Admin → Categories (Section 12).
 - **Product detail page** — photo, price, size, an availability calendar (dates a customer can't pick are greyed out), and a "You may also like" section (other real products from the same category — a plain, non-AI recommendation, separate from the chatbot below).
 - **Site-wide search** — a search overlay that filters a small in-memory catalog by gown name only (not category or price) as the customer types; shows photo, name, and price per result.
 - **"Arabela Recommends" AI chatbot** — a floating chat widget powered by Google Gemini, answering questions about the shop, policies, and (in theory) the catalog. It is grounded by a hand-written prompt describing shop hours, address, rental steps, and cancellation-lockout rules accurately — but its description of the actual gown catalog is out of date (Section 9).
@@ -53,6 +53,7 @@ Notes:
 - **Rental History** — past/completed rental records.
 - **Security Deposits** — which reservations are still holding a deposit, and a one-click "release deposit" action.
 - **Gown Catalog (Inventory)** — add/edit/delete gowns one physical unit at a time, bulk actions, photo upload, status changes, and "Blocked Dates" (temporarily pulling one unit out of the bookable pool for cleaning/repair/alteration/other reasons).
+- **Categories** *(Owner only)* — the picture each category shows on the customer site (Rentals page, Women's and Men's pages, home page): upload, replace, or go back to the standard picture (Section 12).
 - **Clients** — the customer list, with a flag/unflag action for accounts under review.
 - **Staff Management** *(Owner only)* — create, edit, deactivate, or delete staff/manager accounts.
 - **Account Settings** *(Owner only)* — change the owner's own login password.
@@ -170,3 +171,38 @@ Not emailed on purpose: the temporary-lock notice, the "lock removed" message, c
 4. Optional: `SITE_BASE_URL` (for the links and logo in emails). When blank it is taken from the Site row the deployment uses (`SITE_ID=3` on Render, `arabela-gown-rental.onrender.com`).
 
 **Limits:** Gmail allows about 500 emails a day over SMTP (some sources say 100) and the relay about 100 a day on a normal Gmail account; both are far above this shop's volume. Mail from a Gmail address that is not on an owned domain can land in a customer's Spam folder now and then — the owner's test email is the best check.
+
+## 11. Owner account, passwords and recovery
+
+The shop has **one owner account** — the sign-in for this admin panel. Staff and managers sign in with accounts the owner creates in Staff Management.
+
+**Changing the owner's username or password** (owner only; staff cannot): Admin → Edit Profile → **Login & Security**, or the avatar menu → **Account settings**.
+
+- Both forms ask for the **current password**.
+- **Username:** 4–30 letters, numbers, `.`, `-` or `_` (at least one letter), unique ignoring capitals across every account. The owner stays signed in.
+- **Password:** at least 10 characters, not one of the most common passwords, not only numbers, not close to the username. Changing it signs out every other device.
+- **Previous sign-in** (shown on both pages): when the account signed in before the current session, so a sign-in the owner does not recognise can be noticed. It is kept in the session, so there is no database change.
+- 5 wrong sign-in attempts for a username lock that username for 15 minutes.
+
+**There is deliberately no "Forgot password" email.** If the owner forgets the password, whoever looks after the project resets it:
+
+1. **Get the code:** `git clone` the GitHub repository and install `requirements.txt`.
+2. **Recreate `.env`** (it is not on GitHub, on purpose). The database lines are also on Render → *Environment*: `DATABASE_HOST`, `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_NAME`, `DATABASE_PORT` (reveal each with the eye icon). Supabase → Project Settings → Database has the same details and can reset the database password. Without them the project quietly starts with an empty local database instead of the shop's.
+3. **Reset the password:** `python manage.py changepassword <username>` and type the new password twice. If the username is forgotten too: `python manage.py shell -c "from django.contrib.auth import get_user_model as g; print(list(g().objects.filter(is_superuser=True).values_list('username', flat=True)))"`.
+4. **Keep a private copy** of those five database lines (a password manager — never GitHub) in case Render and Supabase are ever out of reach.
+
+Local development uses the **live** database, so step 3 changes the real password.
+
+## 12. Category pictures
+
+Every category has a picture on its tile on the customer site: the **Rentals** page, the **Women's** and **Men's** collection pages, and four tiles on the **home** page. Which picture a tile shows is decided in this order (`gowns/covers.py`):
+
+1. the picture the owner uploaded in **Admin → Inventory Management → Categories** (owner only);
+2. the picture that ships with the site, `static/images/categories/<category key>.jpg` — every original category except Barong;
+3. the plain placeholder, `static/images/categories/placeholder.jpg` (the tile picture the site always had), for a category with neither: Barong, and any category the owner adds until they upload one.
+
+- **Uploading:** JPG, PNG or WEBP, up to 5 MB. The server turns the photo into the exact tile picture (`gowns/cover_images.py`): a gown on a plain white background is framed in the upper part of a 2:3 tile, its white shaded to the tile grey (`#FBFBFB`), with the strip at the bottom left free for the category name; any other photo simply fills the tile. The same code made the pictures that ship with the site, so uploads and bundled pictures look alike.
+- **Storing:** uploads go through the same storage as every other admin upload (Cloudinary on Render, the local `media/` folder otherwise) under `category_covers/`, and the name the storage gave each file is kept so replacing or resetting a picture deletes the old file. Removing a category the owner added removes its picture; removing one of the original categories keeps it, so adding that name back restores it.
+- **Deploying:** this adds one table (`CategoryCover`, migration `gowns/0023_category_cover.py`). Run `python manage.py migrate` against the database **before** pushing to Render. If the code goes live first nothing breaks — customers just see the standard pictures, and the Categories page says uploads need the database update.
+- **Renamed category:** *Ball Gown* is now **Evening Gown** (its address is `/collections/evening-gown/`; the old `/collections/ball-gown/` link and its product links still work). Two migrations carry the rename into the data — `gowns/0024` (gown category, ID prefix and `Ball Gown NN` names, number counters, Removal Log, removed-category list, tag colour, category picture) and `reservations/0023` (the gown name on existing bookings). Web addresses of individual gowns are unchanged, and *Ball Gown Tulle* is a separate category that was not touched. Deploy order for a rename like this: push, wait until Render is live, then run `python manage.py migrate` right away (the old site code would not find the renamed gowns).
+- **Changing a picture that ships with the site:** `build_cover` and `cover_jpeg_bytes` in `gowns/cover_images.py` make the 600×900 JPEG from a photo; save it as `static/images/categories/<key>.jpg`. For a brand-new original category, also add its key to `BUNDLED_COVER_KEYS` in `gowns/covers.py`.

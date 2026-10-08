@@ -1,0 +1,21 @@
+{% comment %}
+  The grey box of one category tile: its picture and its name. Shared by the Rentals page, the Women's and
+  Men's collection pages and the home page so every tile looks the same; each page draws its own link around
+  it and passes the box's size/rounding. Needs: c (a row of category_tiles / home_category_tiles) and box_class.
+
+  A real picture (bundled with the site or uploaded by the owner) sits on the tile grey with the name on a
+  light strip at the bottom. The plain placeholder keeps its original look: the name in white over the picture.
+{% endcomment %}<div class="relative overflow-hidden {{ box_class }} {% if c.cover.is_photo %}bg-[#fbfbfb]{% else %}bg-surface-container-high{% endif %}">
+    <img src="{{ c.cover.url }}" alt="{{ c.label }}" loading="lazy" decoding="async" class="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
+    {% if c.cover.is_photo %}
+    <div class="absolute inset-x-0 bottom-0 flex h-[17%] flex-col items-center justify-center pointer-events-none px-2 bg-gradient-to-t from-[#fbfbfb] via-[#fbfbfb]/85 to-transparent">
+        <span class="text-secondary font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center">{{ c.label }}</span>
+        <span class="mt-2 block w-10 sm:w-12 border-t border-secondary/60" aria-hidden="true"></span>
+    </div>
+    {% else %}
+    <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <span class="text-white font-body text-[0.65rem] sm:text-xs font-medium uppercase tracking-[0.18em] text-center px-2 drop-shadow-sm">{{ c.label }}</span>
+        <span class="mt-2 block w-10 sm:w-12 border-t border-white" aria-hidden="true"></span>
+    </div>
+    {% endif %}
+</div>

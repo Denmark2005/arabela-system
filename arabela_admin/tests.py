@@ -3653,15 +3653,15 @@ class BookingScreensShowTheMatchedGownTests(TestCase):
 
 class MoveGownsBetweenCategoriesWorkflowTests(TestCase):
     """The procedure for moving gowns to another category -- e.g. four gowns catalogued as
-    Wedding Gowns that are really Ball Gowns: check any open booking on them back in, remove
+    Wedding Gowns that are really Evening Gowns: check any open booking on them back in, remove
     them (a reason, logged), then add them under the new category with the same photo. Runs
     through the same views staff use, so it doubles as proof the whole path works."""
 
     MOVES = [
-        ("Wedding Gown-BU-001", "Wedding Gown 18", "Blue", "BU", "Ball Gown 95"),
-        ("Wedding Gown-GD-001", "Wedding Gown 21", "Gold", "GD", "Ball Gown 96"),
-        ("Wedding Gown-GN-001", "Wedding Gown 22", "Green", "GN", "Ball Gown 97"),
-        ("Wedding Gown-PK-001", "Wedding Gown 19", "Pink", "PK", "Ball Gown 98"),
+        ("Wedding Gown-BU-001", "Wedding Gown 18", "Blue", "BU", "Evening Gown 95"),
+        ("Wedding Gown-GD-001", "Wedding Gown 21", "Gold", "GD", "Evening Gown 96"),
+        ("Wedding Gown-GN-001", "Wedding Gown 22", "Green", "GN", "Evening Gown 97"),
+        ("Wedding Gown-PK-001", "Wedding Gown 19", "Pink", "PK", "Evening Gown 98"),
     ]
 
     @classmethod
@@ -3711,7 +3711,7 @@ class MoveGownsBetweenCategoriesWorkflowTests(TestCase):
     def test_the_whole_move_works_in_order(self):
         # 1. While the bookings are open the gowns can't be removed -- and nothing is logged.
         for gown in self.gowns:
-            response = self._remove(gown, reason="Other", note="Moving to Ball Gown")
+            response = self._remove(gown, reason="Other", note="Moving to Evening Gown")
             self.assertEqual(response.status_code, 400)
             self.assertIn("RSV-", response.json()["error"])
         self.assertEqual(GownRemoval.objects.count(), 0)
@@ -3722,7 +3722,7 @@ class MoveGownsBetweenCategoriesWorkflowTests(TestCase):
 
         # 3. Remove each gown with a reason; every removal is logged with its number.
         for gown, (gown_id, name, *_rest) in zip(self.gowns, self.MOVES):
-            response = self._remove(gown, reason="Other", note=f"Moved to Ball Gown (was {name}).")
+            response = self._remove(gown, reason="Other", note=f"Moved to Evening Gown (was {name}).")
             self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(
             sorted(GownRemoval.objects.values_list("gown_id", flat=True)),
@@ -3737,11 +3737,11 @@ class MoveGownsBetweenCategoriesWorkflowTests(TestCase):
             self.assertEqual(item.gown_name, name)
             self.assertEqual(item.stage, ReservationItem.Stage.RETURNED)
 
-        # 4. Add them as Ball Gowns 95-98 (fresh category -> numbers 001-004), same photos.
+        # 4. Add them as Evening Gowns 95-98 (fresh category -> numbers 001-004), same photos.
         created = []
         for _gid, _name, color, code, new_name in self.MOVES:
             response = self.client.post(reverse("arabela_admin:gown_create"), data={
-                "name": new_name, "category": "Ball Gown", "color_name": color, "color_code": code,
+                "name": new_name, "category": "Evening Gown", "color_name": color, "color_code": code,
                 "size": "Medium", "rental_price": "20000", "condition": "Good", "status": "Available",
             })
             self.assertEqual(response.status_code, 200, response.content)
@@ -3751,7 +3751,7 @@ class MoveGownsBetweenCategoriesWorkflowTests(TestCase):
             created.append(made)
         self.assertEqual(
             [g.gown_id for g in created],
-            ["Ball Gown-BU-001", "Ball Gown-GD-002", "Ball Gown-GN-003", "Ball Gown-PK-004"],
+            ["Evening Gown-BU-001", "Evening Gown-GD-002", "Evening Gown-GN-003", "Evening Gown-PK-004"],
         )
         self.assertEqual([g.name for g in created], [m[4] for m in self.MOVES])
         self.assertEqual([g.status for g in created], ["Available"] * 4)
@@ -4298,7 +4298,8 @@ class CustomCategoryTests(TestCase):
             "wedding gown": "already a category",    # a built-in, ignoring capitals
             "Wedding": "too close",                   # same page address as the built-in Wedding Gown
             "All": "too close",                       # reserved for the All page
-            "Ball-Gown": "too close",
+            "Ball-Gown": "too close",                 # the old address of Evening Gown stays reserved
+            "Evening-Gown": "too close",
         }
         for name, expected in cases.items():
             with self.subTest(name=name):
@@ -4400,7 +4401,7 @@ class CustomCategoryTests(TestCase):
     def test_an_unknown_collection_is_a_404_and_built_in_pages_are_unchanged(self):
         anon = Client()
         self.assertEqual(anon.get("/collections/not-a-category/").status_code, 404)
-        for built_in in ("wedding", "ball-gown", "bridesmaid-dresses", "all"):
+        for built_in in ("wedding", "evening-gown", "bridesmaid-dresses", "all"):
             with self.subTest(page=built_in):
                 self.assertEqual(anon.get(f"/collections/{built_in}/").status_code, 200)
 
@@ -4615,7 +4616,7 @@ class BuiltinCategoryRemovalTests(TestCase):
     @staticmethod
     def _grid(path):
         html = Client().get(path).content.decode()
-        return re.findall(r'drop-shadow-sm">([^<]+)</span>', html)
+        return re.findall(r'<img src="[^"]*" alt="([^"]*)" loading="lazy" decoding="async" class="absolute inset-0 h-full w-full object-cover', html)
 
     def test_an_empty_original_category_can_be_removed_and_leaves_everywhere(self):
         self.assertIn("Barong", self._grid("/featured/men/"))
@@ -4743,7 +4744,7 @@ class CategoryAudienceTests(TestCase):
         """Labels of the tiles in the page's category grid (the nav menu lists every category, so
         a plain text search of the whole page would prove nothing)."""
         html = Client().get(path).content.decode()
-        return re.findall(r'drop-shadow-sm">([^<]+)</span>', html)
+        return re.findall(r'<img src="[^"]*" alt="([^"]*)" loading="lazy" decoding="async" class="absolute inset-0 h-full w-full object-cover', html)
 
     def _add(self, name, **extra):
         return self.client.post(
@@ -4982,3 +4983,316 @@ class GownCatalogComponentIntactTests(TestCase):
         for method in ("onGownPhotoChosen(file)", "updateGownPhoto(file)", "addGown(nameChoice)", "resetAddGownForm()"):
             self.assertIn(method, finder.component, method)
         self.assertIn("window.arabelaReadPickedFile(file)", finder.component)
+
+
+class ChangeOwnUsernameTests(TestCase):
+    """`change_own_username_view` -- the owner can rename their own sign-in (current password required, 4-30 letters
+    / numbers / . _ -, unique ignoring capitals across EVERY account). Staff cannot: only the owner manages logins."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = User.objects.create_user(username="rename_owner", password="OldPass123xyz", is_staff=True)
+        UserProfile.objects.update_or_create(user=cls.owner, defaults={"role": UserProfile.Role.OWNER})
+        cls.staffer = User.objects.create_user(username="rename_staff", password="StaffPass123", is_staff=True)
+        UserProfile.objects.update_or_create(user=cls.staffer, defaults={"role": UserProfile.Role.STAFF})
+        cls.customer = User.objects.create_user(username="Rename_Customer", password="CustPass123")
+
+    def setUp(self):
+        self.url = reverse("arabela_admin:change_own_username")
+
+    def _post(self, new="quiet.owner_42", password="OldPass123xyz"):
+        return self.client.post(self.url, data=json.dumps({"new_username": new, "current_password": password}),
+                                content_type="application/json")
+
+    def _username(self):
+        self.owner.refresh_from_db()
+        return self.owner.username
+
+    def test_the_owner_can_change_their_username(self):
+        self.client.force_login(self.owner)
+        response = self._post()
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json(), {"success": True, "username": "quiet.owner_42"})
+        self.assertEqual(self._username(), "quiet.owner_42")
+
+    def test_the_owner_stays_signed_in_and_the_password_is_untouched(self):
+        self.client.force_login(self.owner)
+        self._post()
+        self.assertEqual(self.client.get(reverse("arabela_admin:dashboard")).status_code, 200)
+        self.owner.refresh_from_db()
+        self.assertTrue(self.owner.check_password("OldPass123xyz"))
+
+    def test_the_new_username_signs_in_through_the_real_sign_in_page_and_the_old_one_does_not(self):
+        self.client.force_login(self.owner)
+        self._post()
+        login_url = reverse("arabela_admin:admin_login")
+        ok = Client().post(login_url, {"username": "quiet.owner_42", "password": "OldPass123xyz"})
+        self.assertRedirects(ok, reverse("arabela_admin:dashboard"), fetch_redirect_response=False)
+        old = Client().post(login_url, {"username": "rename_owner", "password": "OldPass123xyz"})
+        self.assertEqual(old.status_code, 200)
+        self.assertContains(old, "Invalid username or password")
+
+    def test_the_current_password_is_required(self):
+        self.client.force_login(self.owner)
+        for password in ("TotallyWrong1", ""):
+            response = self._post(password=password)
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("current password is incorrect", response.json()["error"])
+        self.assertEqual(self._username(), "rename_owner")
+
+    def test_names_that_are_not_allowed_are_refused_with_a_clear_reason(self):
+        self.client.force_login(self.owner)
+        for bad in ("abc", "a" * 31, "has space", "bad@name", "1234", "1234567", "a$bcd", "", "   ", "名前abc"):
+            with self.subTest(name=bad):
+                response = self._post(new=bad)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("4 to 30 letters, numbers", response.json()["error"])
+        self.assertEqual(self._username(), "rename_owner")
+
+    def test_good_names_at_the_edges_are_accepted(self):
+        self.client.force_login(self.owner)
+        for good in ("abcd", "A.b-c_9", "a" * 30, "9lives"):
+            with self.subTest(name=good):
+                self.assertEqual(self._post(new=good).status_code, 200)
+                self.assertEqual(self._username(), good)
+
+    def test_spaces_around_the_name_are_trimmed(self):
+        self.client.force_login(self.owner)
+        self.assertEqual(self._post(new="  fresh.name9  ").json()["username"], "fresh.name9")
+
+    def test_a_name_someone_else_has_is_refused_ignoring_capitals_and_for_customers_too(self):
+        self.client.force_login(self.owner)
+        for taken in ("rename_staff", "RENAME_STAFF", "rename_customer", "RENAME_CUSTOMER"):
+            with self.subTest(name=taken):
+                response = self._post(new=taken)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("already taken", response.json()["error"])
+        self.assertEqual(self._username(), "rename_owner")
+
+    def test_the_same_name_is_refused_but_only_changing_the_capitals_is_fine(self):
+        self.client.force_login(self.owner)
+        same = self._post(new="rename_owner")
+        self.assertEqual(same.status_code, 400)
+        self.assertIn("already your username", same.json()["error"])
+        self.assertEqual(self._post(new="Rename_Owner").status_code, 200)
+        self.assertEqual(self._username(), "Rename_Owner")
+
+    def test_staff_cannot_rename_themselves(self):
+        """Owner-only, enforced on the server -- the page just doesn't show staff the form."""
+        self.client.force_login(self.staffer)
+        response = self._post(password="StaffPass123")
+        self.assertEqual(response.status_code, 403)
+        self.staffer.refresh_from_db()
+        self.assertEqual(self.staffer.username, "rename_staff")
+
+    def test_customers_and_signed_out_visitors_are_sent_to_the_admin_sign_in(self):
+        for who in (self.customer, None):
+            self.client.logout()
+            if who is not None:
+                self.client.force_login(who)
+            response = self._post()
+            self.assertEqual(response.status_code, 302)
+            self.assertIn(reverse("arabela_admin:admin_login"), response.url)
+        self.assertEqual(self._username(), "rename_owner")
+
+    def test_bad_requests_are_refused(self):
+        self.client.force_login(self.owner)
+        self.assertEqual(self.client.post(self.url, data="{not json", content_type="application/json").status_code, 400)
+        self.assertEqual(self.client.post(self.url, data="[]", content_type="application/json").status_code, 400)
+        self.assertEqual(self.client.get(self.url).status_code, 405)
+
+
+class OwnerPasswordRulesTests(TestCase):
+    """`change_own_password_view` after it was tightened: 10+ characters, none of the very common passwords, not only
+    numbers, not close to the username (Django's own validators), and a password change signs out every OTHER device."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = User.objects.create_user(username="pwrules_owner", password="OldPass123xyz", is_staff=True)
+        UserProfile.objects.update_or_create(user=cls.owner, defaults={"role": UserProfile.Role.OWNER})
+
+    def setUp(self):
+        self.url = reverse("arabela_admin:change_own_password")
+        self.client.force_login(self.owner)
+
+    def _post(self, new, confirm=None, current="OldPass123xyz"):
+        return self.client.post(self.url, data=json.dumps({
+            "current_password": current, "new_password": new,
+            "confirm_password": new if confirm is None else confirm,
+        }), content_type="application/json")
+
+    def _still_old(self):
+        self.owner.refresh_from_db()
+        return self.owner.check_password("OldPass123xyz")
+
+    def test_fewer_than_ten_characters_is_refused(self):
+        response = self._post("Abcdef123")   # 9
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("at least 10 characters", response.json()["error"])
+        self.assertTrue(self._still_old())
+
+    def test_a_very_common_password_is_refused(self):
+        response = self._post("qwertyuiop")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("too common", response.json()["error"])
+        self.assertTrue(self._still_old())
+
+    def test_a_password_made_only_of_numbers_is_refused(self):
+        response = self._post("4829175306")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("entirely numeric", response.json()["error"])
+        self.assertTrue(self._still_old())
+
+    def test_a_password_too_close_to_the_username_is_refused(self):
+        response = self._post("pwrules_owner1")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("too similar to the username", response.json()["error"])
+        self.assertTrue(self._still_old())
+
+    def test_an_absurdly_long_password_is_refused(self):
+        response = self._post("a1" * 65)   # 130
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("128 characters or fewer", response.json()["error"])
+        self.assertTrue(self._still_old())
+
+    def test_mismatched_confirmation_and_the_current_password_are_still_refused(self):
+        self.assertEqual(self._post("river-candle-orange-42", confirm="river-candle-orange-43").status_code, 400)
+        self.assertEqual(self._post("OldPass123xyz").status_code, 400)
+        self.assertEqual(self._post("river-candle-orange-42", current="WrongOne123").status_code, 400)
+        self.assertTrue(self._still_old())
+
+    def test_a_good_phrase_and_a_plain_strong_password_are_accepted(self):
+        for index, good in enumerate(("river-candle-orange-42", "NewSecurePass456", "Sunflower-Meadow-2049")):
+            with self.subTest(password=good):
+                self.owner.refresh_from_db()
+                current = "OldPass123xyz" if index == 0 else ("river-candle-orange-42", "NewSecurePass456")[index - 1]
+                response = self._post(good, current=current)
+                self.assertEqual(response.status_code, 200, response.content)
+                self.owner.refresh_from_db()
+                self.assertTrue(self.owner.check_password(good))
+
+    def test_the_owner_stays_signed_in_but_every_other_device_is_signed_out(self):
+        other_device = Client()
+        other_device.force_login(self.owner)
+        self.assertEqual(other_device.get(reverse("arabela_admin:dashboard")).status_code, 200)
+        self.assertEqual(self._post("river-candle-orange-42").status_code, 200)
+        self.assertEqual(self.client.get(reverse("arabela_admin:dashboard")).status_code, 200)   # this device
+        signed_out = other_device.get(reverse("arabela_admin:dashboard"))
+        self.assertEqual(signed_out.status_code, 302)                                              # the other one
+        self.assertIn(reverse("arabela_admin:admin_login"), signed_out.url)
+
+    def test_a_body_that_is_not_an_object_is_refused(self):
+        self.assertEqual(self.client.post(self.url, data="[1, 2]", content_type="application/json").status_code, 400)
+
+
+class PreviousSignInTests(TestCase):
+    """The sign-in BEFORE the current one is read just ahead of login() (Django overwrites last_login) and shown to the
+    owner on Account settings and Edit Profile, so a sign-in she doesn't recognise can be noticed."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = User.objects.create_user(username="prev_owner", password="OldPass123xyz", is_staff=True)
+        UserProfile.objects.update_or_create(user=cls.owner, defaults={"role": UserProfile.Role.OWNER})
+        cls.staffer = User.objects.create_user(username="prev_staff", password="StaffPass123", is_staff=True)
+        UserProfile.objects.update_or_create(user=cls.staffer, defaults={"role": UserProfile.Role.STAFF})
+        cls.account_page = reverse("arabela_admin:page", args=["account-settings"])
+        cls.profile_page = reverse("arabela_admin:page", args=["profile"])
+
+    def _sign_in(self, username="prev_owner", password="OldPass123xyz"):
+        client = Client()
+        response = client.post(reverse("arabela_admin:admin_login"), {"username": username, "password": password})
+        self.assertEqual(response.status_code, 302, "the sign-in itself should have worked")
+        return client
+
+    def _shown(self, moment):
+        from django.template.defaultfilters import date as date_filter
+        return date_filter(timezone.localtime(moment), "M j, Y, g:i A")
+
+    def test_a_first_ever_sign_in_has_nothing_before_it(self):
+        client = self._sign_in()
+        self.assertEqual(client.session["admin_previous_login"], "")
+        self.assertContains(client.get(self.account_page), "Not recorded for this session")
+
+    def test_the_next_sign_in_shows_when_the_one_before_it_was(self):
+        before = timezone.now() - timedelta(days=2, hours=3)
+        User.objects.filter(pk=self.owner.pk).update(last_login=before)
+        client = self._sign_in()
+        for page in (self.account_page, self.profile_page):
+            html = client.get(page).content.decode()
+            self.assertIn(self._shown(before), html, page)
+            self.assertNotIn("Not recorded for this session", html, page)
+        self.owner.refresh_from_db()
+        self.assertGreater(self.owner.last_login, before)   # Django did overwrite last_login with "now"
+
+    def test_signing_in_again_moves_the_previous_time_forward(self):
+        first = self._sign_in()
+        self.owner.refresh_from_db()
+        first_login = self.owner.last_login
+        second = self._sign_in()
+        self.assertContains(second.get(self.account_page), self._shown(first_login))
+        first.logout()
+
+    def test_a_session_from_before_this_was_recorded_still_works(self):
+        self.client.force_login(self.owner)   # no sign-in through the page, so nothing was recorded
+        for page in (self.account_page, self.profile_page):
+            response = self.client.get(page)
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, "Not recorded for this session")
+
+    def test_staff_see_their_own_previous_sign_in_on_account_settings(self):
+        before = timezone.now() - timedelta(days=1)
+        User.objects.filter(pk=self.staffer.pk).update(last_login=before)
+        client = self._sign_in("prev_staff", "StaffPass123")
+        self.assertContains(client.get(self.account_page), self._shown(before))
+
+
+class OwnerSecurityPagesTests(TestCase):
+    """What the owner (and only the owner) is shown: the username and password forms on Account settings, and the
+    Login & Security card on Edit Profile that points at them."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = User.objects.create_user(username="secpage_owner", password="OldPass123xyz", is_staff=True,
+                                             first_name="Ana", last_name="Cruz")
+        UserProfile.objects.update_or_create(user=cls.owner, defaults={"role": UserProfile.Role.OWNER})
+        cls.staffer = User.objects.create_user(username="secpage_staff", password="StaffPass123", is_staff=True)
+        UserProfile.objects.update_or_create(user=cls.staffer, defaults={"role": UserProfile.Role.STAFF})
+        cls.account_page = reverse("arabela_admin:page", args=["account-settings"])
+        cls.profile_page = reverse("arabela_admin:page", args=["profile"])
+
+    def test_the_owner_sees_both_forms_with_the_live_checklist(self):
+        self.client.force_login(self.owner)
+        html = self.client.get(self.account_page).content.decode()
+        for needle in ('id="change-username"', 'id="change-password"', 'x-model="newUsername"', 'x-model="usernamePassword"',
+                       'x-model="currentPassword"', 'x-model="newPassword"', 'x-model="confirmPassword"',
+                       "Show passwords", "At least 10 characters", "Save New Username", "Save New Password",
+                       "function accountSecurity()", reverse("arabela_admin:change_own_username"),
+                       reverse("arabela_admin:change_own_password"), "secpage_owner"):
+            self.assertIn(needle, html, needle)
+        self.assertNotIn("At least 8 characters", html)
+
+    def test_staff_see_neither_form(self):
+        self.client.force_login(self.staffer)
+        html = self.client.get(self.account_page).content.decode()
+        for needle in ('id="change-username"', 'x-model="newUsername"', 'x-model="currentPassword"', "Show passwords"):
+            self.assertNotIn(needle, html, needle)
+        self.assertIn("only the shop owner can change passwords", html.lower())
+        self.assertIn("secpage_staff", html)
+
+    def test_edit_profile_has_the_login_and_security_card_for_the_owner_only(self):
+        self.client.force_login(self.owner)
+        html = self.client.get(self.profile_page).content.decode()
+        self.assertIn('id="login-security"', html)
+        self.assertIn("secpage_owner", html)
+        self.assertIn(f"{self.account_page}#change-username", html)
+        self.assertIn(f"{self.account_page}#change-password", html)
+        self.client.force_login(self.staffer)
+        self.assertNotIn('id="login-security"', self.client.get(self.profile_page).content.decode())
+
+    def test_no_template_code_leaks_into_either_page(self):
+        for user in (self.owner, self.staffer):
+            self.client.force_login(user)
+            for page in (self.account_page, self.profile_page):
+                html = self.client.get(page).content.decode()
+                for leak in ("{%", "{{", "{#"):
+                    self.assertNotIn(leak, html, f"{user.username} {page} {leak}")

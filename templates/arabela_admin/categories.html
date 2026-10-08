@@ -8,18 +8,17 @@
       content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0"
     />
     <meta http-equiv="X-UA-Compatible" content="ie=edge" />
-    <title>
-      Dashboard | Arabela System Admin Panel
-    </title>
+    <title>Categories | Arabela System Admin Panel</title>
     <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
-    <link rel="shortcut icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
   <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet"></head>
   <body
-    x-data="{ page: 'ecommerce', loaded: true, darkMode: false, stickyMenu: false, sidebarToggle: false, scrollTop: false, openReceiptModal: false, receiptPreview: { name: '', amount: '', reference: '', proofUrl: '' }, headerSearch: '', headerSearching: false, headerSearchTimeout: null, filtering: false, filterTimeout: null }"
+    x-data="{ page: 'categories', loaded: true, darkMode: false, stickyMenu: false, sidebarToggle: false, scrollTop: false }"
     x-init="
          darkMode = JSON.parse(localStorage.getItem('darkMode'));
-         $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)))"
-    @keydown.window.escape="openReceiptModal = false"
+         $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)));
+         const presetSearchParams = new URLSearchParams(window.location.search);
+         const presetSearch = presetSearchParams.get('search');
+         if (presetSearch) { search = presetSearch; }"
     :class="{'dark bg-gray-900': darkMode === true}"
   >
     <!-- ===== Preloader Start ===== -->
@@ -66,7 +65,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits' || page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown' || page === 'categories') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits' || page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -222,16 +221,16 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="overflow-hidden transform translate"
+              class="transform overflow-hidden translate"
               :class="(selected === 'BookingsSchedule') ? 'block' :'hidden'"
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
-                class="flex flex-col gap-1 mt-2 menu-dropdown pl-9"
+                class="menu-dropdown mt-2 flex flex-col gap-1 pl-9"
               >
                 <li>
                   <a
-                    href="{% url 'arabela_admin:rental_schedule' %}"
+                    href="{% url 'arabela_admin:calendar' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'rental' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
@@ -626,7 +625,8 @@
 
       <!-- ===== Content Area Start ===== -->
       <div
-        class="relative flex flex-col flex-1 overflow-x-hidden overflow-y-auto"
+        class="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden"
+        style="scrollbar-gutter: stable;"
       >
         <!-- Small Device Overlay Start -->
         <div
@@ -740,12 +740,10 @@
       <!-- Application nav menu button -->
 
       <div class="hidden lg:block">
-        <form @submit.prevent>
+        <form>
           <div class="relative">
             <span class="absolute top-1/2 left-4 -translate-y-1/2">
-              <div x-show="headerSearching" class="h-4 w-4 animate-spin rounded-full border-2 border-solid border-gray-300 border-t-transparent dark:border-gray-600"></div>
               <svg
-                x-show="!headerSearching"
                 class="fill-gray-500 dark:fill-gray-400"
                 width="20"
                 height="20"
@@ -763,30 +761,17 @@
             </span>
             <input
               type="text"
-              x-model="headerSearch"
-              @input="headerSearching = true; clearTimeout(headerSearchTimeout); headerSearchTimeout = setTimeout(() => headerSearching = false, 400); filtering = true; clearTimeout(filterTimeout); filterTimeout = setTimeout(() => filtering = false, 500)"
-              placeholder="Search customer name (e.g. Maria, Juan)..."
+              placeholder="Search or type command..."
               id="search-input"
               class="dark:bg-dark-900 shadow-theme-xs focus:border-brand-300 focus:ring-brand-500/10 dark:focus:border-brand-800 h-11 w-full rounded-lg border border-gray-200 bg-transparent py-2.5 pr-14 pl-12 text-sm text-gray-800 placeholder:text-gray-400 focus:ring-3 focus:outline-hidden xl:w-[430px] dark:border-gray-800 dark:bg-gray-900 dark:bg-white/[0.03] dark:text-white/90 dark:placeholder:text-white/30"
             />
 
             <button
-              type="button"
               id="search-button"
-              @click="headerSearch = ''"
               class="absolute top-1/2 right-2.5 inline-flex -translate-y-1/2 items-center gap-0.5 rounded-lg border border-gray-200 bg-gray-50 px-[7px] py-[4.5px] text-xs -tracking-[0.2px] text-gray-500 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-400"
-              x-show="headerSearch === ''"
             >
               <span> ⌘ </span>
               <span> K </span>
-            </button>
-            <button
-              type="button"
-              @click="headerSearch = ''"
-              x-show="headerSearch !== ''"
-              class="absolute top-1/2 right-2.5 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-xs text-gray-500 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-400"
-            >
-              ✕
             </button>
           </div>
         </form>
@@ -1003,392 +988,272 @@
   </div>
 </header>
 <!-- ===== Header End ===== -->
-
         <!-- ===== Main Content Start ===== -->
         <main>
-          <div class="p-4 mx-auto max-w-(--breakpoint-2xl) md:p-6">
-            <div class="grid grid-cols-12 gap-4 md:gap-6">
-              <div class="col-span-12 space-y-6">
-                <!-- Metric Group One -->
-                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 md:gap-6">
-  <!-- Metric Item Start -->
-  <a
-    href="{% url 'arabela_admin:clients' %}"
-    title="View Client List"
-    class="block rounded-2xl border border-gray-200 bg-white p-5 transition hover:bg-gray-50 dark:border-gray-800 dark:bg-white/[0.03] dark:hover:bg-white/[0.07] md:p-6"
-  >
-    <div
-      class="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800"
-    >
-      <svg
-        class="fill-gray-800 dark:fill-white/90"
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <path
-          fill-rule="evenodd"
-          clip-rule="evenodd"
-          d="M8.80443 5.60156C7.59109 5.60156 6.60749 6.58517 6.60749 7.79851C6.60749 9.01185 7.59109 9.99545 8.80443 9.99545C10.0178 9.99545 11.0014 9.01185 11.0014 7.79851C11.0014 6.58517 10.0178 5.60156 8.80443 5.60156ZM5.10749 7.79851C5.10749 5.75674 6.76267 4.10156 8.80443 4.10156C10.8462 4.10156 12.5014 5.75674 12.5014 7.79851C12.5014 9.84027 10.8462 11.4955 8.80443 11.4955C6.76267 11.4955 5.10749 9.84027 5.10749 7.79851ZM4.86252 15.3208C4.08769 16.0881 3.70377 17.0608 3.51705 17.8611C3.48384 18.0034 3.5211 18.1175 3.60712 18.2112C3.70161 18.3141 3.86659 18.3987 4.07591 18.3987H13.4249C13.6343 18.3987 13.7992 18.3141 13.8937 18.2112C13.9797 18.1175 14.017 18.0034 13.9838 17.8611C13.7971 17.0608 13.4132 16.0881 12.6383 15.3208C11.8821 14.572 10.6899 13.955 8.75042 13.955C6.81096 13.955 5.61877 14.572 4.86252 15.3208ZM3.8071 14.2549C4.87163 13.2009 6.45602 12.455 8.75042 12.455C11.0448 12.455 12.6292 13.2009 13.6937 14.2549C14.7397 15.2906 15.2207 16.5607 15.4446 17.5202C15.7658 18.8971 14.6071 19.8987 13.4249 19.8987H4.07591C2.89369 19.8987 1.73504 18.8971 2.05628 17.5202C2.28015 16.5607 2.76117 15.2906 3.8071 14.2549ZM15.3042 11.4955C14.4702 11.4955 13.7006 11.2193 13.0821 10.7533C13.3742 10.3314 13.6054 9.86419 13.7632 9.36432C14.1597 9.75463 14.7039 9.99545 15.3042 9.99545C16.5176 9.99545 17.5012 9.01185 17.5012 7.79851C17.5012 6.58517 16.5176 5.60156 15.3042 5.60156C14.7039 5.60156 14.1597 5.84239 13.7632 6.23271C13.6054 5.73284 13.3741 5.26561 13.082 4.84371C13.7006 4.37777 14.4702 4.10156 15.3042 4.10156C17.346 4.10156 19.0012 5.75674 19.0012 7.79851C19.0012 9.84027 17.346 11.4955 15.3042 11.4955ZM19.9248 19.8987H16.3901C16.7014 19.4736 16.9159 18.969 16.9827 18.3987H19.9248C20.1341 18.3987 20.2991 18.3141 20.3936 18.2112C20.4796 18.1175 20.5169 18.0034 20.4837 17.861C20.2969 17.0607 19.913 16.088 19.1382 15.3208C18.4047 14.5945 17.261 13.9921 15.4231 13.9566C15.2232 13.6945 14.9995 13.437 14.7491 13.1891C14.5144 12.9566 14.262 12.7384 13.9916 12.5362C14.3853 12.4831 14.8044 12.4549 15.2503 12.4549C17.5447 12.4549 19.1291 13.2008 20.1936 14.2549C21.2395 15.2906 21.7206 16.5607 21.9444 17.5202C22.2657 18.8971 21.107 19.8987 19.9248 19.8987Z"
-          fill=""
-        />
-      </svg>
-    </div>
+          <div class="mx-auto max-w-(--breakpoint-2xl) p-4 md:p-6">
+            <!-- Breadcrumb Start -->
+            <div x-data="{ pageName: `Categories`}">
+              <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+  <h2
+    class="text-xl font-semibold text-gray-800 dark:text-white/90"
+    x-text="pageName"
+  ></h2>
 
-    <div class="mt-5 flex items-end justify-between">
-      <div>
-        <span class="text-sm text-gray-500 dark:text-gray-400">Registered Customers</span>
-        <h4
-          class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90"
+  <nav>
+    <ol class="flex items-center gap-1.5">
+      <li>
+        <a
+          class="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400"
+          href="{% url 'arabela_admin:dashboard' %}"
         >
-          {{ registered_customers }}
-        </h4>
-      </div>
-    </div>
-  </a>
-  <!-- Metric Item End -->
-
-  <!-- Metric Item Start -->
-  <a
-    href="{% url 'arabela_admin:active_reservations' %}"
-    title="View Active Reservations"
-    class="block rounded-2xl border border-gray-200 bg-white p-5 transition hover:bg-gray-50 dark:border-gray-800 dark:bg-white/[0.03] dark:hover:bg-white/[0.07] md:p-6"
-  >
-    <div
-      class="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800"
-    >
-      <svg
-        class="fill-gray-800 dark:fill-white/90"
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <path
-          fill-rule="evenodd"
-          clip-rule="evenodd"
-          d="M11.665 3.75621C11.8762 3.65064 12.1247 3.65064 12.3358 3.75621L18.7807 6.97856L12.3358 10.2009C12.1247 10.3065 11.8762 10.3065 11.665 10.2009L5.22014 6.97856L11.665 3.75621ZM4.29297 8.19203V16.0946C4.29297 16.3787 4.45347 16.6384 4.70757 16.7654L11.25 20.0366V11.6513C11.1631 11.6205 11.0777 11.5843 10.9942 11.5426L4.29297 8.19203ZM12.75 20.037L19.2933 16.7654C19.5474 16.6384 19.7079 16.3787 19.7079 16.0946V8.19202L13.0066 11.5426C12.9229 11.5844 12.8372 11.6208 12.75 11.6516V20.037ZM13.0066 2.41456C12.3732 2.09786 11.6277 2.09786 10.9942 2.41456L4.03676 5.89319C3.27449 6.27432 2.79297 7.05342 2.79297 7.90566V16.0946C2.79297 16.9469 3.27448 17.726 4.03676 18.1071L10.9942 21.5857L11.3296 20.9149L10.9942 21.5857C11.6277 21.9024 12.3732 21.9024 13.0066 21.5857L19.9641 18.1071C20.7264 17.726 21.2079 16.9469 21.2079 16.0946V7.90566C21.2079 7.05342 20.7264 6.27432 19.9641 5.89319L13.0066 2.41456Z"
-          fill=""
-        />
-      </svg>
-    </div>
-
-    <div class="mt-5 flex items-end justify-between">
-      <div>
-        <span class="text-sm text-gray-500 dark:text-gray-400">Active Rentals</span>
-        <h4
-          class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90"
-        >
-          {{ active_rentals }}
-        </h4>
-      </div>
-    </div>
-  </a>
-  <!-- Metric Item End -->
-
-  <!-- Metric Item Start -->
-  <!-- Replaces the old Monthly Rentals bar chart. One per booking, counted in the
-       month its first gown is picked up (see dashboard_view), and opens Reservation
-       Records filtered to exactly those bookings, so the number here always matches
-       the rows it lands on. -->
-  <a
-    href="{{ reservations_this_month_url }}"
-    title="View this month's reservations in Reservation Records"
-    class="metric-tile-wide block rounded-2xl border border-gray-200 bg-white p-5 transition hover:bg-gray-50 dark:border-gray-800 dark:bg-white/[0.03] dark:hover:bg-white/[0.07] md:p-6"
-  >
-    <div
-      class="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800"
-    >
-      <svg
-        class="fill-gray-800 dark:fill-white/90"
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <path
-          fill-rule="evenodd"
-          clip-rule="evenodd"
-          d="M8 2C8.41421 2 8.75 2.33579 8.75 2.75V3.75H15.25V2.75C15.25 2.33579 15.5858 2 16 2C16.4142 2 16.75 2.33579 16.75 2.75V3.75H18.5C19.7426 3.75 20.75 4.75736 20.75 6V9V19C20.75 20.2426 19.7426 21.25 18.5 21.25H5.5C4.25736 21.25 3.25 20.2426 3.25 19V9V6C3.25 4.75736 4.25736 3.75 5.5 3.75H7.25V2.75C7.25 2.33579 7.58579 2 8 2ZM8 5.25H5.5C5.08579 5.25 4.75 5.58579 4.75 6V8.25H19.25V6C19.25 5.58579 18.9142 5.25 18.5 5.25H16H8ZM19.25 9.75H4.75V19C4.75 19.4142 5.08579 19.75 5.5 19.75H18.5C18.9142 19.75 19.25 19.4142 19.25 19V9.75Z"
-          fill=""
-        />
-      </svg>
-    </div>
-
-    <div class="mt-5 flex items-end justify-between">
-      <div>
-        <span class="text-sm text-gray-500 dark:text-gray-400">Reservations This Month</span>
-        <h4
-          class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90"
-        >
-          {{ reservations_this_month }}
-        </h4>
-        <p class="mt-1 text-theme-xs text-gray-400">Picked up in {{ reservations_this_month_label }}</p>
-      </div>
-    </div>
-  </a>
-  <!-- Metric Item End -->
+          Home
+          <svg
+            class="stroke-current"
+            width="17"
+            height="16"
+            viewBox="0 0 17 16"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M6.0765 12.667L10.2432 8.50033L6.0765 4.33366"
+              stroke=""
+              stroke-width="1.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </a>
+      </li>
+      <li
+        class="text-sm text-gray-800 dark:text-white/90"
+        x-text="pageName"
+      ></li>
+    </ol>
+  </nav>
 </div>
-<!-- Metric Group One -->
-
-<!-- Inventory Health -- the single most important thing on this page: nothing else
-     here matters if the gown catalog is empty, since no real booking can complete
-     without real inventory. Two modes rather than a quiet 4th metric tile, so an
-     empty catalog reads as the alert it actually is. -->
-{% if catalog_is_empty %}
-<a
-  href="{% url 'arabela_admin:gown_catalog' %}"
-  class="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-warning-50 p-5 transition hover:bg-gray-50 dark:border-gray-800 dark:bg-white/[0.03] md:p-6"
->
-  <div class="flex items-center gap-4">
-    <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-white dark:bg-gray-800">
-      <svg style="fill: #D4AF37;" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2.25c.414 0 .75.336.75.75v.084a8.752 8.752 0 018.166 8.166h.084a.75.75 0 010 1.5h-.084a8.752 8.752 0 01-8.166 8.166v.084a.75.75 0 01-1.5 0v-.084a8.752 8.752 0 01-8.166-8.166H3a.75.75 0 010-1.5h.084A8.752 8.752 0 0111.25 3.084V3c0-.414.336-.75.75-.75zm-.75 3.354a7.25 7.25 0 00-6.146 6.146h1.646a.75.75 0 010 1.5H5.104a7.25 7.25 0 006.146 6.146V17.75a.75.75 0 011.5 0v1.646a7.25 7.25 0 006.146-6.146H17.25a.75.75 0 010-1.5h1.646a7.25 7.25 0 00-6.146-6.146V6.75a.75.75 0 01-1.5 0V5.604zM12 9a3 3 0 100 6 3 3 0 000-6z" fill=""/>
-      </svg>
-    </div>
-    <div>
-      <h4 class="text-base font-semibold text-gray-800 dark:text-white/90">Your gown catalog is empty</h4>
-      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Customers can browse, but nothing here is real yet -- add a gown to start taking actual bookings.</p>
-    </div>
-  </div>
-  <span class="inline-flex w-full items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style="background-color: #D4AF37;">
-    Add Your First Gown
-  </span>
-</a>
-{% else %}
-<a
-  href="{% url 'arabela_admin:gown_catalog' %}"
-  title="View Gown Catalog"
-  class="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white p-5 transition hover:bg-gray-50 dark:border-gray-800 dark:bg-white/[0.03] dark:hover:bg-white/[0.07] md:p-6"
->
-  <div class="flex items-center gap-4">
-    <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800">
-      <svg class="fill-gray-800 dark:fill-white/90" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path fill-rule="evenodd" clip-rule="evenodd" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" fill=""/>
-      </svg>
-    </div>
-    <span class="text-sm text-gray-500 dark:text-gray-400">Gown Inventory</span>
-  </div>
-  <div class="flex items-center gap-4 flex-wrap">
-    <div>
-      <span class="text-sm text-gray-500 dark:text-gray-400">Total</span>
-      <h4 class="mt-1 text-title-sm font-bold text-gray-800 dark:text-white/90">{{ gown_total }}</h4>
-    </div>
-    <div>
-      <span class="text-sm text-gray-500 dark:text-gray-400">Available</span>
-      <h4 class="mt-1 text-title-sm font-bold text-gray-800 dark:text-white/90">{{ gown_available }}</h4>
-    </div>
-    <div>
-      <span class="text-sm text-gray-500 dark:text-gray-400">Needs Attention</span>
-      <h4 class="mt-1 text-title-sm font-bold text-gray-800 dark:text-white/90">{{ gown_needs_attention }}</h4>
-    </div>
-  </div>
-</a>
-{% endif %}
-
-              </div>
-
-              <div class="col-span-12">
-                <!-- ====== Quick Verify Start -->
-                <div
-  class="overflow-hidden rounded-2xl border border-gray-200 bg-white px-4 pb-3 pt-4 dark:border-gray-800 dark:bg-white/[0.03] sm:px-6"
->
-  <div
-    class="flex flex-col gap-2 mb-4 sm:flex-row sm:items-center sm:justify-between"
-  >
-    <div>
-      <h3 class="text-lg font-semibold text-gray-800 dark:text-white/90">
-        Quick Verify
-      </h3>
-      <p class="mt-1 text-theme-sm text-gray-500 dark:text-gray-400">
-        Latest GCash receipts awaiting review
-      </p>
-    </div>
-
-    <div class="flex items-center gap-3">
-      <a
-        href="{% url 'arabela_admin:payment_verification' %}"
-        class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
-      >
-        See all
-      </a>
-    </div>
-  </div>
-
-  <div x-show="filtering" x-cloak class="flex items-center justify-center" style="height: 180px;">
-    <div class="h-10 w-10 animate-spin rounded-full border-4 border-solid border-gray-300 border-t-transparent dark:border-gray-600"></div>
-  </div>
-  <div x-show="!filtering" class="space-y-4">
-    {% for r in quick_verify_reservations %}
-    <div x-show="headerSearch === '' || '{{ r.display_customer_name|lower|escapejs }} {{ r.reference_code|lower|escapejs }}'.includes(headerSearch.toLowerCase())" x-data="{ status: 'Pending' }" class="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4 text-gray-800 dark:border-gray-800 dark:bg-white/[0.03] dark:text-white/90 sm:p-4">
-      <button type="button" @click="openReceiptModal = true; receiptPreview = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:0 }}', reference: '{{ r.reference_code|escapejs }}', proofUrl: '{{ r.payment_proof_url|escapejs }}' }" title="Open GCash receipt preview" class="h-12 w-12 overflow-hidden rounded-full border border-gray-200 bg-gray-100 shadow-sm flex items-center justify-center dark:border-gray-700 dark:bg-gray-800">
-        <svg class="h-5 w-5 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>
-      </button>
-      <div class="min-w-0 flex-1">
-        <p class="truncate font-medium text-gray-800 text-theme-sm dark:text-white/90">{{ r.display_customer_name }}</p>
-        {% if r.booked_as_name %}<p class="truncate text-xs text-gray-400 dark:text-gray-500">Booked as: {{ r.booked_as_name }}</p>{% endif %}
-        <span class="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ r.reference_code }}</span>
-        <p class="mt-1 text-sm font-semibold" style="color:#D4AF37">&#8369;{{ r.total_amount|floatformat:0 }}</p>
-      </div>
-      <div class="flex flex-wrap items-center gap-2">
-        <button type="button" @click="openReceiptModal = true; receiptPreview = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:0 }}', reference: '{{ r.reference_code|escapejs }}', proofUrl: '{{ r.payment_proof_url|escapejs }}' }" class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View Proof</button>
-        <button type="button" x-show="status === 'Pending'"
-          data-url="{% url 'arabela_admin:reservation_approve' r.id %}"
-          data-action="verify"
-          data-customer="{{ r.display_customer_name|escapejs }}"
-          data-reservation="{{ r.reference_code|escapejs }}"
-          onclick="reviewQuickVerify(this)"
-          style="background-color:#12b76a;color:#fff;min-width:72px" class="rounded-full px-4 py-2 text-xs font-semibold shadow-sm">Verify</button>
-        <button type="button" x-show="status === 'Pending'"
-          data-url="{% url 'arabela_admin:reservation_reject' r.id %}"
-          data-action="reject"
-          data-customer="{{ r.display_customer_name|escapejs }}"
-          data-reservation="{{ r.reference_code|escapejs }}"
-          onclick="reviewQuickVerify(this)"
-          style="background-color:#ef4444;color:#fff;min-width:72px" class="rounded-full px-4 py-2 text-xs font-semibold shadow-sm">Reject</button>
-        <p x-show="status !== 'Pending'" class="inline-flex rounded-full px-3 py-1 text-xs font-semibold"
-           :class="status === 'Verified' ? 'bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500' : 'bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500'"
-           x-text="status"></p>
-      </div>
-    </div>
-    {% empty %}
-    <p x-show="headerSearch === ''" class="py-4 text-center text-sm text-gray-500 dark:text-gray-400">No payments awaiting review right now.</p>
-    {% endfor %}
-
-    <p x-show="headerSearch !== '' && ![{% for r in quick_verify_reservations %}'{{ r.display_customer_name|lower|escapejs }} {{ r.reference_code|lower|escapejs }}'{% if not forloop.last %}, {% endif %}{% endfor %}].some(function (s) { return s.includes(headerSearch.toLowerCase()); })" class="py-4 text-center text-sm text-gray-500 dark:text-gray-400">
-      No matching customer found.
-    </p>
-  </div>
 </div>
-<!-- ====== Quick Verify End -->
+            <!-- Breadcrumb End -->
 
-<div x-show="openReceiptModal" x-cloak class="fixed inset-0 flex items-center justify-center p-5 overflow-y-auto z-99999">
-  <div class="modal-close-btn fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]"></div>
-  <div @click.outside="openReceiptModal = false" class="no-scrollbar relative w-full max-w-[700px] overflow-y-auto rounded-3xl bg-white p-4 dark:bg-gray-900 lg:p-8">
-    <button
-      type="button"
-      @click="openReceiptModal = false"
-      class="transition-color absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300"
-    >
-      <svg class="fill-current" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path fill-rule="evenodd" clip-rule="evenodd" d="M6.04289 16.5418C5.65237 16.9323 5.65237 17.5655 6.04289 17.956C6.43342 18.3465 7.06658 18.3465 7.45711 17.956L11.9987 13.4144L16.5408 17.9565C16.9313 18.347 17.5645 18.347 17.955 17.9565C18.3455 17.566 18.3455 16.9328 17.955 16.5423L13.4129 12.0002L17.955 7.45808C18.3455 7.06756 18.3455 6.43439 17.955 6.04387C17.5645 5.65335 16.9313 5.65335 16.5408 6.04387L11.9987 10.586L7.45711 6.04439C7.06658 5.65386 6.43342 5.65386 6.04289 6.04439C5.65237 6.43491 5.65237 7.06808 6.04289 7.4586L10.5845 12.0002L6.04289 16.5418Z" fill=""/>
-      </svg>
-    </button>
-    <div class="px-2 pr-14">
-      <h4 class="mb-2 text-2xl font-semibold text-gray-800 dark:text-white/90">GCash Receipt Preview</h4>
-      <p class="mb-6 text-sm text-gray-500 dark:text-gray-400" x-text="receiptPreview.name ? `${receiptPreview.name} · ${receiptPreview.amount}` : 'Pending receipt details'"></p>
-      <p x-show="receiptPreview.bookedAs" class="-mt-4 mb-6 text-xs text-gray-400 dark:text-gray-500">Booked as: <span x-text="receiptPreview.bookedAs"></span></p>
-    </div>
-    <div class="px-2">
-      <template x-if="receiptPreview.proofUrl">
-        <div class="mb-6 flex w-full items-center justify-center overflow-hidden rounded-2xl bg-gray-100 dark:bg-gray-800">
-          <img :src="receiptPreview.proofUrl" alt="Payment proof" style="display: block; max-height: 212px; max-width: 100%; width: auto; height: auto;" />
-        </div>
-      </template>
-      <template x-if="!receiptPreview.proofUrl">
-        <div class="mb-6 flex h-[212px] items-center justify-center rounded-2xl bg-gray-100 text-sm text-gray-400 dark:bg-gray-800">
-          No proof of payment uploaded
-        </div>
-      </template>
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div>
-          <p class="text-xs text-gray-500 dark:text-gray-400">Reference</p>
-          <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="receiptPreview.reference || 'GCASH-XXXX'"></p>
-        </div>
-        <div>
-          <p class="text-xs text-gray-500 dark:text-gray-400">Amount</p>
-          <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="receiptPreview.amount || '₱0.00'"></p>
-        </div>
-        <div>
-          <p class="text-xs text-gray-500 dark:text-gray-400">Status</p>
-          <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90">Pending review</p>
-        </div>
-      </div>
-    </div>
-    <div class="mt-6 flex justify-end px-2">
-      <button type="button" @click="openReceiptModal = false" class="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">Close</button>
-    </div>
-  </div>
-</div>
+            <style>
+              /* Admin -> Categories. Namespaced (.cvr-) because the admin stylesheet is a trimmed Tailwind build. */
+              .cvr-hint { margin: 0 0 16px; font-size: 14px; line-height: 1.5; color: #667085; }
+              .dark .cvr-hint { color: #98a2b3; }
+              .cvr-notice { margin: 0 0 16px; padding: 10px 14px; border: 1px solid #fedf89; border-radius: 12px; background: #fffaeb; color: #b54708; font-size: 13px; line-height: 1.5; }
+              .dark .cvr-notice { border-color: rgba(247,144,9,.3); background: rgba(247,144,9,.12); color: #fec84b; }
+              .cvr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 16px; }
+              .cvr-card { display: flex; flex-direction: column; gap: 10px; padding: 10px; border: 1px solid #e4e7ec; border-radius: 16px; background: #fff; }
+              .dark .cvr-card { border-color: #1d2939; background: rgba(255,255,255,.03); }
+              /* The tile is drawn the way the customer site draws it (partials/category_tile.html): 2:3, the tile grey,
+                 the name on a light strip for a real picture, white over the picture for the plain placeholder. */
+              .cvr-tile { position: relative; aspect-ratio: 2 / 3; overflow: hidden; border-radius: 10px; background: #fbfbfb; }
+              .cvr-tile[data-photo="0"] { background: #eae7e7; }
+              .cvr-tile img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+              .cvr-badge { position: absolute; top: 8px; left: 8px; z-index: 1; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; line-height: 18px; }
+              .cvr-badge[hidden] { display: none; }
+              .cvr-badge[data-kind="custom"] { background: #465fff; color: #fff; }
+              .cvr-badge[data-kind="none"] { background: #fef0c7; color: #b54708; }
+              .cvr-strip { position: absolute; left: 0; right: 0; bottom: 0; height: 17%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 8px; pointer-events: none;
+                           background: linear-gradient(to top, #fbfbfb 0%, rgba(251,251,251,.85) 50%, rgba(251,251,251,0) 100%); }
+              .cvr-strip span { font-size: 11px; font-weight: 500; line-height: 1.3; letter-spacing: .18em; text-transform: uppercase; text-align: center; color: #615e57; }
+              .cvr-strip i { display: block; width: 40px; margin-top: 6px; border-top: 1px solid rgba(97,94,87,.6); }
+              .cvr-ph { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+              .cvr-ph span { padding: 0 8px; font-size: 11px; font-weight: 500; letter-spacing: .18em; text-transform: uppercase; text-align: center; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.25); }
+              .cvr-ph i { display: block; width: 40px; margin-top: 8px; border-top: 1px solid #fff; }
+              .cvr-tile[data-photo="0"] .cvr-strip { display: none; }
+              .cvr-tile[data-photo="0"] .cvr-ph { display: flex; }
+              .cvr-actions { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+              .cvr-file { position: absolute; left: 0; top: 0; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+              .cvr-btn { display: inline-flex; flex: 1 1 auto; align-items: center; justify-content: center; min-height: 36px; padding: 0 14px; border: 1px solid #d0d5dd; border-radius: 8px;
+                         background: #fff; color: #344054; font-size: 13px; font-weight: 500; line-height: 1; cursor: pointer; }
+              .cvr-btn-primary { border-color: #465fff; background: #465fff; color: #fff; }
+              .cvr-btn-primary:hover { background: #3641f5; }
+              .cvr-file:focus-visible + .cvr-btn { outline: 2px solid #465fff; outline-offset: 2px; }
+              .cvr-link { flex: 0 0 auto; padding: 4px 2px; border: 0; background: none; color: #667085; font-size: 13px; text-decoration: underline; cursor: pointer; }
+              .cvr-link:hover { color: #d92d20; }
+              .cvr-link[hidden] { display: none; }
+              .dark .cvr-link { color: #98a2b3; }
+              .dark .cvr-link:hover { color: #f97066; }
+              .cvr-busy .cvr-btn, .cvr-busy .cvr-link { opacity: .55; cursor: wait; pointer-events: none; }
+              .cvr-grid[data-ready="0"] .cvr-btn { opacity: .5; cursor: not-allowed; }
+              .cvr-msg { margin: 0; font-size: 12.5px; line-height: 1.4; color: #667085; }
+              .cvr-msg:empty { display: none; }
+              .cvr-msg-ok { color: #039855; }
+              .cvr-msg-bad { color: #d92d20; }
+              .dark .cvr-msg-ok { color: #32d583; }
+              .dark .cvr-msg-bad { color: #f97066; }
+              .cvr-empty { padding: 24px; border: 1px dashed #d0d5dd; border-radius: 16px; color: #667085; font-size: 14px; }
+              @media (max-width: 640px) {
+                .cvr-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+                .cvr-strip span, .cvr-ph span { font-size: 9.5px; letter-spacing: .12em; }
+                .cvr-strip i, .cvr-ph i { width: 28px; margin-top: 5px; }
+              }
+            </style>
 
-              </div>
+            <p class="cvr-hint">One clear photo of the gown on a plain white background &middot; JPG, PNG or WEBP, up to 5 MB.</p>
+
+            {% if not covers_ready %}
+            <div class="cvr-notice" role="status">Uploads aren't ready yet. One database update is still waiting.</div>
+            {% endif %}
+
+            {% if category_rows %}
+            <div id="cvr-grid" class="cvr-grid" data-ready="{% if covers_ready %}1{% else %}0{% endif %}" data-upload-url="{% url 'arabela_admin:category_cover_upload' %}" data-reset-url="{% url 'arabela_admin:category_cover_reset' %}">
+              {% for row in category_rows %}
+              <article class="cvr-card" aria-label="{{ row.label }}" data-key="{{ row.key }}" data-label="{{ row.label }}" data-default-photo="{% if row.default_is_photo %}1{% else %}0{% endif %}">
+                <div class="cvr-tile" data-photo="{% if row.is_photo %}1{% else %}0{% endif %}" title="Shown on: {{ row.shown_on }}">
+                  <img src="{{ row.cover_url }}" alt="{{ row.label }}" loading="lazy" decoding="async">
+                  <span class="cvr-badge" data-kind="{% if row.has_upload %}custom{% else %}none{% endif %}"{% if not row.has_upload and row.is_photo %} hidden{% endif %}>{% if row.has_upload %}Custom{% else %}No picture{% endif %}</span>
+                  <div class="cvr-strip"><span>{{ row.label }}</span><i aria-hidden="true"></i></div>
+                  <div class="cvr-ph"><span>{{ row.label }}</span><i aria-hidden="true"></i></div>
+                </div>
+                <div class="cvr-actions">
+                  <input type="file" id="cvr-file-{{ row.key }}" class="cvr-file" accept="image/jpeg,image/png,image/webp"{% if not covers_ready %} disabled{% endif %}>
+                  <label for="cvr-file-{{ row.key }}" class="cvr-btn cvr-btn-primary" data-upload-label>{% if row.has_upload %}Replace{% else %}Upload{% endif %}</label>
+                  <button type="button" class="cvr-link" data-reset{% if not row.has_upload %} hidden{% endif %}>{% if row.default_is_photo %}Reset{% else %}Remove{% endif %}</button>
+                </div>
+                <p class="cvr-msg" role="status" aria-live="polite"></p>
+              </article>
+              {% endfor %}
             </div>
+            {% else %}
+            <p class="cvr-empty">No categories yet. Add one in Gown Catalog and it appears here.</p>
+            {% endif %}
           </div>
         </main>
+
         <!-- ===== Main Content End ===== -->
       </div>
       <!-- ===== Content Area End ===== -->
     </div>
     <!-- ===== Page Wrapper End ===== -->
+  <script defer src="{% static 'js/picked-file.js' %}?v={{ site_asset_version }}"></script>
+  <script>
+    // Admin -> Categories: upload / replace / reset one category's picture. The server (category_cover_upload_view and
+    // category_cover_reset_view) is what checks the owner, the file and the category; this is the friendly front of it.
+    (function () {
+      var grid = document.getElementById('cvr-grid');
+      if (!grid) return;
+      var uploadUrl = grid.getAttribute('data-upload-url');
+      var resetUrl = grid.getAttribute('data-reset-url');
+      var MAX_BYTES = 5 * 1024 * 1024;
+      var notReady = grid.getAttribute('data-ready') === '0';
+
+      function csrf() {
+        var m = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
+        return m ? decodeURIComponent(m[1]) : '';
+      }
+      function say(card, text, ok) {
+        var el = card.querySelector('.cvr-msg');
+        el.textContent = text || '';
+        el.className = 'cvr-msg' + (text && ok === true ? ' cvr-msg-ok' : '') + (text && ok === false ? ' cvr-msg-bad' : '');
+      }
+      function setBusy(card, on) {
+        card.classList.toggle('cvr-busy', on);
+        card.querySelector('.cvr-file').disabled = on || notReady;
+        card.querySelector('[data-reset]').disabled = on;
+      }
+      function showPicture(card, d) {
+        var tile = card.querySelector('.cvr-tile');
+        tile.setAttribute('data-photo', d.is_photo ? '1' : '0');
+        tile.querySelector('img').src = d.url;
+        var badge = card.querySelector('.cvr-badge');
+        if (d.has_upload) {
+          badge.hidden = false; badge.setAttribute('data-kind', 'custom'); badge.textContent = 'Custom';
+        } else if (!d.is_photo) {
+          badge.hidden = false; badge.setAttribute('data-kind', 'none'); badge.textContent = 'No picture';
+        } else {
+          badge.hidden = true;
+        }
+        card.querySelector('[data-upload-label]').textContent = d.has_upload ? 'Replace' : 'Upload';
+        var reset = card.querySelector('[data-reset]');
+        reset.hidden = !d.has_upload;
+        reset.textContent = card.getAttribute('data-default-photo') === '1' ? 'Reset' : 'Remove';
+      }
+      function describe(err) {
+        if (window.arabelaDescribeRequestError) {
+          return window.arabelaDescribeRequestError(err, 'Something went wrong. Please try again.').message;
+        }
+        return 'Something went wrong. Please try again.';
+      }
+      function post(url, options) {
+        options.method = 'POST';
+        options.credentials = 'same-origin';
+        options.headers = Object.assign({ 'X-CSRFToken': csrf() }, options.headers || {});
+        return fetch(url, options).then(function (res) {
+          return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+        });
+      }
+
+      grid.addEventListener('change', function (event) {
+        var input = event.target;
+        if (notReady || !input.classList || !input.classList.contains('cvr-file')) return;
+        var card = input.closest('.cvr-card');
+        var file = input.files && input.files[0];
+        input.value = '';
+        if (!file) return;
+        if (file.size > MAX_BYTES) { say(card, 'Image must be 5MB or smaller.', false); return; }
+        setBusy(card, true);
+        say(card, 'Uploading...', null);
+        // In-memory copy first (static/js/picked-file.js), so the phone's own file can't break the upload.
+        var ready = window.arabelaReadPickedFile ? window.arabelaReadPickedFile(file) : Promise.resolve(file);
+        ready.then(function (copy) {
+          if (!/^image\/(jpeg|png|webp)$/.test(copy.type)) {
+            var typeErr = new Error('Use a JPG, PNG or WEBP image.');
+            typeErr.code = 'unreadable_photo';
+            throw typeErr;
+          }
+          var form = new FormData();
+          form.append('key', card.getAttribute('data-key'));
+          form.append('image', copy);
+          return post(uploadUrl, { body: form });
+        }).then(function (r) {
+          setBusy(card, false);
+          if (!r.ok || !r.data.success) { say(card, r.data.error || 'Could not upload the picture.', false); return; }
+          showPicture(card, r.data);
+          say(card, 'Saved', true);
+        }).catch(function (err) {
+          setBusy(card, false);
+          say(card, describe(err), false);
+        });
+      });
+
+      grid.addEventListener('click', function (event) {
+        var button = event.target.closest ? event.target.closest('[data-reset]') : null;
+        if (!button || !grid.contains(button)) return;
+        var card = button.closest('.cvr-card');
+        var label = card.getAttribute('data-label');
+        var standard = card.getAttribute('data-default-photo') === '1';
+        var ask = window.adminConfirm ? window.adminConfirm({
+          title: standard ? 'Use the standard picture?' : 'Remove your picture?',
+          message: standard
+            ? 'Customers will see the standard picture for ' + label + ' instead of the one you uploaded.'
+            : 'Customers will see a plain placeholder for ' + label + ' until you upload another picture.',
+          confirmText: standard ? 'Use standard' : 'Remove',
+          danger: true
+        }) : Promise.resolve(true);
+        ask.then(function (ok) {
+          if (!ok) return;
+          setBusy(card, true);
+          say(card, '', null);
+          post(resetUrl, {
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: card.getAttribute('data-key') })
+          }).then(function (r) {
+            setBusy(card, false);
+            if (!r.ok || !r.data.success) { say(card, r.data.error || 'Could not change the picture.', false); return; }
+            showPicture(card, r.data);
+            say(card, 'Done', true);
+          }).catch(function (err) {
+            setBusy(card, false);
+            say(card, describe(err), false);
+          });
+        });
+      });
+    })();
+  </script>
   <script defer src="{% static 'arabela_admin/bundle.js' %}?v={{ admin_asset_version }}"></script>
   <script defer src="{% static 'arabela_admin/global-search.js' %}"></script>
-  <script>
-    function getCsrfToken() {
-      var match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
-      return match ? decodeURIComponent(match[1]) : '';
-    }
 
-    function reviewQuickVerify(btn) {
-      var url = btn.dataset.url;
-      var isVerify = btn.dataset.action === 'verify';
-      var customer = btn.dataset.customer || 'this customer';
-      var reservation = btn.dataset.reservation || '';
-      adminConfirm({
-        title: isVerify ? 'Verify payment' : 'Reject payment',
-        message: isVerify
-          ? customer + ' · ' + reservation + '\n\nMake sure you have reviewed the proof of payment. This approves the reservation and adds it to the Rental Schedule.'
-          : customer + ' · ' + reservation + '\n\nThis will mark the reservation as rejected.',
-        confirmText: isVerify ? 'Verify payment' : 'Reject payment',
-        danger: !isVerify,
-      }).then(function (ok) {
-        if (!ok) return;
-
-        var card = btn.closest('.rounded-2xl');
-        var buttons = card ? card.querySelectorAll('button[data-url]') : [btn];
-        buttons.forEach(function (b) { b.disabled = true; });
-
-        fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-          body: '{}'
-        })
-          .then(function (res) {
-            return res.json().then(function (data) { return { ok: res.ok, data: data }; });
-          })
-          .then(function (result) {
-            if (!result.ok || !result.data.success) {
-              throw new Error(result.data.error || 'Could not update this reservation.');
-            }
-            window.location.reload();
-          })
-          .catch(function (err) {
-            buttons.forEach(function (b) { b.disabled = false; });
-            adminAlert({ title: 'Something went wrong', message: err.message || 'Could not update this reservation.', danger: true });
-          });
-      });
-    }
-
-  </script>
-  <style>
-    /* Three metric tiles share one row on wide screens (xl:grid-cols-3). On tablets
-       the row is two across, so the third tile takes the whole row rather than
-       sitting alone at half width -- the precompiled stylesheet has no
-       sm:col-span-2 / xl:col-span-1 pair to do this with. */
-    @media (min-width: 640px) and (max-width: 1279.98px) {
-      .metric-tile-wide { grid-column: 1 / -1; }
-    }
-  </style>{% include "arabela_admin/partials/dialog.html" %}
+{% include "arabela_admin/partials/dialog.html" %}
 </body>
 </html>
-
-
-
-
-
-
-
-  

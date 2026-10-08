@@ -60,7 +60,7 @@ TAG_COLOR_HEX = dict(TAG_COLOR_PALETTE)
 # rendering a tag with no color.
 DEFAULT_CATEGORY_TAG_COLORS = {
     'Wedding Gown': 'White',
-    'Ball Gown': 'Blue',
+    'Evening Gown': 'Blue',
     'Long Gown': 'Red',
     'Luxury Gown': 'Purple',
     'Mother Gown': 'Pink',
@@ -91,7 +91,7 @@ def resolve_tag_colors(saved):
 class Gown(models.Model):
     class Category(models.TextChoices):
         WEDDING_GOWN = 'Wedding Gown', 'Wedding Gown'
-        BALL_GOWN = 'Ball Gown', 'Ball Gown'
+        EVENING_GOWN = 'Evening Gown', 'Evening Gown'
         LONG_GOWN = 'Long Gown', 'Long Gown'
         LUXURY_GOWN = 'Luxury Gown', 'Luxury Gown'
         MOTHER_GOWN = 'Mother Gown', 'Mother Gown'
@@ -529,6 +529,24 @@ class HiddenCategory(models.Model):
 
     def __str__(self):
         return f'{self.name} (hidden)'
+
+
+class CategoryCover(models.Model):
+    """The picture the owner chose for a category's tile on the customer site (Admin -> Categories).
+
+    One row per category, keyed the way the category's page is ("long-gown", or the slug of one the
+    owner added). No row means the category shows the picture bundled with the site -- or the plain
+    placeholder when it has none -- so deleting the row is exactly what "Reset" does."""
+
+    key = models.CharField(max_length=40, unique=True)
+    image_url = models.URLField(max_length=500)
+    # The name the storage gave the file when it saved it -- exactly what it needs to delete that file later
+    # (on Cloudinary it is not the same as the address in image_url).
+    storage_name = models.CharField(max_length=300, blank=True, default='', db_default='')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.key} cover'
 
 
 def custom_category_names():

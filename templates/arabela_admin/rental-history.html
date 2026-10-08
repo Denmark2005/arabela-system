@@ -344,6 +344,17 @@
                     Gown Catalog
                   </a>
                 </li>
+                {% if admin_is_owner %}
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:categories' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'categories' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Categories
+                  </a>
+                </li>
+                {% endif %}
               </ul>
             </div>
             <!-- Dropdown Menu End -->

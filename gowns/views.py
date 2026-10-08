@@ -25,6 +25,7 @@ from accounts.services import (
     sync_cancellation_flag,
 )
 from gowns.context_processors import (
+    _RENAMED_COLLECTION_KEYS,
     all_categories,
     category_url,
     _FALLBACK_IMG,
@@ -41,7 +42,9 @@ from reservations.models import Reservation, ReservationItem, ReservationStatusE
 
 
 def _category_by_key(collection_key: str):
-    """The category row (built-in or the owner's own) for a collection key, or None."""
+    """The category row (built-in or the owner's own) for a collection key, or None. A key a category used to
+    have (Ball Gown's old "ball-gown") finds the category under its new key."""
+    collection_key = _RENAMED_COLLECTION_KEYS.get(collection_key, collection_key)
     for category in all_categories():
         if category["key"] == collection_key:
             return category
@@ -149,8 +152,8 @@ def collection_wedding(request):
     return _render_collection(request, 'wedding.html', 'wedding')
 
 
-def collection_ball_gown(request):
-    return _render_collection(request, 'ball_gown.html', 'ball-gown')
+def collection_evening_gown(request):
+    return _render_collection(request, 'evening_gown.html', 'evening-gown')
 
 
 def collection_long_gown(request):
@@ -558,6 +561,8 @@ def product_detail(request, collection: str, slug: str):
         # category still exists, so an old product link still opens the product.
         col = "wedding"
         category = _category_by_key(col) or next(iter(all_categories()), None)
+    elif category["key"] != col:
+        col = category["key"]  # opened by a renamed category's OLD address: the page (and a bag filled from it) uses the new key
     collection_url = category_url(category) if category else reverse("gowns:collection_all")
 
     # Slugs are auto-generated unique per gown (Gown.save()), so this always resolves
@@ -940,7 +945,10 @@ def reservation_submit(request):
             created_item = ReservationItem.objects.create(
                 reservation=reservation_obj,
                 gown=item["matched_gown"],
-                gown_name=item["gown_name"][:150],
+                # The booked unit's own current name, not the one the browser sent: a bag filled before a gown was
+                # renamed (or typed in other capitals) must not put an old name on the booking. Only an item with no
+                # real unit behind it keeps what was sent.
+                gown_name=(item["matched_gown"].name if item["matched_gown"] is not None else item["gown_name"])[:150],
                 gown_slug=item["gown_slug"],
                 size=item["size"],
                 rental_price=item["rental_price"],

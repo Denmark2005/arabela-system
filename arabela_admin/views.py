@@ -8,23 +8,29 @@ from functools import wraps
 
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout, get_user_model, update_session_auth_hash
+from django.contrib.auth.password_validation import validate_password
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
+from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
-from django.db import DataError, IntegrityError, transaction
+from django.db import DataError, DatabaseError, IntegrityError, transaction
 from django.db.models import Q, Count, Min, Prefetch
 from django.shortcuts import redirect, render
 from django.http import Http404, HttpResponse, JsonResponse
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.utils.formats import date_format
 from django.utils.http import urlencode
 from django.views.decorators.clickjacking import xframe_options_sameorigin
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 import json
 
 from accounts.models import CustomerMessage, UserProfile
 from accounts.services import CANCELLATION_FLAG_THRESHOLD
 from gowns.models import (
+    CategoryCover,
     CustomCategory,
     DEFAULT_CATEGORY_TAG_COLORS,
     GOWN_COLOR_PRESETS,
@@ -3091,6 +3097,12 @@ def staff_update_view(request, user_id):
     return JsonResponse({"success": True, "account": _staff_row(target)})
 
 
+# The owner's password protects every customer's name, phone, address and receipts, so it is held to more than
+# the 8 characters the rest of the panel asks for.
+OWNER_PASSWORD_MIN_LENGTH = 10
+OWNER_PASSWORD_MAX_LENGTH = 128
+
+
 @require_http_methods(["POST"])
 @_require_owner
 def change_own_password_view(request):
@@ -3112,21 +3124,35 @@ def change_own_password_view(request):
         data = json.loads(request.body)
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid request."}, status=400)
+    if not isinstance(data, dict):
+        return JsonResponse({"error": "Invalid request."}, status=400)
 
-    current_password = data.get("current_password") or ""
-    new_password = data.get("new_password") or ""
-    confirm_password = data.get("confirm_password") or ""
+    current_password = str(data.get("current_password") or "")
+    new_password = str(data.get("new_password") or "")
+    confirm_password = str(data.get("confirm_password") or "")
 
     if not request.user.check_password(current_password):
         return JsonResponse({"error": "Your current password is incorrect."}, status=400)
-    if len(new_password) < 8:
-        return JsonResponse({"error": "New password must be at least 8 characters."}, status=400)
+    if len(new_password) < OWNER_PASSWORD_MIN_LENGTH:
+        return JsonResponse(
+            {"error": f"Use at least {OWNER_PASSWORD_MIN_LENGTH} characters for your new password."}, status=400
+        )
+    if len(new_password) > OWNER_PASSWORD_MAX_LENGTH:
+        return JsonResponse(
+            {"error": f"Use {OWNER_PASSWORD_MAX_LENGTH} characters or fewer for your new password."}, status=400
+        )
     if new_password != confirm_password:
         return JsonResponse({"error": "New passwords do not match."}, status=400)
     if request.user.check_password(new_password):
         return JsonResponse(
             {"error": "That's your current password. Please choose a different one."}, status=400
         )
+    # Django's own checks (AUTH_PASSWORD_VALIDATORS in settings.py): not one of the most common passwords, not
+    # only numbers, not too close to the username / name / email.
+    try:
+        validate_password(new_password, request.user)
+    except ValidationError as exc:
+        return JsonResponse({"error": " ".join(exc.messages)}, status=400)
 
     request.user.set_password(new_password)
     request.user.save(update_fields=["password"])
@@ -3134,6 +3160,50 @@ def change_own_password_view(request):
     # owner would be silently signed out immediately after successfully changing it.
     update_session_auth_hash(request, request.user)
     return JsonResponse({"success": True})
+
+
+_USERNAME_PATTERN = re.compile(r"[A-Za-z0-9._-]{4,30}")
+
+
+@require_http_methods(["POST"])
+@_require_owner
+def change_own_username_view(request):
+    """Let the signed-in OWNER change their own login username.
+
+    Owner-only for the same reason as the password (staff usernames are set by the owner when the account is
+    created). The CURRENT password is required, so someone at an unlocked screen can't quietly rename the
+    owner's login. Letters, numbers, dot, dash and underscore only (4-30, at least one letter): no spaces and
+    no "@", so a username can never be mistaken for an email address by the sign-in code. Compared without
+    regard to capitals against EVERY account (customers included) so two logins can never look alike.
+    Changing the username does not touch the password, so the owner stays signed in."""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid request."}, status=400)
+    if not isinstance(data, dict):
+        return JsonResponse({"error": "Invalid request."}, status=400)
+
+    new_username = str(data.get("new_username") or "").strip()
+    current_password = str(data.get("current_password") or "")
+
+    if not request.user.check_password(current_password):
+        return JsonResponse({"error": "Your current password is incorrect."}, status=400)
+    if not _USERNAME_PATTERN.fullmatch(new_username) or not re.search(r"[A-Za-z]", new_username):
+        return JsonResponse(
+            {"error": "Use 4 to 30 letters, numbers, dots, dashes or underscores, with at least one letter."},
+            status=400,
+        )
+    if new_username == request.user.get_username():
+        return JsonResponse({"error": "That is already your username."}, status=400)
+    if User.objects.filter(username__iexact=new_username).exclude(pk=request.user.pk).exists():
+        return JsonResponse({"error": "That username is already taken. Please try another."}, status=400)
+
+    request.user.username = new_username
+    try:
+        request.user.save(update_fields=["username"])
+    except IntegrityError:   # someone took it in the instant between the check above and this save
+        return JsonResponse({"error": "That username is already taken. Please try another."}, status=400)
+    return JsonResponse({"success": True, "username": new_username})
 
 
 @require_http_methods(["POST"])
@@ -3171,6 +3241,19 @@ _LOCKOUT_MESSAGE = "Too many failed login attempts. Please try again in 15 minut
 
 def _login_attempts_cache_key(username):
     return f"admin_login_attempts:{username.strip().lower()}"
+
+
+# Django overwrites User.last_login with "now" on every sign-in, so by the time anyone looks at it, it only
+# says "you are signed in right now". To let the owner notice a sign-in she doesn't recognise, the time of the
+# sign-in BEFORE this one is read just ahead of login() and kept in this session (no database change).
+_PREVIOUS_LOGIN_SESSION_KEY = "admin_previous_login"
+
+
+def _previous_login(request):
+    """The datetime this account last signed in before the current session, or None when it isn't known
+    (a first sign-in, or a session that began before this was recorded)."""
+    raw = request.session.get(_PREVIOUS_LOGIN_SESSION_KEY)
+    return parse_datetime(raw) if raw else None
 
 
 def admin_login_view(request):
@@ -3228,7 +3311,9 @@ def admin_login_view(request):
 
         # Successful login clears any accumulated failed-attempt count for this username.
         cache.delete(cache_key)
+        previous_login = authenticated_user.last_login   # read BEFORE login() overwrites it
         login(request, authenticated_user)
+        request.session[_PREVIOUS_LOGIN_SESSION_KEY] = previous_login.isoformat() if previous_login else ""
         remember_me = request.POST.get("remember_me") == "on"
         request.session.set_expiry(settings.REMEMBER_ME_AGE if remember_me else 0)
         return redirect("arabela_admin:dashboard")
@@ -3273,6 +3358,8 @@ def page_view(request, page: str):
             "last_name": request.user.last_name,
             "email": request.user.email,
             "bio": profile.display_name,
+            "admin_username": request.user.get_username(),
+            "previous_login": _previous_login(request),
         })
 
     # page == "account-settings"
@@ -3280,6 +3367,7 @@ def page_view(request, page: str):
     # context processor -- only the raw login username is specific to this page.
     return render(request, "arabela_admin/account-settings.html", {
         "admin_username": request.user.get_username(),
+        "previous_login": _previous_login(request),
     })
 
 
@@ -3471,7 +3559,7 @@ def gown_category_create_view(request):
         return JsonResponse({"error": "Invalid request."}, status=400)
 
     from django.utils.text import slugify
-    from gowns.context_processors import _CATEGORIES
+    from gowns.context_processors import _CATEGORIES, _RENAMED_COLLECTION_KEYS
 
     audience = str(data.get("audience") or CustomCategory.Audience.WOMEN)
     if audience not in CustomCategory.Audience.values:
@@ -3498,7 +3586,7 @@ def gown_category_create_view(request):
     if name.casefold() in existing:
         return JsonResponse({"error": f'There is already a category called "{name}".'}, status=400)
     slug = slugify(name)
-    reserved = {c["key"] for c in _CATEGORIES} | {"all"}
+    reserved = {c["key"] for c in _CATEGORIES} | {"all"} | set(_RENAMED_COLLECTION_KEYS)
     if not slug or slug in reserved or CustomCategory.objects.filter(slug=slug).exists():
         return JsonResponse({"error": "That name is too close to an existing category. Try a different name."}, status=400)
     if CustomCategory.objects.count() >= _MAX_CUSTOM_CATEGORIES:
@@ -3587,8 +3675,176 @@ def gown_category_delete_view(request, category_id):
             ),
         }, status=400)
     name = category.name
+    slug = category.slug
     category.delete()
+    _forget_category_cover(slug)
     return JsonResponse({"success": True, "message": f'"{name}" removed.'})
+
+
+# ---- Category pictures (Admin -> Categories) ----------------------------------------------------------------
+# The picture on each category's tile on the customer site. Owner-only, like adding and removing categories.
+# gowns.covers decides which picture a tile shows and gowns.cover_images turns an upload into the exact tile
+# picture, so what the owner sees on this page is what customers see.
+_COVER_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+_COVER_STORAGE_FOLDER = "category_covers/"
+_COVER_PAGE_NAMES = {"women": "Women's collection page", "men": "Men's collection page"}
+_COVER_UNAVAILABLE = "Uploads aren't ready yet. The database update is still waiting."
+
+
+def _cover_owner_error(request):
+    """A JsonResponse when this request may not change category pictures, else None."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    if not _is_owner(request):
+        return JsonResponse({"error": "Only the owner can change the category pictures."}, status=403)
+    return None
+
+
+def _delete_cover_file(storage_name):
+    """Remove a picture file this feature saved earlier, by the name the storage gave it when it saved it,
+    so replacing or resetting a picture leaves no orphan. Only files in this feature's own folder are ever
+    touched, and a missing file must never block the change."""
+    name = (storage_name or "").replace("\\", "/")
+    if _COVER_STORAGE_FOLDER not in name or ".." in name.split("/"):
+        return
+    try:
+        default_storage.delete(name)
+    except Exception:
+        pass
+
+
+def _forget_category_cover(key):
+    """When a category the owner added is removed, its picture goes with it -- otherwise adding a category
+    with the same name later would quietly bring the old picture back. Best effort: it must never be able
+    to stop the removal itself."""
+    try:
+        with transaction.atomic():
+            row = CategoryCover.objects.filter(key=key).first()
+            if row:
+                name = row.storage_name
+                row.delete()
+                _delete_cover_file(name)
+    except Exception:
+        pass
+
+
+def _category_cover_rows():
+    """One row per category the owner can see (the same list the customer site shows), with the picture it
+    has now, the one it would go back to on Reset, and where on the customer site the picture appears."""
+    from gowns.context_processors import HOME_TILE_KEYS, all_categories
+    from gowns.covers import cover_for, owner_cover_urls
+
+    owner_urls = owner_cover_urls()
+    rows = []
+    for category in all_categories():
+        key = category["key"]
+        current = cover_for(key, owner_urls)
+        default = cover_for(key, {})
+        shown_on = ["Rentals page", _COVER_PAGE_NAMES.get(category.get("audience"), "")]
+        if key in HOME_TILE_KEYS:
+            shown_on.append("Home page")
+        rows.append({
+            "key": key,
+            "label": category["label"],
+            "custom": bool(category.get("custom")),
+            "cover_url": current["url"],
+            "is_photo": current["is_photo"],
+            "has_upload": current["owner"],
+            "default_url": default["url"],
+            "default_is_photo": default["is_photo"],
+            "shown_on": " \u00b7 ".join(part for part in shown_on if part),
+        })
+    return rows
+
+
+def _known_category_key(key):
+    from gowns.context_processors import all_categories
+    return any(category["key"] == key for category in all_categories())
+
+
+@ensure_csrf_cookie
+@_require_owner
+def categories_view(request):
+    """The owner's "Categories" page: the picture each category shows on the customer site, with upload / replace / reset."""
+    from gowns.covers import covers_ready
+
+    return render(request, "arabela_admin/categories.html", {
+        "category_rows": _category_cover_rows(),
+        # False until the database update that adds the pictures table has been run: the page then says so and
+        # switches Upload off, rather than letting the owner press it and fail.
+        "covers_ready": covers_ready(),
+    })
+
+
+@require_http_methods(["POST"])
+def category_cover_upload_view(request):
+    """Set (or replace) one category's picture. The upload is turned into the exact tile picture (see
+    gowns.cover_images) and stored like every other admin upload."""
+    refused = _cover_owner_error(request)
+    if refused:
+        return refused
+    key = str(request.POST.get("key") or "").strip()
+    if not _known_category_key(key):
+        return JsonResponse({"error": "That category no longer exists. Please refresh the page."}, status=404)
+    upload = request.FILES.get("image")
+    if not upload:
+        return JsonResponse({"error": "No image was selected."}, status=400)
+    if upload.size > _AVATAR_MAX_BYTES:
+        return JsonResponse({"error": "Image must be 5MB or smaller."}, status=400)
+    if os.path.splitext(upload.name)[1].lower() not in _COVER_EXTENSIONS:
+        return JsonResponse({"error": "Use a JPG, PNG or WEBP image."}, status=400)
+
+    from gowns.cover_images import CoverImageError, cover_from_upload
+
+    try:
+        picture = cover_from_upload(upload)
+    except CoverImageError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+
+    try:
+        saved_path = default_storage.save(f"{_COVER_STORAGE_FOLDER}{uuid.uuid4().hex}.jpg", ContentFile(picture))
+        new_url = default_storage.url(saved_path)
+    except Exception:
+        return JsonResponse({"error": "The picture couldn't be uploaded just now. Please try again."}, status=502)
+
+    try:
+        previous = CategoryCover.objects.filter(key=key).first()
+        old_name = previous.storage_name if previous else ""
+        CategoryCover.objects.update_or_create(key=key, defaults={"image_url": new_url, "storage_name": saved_path})
+    except DatabaseError:
+        _delete_cover_file(saved_path)
+        return JsonResponse({"error": _COVER_UNAVAILABLE}, status=503)
+    _delete_cover_file(old_name)
+    return JsonResponse({"success": True, "url": new_url, "is_photo": True, "has_upload": True})
+
+
+@require_http_methods(["POST"])
+def category_cover_reset_view(request):
+    """Take the owner's picture away from one category; it goes back to the picture the site came with (or the
+    plain placeholder when it never had one)."""
+    refused = _cover_owner_error(request)
+    if refused:
+        return refused
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    key = str(data.get("key") or "").strip() if isinstance(data, dict) else ""
+    if not _known_category_key(key):
+        return JsonResponse({"error": "That category no longer exists. Please refresh the page."}, status=404)
+
+    from gowns.covers import cover_for
+
+    try:
+        previous = CategoryCover.objects.filter(key=key).first()
+        old_name = previous.storage_name if previous else ""
+        if previous:
+            previous.delete()
+    except DatabaseError:
+        return JsonResponse({"error": _COVER_UNAVAILABLE}, status=503)
+    _delete_cover_file(old_name)
+    default = cover_for(key, {})
+    return JsonResponse({"success": True, "url": default["url"], "is_photo": default["is_photo"], "has_upload": False})
 
 
 # ---- GCash payment details (shown to customers when they pay the security deposit) -----------

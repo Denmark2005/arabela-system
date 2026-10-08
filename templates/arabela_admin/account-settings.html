@@ -12,44 +12,7 @@
     <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
   <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet"></head>
   <body
-    x-data="{
-      page: 'account-settings', loaded: true, darkMode: false, stickyMenu: false, sidebarToggle: false, scrollTop: false,
-      currentPassword: '', newPassword: '', confirmPassword: '',
-      passwordBusy: false, passwordError: '',
-      getCsrfToken() {
-        const m = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
-        return m ? decodeURIComponent(m[1]) : '';
-      },
-      changePassword() {
-        this.passwordError = '';
-        if (!this.currentPassword) { this.passwordError = 'Please enter your current password.'; return; }
-        if (this.newPassword.length < 8) { this.passwordError = 'New password must be at least 8 characters.'; return; }
-        if (this.newPassword !== this.confirmPassword) { this.passwordError = 'New passwords do not match.'; return; }
-        this.passwordBusy = true;
-        fetch('{% url "arabela_admin:change_own_password" %}', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.getCsrfToken() },
-          body: JSON.stringify({
-            current_password: this.currentPassword,
-            new_password: this.newPassword,
-            confirm_password: this.confirmPassword
-          })
-        }).then(r => r.json().then(data => ({ ok: r.ok, data })))
-          .then(({ ok, data }) => {
-            this.passwordBusy = false;
-            if (ok && data.success) {
-              this.currentPassword = ''; this.newPassword = ''; this.confirmPassword = '';
-              adminAlert({ title: 'Password changed', message: 'Your password has been updated. Use it next time you sign in.' });
-            } else {
-              this.passwordError = data.error || 'Could not change your password.';
-            }
-          })
-          .catch(() => {
-            this.passwordBusy = false;
-            this.passwordError = 'Could not change your password. Please try again.';
-          });
-      }
-    }"
+    x-data="{ page: 'account-settings', loaded: true, darkMode: false, stickyMenu: false, sidebarToggle: false, scrollTop: false }"
     x-init="
          darkMode = JSON.parse(localStorage.getItem('darkMode'));
          $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)));
@@ -366,6 +329,17 @@
                     Gown Catalog
                   </a>
                 </li>
+                {% if admin_is_owner %}
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:categories' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'categories' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Categories
+                  </a>
+                </li>
+                {% endif %}
               </ul>
             </div>
             <!-- Dropdown Menu End -->
@@ -1061,50 +1035,98 @@
 </div>
             <!-- Breadcrumb End -->
 
-            <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-              <!-- Account Info: read-only, visible to everyone who can reach this page -->
-              <div class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6 lg:col-span-1">
-                <h3 class="mb-4 text-base font-medium text-gray-800 dark:text-white/90">Account Info</h3>
-                <div class="flex flex-col gap-4">
-                  <div>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">Full Name</p>
-                    <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90">{{ admin_full_name }}</p>
-                  </div>
-                  <div>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">Username</p>
-                    <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90">{{ admin_username }}</p>
-                  </div>
-                  <div>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">Role</p>
-                    <p class="mt-1 inline-flex w-fit items-center rounded-full {% if admin_is_owner %}bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400{% else %}bg-gray-100 text-gray-600 dark:bg-white/5 dark:text-gray-400{% endif %} px-2.5 py-0.5 text-theme-xs font-medium">{{ admin_role }}</p>
+            <div x-data="accountSecurity()" class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+              <div class="flex flex-col gap-6 lg:col-span-1">
+                <!-- Account Info: read-only, visible to everyone who can reach this page -->
+                <div class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6">
+                  <h3 class="mb-4 text-base font-medium text-gray-800 dark:text-white/90">Account Info</h3>
+                  <div class="flex flex-col gap-4">
+                    <div>
+                      <p class="text-xs text-gray-500 dark:text-gray-400">Full Name</p>
+                      <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90">{{ admin_full_name }}</p>
+                    </div>
+                    <div>
+                      <p class="text-xs text-gray-500 dark:text-gray-400">Username</p>
+                      <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="currentUsername">{{ admin_username }}</p>
+                    </div>
+                    <div>
+                      <p class="text-xs text-gray-500 dark:text-gray-400">Role</p>
+                      <p class="mt-1 inline-flex w-fit items-center rounded-full {% if admin_is_owner %}bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400{% else %}bg-gray-100 text-gray-600 dark:bg-white/5 dark:text-gray-400{% endif %} px-2.5 py-0.5 text-theme-xs font-medium">{{ admin_role }}</p>
+                    </div>
+                    <div>
+                      <p class="text-xs text-gray-500 dark:text-gray-400">Previous sign-in</p>
+                      <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90">{% if previous_login %}{{ previous_login|date:"M j, Y, g:i A" }}{% else %}Not recorded for this session{% endif %}</p>
+                      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">See a time you don't recognise? Change your password right away.</p>
+                    </div>
                   </div>
                 </div>
+                {% if admin_is_owner %}
+                <!-- Change Username: owner-only, here and (the real access control) in change_own_username_view. -->
+                <div id="change-username" class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6">
+                  <h3 class="mb-1 text-base font-medium text-gray-800 dark:text-white/90">Change Username</h3>
+                  <p class="mb-5 text-sm text-gray-500 dark:text-gray-400">The name you type to sign in. Pick one that only you would know.</p>
+                  <form @submit.prevent="changeUsername()" class="flex flex-col gap-4">
+                    <div>
+                      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">New Username</label>
+                      <input type="text" x-model="newUsername" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="30" placeholder="4 to 30 letters or numbers"
+                        class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800" />
+                      <p x-show="usernameEasy" x-cloak class="mt-1.5 text-theme-xs" style="color: #b54708;">That one is easy to guess. A name only you would know is safer.</p>
+                    </div>
+                    <div>
+                      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Current Password</label>
+                      <input :type="showPasswords ? 'text' : 'password'" x-model="usernamePassword" autocomplete="current-password"
+                        class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800" />
+                    </div>
+                    <p x-show="usernameError" x-cloak x-text="usernameError" class="text-theme-xs text-error-500"></p>
+                    <div>
+                      <button type="submit" :class="usernameBusy && 'pointer-events-none opacity-60'"
+                        class="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs hover:bg-black dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100">
+                        <span x-show="usernameBusy" x-cloak class="animate-spin rounded-full" style="width: 0.875rem; height: 0.875rem; border: 2px solid currentColor; border-top-color: transparent;"></span>
+                        <span x-text="usernameBusy ? 'Saving...' : 'Save New Username'"></span>
+                      </button>
+                    </div>
+                  </form>
+                </div>
+                {% endif %}
               </div>
 
-              <!-- Change Password: the actual reason this page exists. Owner-only, both
-                   here (so staff never even see the form) and, more importantly, on the
-                   server (change_own_password_view) -- the real access control is there,
-                   this is just the matching UI. -->
-              <div class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6 lg:col-span-2">
+              <!-- Change Password: owner-only, both here (so staff never even see the form) and, more importantly,
+                   on the server (change_own_password_view) -- the real access control is there, this is just the
+                   matching UI. The ticks mirror what the server enforces; the server also rejects very common
+                   passwords and ones too close to the username, and says so in plain words. -->
+              <div id="change-password" class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6 lg:col-span-2">
                 <h3 class="mb-1 text-base font-medium text-gray-800 dark:text-white/90">Change Password</h3>
                 {% if admin_is_owner %}
-                <p class="mb-5 text-sm text-gray-500 dark:text-gray-400">Update the password you use to sign in to this admin panel.</p>
+                <p class="mb-5 text-sm text-gray-500 dark:text-gray-400">Update the password you use to sign in to this admin panel. Every other device you are signed in on will be signed out.</p>
                 <form @submit.prevent="changePassword()" class="flex max-w-md flex-col gap-4">
                   <div>
                     <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Current Password</label>
-                    <input type="password" x-model="currentPassword" autocomplete="current-password"
+                    <input :type="showPasswords ? 'text' : 'password'" x-model="currentPassword" autocomplete="current-password"
                       class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800" />
                   </div>
                   <div>
                     <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">New Password</label>
-                    <input type="password" x-model="newPassword" autocomplete="new-password" placeholder="At least 8 characters"
+                    <input :type="showPasswords ? 'text' : 'password'" x-model="newPassword" autocomplete="new-password" placeholder="At least 10 characters"
                       class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800" />
+                    <ul style="list-style: none; margin: 0.625rem 0 0; padding: 0; display: grid; gap: 0.25rem;" aria-live="polite">
+                      <template x-for="item in checks" :key="item.text">
+                        <li style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.8125rem;" :style="{ color: item.ok ? '#12b76a' : '#98a2b3' }">
+                          <span aria-hidden="true" style="width: 1rem; text-align: center;" x-text="item.ok ? '\u2713' : '\u25CB'"></span>
+                          <span x-text="item.text"></span>
+                        </li>
+                      </template>
+                    </ul>
                   </div>
                   <div>
                     <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Confirm New Password</label>
-                    <input type="password" x-model="confirmPassword" autocomplete="new-password"
+                    <input :type="showPasswords ? 'text' : 'password'" x-model="confirmPassword" autocomplete="new-password"
                       class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800" />
                   </div>
+                  <label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400" style="cursor: pointer;">
+                    <input type="checkbox" x-model="showPasswords" style="width: 1rem; height: 1rem;" />
+                    Show passwords
+                  </label>
+                  <p class="text-theme-xs text-gray-500 dark:text-gray-400">Tip: a few random words joined together, like <strong>river-candle-orange-42</strong>, is easy to remember and hard to guess. Very common passwords and ones close to your username are not accepted.</p>
                   <p x-show="passwordError" x-cloak x-text="passwordError" class="text-theme-xs text-error-500"></p>
                   <div>
                     <button type="submit" :class="passwordBusy && 'pointer-events-none opacity-60'"
@@ -1131,6 +1153,90 @@
       <!-- ===== Content Area End ===== -->
     </div>
     <!-- ===== Page Wrapper End ===== -->
+  <script>
+    // Account Settings: change username and password. Both forms are owner-only; the server (change_own_username_view
+    // / change_own_password_view) is what enforces that and every rule below -- this is the friendly front of it.
+    function accountSecurity() {
+      return {
+        currentUsername: '{{ admin_username|escapejs }}',
+        showPasswords: false,
+        // username form
+        newUsername: '', usernamePassword: '', usernameBusy: false, usernameError: '',
+        easyNames: ['admin', 'administrator', 'owner', 'root', 'user', 'test', 'arabela', 'password'],
+        get usernameEasy() { return this.easyNames.indexOf(this.newUsername.trim().toLowerCase()) !== -1; },
+        // password form
+        currentPassword: '', newPassword: '', confirmPassword: '', passwordBusy: false, passwordError: '',
+        get checks() {
+          var p = this.newPassword;
+          return [
+            { ok: p.length >= 10, text: 'At least 10 characters' },
+            { ok: p.length > 0 && !/^[0-9]+$/.test(p), text: 'Not only numbers' },
+            { ok: p.length > 0 && p === this.confirmPassword, text: 'Both passwords match' }
+          ];
+        },
+        csrf() {
+          var m = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
+          return m ? decodeURIComponent(m[1]) : '';
+        },
+        post(url, body) {
+          return fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.csrf() },
+            body: JSON.stringify(body)
+          }).then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); });
+        },
+        changeUsername() {
+          var self = this;
+          self.usernameError = '';
+          var name = self.newUsername.trim();
+          if (!/^[A-Za-z0-9._-]{4,30}$/.test(name) || !/[A-Za-z]/.test(name)) {
+            self.usernameError = 'Use 4 to 30 letters, numbers, dots, dashes or underscores, with at least one letter.';
+            return;
+          }
+          if (!self.usernamePassword) { self.usernameError = 'Please enter your current password.'; return; }
+          self.usernameBusy = true;
+          self.post('{% url "arabela_admin:change_own_username" %}', { new_username: name, current_password: self.usernamePassword })
+            .then(function (res) {
+              self.usernameBusy = false;
+              if (res.ok && res.data.success) {
+                self.currentUsername = res.data.username;
+                self.newUsername = ''; self.usernamePassword = '';
+                adminAlert({ title: 'Username changed', message: 'Your new username is ' + res.data.username + '. Use it the next time you sign in.' });
+              } else {
+                self.usernameError = res.data.error || 'Could not change your username.';
+              }
+            })
+            .catch(function () {
+              self.usernameBusy = false;
+              self.usernameError = 'Could not change your username. Please try again.';
+            });
+        },
+        changePassword() {
+          var self = this;
+          self.passwordError = '';
+          if (!self.currentPassword) { self.passwordError = 'Please enter your current password.'; return; }
+          if (self.newPassword.length < 10) { self.passwordError = 'Use at least 10 characters for your new password.'; return; }
+          if (/^[0-9]+$/.test(self.newPassword)) { self.passwordError = 'Add some letters. A password made only of numbers is too easy to guess.'; return; }
+          if (self.newPassword !== self.confirmPassword) { self.passwordError = 'New passwords do not match.'; return; }
+          self.passwordBusy = true;
+          self.post('{% url "arabela_admin:change_own_password" %}', {
+            current_password: self.currentPassword, new_password: self.newPassword, confirm_password: self.confirmPassword
+          }).then(function (res) {
+            self.passwordBusy = false;
+            if (res.ok && res.data.success) {
+              self.currentPassword = ''; self.newPassword = ''; self.confirmPassword = '';
+              adminAlert({ title: 'Password changed', message: 'Your password has been updated and every other device was signed out. Use the new password the next time you sign in.' });
+            } else {
+              self.passwordError = res.data.error || 'Could not change your password.';
+            }
+          }).catch(function () {
+            self.passwordBusy = false;
+            self.passwordError = 'Could not change your password. Please try again.';
+          });
+        }
+      };
+    }
+  </script>
   <script defer src="{% static 'arabela_admin/bundle.js' %}?v={{ admin_asset_version }}"></script>
   <script defer src="{% static 'arabela_admin/global-search.js' %}"></script>
 
