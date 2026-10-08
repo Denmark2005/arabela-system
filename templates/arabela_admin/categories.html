@@ -1053,6 +1053,8 @@
               .cvr-badge[hidden] { display: none; }
               .cvr-badge[data-kind="custom"] { background: #465fff; color: #fff; }
               .cvr-badge[data-kind="none"] { background: #fef0c7; color: #b54708; }
+              .cvr-badge[data-kind="preview"] { background: #ecf3ff; color: #3641f5; box-shadow: inset 0 0 0 1px #b2ccff; }
+              .cvr-tile[data-preview="1"] { outline: 2px dashed #465fff; outline-offset: -2px; }
               .cvr-strip { position: absolute; left: 0; right: 0; bottom: 0; height: 17%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 8px; pointer-events: none;
                            background: linear-gradient(to top, #fbfbfb 0%, rgba(251,251,251,.85) 50%, rgba(251,251,251,0) 100%); }
               .cvr-strip span { font-size: 11px; font-weight: 500; line-height: 1.3; letter-spacing: .18em; text-transform: uppercase; text-align: center; color: #615e57; }
@@ -1066,6 +1068,7 @@
               .cvr-file { position: absolute; left: 0; top: 0; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
               .cvr-btn { display: inline-flex; flex: 1 1 auto; align-items: center; justify-content: center; min-height: 36px; padding: 0 14px; border: 1px solid #d0d5dd; border-radius: 8px;
                          background: #fff; color: #344054; font-size: 13px; font-weight: 500; line-height: 1; cursor: pointer; }
+              .cvr-btn[hidden] { display: none; }
               .cvr-btn-primary { border-color: #465fff; background: #465fff; color: #fff; }
               .cvr-btn-primary:hover { background: #3641f5; }
               .cvr-file:focus-visible + .cvr-btn { outline: 2px solid #465fff; outline-offset: 2px; }
@@ -1090,14 +1093,14 @@
               }
             </style>
 
-            <p class="cvr-hint">One clear photo of the gown on a plain white background &middot; JPG, PNG or WEBP, up to 5 MB.</p>
+            <p class="cvr-hint">One tall photo of the whole gown on a plain white background &middot; JPG, PNG or WEBP &middot; at least 400 &times; 650 px, up to 5 MB.</p>
 
             {% if not covers_ready %}
             <div class="cvr-notice" role="status">Uploads aren't ready yet. One database update is still waiting.</div>
             {% endif %}
 
             {% if category_rows %}
-            <div id="cvr-grid" class="cvr-grid" data-ready="{% if covers_ready %}1{% else %}0{% endif %}" data-upload-url="{% url 'arabela_admin:category_cover_upload' %}" data-reset-url="{% url 'arabela_admin:category_cover_reset' %}">
+            <div id="cvr-grid" class="cvr-grid" data-ready="{% if covers_ready %}1{% else %}0{% endif %}" data-preview-url="{% url 'arabela_admin:category_cover_preview' %}" data-upload-url="{% url 'arabela_admin:category_cover_upload' %}" data-reset-url="{% url 'arabela_admin:category_cover_reset' %}">
               {% for row in category_rows %}
               <article class="cvr-card" aria-label="{{ row.label }}" data-key="{{ row.key }}" data-label="{{ row.label }}" data-default-photo="{% if row.default_is_photo %}1{% else %}0{% endif %}">
                 <div class="cvr-tile" data-photo="{% if row.is_photo %}1{% else %}0{% endif %}" title="Shown on: {{ row.shown_on }}">
@@ -1110,6 +1113,8 @@
                   <input type="file" id="cvr-file-{{ row.key }}" class="cvr-file" accept="image/jpeg,image/png,image/webp"{% if not covers_ready %} disabled{% endif %}>
                   <label for="cvr-file-{{ row.key }}" class="cvr-btn cvr-btn-primary" data-upload-label>{% if row.has_upload %}Replace{% else %}Upload{% endif %}</label>
                   <button type="button" class="cvr-link" data-reset{% if not row.has_upload %} hidden{% endif %}>{% if row.default_is_photo %}Reset{% else %}Remove{% endif %}</button>
+                  <button type="button" class="cvr-btn cvr-btn-primary" data-save hidden>Save</button>
+                  <button type="button" class="cvr-link" data-cancel hidden>Cancel</button>
                 </div>
                 <p class="cvr-msg" role="status" aria-live="polite"></p>
               </article>
@@ -1128,15 +1133,18 @@
     <!-- ===== Page Wrapper End ===== -->
   <script defer src="{% static 'js/picked-file.js' %}?v={{ site_asset_version }}"></script>
   <script>
-    // Admin -> Categories: upload / replace / reset one category's picture. The server (category_cover_upload_view and
-    // category_cover_reset_view) is what checks the owner, the file and the category; this is the friendly front of it.
+    // Admin -> Categories: choose a photo -> see exactly how it will look in its card -> Save or Cancel. The server
+    // (category_cover_preview_view / category_cover_upload_view / category_cover_reset_view) checks the owner, the file, the
+    // category and the picture rules; this is the friendly front of it.
     (function () {
       var grid = document.getElementById('cvr-grid');
       if (!grid) return;
+      var previewUrl = grid.getAttribute('data-preview-url');
       var uploadUrl = grid.getAttribute('data-upload-url');
       var resetUrl = grid.getAttribute('data-reset-url');
       var MAX_BYTES = 5 * 1024 * 1024;
       var notReady = grid.getAttribute('data-ready') === '0';
+      var pending = null;   // { card, file, before } -- the one picture being previewed right now
 
       function csrf() {
         var m = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
@@ -1152,22 +1160,62 @@
         card.querySelector('.cvr-file').disabled = on || notReady;
         card.querySelector('[data-reset]').disabled = on;
       }
+      function parts(card) {
+        return {
+          tile: card.querySelector('.cvr-tile'), img: card.querySelector('.cvr-tile img'), badge: card.querySelector('.cvr-badge'),
+          upload: card.querySelector('[data-upload-label]'), reset: card.querySelector('[data-reset]'),
+          save: card.querySelector('[data-save]'), cancel: card.querySelector('[data-cancel]')
+        };
+      }
       function showPicture(card, d) {
-        var tile = card.querySelector('.cvr-tile');
-        tile.setAttribute('data-photo', d.is_photo ? '1' : '0');
-        tile.querySelector('img').src = d.url;
-        var badge = card.querySelector('.cvr-badge');
+        var p = parts(card);
+        p.tile.setAttribute('data-photo', d.is_photo ? '1' : '0');
+        p.img.src = d.url;
         if (d.has_upload) {
-          badge.hidden = false; badge.setAttribute('data-kind', 'custom'); badge.textContent = 'Custom';
+          p.badge.hidden = false; p.badge.setAttribute('data-kind', 'custom'); p.badge.textContent = 'Custom';
         } else if (!d.is_photo) {
-          badge.hidden = false; badge.setAttribute('data-kind', 'none'); badge.textContent = 'No picture';
+          p.badge.hidden = false; p.badge.setAttribute('data-kind', 'none'); p.badge.textContent = 'No picture';
         } else {
-          badge.hidden = true;
+          p.badge.hidden = true;
         }
-        card.querySelector('[data-upload-label]').textContent = d.has_upload ? 'Replace' : 'Upload';
-        var reset = card.querySelector('[data-reset]');
-        reset.hidden = !d.has_upload;
-        reset.textContent = card.getAttribute('data-default-photo') === '1' ? 'Reset' : 'Remove';
+        p.upload.textContent = d.has_upload ? 'Replace' : 'Upload';
+        p.reset.hidden = !d.has_upload;
+        p.reset.textContent = card.getAttribute('data-default-photo') === '1' ? 'Reset' : 'Remove';
+      }
+      // Show the finished picture inside the card, with Save / Cancel instead of Upload / Reset.
+      function enterPreview(card, file, dataUrl, notes) {
+        var p = parts(card);
+        if (!pending || pending.card !== card) {
+          pending = {
+            card: card, file: file,
+            before: {
+              src: p.img.getAttribute('src'), photo: p.tile.getAttribute('data-photo'), badgeHidden: p.badge.hidden,
+              badgeKind: p.badge.getAttribute('data-kind'), badgeText: p.badge.textContent, resetHidden: p.reset.hidden
+            }
+          };
+        } else {
+          pending.file = file;
+        }
+        p.tile.setAttribute('data-photo', '1');
+        p.tile.setAttribute('data-preview', '1');
+        p.img.src = dataUrl;
+        p.badge.hidden = false; p.badge.setAttribute('data-kind', 'preview'); p.badge.textContent = 'Preview';
+        p.upload.hidden = true; p.reset.hidden = true; p.save.hidden = false; p.cancel.hidden = false;
+        say(card, (notes || []).join(' '), null);
+      }
+      // Back to the normal buttons. restoreOld = put the card exactly as it was before the preview (Cancel); after a
+      // successful Save showPicture has already drawn the new state.
+      function leavePreview(card, restoreOld) {
+        var p = parts(card);
+        if (restoreOld && pending && pending.card === card) {
+          var b = pending.before;
+          p.img.src = b.src; p.tile.setAttribute('data-photo', b.photo);
+          p.badge.hidden = b.badgeHidden; p.badge.setAttribute('data-kind', b.badgeKind); p.badge.textContent = b.badgeText;
+          p.reset.hidden = b.resetHidden;
+        }
+        p.tile.removeAttribute('data-preview');
+        p.save.hidden = true; p.cancel.hidden = true; p.upload.hidden = false;
+        if (pending && pending.card === card) pending = null;
       }
       function describe(err) {
         if (window.arabelaDescribeRequestError) {
@@ -1191,9 +1239,10 @@
         var file = input.files && input.files[0];
         input.value = '';
         if (!file) return;
+        if (pending && pending.card !== card) { say(pending.card, '', null); leavePreview(pending.card, true); }   // one preview at a time
         if (file.size > MAX_BYTES) { say(card, 'Image must be 5MB or smaller.', false); return; }
         setBusy(card, true);
-        say(card, 'Uploading...', null);
+        say(card, 'Checking...', null);
         // In-memory copy first (static/js/picked-file.js), so the phone's own file can't break the upload.
         var ready = window.arabelaReadPickedFile ? window.arabelaReadPickedFile(file) : Promise.resolve(file);
         ready.then(function (copy) {
@@ -1205,12 +1254,11 @@
           var form = new FormData();
           form.append('key', card.getAttribute('data-key'));
           form.append('image', copy);
-          return post(uploadUrl, { body: form });
-        }).then(function (r) {
+          return post(previewUrl, { body: form }).then(function (r) { return { r: r, copy: copy }; });
+        }).then(function (x) {
           setBusy(card, false);
-          if (!r.ok || !r.data.success) { say(card, r.data.error || 'Could not upload the picture.', false); return; }
-          showPicture(card, r.data);
-          say(card, 'Saved', true);
+          if (!x.r.ok || !x.r.data.success) { say(card, x.r.data.error || 'Could not check the picture.', false); return; }
+          enterPreview(card, x.copy, x.r.data.preview, x.r.data.warnings);
         }).catch(function (err) {
           setBusy(card, false);
           say(card, describe(err), false);
@@ -1218,36 +1266,69 @@
       });
 
       grid.addEventListener('click', function (event) {
-        var button = event.target.closest ? event.target.closest('[data-reset]') : null;
-        if (!button || !grid.contains(button)) return;
-        var card = button.closest('.cvr-card');
-        var label = card.getAttribute('data-label');
-        var standard = card.getAttribute('data-default-photo') === '1';
-        var ask = window.adminConfirm ? window.adminConfirm({
-          title: standard ? 'Use the standard picture?' : 'Remove your picture?',
-          message: standard
-            ? 'Customers will see the standard picture for ' + label + ' instead of the one you uploaded.'
-            : 'Customers will see a plain placeholder for ' + label + ' until you upload another picture.',
-          confirmText: standard ? 'Use standard' : 'Remove',
-          danger: true
-        }) : Promise.resolve(true);
-        ask.then(function (ok) {
-          if (!ok) return;
+        var target = event.target && event.target.closest ? event.target : null;
+        if (!target) return;
+        var saveButton = target.closest('[data-save]');
+        var cancelButton = target.closest('[data-cancel]');
+        var resetButton = target.closest('[data-reset]');
+        var card = (saveButton || cancelButton || resetButton || {}).closest ? (saveButton || cancelButton || resetButton).closest('.cvr-card') : null;
+        if (!card || !grid.contains(card) || card.classList.contains('cvr-busy')) return;
+
+        if (saveButton) {
+          if (!pending || pending.card !== card) return;
           setBusy(card, true);
-          say(card, '', null);
-          post(resetUrl, {
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ key: card.getAttribute('data-key') })
-          }).then(function (r) {
+          say(card, 'Saving...', null);
+          var form = new FormData();
+          form.append('key', card.getAttribute('data-key'));
+          form.append('image', pending.file);
+          post(uploadUrl, { body: form }).then(function (r) {
             setBusy(card, false);
-            if (!r.ok || !r.data.success) { say(card, r.data.error || 'Could not change the picture.', false); return; }
+            if (!r.ok || !r.data.success) { say(card, r.data.error || 'Could not upload the picture.', false); return; }
             showPicture(card, r.data);
-            say(card, 'Done', true);
+            leavePreview(card, false);
+            say(card, 'Saved', true);
           }).catch(function (err) {
             setBusy(card, false);
             say(card, describe(err), false);
           });
-        });
+          return;
+        }
+
+        if (cancelButton) {
+          leavePreview(card, true);
+          say(card, '', null);
+          return;
+        }
+
+        if (resetButton) {
+          var label = card.getAttribute('data-label');
+          var standard = card.getAttribute('data-default-photo') === '1';
+          var ask = window.adminConfirm ? window.adminConfirm({
+            title: standard ? 'Use the standard picture?' : 'Remove your picture?',
+            message: standard
+              ? 'Customers will see the standard picture for ' + label + ' instead of the one you uploaded.'
+              : 'Customers will see a plain placeholder for ' + label + ' until you upload another picture.',
+            confirmText: standard ? 'Use standard' : 'Remove',
+            danger: true
+          }) : Promise.resolve(true);
+          ask.then(function (ok) {
+            if (!ok) return;
+            setBusy(card, true);
+            say(card, '', null);
+            post(resetUrl, {
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ key: card.getAttribute('data-key') })
+            }).then(function (r) {
+              setBusy(card, false);
+              if (!r.ok || !r.data.success) { say(card, r.data.error || 'Could not change the picture.', false); return; }
+              showPicture(card, r.data);
+              say(card, 'Done', true);
+            }).catch(function (err) {
+              setBusy(card, false);
+              say(card, describe(err), false);
+            });
+          });
+        }
       });
     })();
   </script>

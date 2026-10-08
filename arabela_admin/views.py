@@ -1,3 +1,4 @@
+import base64
 import os
 import re
 import uuid
@@ -3776,10 +3777,10 @@ def categories_view(request):
     })
 
 
-@require_http_methods(["POST"])
-def category_cover_upload_view(request):
-    """Set (or replace) one category's picture. The upload is turned into the exact tile picture (see
-    gowns.cover_images) and stored like every other admin upload."""
+def _checked_cover_upload(request):
+    """What the Categories upload and preview have in common: the right owner, a known category, a photo of the right
+    kind and size that follows the picture rules (gowns.cover_images.prepare_cover). Returns (key, PreparedCover),
+    or the JsonResponse that says what is wrong. Stores nothing."""
     refused = _cover_owner_error(request)
     if refused:
         return refused
@@ -3794,12 +3795,39 @@ def category_cover_upload_view(request):
     if os.path.splitext(upload.name)[1].lower() not in _COVER_EXTENSIONS:
         return JsonResponse({"error": "Use a JPG, PNG or WEBP image."}, status=400)
 
-    from gowns.cover_images import CoverImageError, cover_from_upload
+    from gowns.cover_images import CoverImageError, prepare_cover
 
     try:
-        picture = cover_from_upload(upload)
+        return key, prepare_cover(upload)
     except CoverImageError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
+
+
+@require_http_methods(["POST"])
+def category_cover_preview_view(request):
+    """Shows exactly how an upload would look on its tile, or which picture rule the photo breaks -- without saving
+    anything (no file stored, no database row). The Categories page calls this when a photo is chosen, so the owner
+    sees the result and decides with Save / Cancel."""
+    checked = _checked_cover_upload(request)
+    if isinstance(checked, JsonResponse):
+        return checked
+    _key, prepared = checked
+    return JsonResponse({
+        "success": True,
+        "preview": "data:image/jpeg;base64," + base64.b64encode(prepared.data).decode("ascii"),
+        "warnings": list(prepared.warnings),
+    })
+
+
+@require_http_methods(["POST"])
+def category_cover_upload_view(request):
+    """Set (or replace) one category's picture. The photo must follow the picture rules and is turned into the exact
+    tile picture (see gowns.cover_images), then stored like every other admin upload."""
+    checked = _checked_cover_upload(request)
+    if isinstance(checked, JsonResponse):
+        return checked
+    key, prepared = checked
+    picture = prepared.data
 
     try:
         saved_path = default_storage.save(f"{_COVER_STORAGE_FOLDER}{uuid.uuid4().hex}.jpg", ContentFile(picture))

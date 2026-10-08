@@ -327,3 +327,126 @@ class CategoryTilePagesTests(TestCase):
         with CaptureQueriesContext(connection) as queries:
             self.client.get(reverse("gowns:featured_women_collections"))
         self.assertEqual(len([q for q in queries.captured_queries if "gowns_categorycover" in q["sql"]]), 1)
+
+
+def tall_photo(width=1200, height=2000, box=(0.30, 0.10, 0.70, 0.90), background=(255, 255, 255), colour=(120, 30, 60), fmt="JPEG"):
+    """A photo like the shop's own (a gown on a plain backdrop), as an uploaded file."""
+    return jpeg_upload(studio_photo(width, height, colour, background, box), name="gown." + fmt.lower(), fmt=fmt)
+
+
+class PhotoRuleTests(SimpleTestCase):
+    """The rules a photo must follow to become a category picture: a tall photo of the WHOLE gown on a plain white
+    background, big enough to stay sharp. Each rule has its own short message; the first one broken is shown."""
+
+    def refused(self, upload):
+        with self.assertRaises(cover_images.CoverImageError) as raised:
+            cover_images.prepare_cover(upload)
+        return str(raised.exception)
+
+    def test_a_photo_like_the_shops_own_is_accepted_without_any_note(self):
+        result = cover_images.prepare_cover(tall_photo())
+        self.assertEqual(result.warnings, ())
+        picture = Image.open(BytesIO(result.data))
+        self.assertEqual((picture.format, picture.size), ("JPEG", (600, 900)))
+
+    def test_any_tall_shape_is_fine_not_only_3_by_5(self):
+        for size in ((900, 1200), (1000, 1600), (800, 1600), (1200, 2000), (1080, 1350)):
+            with self.subTest(size=size):
+                self.assertEqual(cover_images.prepare_cover(tall_photo(*size)).warnings, ())
+
+    def test_a_transparent_cut_out_png_counts_as_white(self):
+        photo = Image.new("RGBA", (800, 1300), (0, 0, 0, 0))
+        ImageDraw.Draw(photo).rectangle([240, 130, 560, 1170], fill=(30, 90, 160, 255))
+        self.assertEqual(cover_images.prepare_cover(jpeg_upload(photo, name="cutout.png", fmt="PNG")).warnings, ())
+
+    def test_a_slightly_off_white_backdrop_is_fine_a_grey_one_is_not(self):
+        cover_images.prepare_cover(tall_photo(background=(245, 245, 245)))
+        self.assertEqual(self.refused(tall_photo(background=(225, 225, 225))), cover_images.MSG_BACKGROUND)
+
+    def test_a_wide_or_square_or_sliver_photo_is_refused_as_not_tall(self):
+        for size in ((2000, 1300), (1500, 1500), (1100, 1200), (300, 1500)):
+            with self.subTest(size=size):
+                self.assertEqual(self.refused(tall_photo(*size)), cover_images.MSG_NOT_TALL)
+
+    def test_the_shape_is_judged_as_the_photo_is_seen_not_as_it_is_stored(self):
+        """A phone often stores a portrait shot sideways plus a rotation flag. It is a tall photo to the person."""
+        sideways = studio_photo(1600, 1000, box=(0.10, 0.30, 0.90, 0.70))
+        exif = Image.Exif()
+        exif[274] = 6                       # "turn 90 degrees to view"
+        buffer = BytesIO()
+        sideways.save(buffer, format="JPEG", exif=exif)
+        buffer.seek(0)
+        self.assertEqual(cover_images.prepare_cover(buffer).warnings, ())
+        # ...and the other way round: stored upright but flagged to be shown wide -> not a tall photo
+        upright = studio_photo(1000, 1600)
+        buffer = BytesIO()
+        upright.save(buffer, format="JPEG", exif=exif)
+        buffer.seek(0)
+        self.assertEqual(self.refused(buffer), cover_images.MSG_NOT_TALL)
+
+    def test_the_smallest_accepted_photo_is_400_by_650(self):
+        self.assertEqual(cover_images.prepare_cover(tall_photo(400, 650)).warnings, (cover_images.NOTE_SOFT,))
+        for size in ((399, 650), (400, 649), (300, 500), (120, 180)):
+            with self.subTest(size=size):
+                self.assertEqual(self.refused(tall_photo(*size)), cover_images.MSG_TOO_SMALL)
+        self.assertIn("too small", cover_images.MSG_TOO_SMALL)
+
+    def test_a_photo_under_600_by_900_is_accepted_with_a_note_that_a_bigger_one_looks_sharper(self):
+        self.assertEqual(cover_images.prepare_cover(tall_photo(500, 800)).warnings, (cover_images.NOTE_SOFT,))
+        self.assertEqual(cover_images.prepare_cover(tall_photo(600, 900)).warnings, ())
+
+    def test_a_photo_taken_in_a_room_is_refused_because_the_background_is_not_white(self):
+        self.assertEqual(self.refused(tall_photo(background=(60, 90, 120))), cover_images.MSG_BACKGROUND)
+        self.assertEqual(self.refused(tall_photo(background=(20, 20, 20))), cover_images.MSG_BACKGROUND)
+
+    def test_a_gown_cut_off_by_the_top_or_bottom_edge_is_refused_as_cut_off(self):
+        for box in ((0.30, 0.10, 0.70, 1.00), (0.30, 0.00, 0.70, 0.90)):
+            with self.subTest(box=box):
+                self.assertEqual(self.refused(tall_photo(box=box)), cover_images.MSG_CUT_OFF)
+
+    def test_a_gown_running_off_the_side_covers_so_much_of_the_edge_that_the_message_names_both_causes(self):
+        for box in ((0.00, 0.10, 0.70, 0.90), (0.30, 0.10, 1.00, 0.90)):
+            with self.subTest(box=box):
+                self.assertEqual(self.refused(tall_photo(box=box)), cover_images.MSG_BACKGROUND_OR_EDGE)
+
+    def test_a_gown_with_a_little_room_around_it_is_not_cut_off(self):
+        cover_images.prepare_cover(tall_photo(box=(0.30, 0.02, 0.70, 0.98)))
+
+    def test_a_blank_photo_has_no_gown_in_it(self):
+        self.assertEqual(self.refused(tall_photo(box=(0.0, 0.0, 0.0, 0.0), colour=(255, 255, 255))), cover_images.MSG_NO_GOWN)
+
+    def test_a_gown_too_small_in_the_photo_is_refused(self):
+        # 10% of a 2000 px photo = 200 px: it would have to be blown up and would go soft
+        self.assertEqual(self.refused(tall_photo(box=(0.40, 0.45, 0.60, 0.55))), cover_images.MSG_GOWN_SMALL)
+        # the same gown a little bigger (350 px or more) is fine
+        cover_images.prepare_cover(tall_photo(box=(0.35, 0.40, 0.65, 0.60)))
+
+    def test_a_very_wide_gown_is_accepted_with_a_note_that_it_will_look_smaller(self):
+        result = cover_images.prepare_cover(tall_photo(box=(0.04, 0.35, 0.96, 0.65)))
+        self.assertEqual(result.warnings, (cover_images.NOTE_WIDE,))
+
+    def test_the_first_rule_broken_is_the_one_shown(self):
+        # a tiny wide photo is "not tall" before it is "too small"; a huge square one is "too large" before anything
+        self.assertEqual(self.refused(tall_photo(640, 480)), cover_images.MSG_NOT_TALL)
+        self.assertEqual(self.refused(jpeg_upload(Image.new("1", (7000, 7000)), name="huge.png", fmt="PNG")), cover_images.MSG_TOO_LARGE)
+
+    def test_a_file_that_is_not_a_photo_is_refused(self):
+        self.assertEqual(self.refused(BytesIO(b"this is not a picture")), cover_images.MSG_NOT_AN_IMAGE)
+
+    def test_every_picture_the_site_ships_with_follows_the_rules(self):
+        """The rules must never be stricter than the look they protect: the twelve pictures the site came with, which
+        every tile is meant to match, all pass."""
+        for key in sorted(BUNDLED_COVER_KEYS):
+            with self.subTest(key=key):
+                with open(CATEGORY_PICTURES / f"{key}.jpg", "rb") as handle:
+                    result = cover_images.prepare_cover(handle)
+                self.assertEqual(Image.open(BytesIO(result.data)).size, (600, 900))
+                self.assertNotIn(cover_images.NOTE_SOFT, result.warnings)
+
+    def test_the_result_is_exactly_what_the_cover_maker_makes(self):
+        """The rules only decide yes or no: an accepted photo gets the same picture build_cover has always made."""
+        upload = tall_photo()
+        upload.seek(0)
+        expected = cover_images.cover_jpeg_bytes(cover_images.build_cover(Image.open(upload)))
+        self.assertEqual(cover_images.prepare_cover(tall_photo()).data, expected)
+
