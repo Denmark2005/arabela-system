@@ -57,6 +57,9 @@ _AVAILABILITY_HORIZON_DAYS = 120
 # Every collection grid shows this many products per page.
 _COLLECTION_PAGE_SIZE = 8
 
+# A search longer than the longest possible gown name can never match one, so it is not searched at all.
+_SEARCH_MAX_LENGTH = Gown._meta.get_field("name").max_length
+
 
 def _label_for(collection_key: str) -> str:
     category = _category_by_key(collection_key)
@@ -227,6 +230,44 @@ def collection_all(request):
         for category in all_categories()
     ]
     return render(request, "all.html", {"all_panels": panels})
+
+
+def _best_match_rank(title: str, needle: str) -> int:
+    """How well a gown's name fits what the customer typed (needle is already lower-case):
+    0 = the name starts with it, 1 = a word inside the name starts with it, 2 = it only appears inside a word."""
+    name = title.lower()
+    if name.startswith(needle):
+        return 0
+    if re.search(r"(?<!\w)" + re.escape(needle), name):
+        return 1
+    return 2
+
+
+def search_results(request):
+    """The page the search bar's "View all" opens: every gown, from EVERY category together, whose name contains
+    what the customer typed -- the same rule the search overlay uses (capitals ignored), so View all shows the
+    overlay's gowns and the rest of them. Same product list and grouping as the All page (one card per product,
+    Out-of-Stock left out). Ordered Best Match first; the sort drawer can re-sort the whole mixed list."""
+    query = str(request.GET.get("q") or "").strip()
+    if not query:
+        return redirect("gowns:collection_all")
+    needle = query.lower()
+    results: list[dict] = []
+    if len(query) <= _SEARCH_MAX_LENGTH:
+        for category in all_categories():
+            results.extend(
+                item for item in _products_for_category(category["key"])
+                if needle in item["title"].lower()
+            )
+        # Stable sort: gowns that tie keep their category order.
+        results.sort(key=lambda item: (_best_match_rank(item["title"], needle), item["title"].lower()))
+    return render(request, "search_results.html", {
+        "query": query,
+        "results": results,
+        "result_count": len(results),
+        # Turns on the 5th row ("Best match") in the sort drawer -- it only makes sense for a search.
+        "show_best_match_sort": True,
+    })
 
 
 def legacy_wedding_product_url(request, slug: str):

@@ -89,9 +89,10 @@
             {% endfor %}
           </div>
           <div class="flex justify-end mt-8">
-            <button type="button" id="search-view-all-btn" class="hidden px-8 py-3 bg-primary text-on-primary text-[0.65rem] font-bold uppercase tracking-[0.2em] hover:opacity-90 transition-opacity cursor-default rounded-[6px]" disabled aria-disabled="true">
+            {% comment %}A real link to the search results page (every matching gown, every category); the script keeps its address in step with what is typed, and re-reads the box at the moment of the click.{% endcomment %}
+            <a href="{% url 'gowns:search_results' %}" id="search-view-all-btn" class="hidden inline-block px-8 py-3 bg-primary text-on-primary text-[0.65rem] font-bold uppercase tracking-[0.2em] hover:opacity-90 transition-opacity cursor-pointer no-underline rounded-[6px]">
               View all →
-            </button>
+            </a>
           </div>
         </div>
       </div>
@@ -114,6 +115,7 @@
 
     var SEARCH_CATALOG = parseJsonEl("search-catalog-data");
     var SEARCH_COLLECTIONS = parseJsonEl("search-collections-data");
+    var SEARCH_RESULTS_URL = "{% url 'gowns:search_results' %}";
     var DEBOUNCE_MS = 240;
     var debounceTimer = null;
     var gridEl = null;
@@ -139,6 +141,11 @@
       var d = document.createElement("div");
       d.textContent = s == null ? "" : String(s);
       return d.innerHTML;
+    }
+
+    // Where "View all" (and Enter) go: the results page for exactly what was typed.
+    function searchResultsUrl(query) {
+      return SEARCH_RESULTS_URL + "?q=" + encodeURIComponent(String(query || "").trim());
     }
 
     function filterProducts(query) {
@@ -313,8 +320,12 @@
       }
 
       if (viewAllBtn) {
-        if (matches.length) viewAllBtn.classList.remove("hidden");
-        else viewAllBtn.classList.add("hidden");
+        if (matches.length) {
+          viewAllBtn.href = searchResultsUrl(q);
+          viewAllBtn.classList.remove("hidden");
+        } else {
+          viewAllBtn.classList.add("hidden");
+        }
       }
     }
 
@@ -384,6 +395,26 @@
       input.addEventListener("input", function () {
         scheduleSearch(input.value);
       });
+      // Enter opens the results page, same as "View all".
+      input.addEventListener("keydown", function (e) {
+        if (e.key !== "Enter" || e.isComposing) return;
+        var typed = (input.value || "").trim();
+        if (!typed) return;
+        e.preventDefault();
+        window.location.href = searchResultsUrl(typed);
+      });
+      // The box can change a moment before the list catches up (it updates a split second after typing), so the
+      // link is pointed at what is in the box right now, at the moment of the click.
+      if (viewAllBtn) {
+        viewAllBtn.addEventListener("click", function (e) {
+          var typed = (input.value || "").trim();
+          if (!typed) {
+            e.preventDefault();
+            return;
+          }
+          viewAllBtn.href = searchResultsUrl(typed);
+        });
+      }
     }
 
     if (document.readyState === "loading") {

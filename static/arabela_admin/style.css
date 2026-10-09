@@ -5003,7 +5003,7 @@ span.flatpickr-weekday,
   border-top-color: transparent;
 }
 
-/* Gown Catalog's 4-tile stat row (Total/Available/Reserved/Needs Attention).
+/* Gown Catalog's 4-tile stat row (Total/Available/Reserved/Blocked), also used by the dashboard's Gown Inventory tile.
    This sparse build only compiles the grid-cols-2/3 utilities actually used
    elsewhere, not grid-cols-4, so a plain `xl:grid-cols-4` class would silently
    do nothing here. Mirrors Tailwind's own breakpoints (sm: 640px, xl: 1280px)

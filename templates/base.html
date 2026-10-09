@@ -168,6 +168,39 @@
       html.arb-stagger [data-collection-sort-root] .grid > a.arb-in { transition: none; }
     }
 
+    /* Loading step when a sort is applied/cleared (static/js/collection-sort.js): the gown cards fade out under grey
+       placeholders -- the same shimmer the Orders page shows while it loads -- then the new order fades in. Every
+       class here is added by that script for about a second and removed again. */
+    @keyframes arb-skel-shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .arb-skel {
+      background: linear-gradient(90deg, #f4f4f5 25%, #ececec 37%, #f4f4f5 63%);
+      background-size: 200% 100%;
+      animation: arb-skel-shimmer 1.2s infinite linear;
+      border-radius: 0.5rem;
+    }
+    .arb-skel-host { position: relative; }
+    .arb-sort-loading > a {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s ease;
+    }
+    .arb-skel-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+    .arb-skel-layer.is-in { opacity: 1; }
+    .arb-skel-layer.is-leaving { opacity: 0; pointer-events: none; transition-duration: 0.28s; }
+    .arb-skel-card { position: absolute; }
+    @media (prefers-reduced-motion: reduce) {
+      .arb-skel { animation: none; }
+    }
+
     #search-overlay {
       transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
       transform: translateY(-16px);
@@ -610,7 +643,7 @@
   </aside>
   {% endif %}
 
-  {% if url_name == "collection_all" or url_name == "collection_wedding" or url_name == "collection_evening_gown" or url_name == "collection_long_gown" or url_name == "collection_luxury_gown" or url_name == "collection_mother_gown" or url_name == "collection_suit" or url_name == "collection_filipiniana" or url_name == "collection_guest_gown" or url_name == "collection_dresses" or url_name == "collection_kids_gown" or url_name == "collection_barong" or url_name == "collection_ball_gown_tulle" or url_name == "collection_bridesmaid_dresses" or url_name == "collection_custom" %}
+  {% if url_name == "collection_all" or url_name == "collection_wedding" or url_name == "collection_evening_gown" or url_name == "collection_long_gown" or url_name == "collection_luxury_gown" or url_name == "collection_mother_gown" or url_name == "collection_suit" or url_name == "collection_filipiniana" or url_name == "collection_guest_gown" or url_name == "collection_dresses" or url_name == "collection_kids_gown" or url_name == "collection_barong" or url_name == "collection_ball_gown_tulle" or url_name == "collection_bridesmaid_dresses" or url_name == "collection_custom" or url_name == "search_results" %}
   {% include "partials/explore_collections_drawer.html" %}
   {% endif %}
 
@@ -690,7 +723,7 @@
 
   <script src="{% static 'js/picked-file.js' %}?v={{ site_asset_version }}"></script>
   <script src="{% static 'js/reservation-flow.js' %}?v={{ site_asset_version }}"></script>
-  {% if url_name == "collection_all" or url_name == "collection_wedding" or url_name == "collection_evening_gown" or url_name == "collection_long_gown" or url_name == "collection_luxury_gown" or url_name == "collection_mother_gown" or url_name == "collection_suit" or url_name == "collection_filipiniana" or url_name == "collection_guest_gown" or url_name == "collection_dresses" or url_name == "collection_kids_gown" or url_name == "collection_barong" or url_name == "collection_ball_gown_tulle" or url_name == "collection_bridesmaid_dresses" or url_name == "collection_custom" %}
+  {% if url_name == "collection_all" or url_name == "collection_wedding" or url_name == "collection_evening_gown" or url_name == "collection_long_gown" or url_name == "collection_luxury_gown" or url_name == "collection_mother_gown" or url_name == "collection_suit" or url_name == "collection_filipiniana" or url_name == "collection_guest_gown" or url_name == "collection_dresses" or url_name == "collection_kids_gown" or url_name == "collection_barong" or url_name == "collection_ball_gown_tulle" or url_name == "collection_bridesmaid_dresses" or url_name == "collection_custom" or url_name == "search_results" %}
   <script src="{% static 'js/collection-sort.js' %}?v={{ site_asset_version }}"></script>
   <script src="{% static 'js/collection-reveal.js' %}?v={{ site_asset_version }}"></script>
   {% endif %}

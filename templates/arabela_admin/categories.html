@@ -1069,6 +1069,9 @@
               .cvr-btn { display: inline-flex; flex: 1 1 auto; align-items: center; justify-content: center; min-height: 36px; padding: 0 14px; border: 1px solid #d0d5dd; border-radius: 8px;
                          background: #fff; color: #344054; font-size: 13px; font-weight: 500; line-height: 1; cursor: pointer; }
               .cvr-btn[hidden] { display: none; }
+              .cvr-btn:not(.cvr-btn-primary):hover { background: #f9fafb; }
+              .dark .cvr-btn:not(.cvr-btn-primary) { border-color: #344054; background: rgba(255,255,255,.03); color: #d0d5dd; }
+              .dark .cvr-btn:not(.cvr-btn-primary):hover { background: rgba(255,255,255,.07); }
               .cvr-btn-primary { border-color: #465fff; background: #465fff; color: #fff; }
               .cvr-btn-primary:hover { background: #3641f5; }
               .cvr-file:focus-visible + .cvr-btn { outline: 2px solid #465fff; outline-offset: 2px; }
@@ -1086,6 +1089,57 @@
               .dark .cvr-msg-ok { color: #32d583; }
               .dark .cvr-msg-bad { color: #f97066; }
               .cvr-empty { padding: 24px; border: 1px dashed #d0d5dd; border-radius: 16px; color: #667085; font-size: 14px; }
+              /* A tile with a real picture opens the big view when clicked (the View button does the same). */
+              .cvr-tile[data-photo="1"] { cursor: zoom-in; }
+              /* The big view of a picture: the same look as Payment Verification's "View Payment" window -- a wide white
+                 box, round close button top right, big title, the picture uncropped, details and a Close button. */
+              .cvr-view { position: fixed; inset: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; padding: 20px; overflow-y: auto; overscroll-behavior: contain; }
+              .cvr-view[hidden] { display: none; }
+              .cvr-view-backdrop { position: fixed; inset: 0; background: rgba(152,162,179,.5); -webkit-backdrop-filter: blur(32px); backdrop-filter: blur(32px); }
+              .cvr-view-box { position: relative; width: 100%; max-width: min(820px, 94vw); max-height: calc(100vh - 40px); overflow-y: auto; padding: 32px; border-radius: 24px; background: #fff; box-shadow: 0 24px 48px -12px rgba(16,24,40,.25); }
+              .dark .cvr-view-box { background: #101828; }
+              .cvr-view-x { position: absolute; top: 20px; right: 20px; z-index: 2; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 999px; background: #f2f4f7; color: #98a2b3; cursor: pointer; }
+              .cvr-view-x:hover { background: #e4e7ec; color: #667085; }
+              .dark .cvr-view-x { background: rgba(255,255,255,.05); }
+              .dark .cvr-view-x:hover { background: rgba(255,255,255,.09); color: #d0d5dd; }
+              .cvr-view-title { margin: 0 0 8px; padding-right: 56px; font-size: 24px; font-weight: 600; line-height: 1.3; color: #1d2939; }
+              .dark .cvr-view-title { color: rgba(255,255,255,.9); }
+              .cvr-view-sub { margin: 0 0 24px; padding-right: 56px; font-size: 14px; line-height: 1.5; color: #667085; }
+              .dark .cvr-view-sub { color: #98a2b3; }
+              .cvr-view-stage { display: flex; justify-content: center; margin-bottom: 12px; }
+              /* Hugs the picture and never shows it bigger than the file really is (the page sets --cvr-nat-w/-h once it loads). */
+              .cvr-view-frame { position: relative; display: inline-block; max-width: 100%; line-height: 0; overflow: hidden; border-radius: 16px; background: #fbfbfb; }
+              .cvr-view-frame[hidden] { display: none; }
+              /* As tall as the screen leaves room for once the title, details and Close button are counted (so the whole view
+                 fits without scrolling), but never under 320px -- a very short screen scrolls inside the box instead. */
+              .cvr-view-frame img { display: block; width: auto; height: auto; max-width: min(100%, var(--cvr-nat-w, 100%)); max-height: min(max(320px, calc(100vh - 365px)), var(--cvr-nat-h, 9999px)); }
+              .cvr-view-strip { position: absolute; left: 0; right: 0; bottom: 0; height: 17%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 12px; pointer-events: none;
+                                background: linear-gradient(to top, #fbfbfb 0%, rgba(251,251,251,.85) 50%, rgba(251,251,251,0) 100%); }
+              .cvr-view-strip span { font-size: 14px; font-weight: 500; line-height: 1.3; letter-spacing: .18em; text-transform: uppercase; text-align: center; color: #615e57; }
+              .cvr-view-strip i { display: block; width: 52px; margin-top: 8px; border-top: 1px solid rgba(97,94,87,.6); }
+              .cvr-view-fail { margin: 0; padding: 48px 16px; border-radius: 16px; background: #f2f4f7; color: #667085; font-size: 14px; line-height: 1.5; text-align: center; }
+              .cvr-view-fail[hidden] { display: none; }
+              .dark .cvr-view-fail { background: rgba(255,255,255,.05); color: #98a2b3; }
+              .cvr-view-full { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 20px; font-size: 12px; font-weight: 500; color: #465fff; text-decoration: none; }
+              .cvr-view-full:hover { color: #3641f5; }
+              .cvr-view-full[hidden] { display: none; }
+              .dark .cvr-view-full { color: #7592ff; }
+              .cvr-view-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 8px; }
+              .cvr-view-grid p { margin: 0; }
+              .cvr-view-k { font-size: 12px; color: #667085; }
+              .dark .cvr-view-k { color: #98a2b3; }
+              .cvr-view-grid .cvr-view-v { margin-top: 4px; font-size: 14px; font-weight: 500; color: #1d2939; }
+              .dark .cvr-view-grid .cvr-view-v { color: rgba(255,255,255,.9); }
+              .cvr-view-foot { display: flex; justify-content: flex-end; margin-top: 24px; }
+              .cvr-view-foot .cvr-btn { flex: 0 0 auto; min-height: 40px; padding: 0 16px; }
+              @media (max-width: 640px) {
+                .cvr-view { padding: 12px; }
+                .cvr-view-box { padding: 16px; border-radius: 20px; max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); }
+                .cvr-view-x { top: 12px; right: 12px; width: 40px; height: 40px; }
+                .cvr-view-title { font-size: 20px; padding-right: 48px; }
+                .cvr-view-sub { padding-right: 48px; margin-bottom: 16px; }
+                .cvr-view-frame img { max-height: min(max(240px, calc(100vh - 330px)), var(--cvr-nat-h, 9999px)); max-height: min(max(240px, calc(100dvh - 330px)), var(--cvr-nat-h, 9999px)); }
+              }
               @media (max-width: 640px) {
                 .cvr-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
                 .cvr-strip span, .cvr-ph span { font-size: 9.5px; letter-spacing: .12em; }
@@ -1102,7 +1156,7 @@
             {% if category_rows %}
             <div id="cvr-grid" class="cvr-grid" data-ready="{% if covers_ready %}1{% else %}0{% endif %}" data-preview-url="{% url 'arabela_admin:category_cover_preview' %}" data-upload-url="{% url 'arabela_admin:category_cover_upload' %}" data-reset-url="{% url 'arabela_admin:category_cover_reset' %}">
               {% for row in category_rows %}
-              <article class="cvr-card" aria-label="{{ row.label }}" data-key="{{ row.key }}" data-label="{{ row.label }}" data-default-photo="{% if row.default_is_photo %}1{% else %}0{% endif %}">
+              <article class="cvr-card" aria-label="{{ row.label }}" data-key="{{ row.key }}" data-label="{{ row.label }}" data-shown-on="{{ row.shown_on }}" data-default-photo="{% if row.default_is_photo %}1{% else %}0{% endif %}">
                 <div class="cvr-tile" data-photo="{% if row.is_photo %}1{% else %}0{% endif %}" title="Shown on: {{ row.shown_on }}">
                   <img src="{{ row.cover_url }}" alt="{{ row.label }}" loading="lazy" decoding="async">
                   <span class="cvr-badge" data-kind="{% if row.has_upload %}custom{% else %}none{% endif %}"{% if not row.has_upload and row.is_photo %} hidden{% endif %}>{% if row.has_upload %}Custom{% else %}No picture{% endif %}</span>
@@ -1112,6 +1166,7 @@
                 <div class="cvr-actions">
                   <input type="file" id="cvr-file-{{ row.key }}" class="cvr-file" accept="image/jpeg,image/png,image/webp"{% if not covers_ready %} disabled{% endif %}>
                   <label for="cvr-file-{{ row.key }}" class="cvr-btn cvr-btn-primary" data-upload-label>{% if row.has_upload %}Replace{% else %}Upload{% endif %}</label>
+                  <button type="button" class="cvr-btn" data-view{% if not row.is_photo %} hidden{% endif %}>View</button>
                   <button type="button" class="cvr-link" data-reset{% if not row.has_upload %} hidden{% endif %}>{% if row.default_is_photo %}Reset{% else %}Remove{% endif %}</button>
                   <button type="button" class="cvr-btn cvr-btn-primary" data-save hidden>Save</button>
                   <button type="button" class="cvr-link" data-cancel hidden>Cancel</button>
@@ -1131,6 +1186,36 @@
       <!-- ===== Content Area End ===== -->
     </div>
     <!-- ===== Page Wrapper End ===== -->
+  {% if category_rows %}
+  <div id="cvr-view" class="cvr-view" role="dialog" aria-modal="true" aria-labelledby="cvr-view-title" hidden>
+    <div class="cvr-view-backdrop" data-view-close></div>
+    <div class="cvr-view-box">
+      <button type="button" class="cvr-view-x" data-view-close aria-label="Close">
+        <svg class="fill-current" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path fill-rule="evenodd" clip-rule="evenodd" d="M6.04289 16.5418C5.65237 16.9323 5.65237 17.5655 6.04289 17.956C6.43342 18.3465 7.06658 18.3465 7.45711 17.956L11.9987 13.4144L16.5408 17.9565C16.9313 18.347 17.5645 18.347 17.955 17.9565C18.3455 17.566 18.3455 16.9328 17.955 16.5423L13.4129 12.0002L17.955 7.45808C18.3455 7.06756 18.3455 6.43439 17.955 6.04387C17.5645 5.65335 16.9313 5.65335 16.5408 6.04387L11.9987 10.586L7.45711 6.04439C7.06658 5.65386 6.43342 5.65386 6.04289 6.04439C5.65237 6.43491 5.65237 7.06808 6.04289 7.4586L10.5845 12.0002L6.04289 16.5418Z" fill=""/>
+        </svg>
+      </button>
+      <h4 id="cvr-view-title" class="cvr-view-title"></h4>
+      <p class="cvr-view-sub"></p>
+      <div class="cvr-view-stage">
+        <div class="cvr-view-frame">
+          <img alt="">
+          <div class="cvr-view-strip"><span></span><i aria-hidden="true"></i></div>
+        </div>
+        <p class="cvr-view-fail" hidden>This picture could not be loaded.</p>
+      </div>
+      <a class="cvr-view-full" target="_blank" rel="noopener" hidden>
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
+        View Full Image
+      </a>
+      <div class="cvr-view-grid">
+        <div><p class="cvr-view-k">Picture</p><p class="cvr-view-v" data-view-kind></p></div>
+        <div><p class="cvr-view-k">Size</p><p class="cvr-view-v" data-view-size></p></div>
+      </div>
+      <div class="cvr-view-foot"><button type="button" class="cvr-btn" data-view-close>Close</button></div>
+    </div>
+  </div>
+  {% endif %}
   <script defer src="{% static 'js/picked-file.js' %}?v={{ site_asset_version }}"></script>
   <script>
     // Admin -> Categories: choose a photo -> see exactly how it will look in its card -> Save or Cancel. The server
@@ -1164,13 +1249,14 @@
         return {
           tile: card.querySelector('.cvr-tile'), img: card.querySelector('.cvr-tile img'), badge: card.querySelector('.cvr-badge'),
           upload: card.querySelector('[data-upload-label]'), reset: card.querySelector('[data-reset]'),
-          save: card.querySelector('[data-save]'), cancel: card.querySelector('[data-cancel]')
+          save: card.querySelector('[data-save]'), cancel: card.querySelector('[data-cancel]'), view: card.querySelector('[data-view]')
         };
       }
       function showPicture(card, d) {
         var p = parts(card);
         p.tile.setAttribute('data-photo', d.is_photo ? '1' : '0');
         p.img.src = d.url;
+        p.view.hidden = !d.is_photo;
         if (d.has_upload) {
           p.badge.hidden = false; p.badge.setAttribute('data-kind', 'custom'); p.badge.textContent = 'Custom';
         } else if (!d.is_photo) {
@@ -1190,7 +1276,8 @@
             card: card, file: file,
             before: {
               src: p.img.getAttribute('src'), photo: p.tile.getAttribute('data-photo'), badgeHidden: p.badge.hidden,
-              badgeKind: p.badge.getAttribute('data-kind'), badgeText: p.badge.textContent, resetHidden: p.reset.hidden
+              badgeKind: p.badge.getAttribute('data-kind'), badgeText: p.badge.textContent, resetHidden: p.reset.hidden,
+              viewHidden: p.view.hidden
             }
           };
         } else {
@@ -1200,6 +1287,7 @@
         p.tile.setAttribute('data-preview', '1');
         p.img.src = dataUrl;
         p.badge.hidden = false; p.badge.setAttribute('data-kind', 'preview'); p.badge.textContent = 'Preview';
+        p.view.hidden = false;
         p.upload.hidden = true; p.reset.hidden = true; p.save.hidden = false; p.cancel.hidden = false;
         say(card, (notes || []).join(' '), null);
       }
@@ -1212,6 +1300,7 @@
           p.img.src = b.src; p.tile.setAttribute('data-photo', b.photo);
           p.badge.hidden = b.badgeHidden; p.badge.setAttribute('data-kind', b.badgeKind); p.badge.textContent = b.badgeText;
           p.reset.hidden = b.resetHidden;
+          p.view.hidden = b.viewHidden;
         }
         p.tile.removeAttribute('data-preview');
         p.save.hidden = true; p.cancel.hidden = true; p.upload.hidden = false;
@@ -1263,6 +1352,96 @@
           setBusy(card, false);
           say(card, describe(err), false);
         });
+      });
+
+      // ---- the big view of a picture: the View button or a click on the picture itself --------------------------
+      var viewer = document.getElementById('cvr-view');
+      var vp = viewer ? {
+        title: viewer.querySelector('.cvr-view-title'), sub: viewer.querySelector('.cvr-view-sub'),
+        frame: viewer.querySelector('.cvr-view-frame'), img: viewer.querySelector('.cvr-view-frame img'),
+        name: viewer.querySelector('.cvr-view-strip span'), fail: viewer.querySelector('.cvr-view-fail'),
+        full: viewer.querySelector('.cvr-view-full'), kind: viewer.querySelector('[data-view-kind]'),
+        size: viewer.querySelector('[data-view-size]'), close: viewer.querySelector('.cvr-view-x')
+      } : null;
+      var viewOpener = null;   // what to give the keyboard focus back to when the view closes
+
+      function pictureKind(card) {
+        if (card.querySelector('.cvr-tile').getAttribute('data-preview') === '1') return 'Preview (not saved yet)';
+        var badge = card.querySelector('.cvr-badge');
+        return (!badge.hidden && badge.getAttribute('data-kind') === 'custom') ? 'Custom' : 'Standard';
+      }
+      function openViewer(card, opener) {
+        if (!viewer) return;
+        var tile = card.querySelector('.cvr-tile');
+        var thumb = tile.querySelector('img');
+        if (tile.getAttribute('data-photo') !== '1' || !thumb) return;   // a placeholder has no picture to show
+        var label = card.getAttribute('data-label') || '';
+        var preview = tile.getAttribute('data-preview') === '1';
+        var url = thumb.src;
+        vp.title.textContent = label;
+        vp.sub.textContent = card.getAttribute('data-shown-on') || '';
+        vp.name.textContent = label;
+        vp.kind.textContent = pictureKind(card);
+        vp.size.textContent = '\u2026';
+        vp.fail.hidden = true;
+        vp.frame.hidden = false;
+        vp.frame.style.removeProperty('--cvr-nat-w');
+        vp.frame.style.removeProperty('--cvr-nat-h');
+        vp.full.hidden = preview;                      // a picture that is not saved yet is not a file there is to open
+        if (!preview) vp.full.href = url;
+        vp.img.alt = label;
+        vp.img.removeAttribute('src');                 // never flash the previous picture
+        vp.img.onload = function () {
+          vp.frame.style.setProperty('--cvr-nat-w', vp.img.naturalWidth + 'px');
+          vp.frame.style.setProperty('--cvr-nat-h', vp.img.naturalHeight + 'px');
+          vp.size.textContent = vp.img.naturalWidth + ' \u00d7 ' + vp.img.naturalHeight + ' px';
+        };
+        vp.img.onerror = function () {
+          vp.frame.hidden = true;
+          vp.fail.hidden = false;
+          vp.full.hidden = true;
+          vp.size.textContent = '\u2014';
+        };
+        vp.img.src = url;
+        viewOpener = opener || null;
+        viewer.hidden = false;
+        vp.close.focus({ preventScroll: true });     // the round x at the top, so a tall view never jumps down to its bottom
+      }
+      function closeViewer() {
+        if (!viewer || viewer.hidden) return;
+        viewer.hidden = true;
+        vp.img.onload = null;
+        vp.img.onerror = null;
+        vp.img.removeAttribute('src');
+        if (viewOpener && document.body.contains(viewOpener) && !viewOpener.hidden) viewOpener.focus();
+        viewOpener = null;
+      }
+      if (viewer) {
+        viewer.addEventListener('click', function (event) {
+          if (event.target.closest && event.target.closest('[data-view-close]')) closeViewer();
+        });
+        document.addEventListener('keydown', function (event) {
+          if (viewer.hidden) return;
+          if (event.key === 'Escape') { event.preventDefault(); closeViewer(); return; }
+          if (event.key !== 'Tab') return;
+          // keep the Tab key inside the open view
+          var items = Array.prototype.slice.call(viewer.querySelectorAll('button, a[href]')).filter(function (el) { return !el.hidden && !el.closest('[hidden]'); });
+          if (!items.length) return;
+          var first = items[0];
+          var last = items[items.length - 1];
+          if (!viewer.contains(document.activeElement)) { event.preventDefault(); first.focus(); }
+          else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        });
+      }
+      grid.addEventListener('click', function (event) {
+        var hit = event.target && event.target.closest ? event.target : null;
+        if (!hit) return;
+        var viewButton = hit.closest('[data-view]');
+        var source = viewButton || hit.closest('.cvr-tile');
+        var viewCard = source ? source.closest('.cvr-card') : null;
+        if (!viewCard || !grid.contains(viewCard)) return;
+        openViewer(viewCard, viewButton || viewCard.querySelector('[data-view]'));
       });
 
       grid.addEventListener('click', function (event) {

@@ -255,6 +255,9 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # submit, admin actions) as a CSRF failure. Empty locally on purpose; set to
 # e.g. "https://yourapp.onrender.com" in that host's environment variables.
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()]
+# When the CSRF check refuses a request (an old copy of a page, a browser that dropped the cookie) show a short
+# "please try again" page and log the reason, instead of Django's bare 403 -- see arabela_system/csrf.py.
+CSRF_FAILURE_VIEW = 'arabela_system.csrf.csrf_failure'
 
 # HTTPS hardening for staff/customer login sessions -- gated on DEBUG (the same signal
 # used above) so local development is untouched: there's no HTTPS to redirect to on

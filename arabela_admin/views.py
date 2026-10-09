@@ -10,7 +10,6 @@ from functools import wraps
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout, get_user_model, update_session_auth_hash
 from django.contrib.auth.password_validation import validate_password
-from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
@@ -23,11 +22,13 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.formats import date_format
 from django.utils.http import urlencode
+from django.views.decorators.cache import never_cache
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 import json
 
+from accounts import login_throttle
 from accounts.models import CustomerMessage, UserProfile
 from accounts.services import CANCELLATION_FLAG_THRESHOLD
 from gowns.models import (
@@ -131,6 +132,14 @@ def dashboard_view(request):
     # disagreed with the real data by two orders of magnitude.
     gowns = Gown.objects.all()
     gown_total = gowns.count()
+    # Gown Inventory tile: the SAME four figures as Gown Catalog's stat row (Total / Available /
+    # Reserved / Blocked). "Blocked" is the number of gowns with a block covering today -- counted
+    # per gown, so two back-to-back blocks on one gown still make one blocked gown.
+    today = timezone.localdate()
+    gown_blocked = (
+        GownUnavailability.objects.filter(start_date__lte=today, end_date__gte=today)
+        .values("gown_id").distinct().count()
+    )
 
     # Reservations This Month: one per BOOKING (not per gown), counted in the month its
     # FIRST gown is picked up (the same first pick-up _reservation_window gives
@@ -160,9 +169,8 @@ def dashboard_view(request):
             ).count(),
             "gown_total": gown_total,
             "gown_available": gowns.filter(status=Gown.Status.AVAILABLE).count(),
-            "gown_needs_attention": gowns.filter(
-                status=Gown.Status.OUT_OF_STOCK
-            ).count(),
+            "gown_reserved": gowns.filter(status=Gown.Status.RESERVED).count(),
+            "gown_blocked": gown_blocked,
             # Drives the empty-state call to action: with no gowns the shop cannot take
             # a real booking at all, so it is the single most important thing to surface.
             "catalog_is_empty": gown_total == 0,
@@ -3232,16 +3240,11 @@ def staff_delete_view(request, user_id):
 
 
 # Brute-force protection for the admin login: 5 failed attempts locks that username out
-# for 15 minutes. Tracked in Django's cache (no new model/migration needed) -- each failed
-# attempt refreshes the 15-minute window, so a lockout expires 15 minutes after the LAST
-# failed try, not the first.
-_LOGIN_ATTEMPT_LIMIT = 5
-_LOGIN_LOCKOUT_SECONDS = 15 * 60
-_LOCKOUT_MESSAGE = "Too many failed login attempts. Please try again in 15 minutes."
-
-
-def _login_attempts_cache_key(username):
-    return f"admin_login_attempts:{username.strip().lower()}"
+# for 15 minutes. A lockout ends 15 minutes after the 5th wrong
+# attempt; attempts made while locked do not extend it.
+#
+# The counter itself lives in the database now (accounts/login_throttle.py): in the server's memory it was forgotten every
+# time the host restarted or slept, so the lockout kept "resetting".
 
 
 # Django overwrites User.last_login with "now" on every sign-in, so by the time anyone looks at it, it only
@@ -3257,6 +3260,7 @@ def _previous_login(request):
     return parse_datetime(raw) if raw else None
 
 
+@never_cache  # a copy of this page kept by the browser (back button, restored tab) would carry an out-of-date security secret
 def admin_login_view(request):
     if request.method == "POST":
         username = request.POST.get("username", "").strip()
@@ -3269,13 +3273,13 @@ def admin_login_view(request):
                 {"error": "Please enter your username.", "username": username},
             )
 
-        cache_key = _login_attempts_cache_key(username)
-        failed_attempts = cache.get(cache_key, 0)
-        if failed_attempts >= _LOGIN_ATTEMPT_LIMIT:
+        throttle_key = login_throttle.username_key(username)
+        locked_seconds = login_throttle.seconds_locked(throttle_key)
+        if locked_seconds:
             return render(
                 request,
                 "arabela_admin/admin-login.html",
-                {"error": _LOCKOUT_MESSAGE, "username": username},
+                {"error": login_throttle.lockout_message(locked_seconds), "username": username},
             )
 
         if not password:
@@ -3287,12 +3291,10 @@ def admin_login_view(request):
 
         authenticated_user = authenticate(request, username=username, password=password)
         if not authenticated_user:
-            failed_attempts += 1
-            cache.set(cache_key, failed_attempts, _LOGIN_LOCKOUT_SECONDS)
-            if failed_attempts >= _LOGIN_ATTEMPT_LIMIT:
-                error_message = _LOCKOUT_MESSAGE
+            remaining = login_throttle.record_failure(throttle_key)
+            if remaining <= 0:
+                error_message = login_throttle.lockout_message(login_throttle.LOCKOUT_SECONDS)
             else:
-                remaining = _LOGIN_ATTEMPT_LIMIT - failed_attempts
                 error_message = (
                     f"Invalid username or password. {remaining} attempt"
                     f"{'s' if remaining != 1 else ''} remaining before temporary lockout."
@@ -3311,7 +3313,7 @@ def admin_login_view(request):
             )
 
         # Successful login clears any accumulated failed-attempt count for this username.
-        cache.delete(cache_key)
+        login_throttle.clear(throttle_key)
         previous_login = authenticated_user.last_login   # read BEFORE login() overwrites it
         login(request, authenticated_user)
         request.session[_PREVIOUS_LOGIN_SESSION_KEY] = previous_login.isoformat() if previous_login else ""

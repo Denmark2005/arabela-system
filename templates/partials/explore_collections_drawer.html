@@ -82,6 +82,18 @@
               </button>
             </div>
           </div>
+          {% if show_best_match_sort %}
+          {# 5th option, only on the search results page (search_results view): the order the page opens in. #}
+          <div class="explore-reveal" data-sort-row data-sort-mode="bestMatch">
+            <button type="button" class="w-full text-left font-label text-[0.65rem] uppercase tracking-widest text-on-surface-variant transition-colors hover:text-primary py-2 px-1 rounded-md" data-sort-option data-sort-mode="bestMatch" data-sort-label="BEST MATCH">Best match</button>
+            <div class="hidden flex w-full max-w-full items-center justify-between gap-2 rounded-full bg-gray-50 border border-black/5 px-4 py-2" data-sort-selected-shell>
+              <span class="font-label text-[0.65rem] font-medium uppercase tracking-widest text-primary truncate pr-2" data-sort-pill-label></span>
+              <button type="button" class="inline-flex shrink-0 items-center justify-center text-primary hover:opacity-60 transition-opacity" data-sort-pill-dismiss aria-label="Clear sort selection">
+                <span class="material-symbols-outlined text-sm cursor-pointer leading-none">close</span>
+              </button>
+            </div>
+          </div>
+          {% endif %}
         </div>
         </div>
       </div>

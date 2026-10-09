@@ -23,6 +23,8 @@ urlpatterns = [
     # by the generic product-detail pattern below (which requires a /products/<slug>/ suffix).
     path("collections/", views.collections, name="collections"),
     path("collections/all/", views.collection_all, name="collection_all"),
+    # The search bar's "View all": every matching gown from every category in one list.
+    path("search/", views.search_results, name="search_results"),
     path("collections/wedding/", views.collection_wedding, name="collection_wedding"),
     path("collections/evening-gown/", views.collection_evening_gown, name="collection_evening_gown"),
     path("collections/long-gown/", views.collection_long_gown, name="collection_long_gown"),

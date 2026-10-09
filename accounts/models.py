@@ -99,3 +99,17 @@ class CustomerMessage(models.Model):
 
     def __str__(self):
         return f'{self.category} -> {self.recipient.get_username()}'
+
+
+class LoginThrottle(models.Model):
+    """Failed admin sign-in attempts, per username -- kept in the DATABASE (see accounts/login_throttle.py).
+
+    They used to live in the server's memory, which the host wipes every time the app restarts or sleeps and which a
+    second server process would not share, so the "5 wrong attempts = locked for 15 minutes" rule kept forgetting."""
+
+    key = models.CharField(max_length=120, unique=True)
+    failures = models.PositiveIntegerField(default=0)
+    last_failure_at = models.DateTimeField(db_index=True)
+
+    def __str__(self):
+        return f'{self.key}: {self.failures} failed'

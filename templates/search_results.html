@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}ARABELA | Search: {{ result_count }} result{{ result_count|pluralize }} for "{{ query|truncatechars:60 }}"{% endblock %}
+
+{% block main_class %}pt-32 pb-20{% endblock %}
+
+
+{% block content %}
+{% comment %}What the search bar's "View all" opens: every gown from every category whose name contains what was typed. Looks like the All page; the cards are the same markup, so the sort drawer sorts them exactly as it does there.{% endcomment %}
+<section class="mb-16 w-full px-6 md:px-12 lg:px-16 xl:px-24">
+  <h1 class="font-headline text-4xl sm:text-5xl md:text-6xl font-medium tracking-tight text-on-surface leading-[0.9] mb-6 text-center">SEARCH</h1>
+  <p class="mb-12 text-center font-label text-[0.7rem] tracking-widest uppercase text-secondary/60">{{ result_count }} result{{ result_count|pluralize }} for &ldquo;{{ query|truncatechars:60 }}&rdquo;</p>
+  <div class="flex gap-4 flex-wrap">
+    <button type="button" class="px-6 py-2.5 rounded-full border border-gray-300 bg-white text-secondary text-[0.65rem] font-medium tracking-[0.15em] hover:bg-gray-50 transition-colors uppercase" onclick="toggleExplore()">EXPLORE</button>
+    {% if results %}
+    <button type="button" class="px-6 py-2.5 rounded-full border border-gray-300 bg-white text-secondary text-[0.65rem] font-medium tracking-[0.15em] hover:bg-gray-50 transition-colors uppercase" onclick="toggleSort()">SORT BY</button>
+    {% endif %}
+  </div>
+  {% include "partials/collection_sort_active_row.html" %}
+</section>
+
+{# data-default-sort-*: the page opens already on Best Match. data-sort-per-query: a new search starts on Best Match again. #}
+<section class="w-full px-6 md:px-12 lg:px-16 xl:px-24" id="search-results-root"{% if results %} data-collection-sort-root data-default-sort-mode="bestMatch" data-default-sort-label="BEST MATCH" data-sort-per-query{% endif %}>
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-x-4 sm:gap-x-8 gap-y-8 sm:gap-y-12">
+    {% for item in results %}
+    <a href="{% url 'gowns:product_detail' collection=item.collection_key slug=item.slug %}" class="group cursor-pointer block">
+      <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
+        <img alt="{{ item.title }}" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="{{ item.image }}" />
+        <button type="button" class="absolute bottom-3 right-3 w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 text-secondary flex items-center justify-center text-base border-none shadow-none transition-all active:scale-95" onclick="event.preventDefault(); event.stopPropagation(); addCollectionItem({ collection: '{{ item.collection_key|escapejs }}', id: '{{ item.slug|escapejs }}', name: '{{ item.title|escapejs }}', price: {{ item.price }}, img: '{{ item.image|escapejs }}', maxQty: {{ item.available_count }} });">
+          <span class="material-symbols-outlined text-base">add</span>
+        </button>
+      </div>
+      <div class="space-y-2">
+        <h3 class="text-[0.9rem] font-body font-medium tracking-tight text-secondary">{{ item.title }}</h3>
+        <div class="flex items-center justify-between gap-2">
+          <p class="text-[0.9rem] font-body font-medium text-secondary">{{ item.price_display }}</p>
+          {% if item.available_count > 1 %}
+          <p class="text-[0.7rem] font-label tracking-wide text-secondary/60">{{ item.available_count }} available</p>
+          {% endif %}
+        </div>
+      </div>
+    </a>
+    {% empty %}
+    <p class="col-span-2 lg:col-span-4 py-16 text-center font-label text-[0.7rem] tracking-widest uppercase text-secondary/60">
+      No gowns match &ldquo;{{ query|truncatechars:60 }}&rdquo;. Try fewer letters, or
+      <a href="{% url 'gowns:collection_all' %}" class="underline decoration-1 underline-offset-4 hover:text-primary transition-colors">browse all gowns</a>.
+    </p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

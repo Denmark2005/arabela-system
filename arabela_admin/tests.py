@@ -9,6 +9,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import escapejs
 
 from accounts.models import CustomerMessage, UserProfile
 from gowns.models import (
@@ -2111,6 +2112,112 @@ class AdminTimelineRenderTests(TestCase):
         html = self.client.get(reverse("arabela_admin:active_reservations")).content.decode()
         for leak in ("{%", "{{", "{#"):
             self.assertNotIn(leak, html)
+
+
+class DashboardGownInventoryTileTests(TestCase):
+    """The dashboard's Gown Inventory tile shows the same four figures, in the same words, as the stat row on
+    Gown Catalog (Total / Available / Reserved / Blocked) -- no separate "Needs Attention" count."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(username="inv_tile_staff", password="x", is_staff=True)
+
+    def setUp(self):
+        self.client.force_login(self.staff)
+        self.today = timezone.localdate()
+        self.dashboard = reverse("arabela_admin:dashboard")
+
+    def block(self, gown, start_offset, end_offset):
+        return GownUnavailability.objects.create(
+            gown=gown, start_date=self.today + timedelta(days=start_offset),
+            end_date=self.today + timedelta(days=end_offset), reason=GownUnavailability.Reason.CLEANING)
+
+    def seed(self):
+        _make_gown(1, status=Gown.Status.AVAILABLE)
+        _make_gown(2, status=Gown.Status.AVAILABLE)
+        _make_gown(3, status=Gown.Status.RESERVED)
+        _make_gown(4, status=Gown.Status.OUT_OF_STOCK)
+        blocked = _make_gown(5, status=Gown.Status.AVAILABLE)
+        self.block(blocked, -1, 1)                                  # covers today
+        self.block(blocked, 2, 3)                                   # same gown again, later: still ONE blocked gown
+        self.block(_make_gown(6, status=Gown.Status.AVAILABLE), 5, 8)    # future only: not blocked today
+        self.block(_make_gown(7, status=Gown.Status.AVAILABLE), -9, -2)  # expired: not blocked today
+
+    def test_the_four_figures_are_the_catalogs_own_numbers(self):
+        self.seed()
+        response = self.client.get(self.dashboard)
+        catalog = self.client.get(reverse("arabela_admin:gown_catalog")).context
+        self.assertEqual(response.context["gown_total"], catalog["total_gowns_count"])
+        self.assertEqual(response.context["gown_available"], catalog["available_count"])
+        self.assertEqual(response.context["gown_reserved"], catalog["reserved_count"])
+        self.assertEqual(response.context["gown_blocked"], len(catalog["blocked_gowns_today"]))
+        self.assertEqual(
+            (response.context["gown_total"], response.context["gown_available"],
+             response.context["gown_reserved"], response.context["gown_blocked"]), (7, 5, 1, 1))
+
+    def test_the_tile_uses_the_catalogs_wording_and_drops_needs_attention(self):
+        self.seed()
+        html = self.client.get(self.dashboard).content.decode()
+        tile = html[html.index("Gown Inventory"):]
+        tile = tile[:tile.index("</a>")]
+        for word in ("Total Gowns", "Available", "Reserved", "Blocked Gowns"):
+            with self.subTest(word=word):
+                self.assertIn(word, tile)
+        self.assertNotIn("Needs Attention", tile)
+        self.assertNotIn("None blocked today", tile)                # something IS blocked
+
+    def test_with_nothing_blocked_the_tile_says_so_like_the_catalog(self):
+        _make_gown(1)
+        html = self.client.get(self.dashboard).content.decode()
+        self.assertEqual(self.client.get(self.dashboard).context["gown_blocked"], 0)
+        self.assertIn("None blocked today", html)
+
+
+class QuickVerifyProofPopupTests(TestCase):
+    """The dashboard's Quick Verify "View Proof" popup is the same viewer as Payment Verification's
+    "View Payment": a full-size, uncropped receipt with a View Full Image link, the date it was submitted,
+    the GCash reference number and the duplicate warning."""
+
+    PROOF = "https://res.cloudinary.com/demo/image/upload/payment_proofs/receipt.jpg"
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(username="qv_staff", password="x", is_staff=True)
+        cls.customer = User.objects.create_user(username="qv_customer", password="x")
+        cls.first = Reservation.objects.create(
+            customer=cls.customer, customer_name="Quick Verify Customer", status=Reservation.Status.PENDING,
+            payment_method="GCash", payment_proof_url=cls.PROOF, gcash_reference="1234567890123")
+        cls.second = Reservation.objects.create(
+            customer=cls.customer, customer_name="Quick Verify Customer", status=Reservation.Status.PENDING,
+            payment_method="GCash", payment_proof_url=cls.PROOF, gcash_reference="1234567890123")
+
+    def setUp(self):
+        self.client.force_login(self.staff)
+        self.html = self.client.get(reverse("arabela_admin:dashboard")).content.decode()
+
+    def test_the_popup_is_the_payment_verification_viewer(self):
+        for piece in ("GCash Payment Proof", "View Full Image", "admin-photo-frame", "max-height: 75vh",
+                      "Date Submitted", "GCash Reference No.", "Check the receipt before approving"):
+            with self.subTest(piece=piece):
+                self.assertIn(piece, self.html)
+        self.assertNotIn("GCash Receipt Preview", self.html)
+        self.assertNotIn("max-height: 212px", self.html)          # the old thumbnail-sized image
+
+    def test_the_photo_frame_styles_are_on_the_page(self):
+        self.assertIn(".admin-photo-frame {", self.html)
+
+    def test_each_row_hands_the_popup_its_real_details(self):
+        self.assertIn("reservation: '%s'" % escapejs(self.first.reference_code), self.html)
+        self.assertIn("gcashRef: '1234567890123'", self.html)
+        self.assertIn("proofUrl: '%s'" % escapejs(self.PROOF), self.html)
+
+    def test_a_reused_gcash_number_names_the_other_booking_on_each_row(self):
+        self.assertIn("gcashDup: '%s'" % escapejs(self.second.reference_code), self.html)
+        self.assertIn("gcashDup: '%s'" % escapejs(self.first.reference_code), self.html)
+
+    def test_no_template_syntax_leaks_into_the_page(self):
+        for leak in ("{%", "{{", "{#"):
+            self.assertNotIn(leak, self.html)
 
 
 class DashboardReminderSweepTests(TestCase):

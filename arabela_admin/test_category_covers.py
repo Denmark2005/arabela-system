@@ -174,6 +174,46 @@ class CategoriesPageTests(OwnerCase):
         self.assertIn("page === 'gown' || page === 'categories'", html)
         self.assertIn("x-data=\"{ page: 'categories'", html)
 
+    # ---- the big view of a picture (the View button, or a click on the picture) ----------------------------------------------
+    def test_every_card_with_a_picture_has_a_view_button_and_a_placeholder_card_has_none_showing(self):
+        html = self.page().content.decode()
+        self.assertEqual(html.count("data-view>View<") + html.count("data-view hidden>View<"), 13)      # one per card
+        self.assertIn("data-view>View<", self.card(html, "long-gown"))
+        self.assertIn("data-view hidden>View<", self.card(html, "barong"))         # no picture yet: nothing to view
+
+    def test_a_placeholder_gets_its_view_button_once_the_owner_has_uploaded_a_picture(self):
+        CategoryCover.objects.create(key="barong", image_url="https://files.example/category_covers/b.jpg")
+        self.assertIn("data-view>View<", self.card(self.page().content.decode(), "barong"))
+
+    def test_each_card_tells_the_big_view_where_the_picture_is_shown(self):
+        html = htmllib.unescape(self.page().content.decode())
+        self.assertIn("data-shown-on=\"Rentals page · Women's collection page · Home page\"", self.card(html, "long-gown"))
+        self.assertIn("data-shown-on=\"Rentals page · Men's collection page\"", self.card(html, "barong"))
+
+    def test_the_big_view_is_on_the_page_once_closed_and_outside_the_short_main_part(self):
+        html = self.page().content.decode()
+        self.assertEqual(html.count('id="cvr-view"'), 1)
+        self.assertIn('class="cvr-view" role="dialog" aria-modal="true" aria-labelledby="cvr-view-title" hidden>', html)
+        for part in ("View Full Image", "data-view-kind", "data-view-size", "cvr-view-x", "Close</button>"):
+            with self.subTest(part=part):
+                self.assertIn(part, html)
+        main = html.split("<main>")[1].split("</main>")[0]
+        for word in ('id="cvr-view"', "View Full Image", "could not be loaded", "data-view-close"):
+            with self.subTest(word=word):
+                self.assertNotIn(word, main)                                # the page's own words stay as short as before
+
+    def test_the_big_view_script_is_wired_to_the_button_the_picture_and_the_preview(self):
+        html = self.page().content.decode()
+        for piece in ("function openViewer(", "function closeViewer(", "closest('[data-view]')", "closest('.cvr-tile')",
+                      "p.view.hidden = !d.is_photo;", "viewHidden: p.view.hidden", "Preview (not saved yet)"):
+            with self.subTest(piece=piece):
+                self.assertIn(piece, html)
+
+    def test_no_template_comment_text_leaks_onto_the_page(self):
+        html = self.page().content.decode()
+        for leak in ("{#", "#}", "{% comment", "{% endcomment"):
+            self.assertNotIn(leak, html)
+
 
 class SidebarLinkTests(OwnerCase):
     """Every admin page that has the sidebar links to Categories -- for the owner only."""
