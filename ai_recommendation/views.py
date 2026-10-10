@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 
 import requests
 from django.conf import settings
-from django.core.cache import cache
+from accounts import rate_limit
 from django.http import JsonResponse
 from django.urls import reverse
 from django.views.decorators.http import require_POST
@@ -65,39 +65,14 @@ DAILY_LIMIT_REPLY = (
 
 
 def _client_ip(request) -> str:
-    """The visitor's real IP address, correct behind Render's reverse proxy.
-
-    Render sits as the single hop between the internet and this app (see
-    SECURE_PROXY_SSL_HEADER in settings.py) and appends the real client IP as the
-    LAST entry of X-Forwarded-For. Trusting the FIRST entry instead -- a common
-    mistake -- would let any visitor fake a different IP just by sending their own
-    X-Forwarded-For header, defeating the rate limit below entirely. Falls back to
-    REMOTE_ADDR for local development, where there is no proxy and the header is
-    simply absent.
-    """
-    forwarded = request.META.get("HTTP_X_FORWARDED_FOR")
-    if forwarded:
-        return forwarded.split(",")[-1].strip()
-    return request.META.get("REMOTE_ADDR", "unknown")
+    """The visitor's real IP address behind Render's proxy (the LAST X-Forwarded-For entry) -- see accounts.rate_limit.client_ip."""
+    return rate_limit.client_ip(request)
 
 
-def _hit_fixed_window(cache_key: str, window_seconds: int) -> int:
-    """Counts one hit in a fixed time window and returns the count so far.
-
-    The window's expiry is set once, the first time this key is touched, and never
-    refreshed after that -- so a steady trickle of requests under the limit still
-    resets to zero once the window ends, instead of the window silently extending
-    itself forever and eventually trapping a slow, legitimate visitor.
-    """
-    if cache.add(cache_key, 1, window_seconds):
-        return 1
-    try:
-        return cache.incr(cache_key)
-    except ValueError:
-        # Key expired between add() and incr() -- an extremely narrow race.
-        # Treat this request as the first of a brand new window.
-        cache.set(cache_key, 1, window_seconds)
-        return 1
+def _hit_fixed_window(name: str, window_seconds: int) -> int:
+    """Counts one message in a fixed time window and returns the count so far. Kept in the database (accounts.rate_limit), so a
+    restart of the app no longer resets the limit; the window starts at the first message and is never extended by later ones."""
+    return rate_limit.hit(name, window_seconds)
 
 
 def _ai_chat_rate_limit_reply(request):

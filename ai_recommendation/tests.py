@@ -242,7 +242,9 @@ class ChatRateLimitTests(TestCase):
     @override_settings(GEMINI_API_KEY="test-key")
     def test_daily_limit_blocks_even_while_under_the_per_minute_cap(self):
         ip = "203.0.113.77"
-        cache.set(f"ai_chat_rl_day:{ip}", views.AI_CHAT_DAILY_LIMIT, views.AI_CHAT_DAILY_WINDOW_SECONDS)
+        from django.utils import timezone
+        from accounts.models import LoginThrottle
+        LoginThrottle.objects.create(key=f"rl:ai_chat_rl_day:{ip}", failures=views.AI_CHAT_DAILY_LIMIT, last_failure_at=timezone.now())
         with patch.object(views.requests, "post", return_value=_mock_response(200, _candidate_reply("ok"))) as mock_post:
             response = self._post(ip=ip)
         self.assertEqual(response.status_code, 429)
@@ -255,7 +257,8 @@ class ChatRateLimitTests(TestCase):
         with patch.object(views.requests, "post", return_value=_mock_response(200, _candidate_reply("ok"))):
             for _ in range(views.AI_CHAT_RATE_LIMIT_PER_MINUTE + 3):
                 self._post(ip=ip)
-        self.assertEqual(cache.get(f"ai_chat_rl_day:{ip}"), views.AI_CHAT_RATE_LIMIT_PER_MINUTE)
+        from accounts import rate_limit
+        self.assertEqual(rate_limit.count(f"ai_chat_rl_day:{ip}"), views.AI_CHAT_RATE_LIMIT_PER_MINUTE)
 
 
 def _make_gown(n, **overrides):

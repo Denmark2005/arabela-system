@@ -18,6 +18,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.views.decorators.http import require_http_methods
 
+from accounts import rate_limit
 from accounts.models import CustomerMessage, UserProfile
 from accounts.services import (
     cancel_lockout_notice,
@@ -59,6 +60,17 @@ _COLLECTION_PAGE_SIZE = 8
 
 # A search longer than the longest possible gown name can never match one, so it is not searched at all.
 _SEARCH_MAX_LENGTH = Gown._meta.get_field("name").max_length
+
+# Limits that stop scripts spamming the shop (accounts/rate_limit.py). Each is far above what a real customer does:
+# (how many, per how many seconds).
+_SEARCH_LIMIT = (60, 60)          # searches per minute, per connection (IP address)
+_SUBMIT_LIMIT = (10, 10 * 60)     # reservation submissions per 10 minutes, per account (retries after an error included)
+_HOLD_LIMIT = (20, 10 * 60)       # checkout holds started per 10 minutes, per account
+_CART_SAVE_LIMIT = (60, 60)       # cart saves per minute, per account (the page saves after every change)
+
+
+def _too_fast():
+    return JsonResponse({"success": False, "rate_limited": True, "error": rate_limit.SLOW_DOWN}, status=429)
 
 
 def _label_for(collection_key: str) -> str:
@@ -251,6 +263,10 @@ def search_results(request):
     query = str(request.GET.get("q") or "").strip()
     if not query:
         return redirect("gowns:collection_all")
+    if not rate_limit.allowed(f"search:{rate_limit.client_ip(request)}", *_SEARCH_LIMIT):
+        return render(request, "search_results.html", {
+            "query": query, "results": [], "result_count": 0, "rate_limited": True, "show_best_match_sort": True,
+        }, status=429)
     needle = query.lower()
     results: list[dict] = []
     if len(query) <= _SEARCH_MAX_LENGTH:
@@ -791,6 +807,10 @@ def reservation_submit(request):
     except json.JSONDecodeError:
         return JsonResponse({"success": False, "error": "Invalid request data."}, status=400)
 
+    # Counted only now that the body (and any receipt photo) has been read, for the same reason as the lockout below.
+    if not rate_limit.allowed(f"submit:{request.user.pk}", *_SUBMIT_LIMIT):
+        return _too_fast()
+
     # The temporary cancellation lockout used to be checked only when a hold STARTED, so a checkout page
     # that was already open still let a locked account book. Checked here too (after the body has been
     # read, so the phone gets this answer rather than a dropped connection). A hold can only still be
@@ -1207,6 +1227,8 @@ def reservation_hold_start(request):
     "you're about to silently replace an existing held selection" and confirm
     with the customer before swapping it, rather than the countdown quietly
     outliving whatever it was originally holding."""
+    if not rate_limit.allowed(f"hold:{request.user.pk}", *_HOLD_LIMIT):
+        return _too_fast()
     lockout_seconds, lockout_message = cancel_lockout_notice(request.user)
     if lockout_seconds:
         return JsonResponse({"success": False, "locked": True, "error": lockout_message}, status=403)
@@ -1266,6 +1288,8 @@ def cart_save_view(request):
         data = json.loads(request.body)
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
+    if not rate_limit.allowed(f"cart:{request.user.pk}", *_CART_SAVE_LIMIT):
+        return _too_fast()
 
     cart = data.get("cart")
     if not isinstance(cart, list):
