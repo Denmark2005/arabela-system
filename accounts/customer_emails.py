@@ -497,7 +497,8 @@ def _email_for_message(message_id, kind):
 
 
 def on_status_event_saved(sender, instance, created, **kwargs):
-    if not created or not getattr(settings, "CUSTOMER_EMAILS_ENABLED", False):
+    # raw=True is Django loading a backup/fixture (loaddata): old rows being put back must never email anyone.
+    if kwargs.get("raw") or not created or not getattr(settings, "CUSTOMER_EMAILS_ENABLED", False):
         return
     kind = EVENT_KINDS.get(instance.label)
     if kind is None or instance.staff_only or instance.item_id:
@@ -507,7 +508,8 @@ def on_status_event_saved(sender, instance, created, **kwargs):
 
 
 def on_customer_message_saved(sender, instance, created, **kwargs):
-    if not created or not getattr(settings, "CUSTOMER_EMAILS_ENABLED", False):
+    # raw=True is Django loading a backup/fixture (loaddata): old rows being put back must never email anyone.
+    if kwargs.get("raw") or not created or not getattr(settings, "CUSTOMER_EMAILS_ENABLED", False):
         return
     from accounts.models import CustomerMessage
 

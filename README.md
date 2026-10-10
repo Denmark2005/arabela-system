@@ -208,3 +208,30 @@ Every category has a picture on its tile on the customer site: the **Rentals** p
 - **Deploying:** this adds one table (`CategoryCover`, migration `gowns/0023_category_cover.py`). Run `python manage.py migrate` against the database **before** pushing to Render. If the code goes live first nothing breaks — customers just see the standard pictures, and the Categories page says uploads need the database update.
 - **Renamed category:** *Ball Gown* is now **Evening Gown** (its address is `/collections/evening-gown/`; the old `/collections/ball-gown/` link and its product links still work). Two migrations carry the rename into the data — `gowns/0024` (gown category, ID prefix and `Ball Gown NN` names, number counters, Removal Log, removed-category list, tag colour, category picture) and `reservations/0023` (the gown name on existing bookings). Web addresses of individual gowns are unchanged, and *Ball Gown Tulle* is a separate category that was not touched. Deploy order for a rename like this: push, wait until Render is live, then run `python manage.py migrate` right away (the old site code would not find the renamed gowns).
 - **Changing a picture that ships with the site:** `build_cover` and `cover_jpeg_bytes` in `gowns/cover_images.py` make the 600×900 JPEG from a photo; save it as `static/images/categories/<key>.jpg`. For a brand-new original category, also add its key to `BUNDLED_COVER_KEYS` in `gowns/covers.py`.
+
+## 13. Backups and recovery
+
+Supabase's free plan keeps **no backups** of the database, so the shop makes its own.
+
+**Taking a backup** (read-only, safe any time, also against the live database):
+
+```
+python manage.py backup_database
+```
+
+It saves one compressed file, `arabela-backup-YYYYMMDD-HHMMSS.json.gz`, in `C:\Users\<you>\ArabelaBackups` (or the folder in the `ARABELA_BACKUP_DIR` setting, or `--output-dir`), reads the file back to prove it is complete, and keeps the newest 30 (`--keep N`). It holds every gown, reservation, customer, receipt, message and setting. It leaves out what `migrate` rebuilds (content types, permissions), current logins (sessions), the admin click log and failed-login counters. **The photos and payment proofs are not inside it**: they live in Cloudinary, which keeps them; the backup holds their addresses.
+
+**The file holds customers' personal details and password hashes. Keep it private**: never put it on GitHub (this repository is public), a shared drive or an email. Times are kept to the millisecond.
+
+**If the database is lost** (a new, empty database is the only thing a restore goes into):
+
+1. Create a new empty PostgreSQL database (for example a new free Supabase project).
+2. Put its connection details in `.env` (`DATABASE_HOST`, `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_NAME`, `DATABASE_PORT`).
+3. `python manage.py migrate`
+4. `python manage.py restore_database C:\Users\<you>\ArabelaBackups\arabela-backup-....json.gz`
+
+   It refuses a database that already has accounts, gowns or reservations (so it can never overwrite live data), clears what `migrate` pre-fills, loads the backup, and checks every table's count against the file. Customers are never emailed during a restore.
+5. Point Render's `DATABASE_*` settings at the new database and redeploy.
+
+The restore was tested on the real data: 484 records in 18 tables came back with every count, key and value matching. Run `backup_database` before any risky change (a big migration, a bulk delete) so there is always a fresh copy to go back to.
+
