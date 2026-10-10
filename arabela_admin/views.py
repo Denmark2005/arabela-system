@@ -3045,12 +3045,13 @@ def staff_create_view(request):
         return JsonResponse({"error": "Username is required."}, status=400)
     if role not in _STAFF_ROLES:
         return JsonResponse({"error": "Choose a role of Manager or Staff."}, status=400)
-    if len(password) < 8:
-        return JsonResponse({"error": "Password must be at least 8 characters."}, status=400)
+    first, last = _split_name(full_name)
+    problem = _admin_password_problem(password, User(username=username, first_name=first, last_name=last))
+    if problem:
+        return JsonResponse({"error": problem}, status=400)
     if User.objects.filter(username__iexact=username).exists():
         return JsonResponse({"error": "That username is already taken."}, status=400)
 
-    first, last = _split_name(full_name)
     user = User.objects.create_user(
         username=username,
         password=password,
@@ -3087,8 +3088,10 @@ def staff_update_view(request, user_id):
         return JsonResponse({"error": "Full name is required."}, status=400)
     if role not in _STAFF_ROLES:
         return JsonResponse({"error": "Choose a role of Manager or Staff."}, status=400)
-    if password and len(password) < 8:
-        return JsonResponse({"error": "Password must be at least 8 characters."}, status=400)
+    if password:
+        problem = _admin_password_problem(password, target)
+        if problem:
+            return JsonResponse({"error": problem}, status=400)
 
     first, last = _split_name(full_name)
     target.first_name = first
@@ -3106,10 +3109,25 @@ def staff_update_view(request, user_id):
     return JsonResponse({"success": True, "account": _staff_row(target)})
 
 
-# The owner's password protects every customer's name, phone, address and receipts, so it is held to more than
-# the 8 characters the rest of the panel asks for.
+# Every admin password protects customers' names, phones, addresses and receipts: the owner's (Account Settings) and
+# each staff password the owner sets in Staff Management are held to the same rules.
 OWNER_PASSWORD_MIN_LENGTH = 10
 OWNER_PASSWORD_MAX_LENGTH = 128
+
+
+def _admin_password_problem(password, user):
+    """Why `password` cannot be used for this staff account, or None: at least 10 characters (at most 128), and Django's
+    own checks (AUTH_PASSWORD_VALIDATORS): not a common password, not only numbers, not too close to the username or name.
+    Existing accounts keep their current password; this only applies when a password is set."""
+    if len(password) < OWNER_PASSWORD_MIN_LENGTH:
+        return f"Use at least {OWNER_PASSWORD_MIN_LENGTH} characters for the password."
+    if len(password) > OWNER_PASSWORD_MAX_LENGTH:
+        return f"Use {OWNER_PASSWORD_MAX_LENGTH} characters or fewer for the password."
+    try:
+        validate_password(password, user)
+    except ValidationError as exc:
+        return " ".join(exc.messages)
+    return None
 
 
 @require_http_methods(["POST"])

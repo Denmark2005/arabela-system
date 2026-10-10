@@ -13,6 +13,7 @@ from gowns.models import (
     CustomCategory, Gown, SiteSettings, custom_categories, group_gowns_by_name, hidden_category_names, pick_representative_gown,
 )
 from gowns.covers import cover_for, owner_cover_urls
+from gowns.photos import GRID_WIDTH, sized
 from reservations.models import Reservation, ReservationItem
 
 _PRICE_RE = re.compile(r"[^\d]")
@@ -145,7 +146,7 @@ def _build_search_catalog(categories: list[dict] | None = None) -> list[dict]:
                     "title": rep.name,
                     "price_label": f"₱{rep.rental_price:,.0f}",
                     "price": int(rep.rental_price),
-                    "image": rep.photo_url or _FALLBACK_IMG,
+                    "image": sized(rep.photo_url, GRID_WIDTH) or _FALLBACK_IMG,
                     "url": reverse(
                         "gowns:product_detail",
                         kwargs={"collection": collection_key, "slug": rep.slug},

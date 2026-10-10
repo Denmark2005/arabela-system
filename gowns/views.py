@@ -37,6 +37,7 @@ from gowns.context_processors import (
     unread_messages_total,
 )
 from gowns.models import Gown, GownUnavailability, group_gowns_by_name, pick_representative_gown
+from gowns.photos import GRID_WIDTH, PAGE_WIDTH, sized
 from reservations import timeline
 from reservations.models import Reservation, ReservationItem, ReservationStatusEvent
 
@@ -120,7 +121,7 @@ def _cards_for_units(units, collection_key: str) -> list[dict]:
             # unquoted as a JS literal; "price_display" is the text shown on the card.
             "price": int(rep.rental_price),
             "price_display": f"₱{rep.rental_price:,.0f}",
-            "image": rep.photo_url or _FALLBACK_IMG,
+            "image": sized(rep.photo_url, GRID_WIDTH) or _FALLBACK_IMG,
             "collection_key": collection_key,
             # Only true once EVERY unit of this product is currently checked out --
             # if even one sibling is free right now, quick-add can still hand it out.
@@ -620,7 +621,7 @@ def _related_gowns(category_label: str, current_slug: str, limit: int = 4) -> li
             "slug": rep.slug,
             "title": rep.name,
             "price_display": f"₱{rep.rental_price:,.0f}",
-            "image": rep.photo_url or _FALLBACK_IMG,
+            "image": sized(rep.photo_url, GRID_WIDTH) or _FALLBACK_IMG,
         })
     return suggestions
 
@@ -669,7 +670,7 @@ def product_detail(request, collection: str, slug: str):
     product = {
         "title": display_unit.name,
         "price": f"₱{display_unit.rental_price:,.0f}",
-        "image": display_unit.photo_url or _FALLBACK_IMG,
+        "image": sized(display_unit.photo_url, PAGE_WIDTH) or _FALLBACK_IMG,
         "availability": (
             "Currently Unavailable"
             if is_out_of_stock
@@ -1120,7 +1121,7 @@ def reservation_item_detail(request, item_id):
         id=item_id, reservation__customer=request.user,
     )
     reservation = item.reservation
-    gown_photo = item.gown.photo_url if (item.gown_id and item.gown.photo_url) else _FALLBACK_IMG
+    gown_photo = sized(item.gown.photo_url, PAGE_WIDTH) if (item.gown_id and item.gown.photo_url) else _FALLBACK_IMG
     return render(
         request,
         'reservation_item_detail.html',

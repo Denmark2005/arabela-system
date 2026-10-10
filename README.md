@@ -181,7 +181,7 @@ The shop has **one owner account** — the sign-in for this admin panel. Staff a
 
 - Both forms ask for the **current password**.
 - **Username:** 4–30 letters, numbers, `.`, `-` or `_` (at least one letter), unique ignoring capitals across every account. The owner stays signed in.
-- **Password:** at least 10 characters, not one of the most common passwords, not only numbers, not close to the username. Changing it signs out every other device.
+- **Password:** at least 10 characters, not one of the most common passwords, not only numbers, not close to the username. Changing it signs out every other device. Staff passwords set in Staff Management follow the same rules (existing staff keep theirs until it is reset).
 - **Previous sign-in** (shown on both pages): when the account signed in before the current session, so a sign-in the owner does not recognise can be noticed. It is kept in the session, so there is no database change.
 - 5 wrong sign-in attempts for a username lock that username for 15 minutes (the lockout ends 15 minutes after the 5th wrong attempt, and the message says how many minutes are left). The count is kept in the database (`accounts.LoginThrottle`, migration `accounts/0013`), so an app restart or a refresh cannot reset it; before that migration has run it falls back to the server's memory.
 
@@ -266,6 +266,7 @@ The database is far from the web server (each question to it costs about 0.1 s),
 - **The All page and Search fetch the gown list once** for every category (`_products_by_category` in `gowns/views.py`) instead of once per category, with the same filter, order and grouping as each category page.
 - Measured on a copy of the real data (2026-10-10), every page byte-for-byte identical before and after: All page 45 → 5 database questions (4.7 s → 0.5 s), Search 49 → 9 (5.1 s → 0.9 s), category pages 11 → 5 (1.1 s → 0.5 s).
 - **Static files are fingerprinted** (`arabela_system/storage.py`): `collectstatic` saves each file again with a short fingerprint in its name and pages point at that copy, which browsers keep for good (a changed file gets a new name, so nobody sees an old version). If a page ever names a file that does not exist it gets the plain name instead of crashing; a stylesheet pointing at a missing file stops `collectstatic` itself, so a broken build never goes live.
+- **Gown photos are sent smaller** (`gowns/photos.py`): the customer pages ask Cloudinary for a resized, auto-compressed copy (800 px wide in the grids, 1600 px on the product and order pages, WebP where the browser supports it). Measured on the 29 live photos: 5.4 MB → 0.7 MB for the grids. The stored photo and the admin pages keep the original.
 - The first visit after a quiet spell on Render's free plan still waits about 30 s while the server wakes; a paid instance, or a visit a few minutes before a demo, avoids that.
 
 ## 16. Error pages

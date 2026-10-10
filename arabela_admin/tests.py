@@ -889,7 +889,7 @@ class StaffManagementCRUDTests(TestCase):
     def test_owner_can_create_a_staff_account(self):
         response = self.client.post(
             reverse("arabela_admin:staff_create"),
-            data=json.dumps({"name": "New Staffer", "username": "new_staffer_1", "password": "password123", "role": "Staff"}),
+            data=json.dumps({"name": "New Staffer", "username": "new_staffer_1", "password": "Bridal-Gown-2026", "role": "Staff"}),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200, response.content)
@@ -899,7 +899,7 @@ class StaffManagementCRUDTests(TestCase):
         User.objects.create_user(username="taken_name", password="x", is_staff=True)
         response = self.client.post(
             reverse("arabela_admin:staff_create"),
-            data=json.dumps({"name": "Dup", "username": "taken_name", "password": "password123", "role": "Staff"}),
+            data=json.dumps({"name": "Dup", "username": "taken_name", "password": "Bridal-Gown-2026", "role": "Staff"}),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 400)
@@ -911,6 +911,43 @@ class StaffManagementCRUDTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 400)
+
+    def test_staff_passwords_follow_the_same_rules_as_the_owners(self):
+        cases = {
+            "nine-char": "Use at least 10 characters",              # 9 characters
+            "password1234": "too common",                            # long enough but on Django's common list
+            "1234567890123": "entirely numeric",
+            "rules_staffer_9": "too similar",                        # the username itself
+        }
+        for password, message in cases.items():
+            with self.subTest(password=password):
+                response = self.client.post(
+                    reverse("arabela_admin:staff_create"),
+                    data=json.dumps({"name": "Rules Person", "username": "rules_staffer_9", "password": password, "role": "Staff"}),
+                    content_type="application/json",
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertIn(message, response.json()["error"])
+        self.assertFalse(User.objects.filter(username="rules_staffer_9").exists())
+
+    def test_resetting_a_staff_password_uses_the_same_rules_and_blank_keeps_the_old_one(self):
+        target = User.objects.create_user(username="reset_target", password="Old-Password-77", is_staff=True)
+        UserProfile.objects.create(user=target, role=UserProfile.Role.STAFF)
+        url = reverse("arabela_admin:staff_update", args=[target.id])
+        short = self.client.post(url, data=json.dumps({"name": "Reset Target", "role": "Staff", "password": "short123"}),
+                                 content_type="application/json")
+        self.assertEqual(short.status_code, 400)
+        self.assertIn("Use at least 10 characters", short.json()["error"])
+        blank = self.client.post(url, data=json.dumps({"name": "Reset Target", "role": "Staff", "password": ""}),
+                                 content_type="application/json")
+        self.assertEqual(blank.status_code, 200)
+        target.refresh_from_db()
+        self.assertTrue(target.check_password("Old-Password-77"))
+        good = self.client.post(url, data=json.dumps({"name": "Reset Target", "role": "Staff", "password": "Evening-Gown-2026"}),
+                                content_type="application/json")
+        self.assertEqual(good.status_code, 200)
+        target.refresh_from_db()
+        self.assertTrue(target.check_password("Evening-Gown-2026"))
 
     def test_owner_can_update_a_staff_account(self):
         target = User.objects.create_user(username="update_target", password="x", is_staff=True)
