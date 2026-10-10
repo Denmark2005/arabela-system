@@ -123,6 +123,26 @@ class BackupCommandTests(BackupTestBase):
                 call_command("backup_database", output_dir=str(self.folder))
         self.assertEqual(list(self.folder.iterdir()), [])
 
+    def test_a_folder_that_cannot_be_used_falls_back_to_the_home_folder_with_a_warning(self):
+        blocked = self.folder / "a-file"
+        blocked.write_text("not a folder")                       # a folder cannot be made inside a file, like a Drive that is not running
+        home = Path(tempfile.mkdtemp(prefix="arabela-home-test-"))
+        self.addCleanup(lambda: [f.unlink() for f in (home / "ArabelaBackups").glob("*")] or (home / "ArabelaBackups").rmdir() or home.rmdir())
+        errors = io.StringIO()
+        with patch("pathlib.Path.home", return_value=home):
+            call_command("backup_database", output_dir=str(blocked / "ArabelaBackups"), stdout=io.StringIO(), stderr=errors)
+        saved = list((home / "ArabelaBackups").glob("arabela-backup-*.json.gz"))
+        self.assertEqual(len(saved), 1)
+        self.assertIn("WARNING: cannot use", errors.getvalue())
+        self.assertIn("Saving to", errors.getvalue())
+
+    def test_if_neither_folder_works_it_says_so_clearly(self):
+        blocked = self.folder / "a-file"
+        blocked.write_text("not a folder")
+        with patch("pathlib.Path.home", return_value=blocked):  # the fallback is inside a file too
+            with self.assertRaisesMessage(CommandError, "Cannot save backups"):
+                call_command("backup_database", output_dir=str(blocked / "x"), stdout=io.StringIO(), stderr=io.StringIO())
+
     def test_the_default_folder_comes_from_the_environment_or_the_home_folder(self):
         with patch.dict("os.environ", {"ARABELA_BACKUP_DIR": "/somewhere/safe"}):
             self.assertEqual(default_folder(), Path("/somewhere/safe"))

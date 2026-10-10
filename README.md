@@ -221,6 +221,8 @@ python manage.py backup_database
 
 It saves one compressed file, `arabela-backup-YYYYMMDD-HHMMSS.json.gz`, in `C:\Users\<you>\ArabelaBackups` (or the folder in the `ARABELA_BACKUP_DIR` setting, or `--output-dir`), reads the file back to prove it is complete, and keeps the newest 30 (`--keep N`). It holds every gown, reservation, customer, receipt, message and setting. It leaves out what `migrate` rebuilds (content types, permissions), current logins (sessions), the admin click log and failed-login counters. **The photos and payment proofs are not inside it**: they live in Cloudinary, which keeps them; the backup holds their addresses.
 
+**Automatic daily backup (on the owner's laptop).** A Windows scheduled task named **Arabela Daily Backup** runs `C:\Users\<you>\ArabelaBackups\run-backup.bat` every day at **9 PM**, or the next time the laptop is on if it was off then. It saves into the Google Drive folder and keeps a short log in `C:\Users\<you>\ArabelaBackups\backup-log.txt` (the last line says `exit code 0` when it worked). The laptop must be on, signed in, and Google Drive for desktop running; if the Drive folder is not available the backup is saved in `C:\Users\<you>\ArabelaBackups` instead, with a warning in the log. Check it in *Task Scheduler → Task Scheduler Library*, run it now with `Start-ScheduledTask -TaskName "Arabela Daily Backup"`, and remove it with `Unregister-ScheduledTask -TaskName "Arabela Daily Backup" -Confirm:$false`. The task and its `.bat` file belong to that one laptop; they are not part of the project files.
+
 **The file holds customers' personal details and password hashes. Keep it private**: never put it on GitHub (this repository is public), a shared drive or an email. Times are kept to the millisecond.
 
 **If the database is lost** (a new, empty database is the only thing a restore goes into):
@@ -234,4 +236,25 @@ It saves one compressed file, `arabela-backup-YYYYMMDD-HHMMSS.json.gz`, in `C:\U
 5. Point Render's `DATABASE_*` settings at the new database and redeploy.
 
 The restore was tested on the real data: 484 records in 18 tables came back with every count, key and value matching. Run `backup_database` before any risky change (a big migration, a bulk delete) so there is always a fresh copy to go back to.
+
+## 14. Error alerts and the uptime check
+
+Two small safety nets, both free, so you hear about a problem before a customer has to tell you.
+
+**The health page.** `/healthz/` answers `{"status": "ok", "error_alerts": "on" or "off"}` when the site is up and can reach its database, and `{"status": "error"}` (HTTP 503) when it cannot. It needs no login, shows nothing private, and asks the database one tiny question. A regular visit also stops Render's free plan from putting the site to sleep (the first visitor after a quiet period otherwise waits about 30 seconds).
+
+**Uptime monitor (UptimeRobot, free):**
+
+1. Sign up at uptimerobot.com, then **Add New Monitor** → type **HTTP(s)**.
+2. URL: `https://arabela-gown-rental.onrender.com/healthz/`, check every **5 minutes**, and make sure your email is the alert contact.
+3. Optional but good: in Render → the service → **Settings** → **Health Check Path** → `/healthz/`.
+
+**Error alerts (Sentry, free):** when the live site crashes for a visitor, an email arrives with the exact page, line and code version.
+
+1. Sign up at sentry.io (free plan), **Create Project** → platform **Django** → name it `arabela`. Copy the project's **DSN** (an address that starts with `https://`).
+2. In **Render → the service → Environment**, add `SENTRY_DSN` with that address and save (Render redeploys). Do **not** put it in your laptop's `.env`: your laptop shares the live database, so its local errors would arrive as if they were the live site's.
+3. Check it: open `/healthz/` on the live site; it should now say `"error_alerts": "on"`. To see an alert arrive, run on your computer: `$env:SENTRY_DSN = "the-address"; python manage.py send_test_alert` (PowerShell) and look in your Sentry inbox and email.
+4. In Sentry, make sure email notifications are on for new issues (Alerts → the default rule, and your account's Notification settings).
+
+What is sent is kept small on purpose (`arabela_system/monitoring.py`): the error, the page, and which version of the code was running. **No names, emails or IP addresses, and never what was typed into a form** (this was checked by sending a real crash to a stand-in Sentry and reading what arrived). Noise such as strangers' bots sending a made-up website name is dropped. Without `SENTRY_DSN` nothing is sent at all, so local development and the tests never report anything.
 

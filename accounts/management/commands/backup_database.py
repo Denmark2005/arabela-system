@@ -35,11 +35,10 @@ class Command(BaseCommand):
         parser.add_argument("--keep", type=int, default=30, help="How many backups to keep (default 30). Older ones are deleted.")
 
     def handle(self, *args, **options):
-        folder = Path(options["output_dir"]) if options["output_dir"] else default_folder()
         keep = options["keep"]
         if keep < 1:
             raise CommandError("--keep must be at least 1.")
-        folder.mkdir(parents=True, exist_ok=True)
+        folder = self.usable_folder(Path(options["output_dir"]) if options["output_dir"] else default_folder())
         name = f"arabela-backup-{datetime.now():%Y%m%d-%H%M%S}.json.gz"
         final = folder / name
 
@@ -62,6 +61,31 @@ class Command(BaseCommand):
         self.stdout.write(f"  {sum(counts.values())} records in {len(counts)} tables, {size_mb:.2f} MB (compressed)")
         for label, number in sorted(counts.items(), key=lambda item: -item[1])[:8]:
             self.stdout.write(f"    {label:38} {number}")
+
+    def usable_folder(self, wanted: Path) -> Path:
+        """The folder to save into. If the wanted one cannot be used right now (a Google Drive folder while Drive is not running,
+        a USB stick that is unplugged), save into the folder on this computer instead and say so loudly: a backup in the second
+        best place is far better than no backup at all."""
+        try:
+            return self.checked(wanted)
+        except OSError as exc:
+            fallback = Path.home() / "ArabelaBackups"
+            if fallback == wanted:
+                raise CommandError(f"Cannot save backups to {wanted}: {exc}") from exc
+            self.stderr.write(self.style.WARNING(f"WARNING: cannot use {wanted} ({exc}). Saving to {fallback} instead."))
+            try:
+                return self.checked(fallback)
+            except OSError as exc2:
+                raise CommandError(f"Cannot save backups to {wanted} or to {fallback}: {exc2}") from exc2
+
+    @staticmethod
+    def checked(folder: Path) -> Path:
+        """Creates the folder if needed and proves a file can really be written there."""
+        folder.mkdir(parents=True, exist_ok=True)
+        handle, probe = tempfile.mkstemp(prefix=".probe-", dir=folder)
+        os.close(handle)
+        Path(probe).unlink()
+        return folder
 
     @staticmethod
     def read_back(path: Path) -> Counter:

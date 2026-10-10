@@ -407,3 +407,10 @@ LOGGING = {
 # same questions in ~1.2s with no thinking overhead and a far larger free quota.
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '').strip()
 GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite')
+
+
+# Error alerts (Sentry, free plan): off unless SENTRY_DSN is set -- on Render's Environment page, never in .env on a laptop that shares the
+# live database. See arabela_system/monitoring.py and README section 14.
+from arabela_system.monitoring import init_from_environment  # noqa: E402
+
+init_from_environment(os.environ)
