@@ -258,3 +258,13 @@ Two small safety nets, both free, so you hear about a problem before a customer 
 
 What is sent is kept small on purpose (`arabela_system/monitoring.py`): the error, the page, and which version of the code was running. **No names, emails or IP addresses, and never what was typed into a form** (this was checked by sending a real crash to a stand-in Sentry and reading what arrived). Noise such as strangers' bots sending a made-up website name is dropped. Without `SENTRY_DSN` nothing is sent at all, so local development and the tests never report anything.
 
+## 15. Page speed
+
+The database is far from the web server (each question to it costs about 0.1 s), so speed comes from asking it fewer questions.
+
+- **One page visit asks each category question once** (`gowns/request_memo.py`). The menu, the search box, the tiles and the page all read the category lists; they used to ask the database up to 15 times on one page. The memory lasts for that one visit only and is wiped the moment a category is added or removed, so nothing can ever show out-of-date categories.
+- **The All page and Search fetch the gown list once** for every category (`_products_by_category` in `gowns/views.py`) instead of once per category, with the same filter, order and grouping as each category page.
+- Measured on a copy of the real data (2026-10-10), every page byte-for-byte identical before and after: All page 45 → 5 database questions (4.7 s → 0.5 s), Search 49 → 9 (5.1 s → 0.9 s), category pages 11 → 5 (1.1 s → 0.5 s).
+- **Static files are fingerprinted** (`arabela_system/storage.py`): `collectstatic` saves each file again with a short fingerprint in its name and pages point at that copy, which browsers keep for good (a changed file gets a new name, so nobody sees an old version). If a page ever names a file that does not exist it gets the plain name instead of crashing; a stylesheet pointing at a missing file stops `collectstatic` itself, so a broken build never goes live.
+- The first visit after a quiet spell on Render's free plan still waits about 30 s while the server wakes; a paid instance, or a visit a few minutes before a demo, avoids that.
+

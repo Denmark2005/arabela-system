@@ -549,12 +549,20 @@ class CategoryCover(models.Model):
         return f'{self.key} cover'
 
 
+def custom_categories():
+    """The owner's own categories, oldest first. Asked once per page visit (gowns/request_memo.py); callers get their own list."""
+    from gowns.request_memo import remember
+    return list(remember("custom_categories", lambda: list(CustomCategory.objects.all())))
+
+
 def custom_category_names():
-    return list(CustomCategory.objects.values_list('name', flat=True))
+    return [category.name for category in custom_categories()]
 
 
 def hidden_category_names():
-    return set(HiddenCategory.objects.values_list('name', flat=True))
+    """The built-in categories the owner removed. Asked once per page visit (gowns/request_memo.py); callers get their own set."""
+    from gowns.request_memo import remember
+    return set(remember("hidden_category_names", lambda: set(HiddenCategory.objects.values_list('name', flat=True))))
 
 
 def visible_builtin_names():

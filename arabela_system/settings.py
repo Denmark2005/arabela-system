@@ -82,6 +82,9 @@ MIDDLEWARE = [
     # the hosting plan) was momentarily full during a traffic spike -- see the class
     # docstring in arabela_system/middleware.py for why this is safe to retry.
     'arabela_system.middleware.DatabaseRetryMiddleware',
+    # One page visit asks each category question once instead of up to 15 times (gowns/request_memo.py). Inside the retry
+    # middleware, so a retried visit starts with a fresh memory.
+    'gowns.request_memo.RequestMemoMiddleware',
     # Serves collected static files directly from the app process -- needed once
     # DEBUG=False, since Django's dev-server auto-serving of static files only
     # ever worked because DEBUG was True. No separate static file host required.
@@ -235,14 +238,15 @@ else:
 
 STORAGES = {
     "default": {"BACKEND": _default_file_storage},
-    # Compressed (gzip/brotli) but NOT the Manifest variant -- Manifest storage
-    # hard-fails `collectstatic` if any {% static %} tag anywhere points at a
-    # file that doesn't exist, which is too strict a first deploy to risk. The
-    # admin bundle.js/site JS already have their own `?v=` cache-busting (see
-    # admin_asset_version/site_asset_version), so content-hashed filenames
-    # aren't needed for that problem to already be solved.
-    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
+    # Compressed (gzip/brotli) AND fingerprinted: `collectstatic` saves each file a second time with a short fingerprint of its
+    # contents in the name (style.3f9a1c.css) and {% static %} points pages at that copy. WhiteNoise lets browsers keep those
+    # copies for a year, because a changed file gets a new name -- so repeat visits stop re-downloading styles, scripts and
+    # pictures, and nobody ever sees an old version. The plain-named copies stay too, for any script that names a file directly.
+    # (arabela_system/storage.py: if a page ever names a static file that does not exist, it gets the plain name -- one missing
+    # picture or style -- instead of the whole page crashing. Also lets local development and the tests run without `collectstatic`.)
+    "staticfiles": {"BACKEND": "arabela_system.storage.ForgivingManifestStaticFilesStorage"},
 }
+WHITENOISE_MANIFEST_STRICT = False
 
 # Media files (gown photos, GCash screenshots). MEDIA_URL/MEDIA_ROOT only
 # matter for the FileSystemStorage fallback above -- Cloudinary ignores them

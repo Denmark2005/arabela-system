@@ -10,7 +10,7 @@ from django.utils.functional import SimpleLazyObject
 
 from accounts.models import CustomerMessage, UserProfile
 from gowns.models import (
-    CustomCategory, Gown, SiteSettings, group_gowns_by_name, hidden_category_names, pick_representative_gown,
+    CustomCategory, Gown, SiteSettings, custom_categories, group_gowns_by_name, hidden_category_names, pick_representative_gown,
 )
 from gowns.covers import cover_for, owner_cover_urls
 from reservations.models import Reservation, ReservationItem
@@ -81,7 +81,7 @@ def all_categories() -> list[dict]:
         {**row, "audience": "men" if row["key"] in _MEN_KEYS else "women"}
         for row in _CATEGORIES if row["label"] not in hidden
     ]
-    for category in CustomCategory.objects.all():
+    for category in custom_categories():
         rows.append({
             "key": category.slug, "url_name": "collection_custom", "label": category.name,
             "custom": True, "audience": category.audience,

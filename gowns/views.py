@@ -96,6 +96,20 @@ def _products_for_category(collection_key: str) -> list[dict]:
         .exclude(status=Gown.Status.OUT_OF_STOCK)
         .order_by("color_code", "gown_id")
     )
+    return _cards_for_units(units, collection_key)
+
+
+def _products_by_category(categories) -> dict[str, list[dict]]:
+    """The same cards as _products_for_category, for many categories at once with ONE gown query instead of one per category
+    (the All page and Search list every category). Same filter, same order within each category, same grouping."""
+    units_by_label = defaultdict(list)
+    for gown in Gown.objects.exclude(status=Gown.Status.OUT_OF_STOCK).order_by("color_code", "gown_id"):
+        units_by_label[gown.category].append(gown)
+    return {category["key"]: _cards_for_units(units_by_label.get(category["label"], []), category["key"]) for category in categories}
+
+
+def _cards_for_units(units, collection_key: str) -> list[dict]:
+    """One card per product from a category's bookable units (already ordered by color code, then gown ID)."""
     cards = []
     for group in group_gowns_by_name(units):
         rep = pick_representative_gown(group)
@@ -233,13 +247,15 @@ def featured_women_collections(request):
 
 def collection_all(request):
     """Rent → All: cycle through every category's product grid (same slugs/prices as each collection page)."""
+    categories = all_categories()
+    products = _products_by_category(categories)
     panels = [
         {
             "collection_key": category["key"],
             "label": category["label"],
-            "products": _products_for_category(category["key"]),
+            "products": products[category["key"]],
         }
-        for category in all_categories()
+        for category in categories
     ]
     return render(request, "all.html", {"all_panels": panels})
 
@@ -270,11 +286,10 @@ def search_results(request):
     needle = query.lower()
     results: list[dict] = []
     if len(query) <= _SEARCH_MAX_LENGTH:
-        for category in all_categories():
-            results.extend(
-                item for item in _products_for_category(category["key"])
-                if needle in item["title"].lower()
-            )
+        categories = all_categories()
+        products = _products_by_category(categories)
+        for category in categories:
+            results.extend(item for item in products[category["key"]] if needle in item["title"].lower())
         # Stable sort: gowns that tie keep their category order.
         results.sort(key=lambda item: (_best_match_rank(item["title"], needle), item["title"].lower()))
     return render(request, "search_results.html", {
