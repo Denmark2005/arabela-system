@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}ARABELA | Page not found{% endblock %}
+
+{% block body_class %}min-h-screen flex flex-col{% endblock %}
+
+{% block main_class %}flex-grow flex items-center justify-center pt-32 pb-24 px-6{% endblock %}
+
+{% block content %}
+{% comment %}Shown by Django whenever a page does not exist (a mistyped link, an old link to a gown that was removed). Only on the live site: with DEBUG on, Django shows its own developer page instead. Keeps the normal menu and footer so the visitor can carry on browsing.{% endcomment %}
+{% with in_admin=request.path|slice:":13" %}
+  <div class="max-w-2xl w-full text-center">
+    <p class="font-label text-[0.7rem] tracking-[0.3em] uppercase text-secondary/60 mb-6">Error 404</p>
+    <h1 class="font-headline text-4xl md:text-6xl font-light tracking-tight text-primary leading-[1.1] mb-6">
+      Page not found.
+    </h1>
+    <p class="font-body text-base leading-relaxed font-light text-secondary max-w-lg mx-auto mb-12">
+      {% if in_admin == "/admin-panel/" %}
+        This admin page does not exist. The link may be old or mistyped.
+      {% else %}
+        The page you are looking for is not here. The link may be old or mistyped, or the gown may no longer be listed.
+      {% endif %}
+    </p>
+    <div class="flex flex-col items-center gap-8">
+      {% if in_admin == "/admin-panel/" %}
+        <a href="{% url 'arabela_admin:dashboard' %}" class="w-full md:w-64 px-10 py-5 bg-primary text-white text-[0.65rem] uppercase tracking-[0.3em] font-medium hover:bg-secondary transition-all duration-500 rounded-[6px] flex items-center justify-center no-underline text-center">
+          Back to the dashboard
+        </a>
+      {% else %}
+        <a href="{% url 'gowns:collection_all' %}" class="w-full md:w-64 px-10 py-5 bg-primary text-white text-[0.65rem] uppercase tracking-[0.3em] font-medium hover:bg-secondary transition-all duration-500 rounded-[6px] flex items-center justify-center no-underline text-center">
+          Browse all gowns
+        </a>
+      {% endif %}
+      <a class="font-label text-[0.6rem] uppercase tracking-[0.3em] text-secondary hover:text-primary transition-colors border-b border-transparent hover:border-primary/20 pb-1" href="{% url 'gowns:homepage' %}">
+        Back to Home
+      </a>
+    </div>
+  </div>
+{% endwith %}
+{% endblock %}

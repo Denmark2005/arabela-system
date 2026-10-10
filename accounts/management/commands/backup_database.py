@@ -14,6 +14,7 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
+from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 
@@ -35,6 +36,9 @@ class Command(BaseCommand):
         parser.add_argument("--keep", type=int, default=30, help="How many backups to keep (default 30). Older ones are deleted.")
 
     def handle(self, *args, **options):
+        if getattr(settings, "USING_LAPTOP_DB", False):
+            # Backups are of the live shop; a laptop copy saved among them would push real backups out of the newest 30.
+            raise CommandError("This would back up the LAPTOP database, not the live shop. Run: python live.py backup_database")
         keep = options["keep"]
         if keep < 1:
             raise CommandError("--keep must be at least 1.")

@@ -1,0 +1,46 @@
+<!doctype html>
+{% comment %}Shown by Django when a page crashes on the live site (with DEBUG on, Django shows its own developer page instead). Deliberately stands alone: no base.html, no database, no template tags that could fail, styles written inline -- when something has broken, this page must still appear.{% endcomment %}
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>ARABELA | Something went wrong</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500&family=Lobster+Two:ital,wght@1,700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; background: #ffffff; color: #615e57;
+         font-family: "Poppins", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { padding: 22px 24px; border-bottom: 1px solid rgba(0, 0, 0, 0.05); text-align: center; }
+  .wordmark { font-family: "Lobster Two", cursive; font-style: italic; font-weight: 700; font-size: 26px; color: #222222; text-decoration: none; }
+  main { flex-grow: 1; display: flex; align-items: center; justify-content: center; padding: 64px 24px 96px; }
+  .box { max-width: 560px; width: 100%; text-align: center; }
+  .label { margin: 0 0 24px; font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase; color: rgba(97, 94, 87, 0.6); }
+  h1 { margin: 0 0 24px; font-size: clamp(36px, 7vw, 60px); font-weight: 300; letter-spacing: -0.02em; line-height: 1.1; color: #0b0c0c; }
+  p.text { margin: 0 auto 48px; max-width: 460px; font-size: 16px; font-weight: 300; line-height: 1.65; }
+  .actions { display: flex; flex-direction: column; align-items: center; gap: 32px; }
+  .button { display: flex; align-items: center; justify-content: center; width: 100%; max-width: 256px; padding: 20px 40px; border-radius: 6px;
+            background: #0b0c0c; color: #ffffff; font-size: 10.5px; font-weight: 500; letter-spacing: 0.3em; text-transform: uppercase; text-decoration: none;
+            transition: background-color 0.5s; }
+  .button:hover { background: #615e57; }
+  .link { font-size: 9.6px; letter-spacing: 0.3em; text-transform: uppercase; color: #615e57; text-decoration: none; padding-bottom: 4px;
+          border-bottom: 1px solid transparent; }
+  .link:hover { color: #0b0c0c; border-bottom-color: rgba(11, 12, 12, 0.2); }
+  a:focus-visible { outline: 2px solid #0b0c0c; outline-offset: 3px; }
+</style>
+</head>
+<body>
+<header><a class="wordmark" href="/">Arabela</a></header>
+<main>
+  <div class="box">
+    <p class="label">Error 500</p>
+    <h1>Something went wrong.</h1>
+    <p class="text">This is a problem on our side, not anything you did. Please try again in a moment. If you were sending a reservation, check My Orders first so it is not sent twice.</p>
+    <div class="actions">
+      <a class="button" href="/">Back to Home</a>
+      <a class="link" href="/reservations/">My Orders</a>
+    </div>
+  </div>
+</main>
+</body>
+</html>

@@ -1,4 +1,5 @@
 .env
+.env.laptop-db
 __pycache__/
 *.pyc
 media/

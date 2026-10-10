@@ -268,3 +268,23 @@ The database is far from the web server (each question to it costs about 0.1 s),
 - **Static files are fingerprinted** (`arabela_system/storage.py`): `collectstatic` saves each file again with a short fingerprint in its name and pages point at that copy, which browsers keep for good (a changed file gets a new name, so nobody sees an old version). If a page ever names a file that does not exist it gets the plain name instead of crashing; a stylesheet pointing at a missing file stops `collectstatic` itself, so a broken build never goes live.
 - The first visit after a quiet spell on Render's free plan still waits about 30 s while the server wakes; a paid instance, or a visit a few minutes before a demo, avoids that.
 
+## 16. Error pages
+
+`templates/404.html` (a page that does not exist) keeps the normal menu and footer and offers "Browse all gowns" (or "Back to the dashboard" inside the admin panel). `templates/500.html` (a crash) stands alone on purpose, with no database, no shared layout and its styles written inline, so it still appears when something is broken. Both only show on the live site: with `DEBUG=True` Django shows its own developer pages instead.
+
+## 17. Laptop database (so local testing never changes the live shop)
+
+Until this is set up, the laptop's `.env` points at the live database, and anything clicked locally really happens on the live site. To give the laptop its own copy:
+
+1. In Supabase, create a second free project (same region as the live one), and keep its database password somewhere safe.
+2. Copy `.env.laptop-db.example` to `.env.laptop-db` and fill it in from the new project's **Connect → Session pooler** page. The file is git-ignored and only its five `DATABASE_*` lines are read.
+3. Build the tables and copy the live data across:
+   ```
+   python manage.py migrate
+   python live.py backup_database
+   python manage.py restore_database "<the backup file it printed>"
+   ```
+
+From then on `python manage.py runserver` says "Using the LAPTOP database" and the live shop is not touched. On the laptop, deleting a photo keeps the Cloudinary file (the live shop still shows it) and customer emails stay off.
+
+To do something to the live database on purpose, use `live.py` for that one command: `python live.py migrate` after a new migration (run plain `python manage.py migrate` too, for the laptop copy). The daily backup task already runs `live.py backup_database`, and `backup_database` refuses to back up the laptop copy. Delete `.env.laptop-db` to go back to the old behaviour. Free Supabase projects pause after a week without use; press **Restore** in the dashboard to wake it.

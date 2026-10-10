@@ -11,9 +11,12 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 
 import cloudinary
+
+from arabela_system import laptop_db
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -32,7 +35,14 @@ def _load_dotenv(dotenv_path: Path) -> None:
         os.environ.setdefault(key, value)
 
 
+_SHELL_ENV_KEYS = set(os.environ)   # typed in the terminal: wins over both files
 _load_dotenv(BASE_DIR / '.env')
+# The laptop's own copy of the database when `.env.laptop-db` exists (never on Render); `python live.py <command>` reaches the
+# live one on purpose. See arabela_system/laptop_db.py.
+USING_LAPTOP_DB = laptop_db.apply(BASE_DIR, os.environ, _SHELL_ENV_KEYS)
+if USING_LAPTOP_DB and 'runserver' in sys.argv:
+    print("Using the LAPTOP database (.env.laptop-db) -- the live shop is not touched. "
+          "Use `python live.py <command>` for the live database.", file=sys.stderr)
 
 
 # Quick-start development settings - unsuitable for production
@@ -226,6 +236,9 @@ if _cloudinary_cloud_name:
         'API_SECRET': os.getenv('CLOUDINARY_API_SECRET', '').strip(),
     }
     _default_file_storage = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+    if USING_LAPTOP_DB:
+        # Same files as the live shop: deleting a photo on the laptop keeps the file (arabela_system/laptop_storage.py).
+        _default_file_storage = 'arabela_system.laptop_storage.LaptopSafeCloudinaryStorage'
     # django-cloudinary-storage only ever forwards CLOUD_NAME/API_KEY/API_SECRET
     # (and SECURE) out of CLOUDINARY_STORAGE into cloudinary.config() -- it has no
     # timeout option of its own -- so without this, every upload (gown photos,
@@ -355,7 +368,7 @@ EMAIL_TIMEOUT = int(os.getenv('EMAIL_TIMEOUT', '10'))
 # OFF unless this is explicitly 'true'. Local development shares the live database, so approving a real
 # booking from a laptop must never email a real customer: only the Render service sets it. The admin's
 # "Send test to me" button works either way (it only ever mails the signed-in owner's own address).
-CUSTOMER_EMAILS_ENABLED = os.getenv('CUSTOMER_EMAILS_ENABLED', 'false').strip().lower() == 'true'
+CUSTOMER_EMAILS_ENABLED = os.getenv('CUSTOMER_EMAILS_ENABLED', 'false').strip().lower() == 'true' and not USING_LAPTOP_DB
 # Links inside those emails. Blank = built from the Site row (django_site) the deployment points at.
 SITE_BASE_URL = os.getenv('SITE_BASE_URL', '').strip().rstrip('/')
 # Render's FREE web services block outbound SMTP (ports 25/465/587), so Gmail-over-SMTP only works on a paid
