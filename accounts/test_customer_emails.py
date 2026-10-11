@@ -450,9 +450,9 @@ class CustomerEmailHookTests(TestCase):
     def test_a_double_clicked_approve_sends_one_email(self):
         reservation = self._reservation()
         with self.captureOnCommitCallbacks(execute=True):
-            self._post("reservation_approve", [reservation.pk])
-            self._post("reservation_approve", [reservation.pk])
-        self.assertEqual(ReservationStatusEvent.objects.filter(reservation=reservation, label="Reservation approved").count(), 2)
+            self.assertEqual(self._post("reservation_approve", [reservation.pk]).status_code, 200)
+            self.assertEqual(self._post("reservation_approve", [reservation.pk]).status_code, 409)   # already approved
+        self.assertEqual(ReservationStatusEvent.objects.filter(reservation=reservation, label="Reservation approved").count(), 1)
         self._the_one_email()
 
     def test_rejecting_emails_the_reason(self):

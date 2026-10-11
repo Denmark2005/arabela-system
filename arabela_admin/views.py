@@ -2321,18 +2321,32 @@ def gown_block_delete_view(request, block_id):
     return JsonResponse({"success": True})
 
 
+def _already_reviewed_response(pk):
+    """Approve/Reject on a reservation that is no longer Pending: 404 if it is gone, else a 409 saying what happened,
+    so a second staff member working from an old page is told to refresh instead of overturning the first decision."""
+    reservation = Reservation.objects.filter(id=pk).only("status").first()
+    if reservation is None:
+        return JsonResponse({"error": "Reservation not found"}, status=404)
+    done = {
+        Reservation.Status.REJECTED: "already rejected",
+        Reservation.Status.CANCELLED: "cancelled by the customer",
+    }.get(reservation.status, "already approved")
+    return JsonResponse({"error": f"This reservation was {done}. Please refresh the page."}, status=409)
+
+
 @require_http_methods(["POST"])
 def reservation_approve_view(request, pk):
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
-    try:
-        reservation = Reservation.objects.get(id=pk)
-    except Reservation.DoesNotExist:
-        return JsonResponse({"error": "Reservation not found"}, status=404)
-
-    reservation.status = Reservation.Status.CONFIRMED
-    reservation.reviewed_at = timezone.now()
-    reservation.save(update_fields=["status", "reviewed_at", "updated_at"])
+    # Claim it only while it is still Pending: one conditional UPDATE, so of two staff clicking at the same moment
+    # (or one on an old page) exactly one wins and the other is told it was already decided.
+    now = timezone.now()
+    claimed = Reservation.objects.filter(id=pk, status=Reservation.Status.PENDING).update(
+        status=Reservation.Status.CONFIRMED, reviewed_at=now, updated_at=now,
+    )
+    if not claimed:
+        return _already_reviewed_response(pk)
+    reservation = Reservation.objects.get(id=pk)
     ReservationStatusEvent.record(
         reservation, "Reservation approved",
         detail="Your payment was verified. Your booking is confirmed.",
@@ -2353,23 +2367,20 @@ def reservation_reject_view(request, pk):
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
     try:
-        reservation = Reservation.objects.get(id=pk)
-    except Reservation.DoesNotExist:
-        return JsonResponse({"error": "Reservation not found"}, status=404)
-
-    try:
         data = json.loads(request.body or "{}")
     except json.JSONDecodeError:
         data = {}
     reason = (data.get("reason") or "").strip()
 
-    reservation.status = Reservation.Status.REJECTED
-    reservation.reviewed_at = timezone.now()
-    update_fields = ["status", "reviewed_at", "updated_at"]
+    # Same claim as Approve: only a reservation still Pending can be rejected.
+    now = timezone.now()
+    changes = {"status": Reservation.Status.REJECTED, "reviewed_at": now, "updated_at": now}
     if reason:
-        reservation.notes = reason
-        update_fields.append("notes")
-    reservation.save(update_fields=update_fields)
+        changes["notes"] = reason
+    claimed = Reservation.objects.filter(id=pk, status=Reservation.Status.PENDING).update(**changes)
+    if not claimed:
+        return _already_reviewed_response(pk)
+    reservation = Reservation.objects.get(id=pk)
     ReservationStatusEvent.record(
         reservation, "Reservation rejected",
         detail=reason or "Please contact the shop for details.",
@@ -2403,10 +2414,18 @@ def reservation_item_mark_returned_view(request, item_id):
         return JsonResponse({"error": "Choose Returned or Returned — needs repair."}, status=400)
     needs_repair = condition == ReservationItem.ReturnCondition.NEEDS_REPAIR
 
+    # Claim the check-in only while the gown is not back yet: one conditional UPDATE, so a second click (another staff
+    # member, an old page, a double tap) can never log it twice or move the real return date to a later day.
+    today, now = timezone.localdate(), timezone.now()
+    claimed = ReservationItem.objects.filter(id=item.id).exclude(stage=ReservationItem.Stage.RETURNED).update(
+        stage=ReservationItem.Stage.RETURNED, returned_on=today, return_condition=condition, updated_at=now,
+    )
+    if not claimed:
+        return JsonResponse({"error": "This gown is already checked in. Please refresh the page."}, status=409)
     item.stage = ReservationItem.Stage.RETURNED
-    item.returned_on = timezone.localdate()
+    item.returned_on = today
     item.return_condition = condition
-    item.save(update_fields=["stage", "returned_on", "return_condition", "updated_at"])
+    item.updated_at = now
     ReservationStatusEvent.record(
         item.reservation, f"{item.gown_name} returned", item=item,
         detail="Checked in by staff.",
