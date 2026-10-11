@@ -627,16 +627,16 @@ class ReminderDeliveryTests(TestCase):
             return_date=self.today + timedelta(days=1),
             overdue_date=self.today + timedelta(days=2))
 
-        real_send = reminders.send_reminder
+        real_send = reminders.send_reminder_group
         calls = []
 
-        def explode_on_first(item, kind, today=None):
-            calls.append(item.gown_name)
+        def explode_on_first(items, kind, today=None):
+            calls.append(items[0].gown_name)
             if len(calls) == 1:
                 raise RuntimeError("simulated failure")
-            return real_send(item, kind, today)
+            return real_send(items, kind, today)
 
-        with patch.object(reminders, "send_reminder", explode_on_first):
+        with patch.object(reminders, "send_reminder_group", explode_on_first):
             sent = reminders.send_due_reminders(self.today)
 
         self.assertEqual(len(calls), 2)

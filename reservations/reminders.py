@@ -24,6 +24,7 @@ Three deliberate design rules:
    opening the dashboard cannot be shown an error because a customer message failed.
 """
 
+import re
 from datetime import timedelta
 
 from django.db import transaction
@@ -158,6 +159,72 @@ def _body_for(kind, item, today):
     )
 
 
+def _gown_list(items):
+    """The gowns' names for a sentence: 'A', 'A and B', 'A, B and C'. Two units of the same gown read as 'A (x2)'."""
+    counts = {}
+    for item in items:
+        counts[item.gown_name] = counts.get(item.gown_name, 0) + 1
+    names = [name if count == 1 else f"{name} (x{count})" for name, count in counts.items()]
+    if len(names) <= 2:
+        return " and ".join(names)
+    return ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def _days_overdue(item, today):
+    days_late = (today - item.return_date).days
+    return f"{days_late} {'day' if days_late == 1 else 'days'}"
+
+
+def _group_body_for(kind, items, today):
+    """One message for every gown of a booking that needs the same reminder today.
+
+    A single gown reads exactly as it always has (_body_for). Several gowns of the same booking share the date for
+    every kind but OVERDUE -- the kind is worked out from that date -- so they share one sentence. Overdue gowns may
+    have been due back on different days, so each is then named with its own date."""
+    if len(items) == 1:
+        return _body_for(kind, items[0], today)
+    gowns = _gown_list(items)
+    first = items[0]
+    code = first.reservation.reference_code
+
+    if kind == PICKUP_TOMORROW:
+        return (
+            f"Reminder: your rental of {gowns} starts tomorrow, "
+            f"{first.rental_date:%B %d, %Y}. Please visit Arabela to pick up your gowns. "
+            f"Reference: {code}."
+        )
+    if kind == PICKUP_TODAY:
+        return (
+            f"Reminder: your rental of {gowns} starts today, "
+            f"{first.rental_date:%B %d, %Y}. Your gowns are ready for pick-up at Arabela. "
+            f"Reference: {code}."
+        )
+    if kind == RETURN_TOMORROW:
+        return (
+            f"Reminder: {gowns} are due back tomorrow, {first.return_date:%B %d, %Y}. "
+            f"Returning on time keeps your security deposit fully refundable. "
+            f"Reference: {code}."
+        )
+    if kind == RETURN_TODAY:
+        return (
+            f"Reminder: {gowns} are due back today, {first.return_date:%B %d, %Y}. "
+            f"Returning on time keeps your security deposit fully refundable. "
+            f"Reference: {code}."
+        )
+
+    please = ("Please return them to Arabela as soon as possible -- "
+              "overdue rentals may affect your security deposit refund.")
+    if len({item.return_date for item in items}) == 1:
+        return (
+            f"{gowns} were due back on {first.return_date:%B %d, %Y} and are now "
+            f"{_days_overdue(first, today)} overdue. {please} Reference: {code}."
+        )
+    each = [f"{item.gown_name} (due back {item.return_date:%B %d, %Y}, now {_days_overdue(item, today)} overdue)"
+            for item in items]
+    listed = " and ".join(each) if len(each) == 2 else ", ".join(each[:-1]) + " and " + each[-1]
+    return f"These gowns are overdue: {listed}. {please} Reference: {code}."
+
+
 def _already_sent(kind, item_id, sent_map, today):
     """Whether this exact reminder has already gone out.
 
@@ -216,53 +283,135 @@ def find_due_reminders(today=None):
     return due
 
 
-def send_reminder(item, kind, today=None):
-    """Deliver one reminder: a message in the customer's inbox plus a timeline entry.
+def _sort_key(item):
+    # Earliest due first, then the order the gowns were booked in (not alphabetical: "Wedding Gown 11" would come
+    # before "Wedding Gown 9").
+    return (item.return_date, item.rental_date, item.id)
 
-    The two are written together or not at all, and that is the whole point of the
-    atomic block. The timeline entry is also the dedupe key, and
-    ReservationStatusEvent.record() deliberately swallows its own errors -- correct
-    everywhere else, but here it would mean the customer receives the message while
-    nothing records that they did. The next sweep would see no history, send it again,
-    and keep sending it every single day forever. Raising instead lets
-    send_due_reminders skip this one item, and rolls the message back with it, so the
-    reminder is simply retried next time rather than repeated endlessly.
+
+def _open_overdue_message(reservation):
+    """The customer's latest overdue notice for this booking, to bring up to date instead of adding another one.
+
+    Every overdue notice the sweep writes ends with "Reference: <code>." (staff-written reminders use a different
+    category), so the booking is recognised from the text itself and no database change is needed."""
+    return (
+        CustomerMessage.objects
+        .filter(recipient_id=reservation.customer_id, category=CustomerMessage.Category.RETURN_OVERDUE,
+                body__endswith=f"Reference: {reservation.reference_code}.")
+        .order_by('-created_at', '-id')
+        .first()
+    )
+
+
+def send_reminder_group(items, kind, today=None):
+    """Deliver one reminder for one booking: ONE message naming every gown it covers, plus a timeline entry per gown.
+
+    Several gowns of the same booking used to send one message (and one email) each. Now they share one. An overdue
+    notice goes further: the booking keeps a single overdue message that is brought up to date every time ("now 7
+    days overdue", "now 10 days overdue"), moved back to the top and marked unread again so the bell still rings,
+    and emailed again -- instead of a new message piling up every three days. If the customer deleted it, a new one
+    is written.
+
+    The message and the timeline entries are written together or not at all, and that is the whole point of the
+    atomic block. The timeline entry is also the dedupe key, and ReservationStatusEvent.record() deliberately
+    swallows its own errors -- correct everywhere else, but here it would mean the customer receives the message
+    while nothing records that they did. The next sweep would see no history, send it again, and keep sending it
+    every single day forever. Raising instead lets send_due_reminders skip this booking, and rolls the message back
+    with it, so the reminder is simply retried next time rather than repeated endlessly.
     """
     today = today or timezone.localdate()
-    body = _body_for(kind, item, today)
+    reservation = items[0].reservation
+    if kind == OVERDUE:
+        # Every gown of the booking that is overdue right now, not only the ones whose own three-day wait ran out
+        # today: the notice always names them all, and from here on they share one cadence.
+        overdue_now = [
+            item for item in ReservationItem.objects.filter(reservation=reservation)
+            .select_related('reservation__customer')
+            if _due_kind(item, today) == OVERDUE
+        ]
+        if {item.id for item in items} <= {item.id for item in overdue_now}:
+            items = overdue_now
+    items = sorted(items, key=_sort_key)
+    body = _group_body_for(kind, items, today)
 
     with transaction.atomic():
-        CustomerMessage.objects.create(
-            recipient=item.reservation.customer,
-            category=_MESSAGE_CATEGORIES[kind],
-            body=body,
-        )
-        recorded = ReservationStatusEvent.record(
-            item.reservation, EVENT_LABELS[kind], item=item, detail=body,
-            actor=ReservationStatusEvent.Actor.SYSTEM,
-        )
-        if recorded is None:
-            raise RuntimeError(
-                f"Could not record the reminder sent for item {item.id}; "
-                f"rolling the message back rather than risk re-sending it daily."
+        message = _open_overdue_message(reservation) if kind == OVERDUE else None
+        if message is None:
+            CustomerMessage.objects.create(
+                recipient=reservation.customer,
+                category=_MESSAGE_CATEGORIES[kind],
+                body=body,
             )
+        else:
+            # created_at is the time the Messages page shows and sorts by, so the update reads as the newest message.
+            now = timezone.now()
+            CustomerMessage.objects.filter(pk=message.pk).update(body=body, is_read=False, created_at=now)
+            message.body, message.is_read, message.created_at = body, False, now
+            from accounts import customer_emails
+            customer_emails.email_customer_message(message)
+        for item in items:
+            recorded = ReservationStatusEvent.record(
+                reservation, EVENT_LABELS[kind], item=item, detail=body,
+                actor=ReservationStatusEvent.Actor.SYSTEM,
+            )
+            if recorded is None:
+                raise RuntimeError(
+                    f"Could not record the reminder sent for item {item.id}; "
+                    f"rolling the message back rather than risk re-sending it daily."
+                )
+
+
+def send_reminder(item, kind, today=None):
+    """One gown's reminder -- the same delivery as send_reminder_group, for a booking with just this gown due."""
+    send_reminder_group([item], kind, today)
 
 
 def send_due_reminders(today=None):
-    """Send everything due today. Returns how many went out.
+    """Send everything due today, one message per booking and kind. Returns how many messages went out
+    (an overdue notice brought up to date counts as one).
 
-    Each reminder is isolated: one customer whose row is somehow broken must not stop
-    every other customer from being reminded.
+    Each booking is isolated: one customer whose row is somehow broken must not stop every other customer from
+    being reminded.
     """
     today = today or timezone.localdate()
-    sent = 0
+    groups = {}
     for item, kind in find_due_reminders(today):
+        groups.setdefault((item.reservation_id, kind), []).append(item)
+    sent = 0
+    for (_reservation_id, kind), items in groups.items():
         try:
-            send_reminder(item, kind, today)
+            send_reminder_group(items, kind, today)
             sent += 1
         except Exception:
             continue
     return sent
+
+
+_REFERENCE_AT_END = re.compile(r"Reference: (\S+)\.\s*$")
+
+
+def closed_overdue_notices(user, messages):
+    """{message id: (how many gowns came back, booking code)} for the overdue notices whose booking has since been
+    fully returned.
+
+    Worked out when the Messages page is drawn (nothing stored), so a notice can never keep shouting "overdue" at a
+    customer who has already brought everything back -- old notices from before this change included."""
+    codes = {}
+    for message in messages:
+        if message.category == CustomerMessage.Category.RETURN_OVERDUE:
+            match = _REFERENCE_AT_END.search(message.body or "")
+            if match:
+                codes[message.id] = match.group(1)
+    if not codes:
+        return {}
+    returned = {}
+    for reservation in (Reservation.objects.filter(customer=user, reference_code__in=set(codes.values()))
+                        .prefetch_related('items')):
+        stages = [item.stage for item in reservation.items.all()]
+        back = stages.count(ReservationItem.Stage.RETURNED)
+        if back and not any(stage in _OUT_STAGES for stage in stages):
+            returned[reservation.reference_code] = back
+    return {message_id: (returned[code], code) for message_id, code in codes.items() if code in returned}
 
 
 def run_daily_sweep_if_due(today=None):

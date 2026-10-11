@@ -38,7 +38,7 @@ from gowns.context_processors import (
 )
 from gowns.models import Gown, GownUnavailability, group_gowns_by_name, pick_representative_gown
 from gowns.photos import GRID_WIDTH, PAGE_WIDTH, sized
-from reservations import timeline
+from reservations import reminders, timeline
 from reservations.models import Reservation, ReservationItem, ReservationStatusEvent
 
 
@@ -1345,14 +1345,51 @@ def messages_view(request):
     unread_ids = [m.id for m in message_list if not m.is_read]
     if unread_ids:
         CustomerMessage.objects.filter(id__in=unread_ids).update(is_read=True)
+    # An overdue notice whose gowns have all come back is shown as "Returned" instead of a red warning.
+    closed = reminders.closed_overdue_notices(request.user, message_list)
     for m in message_list:
         m.was_unread = m.id in unread_ids
+        if m.id in closed:
+            count, code = closed[m.id]
+            m.returned_body = (
+                f"Thank you -- {'your gown has' if count == 1 else 'your gowns have'} been returned, "
+                f"so this overdue notice is closed. Reference: {code}."
+            )
 
     return render(
         request,
         'messages.html',
         {"display_name": profile.display_name, "customer_messages": message_list},
     )
+
+
+# A customer clears at most what one Messages page shows; anything larger is not a person clicking.
+_MESSAGES_DELETE_MAX = 500
+
+
+@require_http_methods(["POST"])
+def messages_delete(request):
+    """Deletes messages from the customer's own Messages page (the trash button, and "Clear all").
+
+    Only the signed-in customer's own messages, and only ones already read -- opening the Messages page marks what
+    it shows as read, so everything on the page qualifies while a message that arrived after the page was opened is
+    never removed unseen. Nothing else is affected: the shop's record that a reminder was sent lives in the
+    reservation's timeline, which staff see and the customer cannot delete. The page waits a few seconds (Undo)
+    before calling this."""
+    if not request.user.is_authenticated:
+        return JsonResponse({"error": "Please sign in again."}, status=401)
+    try:
+        ids = json.loads(request.body or b"{}").get("ids")
+    except (ValueError, AttributeError):
+        return JsonResponse({"error": "Invalid request."}, status=400)
+    if not isinstance(ids, list) or not ids or len(ids) > _MESSAGES_DELETE_MAX:
+        return JsonResponse({"error": "Invalid request."}, status=400)
+    try:
+        ids = [int(message_id) for message_id in ids]
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "Invalid request."}, status=400)
+    deleted, _ = CustomerMessage.objects.filter(recipient=request.user, is_read=True, id__in=ids).delete()
+    return JsonResponse({"success": True, "deleted": deleted})
 
 
 @login_required(login_url='accounts:login')

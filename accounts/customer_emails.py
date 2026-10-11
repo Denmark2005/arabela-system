@@ -525,6 +525,12 @@ def on_customer_message_saved(sender, instance, created, **kwargs):
     transaction.on_commit(lambda: _guarded(_email_for_message, pk, kind))
 
 
+def email_customer_message(message):
+    """The email a NEW message gets, for an overdue notice that was brought up to date in place instead of being added
+    again (reservations/reminders.py). Same rules: only when customer emails are on, only after the database commits."""
+    on_customer_message_saved(type(message), message, created=True)
+
+
 def connect_signals():
     """Called once when the accounts app starts (accounts/apps.py)."""
     from django.db.models.signals import post_save

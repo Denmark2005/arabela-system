@@ -199,6 +199,15 @@
       @media (prefers-reduced-motion: reduce) {
         .message-row, .new-message-tag { animation: none; }
       }
+      .message-row.message-hidden,
+      .messages-hidden {
+        display: none !important;
+      }
+      #messages-undo-bar.is-visible {
+        opacity: 1;
+        transform: translate(-50%, 0);
+        pointer-events: auto;
+      }
     </style>
     <title>Messages | Arabela</title>
   </head>
@@ -277,16 +286,22 @@
 
     <main class="flex min-h-screen flex-col items-center px-6 pb-24 pt-32 md:px-12">
       <div class="w-full max-w-4xl rounded-xl bg-white p-8 shadow-[0_20px_40px_rgba(0,0,0,0.04)] md:p-16">
-        <header class="mb-12">
-          <h2 class="mb-2 text-3xl font-semibold tracking-tight text-[#1b1c1c] md:text-4xl">Messages</h2>
-          <p class="text-sm uppercase tracking-[0.15rem] text-secondary/60">Updates From Arabela</p>
+        <header class="mb-12 flex items-end justify-between gap-6">
+          <div>
+            <h2 class="mb-2 text-3xl font-semibold tracking-tight text-[#1b1c1c] md:text-4xl">Messages</h2>
+            <p class="text-sm uppercase tracking-[0.15rem] text-secondary/60">Updates From Arabela</p>
+          </div>
+          <button type="button" id="messages-clear-all" class="mb-1 shrink-0 text-[0.6875rem] uppercase tracking-[0.1rem] text-[#615E57] decoration-1 underline-offset-4 transition-colors hover:text-secondary hover:underline{% if not customer_messages %} messages-hidden{% endif %}">Clear all</button>
         </header>
 
-        <div class="flex flex-col space-y-0">
+        {# Deleting waits 5 seconds (Undo) before it calls gowns:messages_delete; only messages already read can go. #}
+        <div class="flex flex-col space-y-0" id="messages-list" data-delete-url="{% url 'gowns:messages_delete' %}" data-csrf="{{ csrf_token }}">
           {% for message in customer_messages %}
-            <div class="message-row group flex flex-col justify-between gap-4 py-8 md:flex-row md:items-start entry-line">
+            <div class="message-row group flex flex-col justify-between gap-4 py-8 md:flex-row md:items-start entry-line" data-message-id="{{ message.id }}">
               <div class="flex items-start gap-4">
-                {% if message.category == "Account Flagged" %}
+                {% if message.returned_body %}
+                  <span class="material-symbols-outlined vibrant-green">check_circle</span>
+                {% elif message.category == "Account Flagged" %}
                   <span class="material-symbols-outlined bold-red">flag</span>
                 {% elif message.category == "Account Unflagged" %}
                   <span class="material-symbols-outlined vibrant-green">check_circle</span>
@@ -301,7 +316,9 @@
                 {% endif %}
                 <div class="flex flex-col gap-2">
                   <div class="flex flex-wrap items-center gap-3">
-                    {% if message.category == "Account Flagged" %}
+                    {% if message.returned_body %}
+                      <span class="text-xs font-semibold uppercase tracking-wider vibrant-green">Returned</span>
+                    {% elif message.category == "Account Flagged" %}
                       <span class="text-xs font-semibold uppercase tracking-wider bold-red">{{ message.category }}</span>
                     {% elif message.category == "Account Unflagged" %}
                       <span class="text-xs font-semibold uppercase tracking-wider vibrant-green">{{ message.category }}</span>
@@ -318,17 +335,21 @@
                       <span class="new-message-tag inline-flex w-fit items-center rounded-full bg-[#dc2626] px-2 py-0.5 text-[0.625rem] font-semibold uppercase tracking-wider text-white">New</span>
                     {% endif %}
                   </div>
-                  <p class="max-w-xl text-sm leading-relaxed text-secondary">{{ message.body }}</p>
+                  <p class="max-w-xl text-sm leading-relaxed text-secondary">{% if message.returned_body %}{{ message.returned_body }}{% else %}{{ message.body }}{% endif %}</p>
                 </div>
               </div>
-              <p class="shrink-0 text-xs text-secondary/60 md:text-right">{{ message.created_at|date:"M d, Y" }}<span class="block text-secondary/40">{{ message.created_at|date:"g:i A" }}</span></p>
-            </div>
-          {% empty %}
-            <div class="flex flex-col items-center gap-3 py-20 text-center">
-              <span class="material-symbols-outlined text-4xl text-neutral-300">notifications</span>
-              <p class="text-sm text-secondary/60">You have no messages yet.</p>
+              <div class="flex shrink-0 items-start justify-between gap-4 pl-9 md:justify-end md:pl-0">
+                <p class="text-xs text-secondary/60 md:text-right">{{ message.created_at|date:"M d, Y" }}<span class="block text-secondary/40">{{ message.created_at|date:"g:i A" }}</span></p>
+                <button type="button" class="js-delete-message -mr-1.5 -mt-1 flex h-8 w-8 items-center justify-center rounded-full text-secondary/40 transition-colors hover:bg-neutral-100 hover:text-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1b1c1c]" aria-label="Delete this message" title="Delete">
+                  <span class="material-symbols-outlined" style="font-size: 1.15rem;">delete</span>
+                </button>
+              </div>
             </div>
           {% endfor %}
+        </div>
+        <div id="messages-empty" class="flex flex-col items-center gap-3 py-20 text-center{% if customer_messages %} messages-hidden{% endif %}">
+          <span class="material-symbols-outlined text-4xl text-neutral-300">notifications</span>
+          <p class="text-sm text-secondary/60">You have no messages.</p>
         </div>
       </div>
     </main>
@@ -484,6 +505,113 @@
         });
       });
     </script>
+  <div id="messages-undo-bar" class="fixed bottom-6 left-1/2 z-[90] flex max-w-[calc(100%-32px)] items-center gap-5 whitespace-nowrap rounded-[6px] bg-[#1b1c1c] px-5 py-3 text-sm text-white opacity-0 shadow-[0_12px_30px_rgba(0,0,0,0.18)] transition-all duration-300 pointer-events-none" style="transform: translate(-50%, 12px);" role="status" aria-live="polite">
+    <span id="messages-undo-text">Message deleted</span>
+    <button type="button" id="messages-undo-btn" class="text-[0.6875rem] font-semibold uppercase tracking-[0.15em] text-white/90 decoration-1 underline-offset-4 transition-colors hover:text-white hover:underline">Undo</button>
+  </div>
+  <script>
+    /* Delete with Undo: a deleted row disappears at once, but the server is only told after 5 seconds (or when the
+       customer leaves the page), so Undo simply puts the row back. A new delete first finishes the previous one. */
+    (function () {
+      var list = document.getElementById("messages-list");
+      var bar = document.getElementById("messages-undo-bar");
+      if (!list || !bar) return;
+      var barText = document.getElementById("messages-undo-text");
+      var undoBtn = document.getElementById("messages-undo-btn");
+      var clearBtn = document.getElementById("messages-clear-all");
+      var empty = document.getElementById("messages-empty");
+      var UNDO_MS = 5000;
+      var pending = null;
+      var hideTimer = null;
+
+      function shownRows() {
+        return Array.prototype.filter.call(list.querySelectorAll("[data-message-id]"), function (row) {
+          return !row.classList.contains("message-hidden");
+        });
+      }
+      function refreshEmpty() {
+        var any = shownRows().length > 0;
+        if (empty) empty.classList.toggle("messages-hidden", any);
+        if (clearBtn) clearBtn.classList.toggle("messages-hidden", !any);
+      }
+      function showBar(text, withUndo) {
+        var banner = document.getElementById("hold-banner");
+        var lift = banner && banner.offsetHeight ? banner.offsetHeight + 16 : 24;
+        bar.style.bottom = lift + "px";
+        barText.textContent = text;
+        undoBtn.style.display = withUndo ? "" : "none";
+        bar.style.transform = "";
+        bar.classList.add("is-visible");
+        clearTimeout(hideTimer);
+        if (!withUndo) hideTimer = setTimeout(hideBar, 4000);
+      }
+      function hideBar() {
+        bar.classList.remove("is-visible");
+        bar.style.transform = "translate(-50%, 12px)";
+      }
+      function send(ids, leaving) {
+        return fetch(list.dataset.deleteUrl, {
+          method: "POST",
+          credentials: "same-origin",
+          keepalive: !!leaving,
+          headers: { "Content-Type": "application/json", "X-CSRFToken": list.dataset.csrf },
+          body: JSON.stringify({ ids: ids })
+        }).then(function (response) {
+          if (!response.ok) throw new Error("delete failed");
+          return response.json();
+        });
+      }
+      function commit(leaving) {
+        if (!pending) return;
+        var job = pending;
+        pending = null;
+        clearTimeout(job.timer);
+        if (!leaving) hideBar();
+        send(job.ids, leaving).then(function () {
+          job.rows.forEach(function (row) { row.remove(); });
+        }).catch(function () {
+          if (leaving) return;
+          job.rows.forEach(function (row) { row.classList.remove("message-hidden"); });
+          refreshEmpty();
+          showBar("Couldn't delete. Please try again.", false);
+        });
+      }
+      function startDelete(rows, text) {
+        if (!rows.length) return;
+        if (pending) commit(false);
+        rows.forEach(function (row) { row.classList.add("message-hidden"); });
+        refreshEmpty();
+        pending = {
+          ids: rows.map(function (row) { return Number(row.getAttribute("data-message-id")); }),
+          rows: rows,
+          timer: setTimeout(function () { commit(false); }, UNDO_MS)
+        };
+        showBar(text, true);
+      }
+
+      list.addEventListener("click", function (event) {
+        var button = event.target.closest(".js-delete-message");
+        if (!button) return;
+        var row = button.closest("[data-message-id]");
+        if (row) startDelete([row], "Message deleted");
+      });
+      if (clearBtn) {
+        clearBtn.addEventListener("click", function () {
+          var rows = shownRows();
+          startDelete(rows, rows.length === 1 ? "Message deleted" : rows.length + " messages deleted");
+        });
+      }
+      undoBtn.addEventListener("click", function () {
+        if (!pending) return;
+        clearTimeout(pending.timer);
+        pending.rows.forEach(function (row) { row.classList.remove("message-hidden"); });
+        pending = null;
+        refreshEmpty();
+        hideBar();
+      });
+      window.addEventListener("pagehide", function () { commit(true); });
+    })();
+  </script>
   <!-- Keeps the badges above current on a page that stays open (see the script's own header). -->
   {% load static %}<script defer src="{% static 'js/customer-badges-live.js' %}?v={{ site_asset_version }}" data-live-badges-url="{% url 'gowns:notification_badges' %}"></script>
   {% include "partials/reservation_hold_banner.html" %}
