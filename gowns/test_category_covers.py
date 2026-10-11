@@ -135,8 +135,8 @@ class CoverImageTests(SimpleTestCase):
 class BundledPictureTests(SimpleTestCase):
     """The pictures that ship with the site (static/images/categories/)."""
 
-    def test_the_twelve_categories_with_a_photo_each_have_a_tile_picture(self):
-        self.assertEqual(len(BUNDLED_COVER_KEYS), 12)
+    def test_every_built_in_category_has_a_tile_picture(self):
+        self.assertEqual(len(BUNDLED_COVER_KEYS), 13)
         for key in sorted(BUNDLED_COVER_KEYS):
             with self.subTest(key=key):
                 path = CATEGORY_PICTURES / f"{key}.jpg"
@@ -156,9 +156,9 @@ class BundledPictureTests(SimpleTestCase):
                 self.assertGreaterEqual(top, 0.04)
                 self.assertLessEqual(bottom, 0.86)
 
-    def test_barong_has_no_photo_of_its_own_and_keeps_the_original_placeholder(self):
-        self.assertNotIn("barong", BUNDLED_COVER_KEYS)
-        self.assertFalse((CATEGORY_PICTURES / "barong.jpg").exists())
+    def test_every_built_in_category_has_its_own_photo_and_the_placeholder_still_ships(self):
+        self.assertIn("barong", BUNDLED_COVER_KEYS)
+        self.assertTrue((CATEGORY_PICTURES / "barong.jpg").exists())
         self.assertTrue((CATEGORY_PICTURES.parent / PLACEHOLDER_STATIC_PATH.split("/", 1)[1]).exists())
 
 
@@ -169,13 +169,12 @@ class CoverChoiceTests(TestCase):
         cover = cover_for("long-gown", {})
         self.assertEqual(cover, {"url": "/static/images/categories/long-gown.jpg", "is_photo": True, "owner": False})
 
-    def test_barong_and_a_new_category_get_the_plain_placeholder(self):
-        for key in ("barong", "debut-gown"):
-            with self.subTest(key=key):
-                cover = cover_for(key, {})
-                self.assertEqual(cover["url"], "/static/images/categories/placeholder.jpg")
-                self.assertFalse(cover["is_photo"])
-                self.assertFalse(cover["owner"])
+    def test_barong_gets_its_bundled_picture_and_a_new_category_the_plain_placeholder(self):
+        self.assertEqual(cover_for("barong", {}), {"url": "/static/images/categories/barong.jpg", "is_photo": True, "owner": False})
+        cover = cover_for("debut-gown", {})
+        self.assertEqual(cover["url"], "/static/images/categories/placeholder.jpg")
+        self.assertFalse(cover["is_photo"])
+        self.assertFalse(cover["owner"])
 
     def test_the_owners_picture_wins_over_the_bundled_one(self):
         url = "https://res.cloudinary.com/demo/image/upload/category_covers/mine"
@@ -217,11 +216,10 @@ class CategoryTilePagesTests(TestCase):
         for label, key in (("Wedding Gown", "wedding"), ("Evening Gown", "evening-gown"), ("Long Gown", "long-gown"),
                            ("Luxury Gown", "luxury-gown"), ("Mother Gown", "mother-gown"), ("Suit", "suit"),
                            ("Filipiniana", "filipiniana"), ("Guest Gown", "guest-gown"), ("Dresses", "dresses"),
-                           ("Kids Gown", "kids-gown"), ("Ball Gown Tulle", "ball-gown-tulle"),
+                           ("Kids Gown", "kids-gown"), ("Barong", "barong"), ("Ball Gown Tulle", "ball-gown-tulle"),
                            ("Bridesmaid Dresses", "bridesmaid-dresses")):
             with self.subTest(label=label):
                 self.assertEqual(images[label], f"/static/images/categories/{key}.jpg")
-        self.assertEqual(images["Barong"], "/static/images/categories/placeholder.jpg")
 
     def test_no_tile_still_points_at_the_old_hosted_stock_picture(self):
         for name in ("gowns:collections", "gowns:featured_women_collections", "gowns:featured_men_collections", "gowns:homepage"):
@@ -235,7 +233,7 @@ class CategoryTilePagesTests(TestCase):
         self.assertEqual(len(women), 11)
         self.assertEqual(set(men), {"Suit", "Barong"})
         self.assertEqual(men["Suit"], "/static/images/categories/suit.jpg")
-        self.assertEqual(men["Barong"], "/static/images/categories/placeholder.jpg")
+        self.assertEqual(men["Barong"], "/static/images/categories/barong.jpg")
         self.assertNotIn("Suit", women)
 
     def test_the_home_page_shows_its_four_categories_in_order_with_the_same_pictures(self):
@@ -254,14 +252,17 @@ class CategoryTilePagesTests(TestCase):
             self.assertIn(f'href="{reverse(f"gowns:{url_name}")}" class="group cursor-pointer flex flex-col items-center"', html)
 
     def test_a_real_picture_has_its_name_on_a_light_strip_and_the_placeholder_keeps_the_white_label(self):
+        CustomCategory.objects.create(name="Debut Suit", slug="debut-suit", audience="men")    # no picture yet
         html = self.client.get(reverse("gowns:featured_men_collections")).content.decode()
-        suit_tile = html.split('alt="Suit"')[1].split("</a>")[0]
-        barong_tile = html.split('alt="Barong"')[1].split("</a>")[0]
-        self.assertIn("bg-gradient-to-t", suit_tile)
-        self.assertIn("text-secondary", suit_tile)
-        self.assertNotIn("text-white", suit_tile)
-        self.assertIn("text-white", barong_tile)
-        self.assertNotIn("bg-gradient-to-t", barong_tile)
+        for label in ("Suit", "Barong"):
+            with self.subTest(label=label):
+                tile = html.split(f'alt="{label}"')[1].split("</a>")[0]
+                self.assertIn("bg-gradient-to-t", tile)
+                self.assertIn("text-secondary", tile)
+                self.assertNotIn("text-white", tile)
+        placeholder_tile = html.split('alt="Debut Suit"')[1].split("</a>")[0]
+        self.assertIn("text-white", placeholder_tile)
+        self.assertNotIn("bg-gradient-to-t", placeholder_tile)
 
     def test_a_picture_the_owner_uploaded_shows_on_every_page_that_draws_the_tile(self):
         url = "https://res.cloudinary.com/demo/image/upload/category_covers/new-suit"

@@ -4,7 +4,7 @@ For one category, in order:
   1. the picture the owner uploaded in Admin -> Categories (gowns.models.CategoryCover);
   2. the picture bundled with the site (static/images/categories/<key>.jpg);
   3. the plain placeholder -- the tile picture the site always had -- for a category with neither:
-     Barong, and any category the owner adds before giving it a picture.
+     any category the owner adds before giving it a picture.
 
 Customers must never see a broken page because of this: if the owner-pictures table can't be read
 (for example the code is live before its migration has run) every tile simply uses 2 or 3.
@@ -16,11 +16,10 @@ from django.templatetags.static import static
 
 from gowns.models import CategoryCover
 
-# The categories that ship with a picture (static/images/categories/<key>.jpg). Barong is left out on
-# purpose: it keeps the placeholder until the owner uploads a picture for it.
+# The categories that ship with a picture (static/images/categories/<key>.jpg): every built-in one.
 BUNDLED_COVER_KEYS = frozenset({
     "wedding", "evening-gown", "long-gown", "luxury-gown", "mother-gown", "suit", "filipiniana",
-    "guest-gown", "dresses", "kids-gown", "ball-gown-tulle", "bridesmaid-dresses",
+    "guest-gown", "dresses", "kids-gown", "barong", "ball-gown-tulle", "bridesmaid-dresses",
 })
 
 PLACEHOLDER_STATIC_PATH = "images/categories/placeholder.jpg"

@@ -96,6 +96,7 @@ class CategoriesPageTests(OwnerCase):
         self.assertEqual(main.count("Upload<"), 13)       # one short button per card
 
     def test_a_standard_card_is_the_picture_and_one_button_and_a_placeholder_card_says_so(self):
+        CustomCategory.objects.create(name="Debut Suit", slug="debut-suit", audience="men")    # added, no picture yet
         html = htmllib.unescape(self.page().content.decode())
         long_gown = self.card(html, "long-gown")
         self.assertIn("/static/images/categories/long-gown.jpg", long_gown)
@@ -104,22 +105,26 @@ class CategoriesPageTests(OwnerCase):
         self.assertIn('data-kind="none" hidden', long_gown)                 # a standard picture needs no badge
         self.assertIn("Shown on: Rentals page \u00b7 Women's collection page \u00b7 Home page", long_gown)   # as a hover tip
         barong = self.card(html, "barong")
-        self.assertIn('data-photo="0"', barong)
-        self.assertIn('data-kind="none">No picture<', barong)               # the one thing worth a word
+        self.assertIn("/static/images/categories/barong.jpg", barong)
+        self.assertIn('data-kind="none" hidden', barong)
         self.assertIn("Shown on: Rentals page \u00b7 Men's collection page", barong)
         self.assertNotIn("Home page", barong)
+        added = self.card(html, "debut-suit")
+        self.assertIn('data-photo="0"', added)
+        self.assertIn('data-kind="none">No picture<', added)                # the one thing worth a word
         self.assertIn("Men's collection page \u00b7 Home page", self.card(html, "suit"))
 
     def test_a_picture_the_owner_uploaded_gets_a_custom_badge_replace_and_a_way_back(self):
-        CategoryCover.objects.create(key="barong", image_url="https://files.example/category_covers/b.jpg")
+        CustomCategory.objects.create(name="Debut Suit", slug="debut-suit", audience="men")
+        CategoryCover.objects.create(key="debut-suit", image_url="https://files.example/category_covers/b.jpg")
         CategoryCover.objects.create(key="suit", image_url="https://files.example/category_covers/s.jpg")
         html = self.page().content.decode()
-        barong = self.card(html, "barong")
-        self.assertIn("https://files.example/category_covers/b.jpg", barong)
-        self.assertIn('data-kind="custom">Custom<', barong)
-        self.assertIn("data-upload-label>Replace<", barong)
-        self.assertNotIn("data-reset hidden", barong)
-        self.assertIn("data-reset>Remove<", barong)                          # Barong has no standard picture to go back to
+        added = self.card(html, "debut-suit")
+        self.assertIn("https://files.example/category_covers/b.jpg", added)
+        self.assertIn('data-kind="custom">Custom<', added)
+        self.assertIn("data-upload-label>Replace<", added)
+        self.assertNotIn("data-reset hidden", added)
+        self.assertIn("data-reset>Remove<", added)                           # an added category has no standard picture
         self.assertIn("data-reset>Reset<", self.card(html, "suit"))          # Suit goes back to the one it came with
 
     def test_a_category_the_owner_added_has_a_card_and_a_removed_one_does_not(self):
@@ -176,14 +181,17 @@ class CategoriesPageTests(OwnerCase):
 
     # ---- the big view of a picture (the View button, or a click on the picture) ----------------------------------------------
     def test_every_card_with_a_picture_has_a_view_button_and_a_placeholder_card_has_none_showing(self):
+        CustomCategory.objects.create(name="Debut Suit", slug="debut-suit", audience="men")
         html = self.page().content.decode()
-        self.assertEqual(html.count("data-view>View<") + html.count("data-view hidden>View<"), 13)      # one per card
+        self.assertEqual(html.count("data-view>View<") + html.count("data-view hidden>View<"), 14)      # one per card
         self.assertIn("data-view>View<", self.card(html, "long-gown"))
-        self.assertIn("data-view hidden>View<", self.card(html, "barong"))         # no picture yet: nothing to view
+        self.assertIn("data-view>View<", self.card(html, "barong"))
+        self.assertIn("data-view hidden>View<", self.card(html, "debut-suit"))     # no picture yet: nothing to view
 
     def test_a_placeholder_gets_its_view_button_once_the_owner_has_uploaded_a_picture(self):
-        CategoryCover.objects.create(key="barong", image_url="https://files.example/category_covers/b.jpg")
-        self.assertIn("data-view>View<", self.card(self.page().content.decode(), "barong"))
+        CustomCategory.objects.create(name="Debut Suit", slug="debut-suit", audience="men")
+        CategoryCover.objects.create(key="debut-suit", image_url="https://files.example/category_covers/b.jpg")
+        self.assertIn("data-view>View<", self.card(self.page().content.decode(), "debut-suit"))
 
     def test_each_card_tells_the_big_view_where_the_picture_is_shown(self):
         html = htmllib.unescape(self.page().content.decode())
@@ -384,9 +392,10 @@ class CategoryCoverResetTests(OwnerCase):
         self.assertFalse(CategoryCover.objects.filter(key="suit").exists())
 
     def test_a_category_with_no_standard_picture_goes_back_to_the_placeholder(self):
-        CategoryCover.objects.create(key="barong", image_url="https://files.example/category_covers/b.jpg")
+        CustomCategory.objects.create(name="Debut Suit", slug="debut-suit", audience="men")
+        CategoryCover.objects.create(key="debut-suit", image_url="https://files.example/category_covers/b.jpg")
         with patch("arabela_admin.views.default_storage"):
-            response = self.reset("barong")
+            response = self.reset("debut-suit")
         self.assertEqual(response.json(), {
             "success": True, "url": "/static/images/categories/placeholder.jpg", "is_photo": False, "has_upload": False,
         })
