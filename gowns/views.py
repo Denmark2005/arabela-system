@@ -36,7 +36,9 @@ from gowns.context_processors import (
     start_reservation_hold,
     unread_messages_total,
 )
-from gowns.models import Gown, GownUnavailability, group_gowns_by_name, pick_representative_gown
+from gowns.models import (
+    SIZE_CODES, Gown, GownUnavailability, group_gowns_by_name, pick_representative_gown, size_codes_of,
+)
 from gowns.photos import GRID_WIDTH, PAGE_WIDTH, sized
 from reservations import reminders, timeline
 from reservations.models import Reservation, ReservationItem, ReservationStatusEvent
@@ -348,37 +350,32 @@ def _blocked_dates_for_category(label: str, name: str) -> list[str]:
     Tracking a SET of unit ids per day (rather than adding up counts) means a unit that
     is both booked and blocked on the same day is still just one unit off the pool.
     """
-    unit_ids = set(
+    units, busy = _bookable_units_and_busy_ranges(label, name)
+    return _days_every_unit_is_busy(units, busy)
+
+
+def _bookable_units_and_busy_ranges(label: str, name: str):
+    """This product's bookable units (same name and category, not Out-of-Stock) and, per unit id, the date ranges it is
+    spoken for within the booking horizon -- by an active booking (whole rental_date..return_date window; only stage
+    'Returned' releases it, and Rejected/Cancelled reservations never held stock) or by an admin/cooldown
+    GownUnavailability block. The single source both the calendar's blocked days and the gown page's per-size
+    availability are worked out from, using the same rules _find_available_unit checks at checkout."""
+    units = list(
         Gown.objects.filter(category=label, name__iexact=name)
         .exclude(status=Gown.Status.OUT_OF_STOCK)
-        .values_list("id", flat=True)
+        .order_by("id")
     )
-    total_units = len(unit_ids)
-    # No bookable units of this product right now -- nothing to be full, never block
-    # anything. Without this guard the "spoken for >= total" test would be 0 >= 0 and
-    # black out every date. (product_detail() already sends unavailable products down
-    # a separate "Currently Unavailable" path that never calls this at all.)
-    if total_units == 0:
-        return []
+    busy = defaultdict(list)
+    if not units:
+        return units, busy
 
     today = timezone.localdate()
     horizon = today + timedelta(days=_AVAILABILITY_HORIZON_DAYS)
-    spoken_for = defaultdict(set)
-
-    def occupy(gown_pk, start, end):
-        if gown_pk not in unit_ids:
-            return
-        day = max(start, today)
-        last = min(end, horizon)
-        while day <= last:
-            spoken_for[day].add(gown_pk)
-            day += timedelta(days=1)
+    unit_ids = {unit.id for unit in units}
 
     booked_items = (
         ReservationItem.objects.filter(
-            gown__isnull=False,
-            gown__category=label,
-            gown__name__iexact=name,
+            gown_id__in=unit_ids,
             return_date__gte=today,
             rental_date__lte=horizon,
         )
@@ -392,20 +389,59 @@ def _blocked_dates_for_category(label: str, name: str) -> list[str]:
         .values_list("gown_id", "rental_date", "return_date")
     )
     for gown_pk, rental_date, return_date in booked_items:
-        occupy(gown_pk, rental_date, return_date)
+        busy[gown_pk].append((rental_date, return_date))
 
     blocks = GownUnavailability.objects.filter(
-        gown__category=label,
-        gown__name__iexact=name,
+        gown_id__in=unit_ids,
         end_date__gte=today,
         start_date__lte=horizon,
     ).values_list("gown_id", "start_date", "end_date")
     for gown_pk, start_date, end_date in blocks:
-        occupy(gown_pk, start_date, end_date)
+        busy[gown_pk].append((start_date, end_date))
+    return units, busy
 
+
+def _days_every_unit_is_busy(units, busy) -> list[str]:
+    """ISO days (today .. the booking horizon) on which every one of `units` is spoken for."""
+    total_units = len(units)
+    # No bookable units of this product right now -- nothing to be full, never block
+    # anything. Without this guard the "spoken for >= total" test would be 0 >= 0 and
+    # black out every date. (product_detail() already sends unavailable products down
+    # a separate "Currently Unavailable" path that never calls this at all.)
+    if total_units == 0:
+        return []
+    today = timezone.localdate()
+    horizon = today + timedelta(days=_AVAILABILITY_HORIZON_DAYS)
+    spoken_for = defaultdict(set)
+    for unit in units:
+        for start, end in busy.get(unit.id, ()):
+            day = max(start, today)
+            last = min(end, horizon)
+            while day <= last:
+                spoken_for[day].add(unit.id)
+                day += timedelta(days=1)
     return sorted(
-        day.isoformat() for day, units in spoken_for.items() if len(units) >= total_units
+        day.isoformat() for day, unit_set in spoken_for.items() if len(unit_set) >= total_units
     )
+
+
+def _size_options_and_units(units, busy):
+    """What the gown page needs to offer ONLY the sizes staff gave this product's units, and to tell which size is
+    rented on the customer's dates: [{code, label, count}] in button order, and one {size, busy} entry per unit."""
+    code_of = SIZE_CODES
+    options = []
+    for code in size_codes_of(units):
+        count = sum(1 for unit in units if code_of.get(unit.size) == code)
+        name = next(value for value, c in code_of.items() if c == code)
+        options.append({"code": code, "label": "Free Size" if code == "FREE" else code, "name": str(name), "count": count})
+    unit_rows = [
+        {
+            "size": code_of.get(unit.size, ""),
+            "busy": [[start.isoformat(), end.isoformat()] for start, end in sorted(busy.get(unit.id, ()))],
+        }
+        for unit in units
+    ]
+    return options, unit_rows
 
 
 # --- Which physical unit does a cart item actually get? --------------------------
@@ -415,6 +451,10 @@ _UNIT_NO_INVENTORY = "no_inventory"   # no real Gown row carries this slug/name 
 _UNIT_ASSIGNED = "assigned"           # a specific free physical unit was picked
 _UNIT_UNAVAILABLE = "unavailable"     # real bookable units exist but every one is taken for these dates
 _UNIT_OUT_OF_STOCK = "out_of_stock"   # the slug/name IS a real gown, but every match is Out-of-Stock -> reject
+# A size this product does not come in, and a product with several sizes asked for without one -- both refused with a
+# message that sends the customer back to the gown page to choose one of its real sizes.
+_UNIT_SIZE_NOT_OFFERED = "size_not_offered"
+_UNIT_SIZE_REQUIRED = "size_required"
 
 # products.html's size buttons emit 'S' / 'M' / 'L'; Gown.size stores 'Small' / 'Medium'
 # / 'Large' / 'Extra Large' / 'Free Size'. This bridges the two so size can act as a
@@ -515,6 +555,19 @@ def _find_available_unit(gown_name, rental_date, return_date, *, gown_slug="", s
     if not candidates:
         return (_UNIT_NO_INVENTORY, None)
 
+    # The customer books a SIZE, not just the gown: only units in the size they chose can be given to them. A size this
+    # product doesn't come in (an old bag, a hand-made request) is refused rather than silently swapped for another
+    # size, and a product that comes in several sizes needs one chosen. With a single size nothing is asked: that size
+    # is the only possible answer, so a blank size (a quick-added bag line) still books exactly as before.
+    offered_sizes = {gown.size for gown in candidates}
+    wanted_size = _normalize_size(size)
+    if wanted_size:
+        if wanted_size not in offered_sizes:
+            return (_UNIT_SIZE_NOT_OFFERED, None)
+        candidates = [gown for gown in candidates if gown.size == wanted_size]
+    elif len(offered_sizes) > 1:
+        return (_UNIT_SIZE_REQUIRED, None)
+
     # Inclusive overlap on both ends: a booking 10th-12th collides with a request
     # 12th-14th, matching _blocked_dates_for_category's day-by-day inclusive occupy().
     busy = set(already_taken)
@@ -545,17 +598,11 @@ def _find_available_unit(gown_name, rental_date, return_date, *, gown_slug="", s
     if not free:
         return (_UNIT_UNAVAILABLE, None)
 
-    # 1st choice: the exact unit they browsed. 2nd: a free sibling in their size.
-    # 3rd: the lowest-id free sibling (stable, so repeated runs are reproducible).
+    # `free` is already only the chosen size. 1st choice: the exact unit they browsed (when it is that size and free).
+    # 2nd: the lowest-id free unit (stable, so repeated runs are reproducible).
     if preferred is not None:
         for gown in free:
             if gown.id == preferred.id:
-                return (_UNIT_ASSIGNED, gown)
-
-    wanted_size = _normalize_size(size)
-    if wanted_size:
-        for gown in free:
-            if gown.size == wanted_size:
                 return (_UNIT_ASSIGNED, gown)
 
     return (_UNIT_ASSIGNED, free[0])
@@ -663,10 +710,12 @@ def product_detail(request, collection: str, slug: str):
     # photo and price instead of blowing up on an empty list.
     display_unit = pick_representative_gown(bookable_siblings) if bookable_siblings else real_gown
 
-    blocked_dates = (
-        [] if is_out_of_stock
-        else _blocked_dates_for_category(real_gown.category, real_gown.name)
-    )
+    if is_out_of_stock:
+        blocked_dates, size_options, unit_rows = [], [], []
+    else:
+        units, busy = _bookable_units_and_busy_ranges(real_gown.category, real_gown.name)
+        blocked_dates = _days_every_unit_is_busy(units, busy)
+        size_options, unit_rows = _size_options_and_units(units, busy)
     product = {
         "title": display_unit.name,
         "price": f"₱{display_unit.rental_price:,.0f}",
@@ -693,6 +742,10 @@ def product_detail(request, collection: str, slug: str):
             "collection": col,
             "collection_url": collection_url,
             "blocked_dates_json": json.dumps(blocked_dates),
+            # Only the sizes staff gave this product's units (Gown Catalog), and each unit's busy dates, so the page
+            # can grey out a size that is rented on the customer's dates and show "3 of 4 available".
+            "size_options": size_options,
+            "size_units": unit_rows,
             "related_products": _related_gowns(product["collection"], slug),
         },
     )
@@ -971,6 +1024,23 @@ def reservation_submit(request):
                     },
                     status=400,
                 )
+            if outcome in (_UNIT_SIZE_NOT_OFFERED, _UNIT_SIZE_REQUIRED):
+                # Nothing has been written yet (same as the two refusals above); the checkout hold is left alone so the
+                # customer can open the gown from their bag, pick one of its real sizes and submit again.
+                size_value = _normalize_size(item["size"])
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "error": (
+                            f"{item['gown_name']} doesn't come in {size_value}. Please open it from your order "
+                            "summary and choose one of its sizes."
+                            if outcome == _UNIT_SIZE_NOT_OFFERED else
+                            f"Please choose a size for {item['gown_name']}: open it from your order summary and "
+                            "pick one of its sizes."
+                        ),
+                    },
+                    status=400,
+                )
             # None when this name has no real inventory (placeholder catalog) --
             # unchanged behaviour: the item is still booked, just without a gown FK.
             item["matched_gown"] = unit
@@ -1027,7 +1097,8 @@ def reservation_submit(request):
                 # real unit behind it keeps what was sent.
                 gown_name=(item["matched_gown"].name if item["matched_gown"] is not None else item["gown_name"])[:150],
                 gown_slug=item["gown_slug"],
-                size=item["size"],
+                # The booked unit's real size (what the shop will hand over); only an item with no real unit keeps what was sent.
+                size=(item["matched_gown"].size if item["matched_gown"] is not None else item["size"])[:20],
                 rental_price=item["rental_price"],
                 rental_date=item["rental_date"],
                 return_date=item["return_date"],

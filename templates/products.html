@@ -5,6 +5,16 @@
 
 {% block extra_head %}
 <style>
+  /* A size rented on the customer's dates: visible but not choosable (see updateSizeAvailability). */
+  .product-size-btn[aria-disabled="true"] {
+    opacity: 0.35;
+    text-decoration: line-through;
+    cursor: not-allowed;
+  }
+  .product-size-btn[aria-disabled="true"]:hover {
+    background-color: transparent !important;
+    color: inherit !important;
+  }
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
@@ -370,12 +380,17 @@
         <label class="font-label text-[0.6875rem] tracking-widest uppercase font-bold">Select Size</label>
         <button type="button" class="font-label text-[0.625rem] tracking-widest uppercase underline underline-offset-4 decoration-outline-variant">Size Guide</button>
       </div>
-      <div class="flex gap-3">
-        <button type="button" data-product-size="S" aria-pressed="false" class="w-12 h-12 flex items-center justify-center border border-outline-variant/30 text-secondary font-body text-sm hover:bg-on-surface hover:text-white hover:border-on-surface transition-all">S</button>
-        <button type="button" data-product-size="M" aria-pressed="false" class="w-12 h-12 flex items-center justify-center border border-outline-variant/30 text-secondary font-body text-sm hover:bg-on-surface hover:text-white hover:border-on-surface transition-all">M</button>
-        <button type="button" data-product-size="L" aria-pressed="false" class="w-12 h-12 flex items-center justify-center border border-outline-variant/30 text-secondary font-body text-sm hover:bg-on-surface hover:text-white hover:border-on-surface transition-all">L</button>
-        <button type="button" class="w-12 h-12 flex items-center justify-center border border-outline-variant/30 text-secondary/30 font-body text-sm cursor-not-allowed" aria-disabled="true">XL</button>
+      {# Only the sizes staff gave this gown's units in Gown Catalog (gowns.views._size_options_and_units). #}
+      <div class="flex flex-wrap gap-3">
+        {% for option in size_options %}
+        <div class="flex flex-col items-center gap-1">
+          <button type="button" data-product-size="{{ option.code }}" data-size-label="{{ option.label }}" data-size-name="{{ option.name }}" data-size-count="{{ option.count }}" aria-pressed="false" class="product-size-btn {% if option.code == 'FREE' %}px-4 min-w-12{% else %}w-12{% endif %} h-12 flex items-center justify-center border border-outline-variant/30 text-secondary font-body text-sm hover:bg-on-surface hover:text-white hover:border-on-surface transition-all">{{ option.label }}</button>
+          <span class="product-size-rented hidden font-label text-[0.5625rem] tracking-widest uppercase text-secondary/60">Rented</span>
+        </div>
+        {% endfor %}
       </div>
+      <p id="product-size-note" class="hidden text-[0.75rem] leading-relaxed text-secondary" role="status" aria-live="polite"></p>
+      {{ size_units|json_script:"product-size-units" }}
     </div>
 
     <!-- Rental Date Picker (with JS logic) -->
@@ -790,11 +805,22 @@
     if (sizeButtons.length) {
       sizeButtons.forEach(function (btn) {
         btn.addEventListener('click', function () {
+          if (btn.getAttribute('aria-disabled') === 'true') {
+            showSizeNote(sizeLabelOf(btn.dataset.productSize || '') + ' is already rented on your dates. Please choose another size or date.');
+            return;
+          }
           selectedSize = btn.dataset.productSize || '-';
+          showSizeNote('');
           updateSizeButtonState();
           liveSyncEditableCartRow({ size: selectedSize });
+          // The calendar shows the chosen size's own availability. Defined further down; a click can only
+          // happen after the page has finished loading, by which time they exist.
+          if (typeof render === 'function') render();
+          if (typeof updateSizeAvailability === 'function') updateSizeAvailability();
         });
       });
+      // A gown that comes in one size only: that size is the only possible answer, so it starts chosen.
+      if (sizeButtons.length === 1) selectedSize = sizeButtons[0].dataset.productSize || '-';
       updateSizeButtonState();
     }
 
@@ -1061,13 +1087,91 @@
     // Checked against this exact same blockedDates set -- the one gowns/views.py
     // _find_available_unit's own overlap check is built from -- so this can never wave
     // through a selection checkout would then refuse.
+    // Each bookable unit of this gown with its size code and busy date ranges (gowns/views.py
+    // _size_options_and_units). A date is open when at least one unit -- of the CHOSEN size, once a size is
+    // picked -- is free for the whole pickup..return window: the same single-unit rule checkout's
+    // _find_available_unit applies, so the calendar can never offer what checkout would refuse.
+    const sizeUnits = (function () {
+      try {
+        const el = document.getElementById('product-size-units');
+        const raw = el ? JSON.parse(el.textContent || 'null') : null;
+        return Array.isArray(raw) && raw.length ? raw : null;
+      } catch (err) {
+        return null;
+      }
+    })();
+    const sizeCodes = sizeButtons.map(function (btn) { return btn.dataset.productSize || ''; });
+
+    function windowBounds(eventDate) {
+      const end = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate() + 2);
+      return [ymd(clampedPickup(eventDate)), ymd(end)];
+    }
+
+    // How many units (of `sizeCode`, or of any size when it is not one of this gown's sizes) are free for the
+    // whole window around `eventDate`. Dates are ISO strings, so plain string comparison orders them correctly.
+    function freeUnitCount(eventDate, sizeCode) {
+      if (!sizeUnits) return 0;
+      const bounds = windowBounds(eventDate);
+      const scoped = sizeCodes.indexOf(sizeCode) >= 0;
+      let free = 0;
+      sizeUnits.forEach(function (unit) {
+        if (scoped && unit.size !== sizeCode) return;
+        const busy = Array.isArray(unit.busy) ? unit.busy : [];
+        const taken = busy.some(function (range) { return range[0] <= bounds[1] && range[1] >= bounds[0]; });
+        if (!taken) free += 1;
+      });
+      return free;
+    }
+
     function windowOverlapsBlocked(eventDate) {
+      if (sizeUnits) return freeUnitCount(eventDate, selectedSize) === 0;
       const start = clampedPickup(eventDate);
       const end = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate() + 2);
       for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
         if (blockedDates.has(ymd(d))) return true;
       }
       return false;
+    }
+
+    const sizeNoteEl = document.getElementById('product-size-note');
+    const availableCountEl = document.getElementById('product-available-count');
+
+    function showSizeNote(text) {
+      if (!sizeNoteEl) return;
+      sizeNoteEl.textContent = text || '';
+      sizeNoteEl.classList.toggle('hidden', !text);
+    }
+
+    function sizeLabelOf(code) {
+      const btn = sizeButtons.find(function (b) { return b.dataset.productSize === code; });
+      return btn ? (btn.dataset.sizeName || btn.dataset.sizeLabel || code) : code;
+    }
+
+    // Greys out (and makes unclickable) every size with no unit free on the chosen dates, labels it "Rented",
+    // and updates "X of N available for <date>". A chosen size that has become rented is let go with a note.
+    function updateSizeAvailability() {
+      if (!sizeUnits) return;
+      sizeButtons.forEach(function (btn) {
+        const code = btn.dataset.productSize || '';
+        const rented = !!center && freeUnitCount(center, code) === 0;
+        btn.setAttribute('aria-disabled', rented ? 'true' : 'false');
+        btn.title = rented ? sizeLabelOf(code) + ' is rented on your dates' : '';
+        const caption = btn.parentElement ? btn.parentElement.querySelector('.product-size-rented') : null;
+        if (caption) caption.classList.toggle('hidden', !rented);
+      });
+      if (availableCountEl) {
+        const total = sizeUnits.length;
+        availableCountEl.textContent = center
+          ? freeUnitCount(center, '') + ' of ' + total + ' available for ' + fmt(center)
+          : total + ' available';
+      }
+      if (center && sizeCodes.indexOf(selectedSize) >= 0 && freeUnitCount(center, selectedSize) === 0) {
+        const label = sizeLabelOf(selectedSize);
+        selectedSize = '-';
+        updateSizeButtonState();
+        liveSyncEditableCartRow({ size: '-' });
+        showSizeNote(label + ' is already rented for ' + fmt(center) + '. Please choose another size or date.');
+      }
     }
 
     // Single shared tooltip, repositioned above whichever unavailable day is
@@ -1181,6 +1285,8 @@
             center = clicked;
             setRangeText();
             render();
+            showSizeNote('');
+            updateSizeAvailability();
             maybeShowRentalTip();
             const liveStart = clampedPickup(clicked);
             const liveReturn = new Date(clicked.getFullYear(), clicked.getMonth(), clicked.getDate() + 2);
@@ -1262,19 +1368,20 @@
 
     if (cartContextItem) restoreSelectionFrom(cartContextItem.rental);
 
-    setRangeText();
-    render();
-
-    // arabelaSizeLabel normalises both shapes this can arrive in: the drawer cart
-    // stores a bare 'M', the checkout snapshot stores it prefixed as 'Size: M'.
-    // It maps the not-chosen-yet cases to 'TBD', which is not a real size button.
-    if (cartContextItem && typeof cartContextItem.size === 'string') {
-      const restoredSize = window.arabelaSizeLabel(cartContextItem.size);
-      if (restoredSize !== 'TBD') {
-        selectedSize = restoredSize.toUpperCase();
+    // arabelaSizeCode normalises every shape a stored size can arrive in ('M', 'Size: M', 'Medium', 'Free Size')
+    // to a button code. Only a size this gown really comes in is restored; anything else (an old bag line from
+    // before sizes were real) keeps the page's own default -- the only size, or none.
+    if (cartContextItem && typeof cartContextItem.size === 'string' && typeof window.arabelaSizeCode === 'function') {
+      const restoredSize = window.arabelaSizeCode(cartContextItem.size);
+      if (sizeCodes.indexOf(restoredSize) >= 0) {
+        selectedSize = restoredSize;
         updateSizeButtonState();
       }
     }
+
+    setRangeText();
+    render();
+    updateSizeAvailability();
 
     if (bookNowBtn) {
       bookNowBtn.addEventListener('click', function () {
@@ -1283,9 +1390,16 @@
           return;
         }
 
-        // Size is intentionally NOT required -- the shop fits the customer at
-        // pick-up, so it stays '-' (shown as "TBD") until they decide. The rental
-        // date above is the only thing a booking genuinely cannot be made without.
+        // The gown is booked in a SIZE: only the sizes staff gave its units are offered, and one must be chosen
+        // (a single size starts chosen). The server checks the same at submit (_find_available_unit).
+        if (sizeButtons.length && sizeCodes.indexOf(selectedSize) < 0) {
+          arabelaAlert({ title: 'Choose a size', message: 'Please choose a size first.' });
+          return;
+        }
+        if (sizeUnits && sizeCodes.indexOf(selectedSize) >= 0 && freeUnitCount(center, selectedSize) === 0) {
+          arabelaAlert({ title: 'Size not available', message: sizeLabelOf(selectedSize) + ' is already rented for these dates. Please choose another size or date.' });
+          return;
+        }
 
         const startDate = clampedPickup(center);
         const returnDate = new Date(center.getFullYear(), center.getMonth(), center.getDate() + 2);
@@ -1301,7 +1415,10 @@
           qty: 1,
           // Always this page's OWN fresh count, not carried over from cartContextItem --
           // stock can change between when a line was first added and when it's edited.
-          maxQty: {{ product.available_count|default:1 }},
+          maxQty: (function () {
+            const chosen = sizeButtons.find(function (b) { return b.dataset.productSize === selectedSize; });
+            return chosen ? (Number(chosen.dataset.sizeCount) || 1) : {{ product.available_count|default:1 }};
+          })(),
           size: selectedSize,
           img: cartContextItem && cartContextItem.img ? cartContextItem.img : '{{ product.image|escapejs }}',
           rental: fmtMDY(startDate) + ' - ' + fmtMDY(returnDate),

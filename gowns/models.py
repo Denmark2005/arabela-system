@@ -212,6 +212,23 @@ class Gown(models.Model):
         return GownSequence.next_value_for(category)
 
 
+# The short code the customer site uses for each size (the size buttons, the bag, checkout), in the order the buttons are
+# shown. A product's sizes are exactly the sizes staff gave its physical units in Gown Catalog -- nothing else is offered.
+SIZE_CODES = {
+    Gown.Size.SMALL: "S",
+    Gown.Size.MEDIUM: "M",
+    Gown.Size.LARGE: "L",
+    Gown.Size.EXTRA_LARGE: "XL",
+    Gown.Size.FREE_SIZE: "FREE",
+}
+
+
+def size_codes_of(units):
+    """The size codes these units come in, in button order (S, M, L, XL, Free Size), each once."""
+    present = {unit.size for unit in units}
+    return [code for value, code in SIZE_CODES.items() if value in present]
+
+
 def pick_representative_gown(units):
     """The one unit whose photo/price stand in for a product with several physical
     units sharing a name. Lowest price wins (ties broken by id, for a stable pick) --

@@ -11,6 +11,7 @@ from django.utils.functional import SimpleLazyObject
 from accounts.models import CustomerMessage, UserProfile
 from gowns.models import (
     CustomCategory, Gown, SiteSettings, custom_categories, group_gowns_by_name, hidden_category_names, pick_representative_gown,
+    size_codes_of,
 )
 from gowns.covers import cover_for, owner_cover_urls
 from gowns.photos import GRID_WIDTH, sized
@@ -151,6 +152,9 @@ def _build_search_catalog(categories: list[dict] | None = None) -> list[dict]:
                         "gowns:product_detail",
                         kwargs={"collection": collection_key, "slug": rep.slug},
                     ),
+                    # The sizes this product's units come in (S, M, L, XL, FREE) -- the bag's quick-add uses it to fill in
+                    # the only size, or to send the customer to the gown page to choose when there are several.
+                    "sizes": size_codes_of(group),
                 }
             )
     return items

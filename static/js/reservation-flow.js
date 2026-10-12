@@ -111,7 +111,17 @@
     // both that and an empty string mean "not chosen yet".
     window.arabelaSizeLabel = function (size) {
         var t = String(size == null ? '' : size).replace(/^\s*Size:\s*/i, '').trim();
-        return (!t || t === '-') ? 'TBD' : t;
+        if (!t || t === '-') return 'TBD';
+        return t.toUpperCase() === 'FREE' ? 'Free Size' : t;
+    };
+
+    // The size BUTTON code ('S', 'M', 'L', 'XL', 'FREE') for any shape a stored size arrives in: the drawer's bare
+    // 'M', the checkout snapshot's 'Size: M', or a full name such as 'Medium' or 'Free Size'. '' when it is none of them.
+    window.arabelaSizeCode = function (size) {
+        var t = String(size == null ? '' : size).replace(/^\s*Size:\s*/i, '').trim().toUpperCase();
+        var names = { 'SMALL': 'S', 'MEDIUM': 'M', 'LARGE': 'L', 'EXTRA LARGE': 'XL', 'FREE SIZE': 'FREE' };
+        if (names[t]) return names[t];
+        return ['S', 'M', 'L', 'XL', 'FREE'].indexOf(t) >= 0 ? t : '';
     };
 
     // Rebuilds a gown's product URL from a stored line. Mirrors base.html's and

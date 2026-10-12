@@ -1028,8 +1028,39 @@
       updateCartTotals();
     }
 
+    // The sizes a product comes in, from the search catalog every page already carries (gowns.context_processors
+    // _build_search_catalog). null when it can't be read -- then the item is added exactly as before.
+    let catalogSizesCache = null;
+    function catalogSizesFor(slug, collection) {
+      try {
+        if (catalogSizesCache === null) {
+          const el = document.getElementById('search-catalog-data');
+          const rows = el ? JSON.parse(el.textContent || '[]') : [];
+          catalogSizesCache = Array.isArray(rows) ? rows : [];
+        }
+        const row = catalogSizesCache.find(function (r) {
+          return r && r.slug === slug && (!collection || r.collection_key === collection);
+        }) || catalogSizesCache.find(function (r) { return r && r.slug === slug; });
+        return row && Array.isArray(row.sizes) ? row.sizes : null;
+      } catch (err) {
+        return null;
+      }
+    }
+
     window.addCollectionItem = function (item) {
       if (!item || !item.id) return;
+      // A gown is booked in one of ITS sizes. Quick-add fills in the only size; a gown that comes in several sizes
+      // opens its page instead, so the customer chooses one there (and sees which sizes are free on their dates).
+      if (!item.size || item.size === '-') {
+        const itemColl = item.collection ? String(item.collection).trim() : 'wedding';
+        const sizes = catalogSizesFor(String(item.id), itemColl);
+        if (sizes && sizes.length === 1) {
+          item = Object.assign({}, item, { size: sizes[0] });
+        } else if (sizes && sizes.length > 1) {
+          window.location.href = '/collections/' + encodeURIComponent(itemColl) + '/products/' + encodeURIComponent(String(item.id)) + '/';
+          return;
+        }
+      }
       // "Still needs finishing" now means only the date -- size is optional, so a
       // dated row with no size must NOT keep absorbing repeat adds as extra qty.
       function lineComplete(ci) {
