@@ -1,7 +1,13 @@
+import logging
+
 from allauth.core.exceptions import ImmediateHttpResponse
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
+from allauth.socialaccount.providers.base import AuthError
 from django.contrib.auth import get_user_model
-from django.shortcuts import render
+from django.shortcuts import redirect, render
+from django.urls import reverse
+
+logger = logging.getLogger(__name__)
 
 from .models import UserProfile
 
@@ -23,6 +29,19 @@ def _refuse_staff(request):
 
 
 class ArabelaSocialAccountAdapter(DefaultSocialAccountAdapter):
+    def on_authentication_error(self, request, provider, error=None, exception=None, extra_context=None):
+        """Google's answer could not be used. Instead of allauth's bare "Third-Party Login Failure" page:
+          * someone who is ALREADY signed in just goes to the homepage. The usual cause is the same Google answer arriving
+            twice (a second tap on the account, a refresh, a slow connection): the first one signed them in and only the
+            repeat failed -- there is nothing to tell them;
+          * anyone else goes back to the login page, which says what happened and to try once more.
+        The login page is a redirect (not the callback URL itself), so a refresh can never replay the failed answer."""
+        if request.user.is_authenticated:
+            raise ImmediateHttpResponse(redirect("gowns:homepage"))
+        logger.warning("Google sign-in did not finish: error=%s exception=%r", error, exception)
+        problem = "cancelled" if error in (AuthError.CANCELLED, AuthError.DENIED) else "incomplete"
+        raise ImmediateHttpResponse(redirect(f"{reverse('accounts:login')}?problem={problem}"))
+
     def pre_social_login(self, request, sociallogin):
         # A Google sign-in that was already linked to a staff account (an older sign-in that matched by email).
         if sociallogin.is_existing:

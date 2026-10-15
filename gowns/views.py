@@ -109,14 +109,31 @@ def _products_by_category(categories) -> dict[str, list[dict]]:
     units_by_label = defaultdict(list)
     for gown in Gown.objects.exclude(status=Gown.Status.OUT_OF_STOCK).order_by("color_code", "gown_id"):
         units_by_label[gown.category].append(gown)
-    return {category["key"]: _cards_for_units(units_by_label.get(category["label"], []), category["key"]) for category in categories}
+    busy = _busy_for([gown for units in units_by_label.values() for gown in units])   # every gown's bookings, read once
+    return {
+        category["key"]: _cards_for_units(units_by_label.get(category["label"], []), category["key"], busy)
+        for category in categories
+    }
 
 
-def _cards_for_units(units, collection_key: str) -> list[dict]:
-    """One card per product from a category's bookable units (already ordered by color code, then gown ID)."""
+def _busy_for(units):
+    """(bookings_by_unit, blocks_by_unit, now) for these units -- two queries for a whole page of cards."""
+    now = availability.now_local()
+    bookings, blocks = availability.load_busy_ranges([unit.id for unit in units], now.date(), availability.HORIZON_DAYS)
+    return bookings, blocks, now
+
+
+def _cards_for_units(units, collection_key: str, busy=None) -> list[dict]:
+    """One card per product from a category's bookable units (already ordered by color code, then gown ID).
+
+    `busy` is _busy_for() of these units (or more); read here when not given."""
+    bookings, blocks, now = busy if busy is not None else _busy_for(units)
     cards = []
     for group in group_gowns_by_name(units):
         rep = pick_representative_gown(group)
+        # Worked out from the real bookings and dates -- the same function the gown page uses for its own label, so a card and
+        # its page always agree. No label at all while the gown can be booked now.
+        badge = availability.booking_badge(group, bookings, blocks, now)
         cards.append({
             "slug": rep.slug,
             "title": rep.name,
@@ -126,9 +143,8 @@ def _cards_for_units(units, collection_key: str) -> list[dict]:
             "price_display": f"₱{rep.rental_price:,.0f}",
             "image": sized(rep.photo_url, GRID_WIDTH) or _FALLBACK_IMG,
             "collection_key": collection_key,
-            # Only true once EVERY unit of this product is currently checked out --
-            # if even one sibling is free right now, quick-add can still hand it out.
-            "reserved": all(g.status == Gown.Status.RESERVED for g in group),
+            "badge": badge["text"],                      # "", "Available from Oct 26" or "Fully booked for now"
+            "can_add": badge["state"] != "full",         # quick-add only when some date can actually be booked
             "available_count": len(group),
         })
     return cards
@@ -714,12 +730,14 @@ def product_detail(request, collection: str, slug: str):
 
     now = availability.now_local()
     calendar_data = {}
+    badge = None
     if is_out_of_stock:
         blocked_dates, size_options = [], []
     else:
         units, bookings, blocks = _bookable_units_and_busy_ranges(real_gown.category, real_gown.name)
         busy = {unit.id: list(bookings.get(unit.id, ())) + list(blocks.get(unit.id, ())) for unit in units}
         blocked_dates = _days_every_unit_is_busy(units, busy)
+        badge = availability.booking_badge(units, bookings, blocks, now)    # the same label its collection card shows
         size_options = _size_options(units)
         code_of = lambda unit: SIZE_CODES.get(unit.size, "")
         plans = availability.plan_calendar(units, bookings, blocks, now, _AVAILABILITY_HORIZON_DAYS, code_of)
@@ -745,11 +763,8 @@ def product_detail(request, collection: str, slug: str):
         "title": display_unit.name,
         "price": f"₱{display_unit.rental_price:,.0f}",
         "image": sized(display_unit.photo_url, PAGE_WIDTH) or _FALLBACK_IMG,
-        "availability": (
-            "Currently Unavailable"
-            if is_out_of_stock
-            else ("Limited Availability" if blocked_dates else "Available Now")
-        ),
+        # No label while the gown can be booked now; otherwise the real date (or "Fully booked for now") -- see booking_badge.
+        "availability": "Currently Unavailable" if is_out_of_stock else badge["text"],
         "collection": real_gown.category,
         "unavailable": is_out_of_stock,
         # How many physical units back this product right now -- shown to the

@@ -14,6 +14,13 @@ def _allowed_next_url(request, candidate) -> str:
     return ''
 
 
+# Why a Google sign-in did not finish (accounts.adapters sends people here with ?problem=...). Only these words can ever be shown.
+SIGN_IN_PROBLEMS = {
+    "incomplete": "Sign-in with Google didn't finish. Please tap Continue with Google once and wait a moment for it to load.",
+    "cancelled": "Sign-in was cancelled. Tap Continue with Google whenever you're ready.",
+}
+
+
 def login_view(request):
     """The only customer-facing sign-in/sign-up entry point: one "Continue with
     Google" card, shared by the accounts:login and accounts:signup URLs. The
@@ -29,6 +36,7 @@ def login_view(request):
         return redirect('gowns:homepage')
     return render(request, 'login.html', {
         'next': _allowed_next_url(request, request.GET.get('next')),
+        'error': SIGN_IN_PROBLEMS.get(request.GET.get('problem', ''), ''),
     })
 
 

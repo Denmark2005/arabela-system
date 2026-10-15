@@ -115,6 +115,39 @@ def plan_calendar(units, bookings_by_unit, blocks_by_unit, now, horizon_days, si
     return calendar
 
 
+FULLY_BOOKED_TEXT = "Fully booked for now"
+
+
+def booking_badge(units, bookings_by_unit, blocks_by_unit, now, horizon_days=HORIZON_DAYS):
+    """The ONE label a gown shows customers about when it can be booked -- on the collection card AND on the gown page, so the two
+    can never disagree (they used to: the card read the gown's saved "Reserved" status, the page read the dates).
+
+    -> {"state", "date", "text"}:
+      * "now"  -- an event today (or tomorrow) can be booked: no label at all ("text" is "").
+      * "from" -- the first event date that can be booked is later: "Available from Oct 26". The same day is the first one the
+                  calendar lets the customer pick, because it is worked out by the same plan_unit rule, unit by unit.
+      * "full" -- no event date can be booked in the whole calendar (the next `horizon_days` days): "Fully booked for now"."""
+    today = now.date()
+    earliest = earliest_pickup_day(now)
+    first_open = None
+    for offset in range(horizon_days + 1):
+        event = today + timedelta(days=offset)
+        if day_problem(event, now):
+            continue
+        if any(
+            plan_unit(event, bookings_by_unit.get(unit.id, ()), blocks_by_unit.get(unit.id, ()), earliest)[0] is not None
+            for unit in units
+        ):
+            first_open = event
+            break
+    if first_open is None:
+        return {"state": "full", "date": None, "text": FULLY_BOOKED_TEXT}
+    if first_open <= today + timedelta(days=1):
+        return {"state": "now", "date": first_open, "text": ""}
+    label = f"{first_open:%b} {first_open.day}" + (f", {first_open.year}" if first_open.year != today.year else "")
+    return {"state": "from", "date": first_open, "text": f"Available from {label}"}
+
+
 def open_event_dates(units, bookings_by_unit, blocks_by_unit, now, horizon_days):
     """The set of event dates (ISO) on which at least one of these units can be rented."""
     calendar = plan_calendar(units, bookings_by_unit, blocks_by_unit, now, horizon_days, lambda unit: "")

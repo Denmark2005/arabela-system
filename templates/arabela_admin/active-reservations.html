@@ -29,6 +29,7 @@
   >
     {% include "arabela_admin/partials/timeline_styles.html" %}
     {% include "arabela_admin/partials/dialog.html" %}
+    {% include "arabela_admin/partials/cancel_booking.html" %}
     <!-- One shared floating popover, reused for both the pickup/return date "Edit"
          form and the "Mark Returned" condition choice -- position: fixed so it
          overlays the table instead of growing a row's height (which used to push
@@ -1245,6 +1246,19 @@
                               class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
                               <span x-text="openTimeline === {{ r.id }} ? 'Hide Timeline' : 'Timeline'">Timeline</span>
                             </button>
+                            {% if r.can_cancel %}
+                            <!-- Only while nothing in the booking has been picked up. Opens the confirm window
+                                 (partials/cancel_booking.html); nothing happens until the booking code is typed. -->
+                            <button type="button" class="cb-open-btn{% if r.cancel_urgent %} cb-open-btn--urgent{% endif %}"
+                              title="{% if r.cancel_urgent %}The event date has passed and nothing was picked up{% else %}Cancel this booking{% endif %}"
+                              data-url="{% url 'arabela_admin:reservation_cancel' r.id %}"
+                              data-ref="{{ r.reference_code }}"
+                              data-customer="{{ r.display_customer_name }}"
+                              data-gowns="{{ r.cancel_gowns }}"
+                              data-event="{{ r.cancel_event_text }}"
+                              data-deposit="&#8369;{{ r.security_deposit|floatformat:'2g' }}"
+                              data-reason="{{ r.cancel_default_reason }}">Cancel booking</button>
+                            {% endif %}
                           </div>
                         </td>
                         {% endif %}

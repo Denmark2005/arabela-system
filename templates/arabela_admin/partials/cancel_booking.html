@@ -1,0 +1,218 @@
+{% comment %}
+  "Cancel booking" window for Active Reservations (arabela_admin.views.reservation_cancel_view).
+
+  One small, self-contained piece: its own styles (the admin's compiled CSS only has the classes the pack itself uses), its own
+  markup and its own script. Every "Cancel booking" button on the page (class cb-open-btn) opens it and hands it that booking's
+  details through data- attributes. Nothing is cancelled until the booking code is typed exactly -- so it can't happen by accident.
+{% endcomment %}
+<style>
+  .cb-open-btn { display: inline-flex; align-items: center; gap: .5rem; border: 1px solid #fda29b; background: #fff; color: #b42318; border-radius: .5rem; padding: .375rem .75rem; font-size: .75rem; line-height: 1.25; font-weight: 500; cursor: pointer; }
+  .cb-open-btn:hover { background: #fef3f2; }
+  .cb-open-btn--urgent { background: #fef3f2; border-color: #f04438; }
+  .dark .cb-open-btn { background: transparent; color: #fda29b; border-color: rgba(240, 68, 56, .55); }
+  .dark .cb-open-btn:hover, .dark .cb-open-btn--urgent { background: rgba(240, 68, 56, .16); }
+
+  .cb-overlay { position: fixed; inset: 0; z-index: 100000; display: none; align-items: center; justify-content: center; padding: 1rem; background: rgba(16, 24, 40, .62); }
+  .cb-overlay.is-open { display: flex; }
+  .cb-card { width: 100%; max-width: 31rem; max-height: calc(100vh - 2rem); overflow-y: auto; background: #fff; color: #1d2939; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 24px 48px -12px rgba(16, 24, 40, .35); }
+  .dark .cb-card { background: #101828; color: #f2f4f7; border: 1px solid #1d2939; }
+  .cb-title { margin: 0 0 .25rem; font-size: 1.125rem; font-weight: 600; }
+  .cb-lead { margin: 0 0 1rem; font-size: .875rem; color: #667085; }
+  .dark .cb-lead { color: #98a2b3; }
+  .cb-summary { margin: 0 0 1rem; padding: .75rem 1rem; border-radius: .75rem; background: #f9fafb; border: 1px solid #e4e7ec; display: grid; grid-template-columns: auto 1fr; gap: .35rem 1rem; font-size: .875rem; }
+  .dark .cb-summary { background: rgba(255, 255, 255, .04); border-color: #1d2939; }
+  .cb-summary dt { color: #667085; }
+  .dark .cb-summary dt { color: #98a2b3; }
+  .cb-summary dd { margin: 0; font-weight: 500; word-break: break-word; }
+  .cb-warn { margin: 0 0 1rem; padding: .75rem 1rem; border-radius: .75rem; background: #fef3f2; color: #912018; font-size: .875rem; line-height: 1.45; }
+  .dark .cb-warn { background: rgba(240, 68, 56, .16); color: #fda29b; }
+  .cb-label { display: block; margin: 0 0 .35rem; font-size: .8125rem; font-weight: 500; }
+  .cb-field { display: block; width: 100%; box-sizing: border-box; margin: 0 0 .9rem; padding: .6rem .75rem; border: 1px solid #d0d5dd; border-radius: .6rem; background: #fff; color: inherit; font: inherit; font-size: .875rem; }
+  .dark .cb-field { background: #0c111d; border-color: #344054; }
+  .cb-field:focus { outline: 2px solid #465fff; outline-offset: 1px; border-color: #465fff; }
+  textarea.cb-field { resize: vertical; min-height: 4rem; }
+  .cb-code { font-weight: 600; }
+  .cb-error { margin: 0 0 .9rem; padding: .6rem .75rem; border-radius: .6rem; background: #fef3f2; color: #b42318; font-size: .8125rem; }
+  .dark .cb-error { background: rgba(240, 68, 56, .16); color: #fda29b; }
+  .cb-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .6rem; margin-top: .25rem; }
+  .cb-btn { border-radius: .6rem; padding: .6rem 1.1rem; font: inherit; font-size: .875rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; }
+  .cb-btn--keep { background: #fff; color: #344054; border-color: #d0d5dd; }
+  .dark .cb-btn--keep { background: transparent; color: #d0d5dd; border-color: #344054; }
+  .cb-btn--danger { background: #d92d20; color: #fff; }
+  .cb-btn--danger:hover:not(:disabled) { background: #b42318; }
+  .cb-btn:disabled { opacity: .45; cursor: not-allowed; }
+  .cb-open-btn:focus-visible, .cb-btn:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+</style>
+
+<div class="cb-overlay" id="cb-overlay" aria-hidden="true">
+  <div class="cb-card" role="dialog" aria-modal="true" aria-labelledby="cb-title" aria-describedby="cb-lead">
+    <h2 class="cb-title" id="cb-title">Cancel this booking?</h2>
+    <p class="cb-lead" id="cb-lead">Check the details below, then confirm.</p>
+
+    <dl class="cb-summary">
+      <dt>Customer</dt><dd id="cb-customer"></dd>
+      <dt>Booking</dt><dd id="cb-ref"></dd>
+      <dt>Gown</dt><dd id="cb-gowns"></dd>
+      <dt>Event date</dt><dd id="cb-event"></dd>
+      <dt>Deposit paid</dt><dd id="cb-deposit"></dd>
+    </dl>
+
+    <p class="cb-warn">The deposit is <strong>not refunded</strong> &mdash; the booking stays on record as Cancelled with that written on it. The gown is released, the customer is told by message and email, and this can't be undone.</p>
+
+    <label class="cb-label" for="cb-reason">Why is it being cancelled?</label>
+    <select class="cb-field" id="cb-reason">
+      <option value="no_show">The gown was not picked up</option>
+      <option value="customer_asked">The customer asked to cancel</option>
+      <option value="other">Another reason</option>
+    </select>
+
+    <label class="cb-label" for="cb-note" id="cb-note-label"></label>
+    <textarea class="cb-field" id="cb-note" maxlength="150" rows="2"></textarea>
+
+    <label class="cb-label" for="cb-code">To confirm, type <span class="cb-code" id="cb-code-hint"></span></label>
+    <input class="cb-field" id="cb-code" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false">
+
+    <p class="cb-error" id="cb-error" role="alert" hidden></p>
+
+    <div class="cb-actions">
+      <button type="button" class="cb-btn cb-btn--keep" id="cb-keep">Keep booking</button>
+      <button type="button" class="cb-btn cb-btn--danger" id="cb-confirm" disabled>Cancel booking</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var overlay = document.getElementById('cb-overlay');
+    if (!overlay) { return; }
+    var $ = function (id) { return document.getElementById(id); };
+    var reason = $('cb-reason'), note = $('cb-note'), code = $('cb-code'), errorEl = $('cb-error');
+    var confirmBtn = $('cb-confirm'), keepBtn = $('cb-keep');
+    var current = null, busy = false, lastFocus = null;
+
+    function csrf() {
+      var input = document.querySelector('input[name="csrfmiddlewaretoken"]');
+      if (input) { return input.value; }
+      var match = document.cookie.match(/csrftoken=([^;]+)/);
+      return match ? decodeURIComponent(match[1]) : '';
+    }
+
+    // The confirm button stays off until the booking code is typed exactly (and, for "Another reason", a reason is written).
+    function refresh() {
+      var typedOk = !!current && code.value.trim().toUpperCase() === current.ref.toUpperCase();
+      var needsNote = reason.value === 'other' && note.value.trim() === '';
+      confirmBtn.disabled = busy || !typedOk || needsNote;
+    }
+
+    function noteWording() {
+      var other = reason.value === 'other';
+      $('cb-note-label').textContent = other
+        ? 'What should the customer be told? (required)'
+        : "Note for the shop's records (optional — the customer does not see it)";
+      note.placeholder = other ? 'e.g. The gown is no longer available' : 'e.g. Called twice, no answer';
+    }
+
+    function showError(message) {
+      errorEl.textContent = message;
+      errorEl.hidden = !message;
+    }
+
+    function open(btn) {
+      current = {
+        url: btn.getAttribute('data-url'),
+        ref: btn.getAttribute('data-ref') || '',
+      };
+      $('cb-customer').textContent = btn.getAttribute('data-customer') || '';
+      $('cb-ref').textContent = current.ref;
+      $('cb-gowns').textContent = btn.getAttribute('data-gowns') || '';
+      $('cb-event').textContent = btn.getAttribute('data-event') || '';
+      $('cb-deposit').textContent = btn.getAttribute('data-deposit') || '';
+      $('cb-code-hint').textContent = current.ref;
+      reason.value = btn.getAttribute('data-reason') === 'no_show' ? 'no_show' : 'customer_asked';
+      note.value = '';
+      code.value = '';
+      busy = false;
+      confirmBtn.textContent = 'Cancel booking';
+      keepBtn.disabled = false;
+      showError('');
+      noteWording();
+      refresh();
+      lastFocus = document.activeElement;
+      overlay.classList.add('is-open');
+      overlay.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+      window.setTimeout(function () { code.focus(); }, 30);
+    }
+
+    function close() {
+      if (busy) { return; }
+      overlay.classList.remove('is-open');
+      overlay.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
+      current = null;
+      if (lastFocus && typeof lastFocus.focus === 'function') { lastFocus.focus(); }
+    }
+
+    function done(reference) {
+      busy = false;
+      overlay.classList.remove('is-open');
+      overlay.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
+      var reload = function () { window.location.reload(); };
+      if (typeof window.adminAlert === 'function') {
+        Promise.resolve(window.adminAlert({
+          title: 'Booking cancelled',
+          message: reference + ' was cancelled. The customer has been told by message and email, and the gown is free again. You can find the booking in Reservation Records under Cancelled.',
+        })).then(reload, reload);
+      } else {
+        reload();
+      }
+    }
+
+    function submit() {
+      if (confirmBtn.disabled || !current) { return; }
+      busy = true;
+      showError('');
+      confirmBtn.textContent = 'Cancelling...';
+      confirmBtn.disabled = true;
+      keepBtn.disabled = true;
+      fetch(current.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+        credentials: 'same-origin',
+        body: JSON.stringify({ reason: reason.value, note: note.value.trim(), confirm: code.value.trim() }),
+      })
+        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+        .then(function (result) {
+          if (result.ok && result.data.success) { done(result.data.reference || current.ref); return; }
+          busy = false;
+          keepBtn.disabled = false;
+          confirmBtn.textContent = 'Cancel booking';
+          showError(result.data.error || 'This booking could not be cancelled. Please refresh the page and try again.');
+          refresh();
+        })
+        .catch(function () {
+          busy = false;
+          keepBtn.disabled = false;
+          confirmBtn.textContent = 'Cancel booking';
+          showError('Could not reach the server. Check your connection and try again. Nothing was cancelled.');
+          refresh();
+        });
+    }
+
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest ? e.target.closest('.cb-open-btn') : null;
+      if (btn) { e.preventDefault(); open(btn); }
+    });
+    overlay.addEventListener('mousedown', function (e) { if (e.target === overlay) { close(); } });
+    keepBtn.addEventListener('click', close);
+    confirmBtn.addEventListener('click', submit);
+    reason.addEventListener('change', function () { noteWording(); refresh(); });
+    note.addEventListener('input', refresh);
+    code.addEventListener('input', refresh);
+    code.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && overlay.classList.contains('is-open')) { e.preventDefault(); close(); }
+    });
+  })();
+</script>

@@ -99,17 +99,19 @@ class OneGownQueryForManyCategoriesTests(TestCase):
             with self.subTest(category=category["label"]):
                 self.assertEqual(together[category["key"]], views._products_for_category(category["key"]))
 
+    # 7 = the 5 the page always asked + 2 for the availability labels (every gown's bookings and its blocks, read ONCE for the whole
+    # page, never once per card -- see gowns.views._busy_for and gowns/test_booking_badge.py).
     def test_the_all_page_and_search_ask_the_database_only_a_few_times(self):
         self.client.get("/collections/all/")          # first visit warms up the site settings row
-        with self.assertNumQueries(5):
+        with self.assertNumQueries(7):
             self.assertEqual(self.client.get("/collections/all/").status_code, 200)
         # The search speed limit keeps its own small counter row (tested in accounts/test_rate_limit.py); left out here so this
         # counts only the page's own questions.
         with patch("gowns.views.rate_limit.allowed", return_value=True):
-            with self.assertNumQueries(5):
+            with self.assertNumQueries(7):
                 self.assertEqual(self.client.get("/search/", {"q": "we"}).status_code, 200)
 
     def test_a_category_page_asks_the_database_only_a_few_times(self):
         self.client.get("/collections/wedding/")
-        with self.assertNumQueries(5):
+        with self.assertNumQueries(7):
             self.assertEqual(self.client.get("/collections/wedding/").status_code, 200)

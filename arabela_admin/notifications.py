@@ -196,9 +196,10 @@ def build_items(user):
         ))
 
     # --- Overdue returns (the most time-critical queue) ----------------------------
+    # A gown still at Pick-up never left the shop, so it cannot be overdue for return -- that is a missed pick-up, below.
     overdue_items = (
         ReservationItem.objects.filter(return_date__lt=today)
-        .exclude(stage=ReservationItem.Stage.RETURNED)
+        .exclude(stage__in=[ReservationItem.Stage.RETURNED, ReservationItem.Stage.PICKUP])
         .exclude(reservation__status__in=[
             Reservation.Status.REJECTED,
             Reservation.Status.CANCELLED,
@@ -228,28 +229,63 @@ def build_items(user):
     # return reminder, nothing automatically contacts the customer for this one. Scoped
     # to _SCHEDULED_STATUSES (the same filter Active Reservations itself queries on) so
     # a click always lands on a row that's actually visible there.
-    late_pickup_items = (
+    #
+    # ONE entry per booking (a three-gown booking used to make three). Two stages:
+    #   * pick-up date passed, event not yet over  -> a warning: call the customer;
+    #   * the event date has passed and nothing in the booking was picked up -> critical, "cancel the booking": the gown can no
+    #     longer be used, and Active Reservations has the Cancel booking button for exactly this.
+    # A booking that also has a gown already out can't be cancelled whole, so it stays a plain warning.
+    late_pickup_items = list(
         ReservationItem.objects.filter(
             stage=ReservationItem.Stage.PICKUP,
             rental_date__lt=today,
             reservation__status__in=_SCHEDULED_STATUSES,
         )
         .select_related("reservation__customer__profile")
-        .order_by("rental_date")[:10]
+        .order_by("rental_date", "id")
     )
+    late_by_booking = {}
     for it in late_pickup_items:
-        days_late = (today - it.rental_date).days
+        late_by_booking.setdefault(it.reservation_id, []).append(it)
+    partly_out = set(
+        ReservationItem.objects.filter(reservation_id__in=late_by_booking)
+        .exclude(stage=ReservationItem.Stage.PICKUP)
+        .values_list("reservation_id", flat=True)
+    )
+    for reservation_id, group in list(late_by_booking.items())[:10]:
+        reservation = group[0].reservation
+        count = len(group)
+        first_day = group[0].rental_date
+        days_late = (today - first_day).days
+        event_over_by = (today - min(g.effective_event_date for g in group)).days
+        if event_over_by > 0 and reservation_id not in partly_out:
+            plural = "s" if event_over_by != 1 else ""
+            items.append(_item(
+                key=f"late_pickup:{reservation_id}:decide",
+                kind="late_pickup",
+                level="critical",
+                actor=reservation.display_customer_name,
+                text=(f"never picked up {'the gown' if count == 1 else 'the gowns'} and the event date passed "
+                      f"{event_over_by} day{plural} ago. Cancel booking"),
+                subject=reservation.reference_code,
+                module="Reservations",
+                url=_searchable("arabela_admin:active_reservations", reservation.reference_code),
+                when=first_day,
+                sort=datetime.combine(first_day, time.min),
+            ))
+            continue
+        gowns = group[0].gown_name if count == 1 else f"{group[0].gown_name} and {count - 1} more"
         items.append(_item(
-            key=f"late_pickup:{it.id}",
+            key=f"late_pickup:{reservation_id}",
             kind="late_pickup",
             level="warning",
-            actor=it.gown_name,
-            text=f"is {days_late} day{'s' if days_late != 1 else ''} late for pick-up by",
-            subject=it.reservation.display_customer_name,
+            actor=gowns,
+            text=f"{'is' if count == 1 else 'are'} {days_late} day{'s' if days_late != 1 else ''} late for pick-up by",
+            subject=reservation.display_customer_name,
             module="Reservations",
-            url=_searchable("arabela_admin:active_reservations", it.reservation.reference_code),
-            when=it.rental_date,
-            sort=datetime.combine(it.rental_date, time.min),
+            url=_searchable("arabela_admin:active_reservations", reservation.reference_code),
+            when=first_day,
+            sort=datetime.combine(first_day, time.min),
         ))
 
     # --- Inventory needing attention ----------------------------------------------

@@ -13,6 +13,11 @@
   <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet">
   {% include "arabela_admin/partials/photo_viewer_styles.html" %}
   <style>
+    /* Customer icon + name in the payments table open that booking in Reservation Records. */
+    .pv-customer-link { text-decoration: none; color: inherit; cursor: pointer; border-radius: 0.5rem; }
+    .pv-customer-link:hover span.block.font-medium { text-decoration: underline; }
+    .pv-customer-link:hover > div:first-child { box-shadow: 0 0 0 2px #465fff; }
+    .pv-customer-link:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
     /* Verified Today: capped-height scroll instead of growing the page taller with
        every verification (mirrors the notification bell's own "All Notifications"
        list -- same custom-scrollbar class, same 420px cap -- so this behaves like
@@ -1240,7 +1245,7 @@
                           x-show="(statusFilter === 'All' || statusFilter === status) && (yearFilter === '' || yearFilter === '{{ r.created_at|date:"Y" }}') && (monthFilter === 'All' || monthFilter === '{{ r.created_at|date:"M" }}') && (search === '' || '{{ r.display_customer_name|lower }} {{ r.reference_code|lower }}'.includes(search.toLowerCase()))"
                           :class="search !== '' && '{{ r.reference_code|lower|escapejs }}' === search.toLowerCase() ? 'bg-brand-50 dark:bg-brand-500/15' : ''">
                         <td class="px-5 py-4 sm:px-6">
-                          <div class="flex items-center gap-3">
+                          <a href="{% url 'arabela_admin:reservation_records' %}?search={{ r.reference_code|urlencode }}" class="pv-customer-link flex items-center gap-3" title="Open {{ r.reference_code }} in Reservation Records" aria-label="Open {{ r.display_customer_name }}, {{ r.reference_code }}, in Reservation Records">
                             <div class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-gray-400 dark:bg-gray-800">
                               <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>
                             </div>
@@ -1248,7 +1253,7 @@
                               <span class="block font-medium text-gray-800 text-theme-sm dark:text-white/90">{{ r.display_customer_name }}</span>
                               {% if r.booked_as_name %}<span class="block text-xs text-gray-400 dark:text-gray-500">Booked as: {{ r.booked_as_name }}</span>{% endif %}
                             </div>
-                          </div>
+                          </a>
                         </td>
                         <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ r.reference_code }}</p></td>
                         <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ r.payment_method|default:"&mdash;" }}</p></td>

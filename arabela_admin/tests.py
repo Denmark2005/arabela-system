@@ -1349,7 +1349,7 @@ class AdminNotificationsTests(TestCase):
         from reservations.models import Reservation, ReservationItem
         reservation = Reservation.objects.create(customer=self.customer, customer_name="Overdue Notif Customer")
         ReservationItem.objects.create(
-            reservation=reservation, gown_name="Overdue Notif Gown",
+            reservation=reservation, gown_name="Overdue Notif Gown", stage=ReservationItem.Stage.RESERVED,   # the gown is OUT
             rental_date=date.today() - timedelta(days=10),
             return_date=date.today() - timedelta(days=3),
         )
@@ -1442,10 +1442,11 @@ class AdminNotificationsTests(TestCase):
         from reservations.models import Reservation, ReservationItem
         # An "info"-level reservation notification, freshly created (newest).
         Reservation.objects.create(customer=self.customer, customer_name="Info Notif Customer")
-        # A "critical"-level overdue item, from days ago (older by timestamp).
-        reservation = Reservation.objects.create(customer=self.customer, customer_name="Critical Notif Customer")
+        # A "critical"-level overdue item (a gown that is OUT and late back), from days ago (older by timestamp).
+        reservation = Reservation.objects.create(
+            customer=self.customer, customer_name="Critical Notif Customer", status=Reservation.Status.ACTIVE)
         ReservationItem.objects.create(
-            reservation=reservation, gown_name="Critical Notif Gown",
+            reservation=reservation, gown_name="Critical Notif Gown", stage=ReservationItem.Stage.RESERVED,
             rental_date=date.today() - timedelta(days=10),
             return_date=date.today() - timedelta(days=3),
         )
@@ -2876,6 +2877,17 @@ class ReservationRecordsTests(TestCase):
             r'<script id="reservation-records-data" type="application/json">(.*?)</script>', html, re.S)
         return {r["reference"]: r for r in json.loads(match.group(1))}
 
+    def test_the_payments_table_links_each_customer_to_that_booking_in_reservation_records(self):
+        html = self.client.get(reverse("arabela_admin:payment_verification")).content.decode()
+        code = self.two_gowns.reference_code
+        link = f'href="{reverse("arabela_admin:reservation_records")}?search={code}"'
+        self.assertIn(link, html)
+        self.assertIn("pv-customer-link", html)
+        # the link really lands on that booking: the records page opens with the code searched for, and lists it
+        page = self.client.get(reverse("arabela_admin:reservation_records"), {"search": code})
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(code, self._records())
+
     def test_one_row_per_reservation_with_its_full_window(self):
         row = self._records()[self.two_gowns.reference_code]
         self.assertEqual(row["gownSummary"], "Records Gown A + 1 more")
@@ -2897,10 +2909,17 @@ class ReservationRecordsTests(TestCase):
         self.assertTrue(row["depositLink"].startswith(reverse("arabela_admin:security_deposits")))
         self.assertTrue(row["depositLink"].endswith("?search=" + self.two_gowns.reference_code))
         self.assertEqual(row["depositLinkLabel"], "Open in Security Deposits")
+        # Rejected bookings never held a deposit; a booking cancelled before its payment was verified says so.
+        rejected = Reservation.objects.create(
+            customer=self.customer, customer_name="Maria Records", status=Reservation.Status.REJECTED)
+        row = self._records()[rejected.reference_code]
+        self.assertEqual(row["depositStatus"], "Not held")
+        self.assertEqual(row["depositLink"], "")
+        self.assertEqual(row["depositLinkLabel"], "")
         cancelled = Reservation.objects.create(
             customer=self.customer, customer_name="Maria Records", status=Reservation.Status.CANCELLED)
         row = self._records()[cancelled.reference_code]
-        self.assertEqual(row["depositStatus"], "Not held")
+        self.assertEqual(row["depositStatus"], "Never verified")
         self.assertEqual(row["depositLink"], "")
         self.assertEqual(row["depositLinkLabel"], "")
 

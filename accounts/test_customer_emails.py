@@ -508,6 +508,23 @@ class CustomerEmailHookTests(TestCase):
         self.assertEqual(email.subject, "Your Arabela gown is overdue")
         self.assertIn("2 days overdue", email.body)
 
+    def test_an_overdue_notice_and_its_email_go_only_to_the_account_that_rented_the_gown(self):
+        today = timezone.localdate()
+        self._reservation(status=Reservation.Status.CONFIRMED, stage=ReservationItem.Stage.RETURN,
+                          rental_date=today - timedelta(days=6), return_date=today - timedelta(days=2))          # the renter's
+        self._reservation(customer=self.other, status=Reservation.Status.CONFIRMED,
+                          rental_date=today + timedelta(days=20), return_date=today + timedelta(days=23))        # a bystander's, not due
+        with self.captureOnCommitCallbacks(execute=True):
+            reminders.send_due_reminders(today)
+        self.assertEqual([m.to for m in mail.outbox], [["rainer@gmail.com"]])                                    # nobody else is emailed
+        self.assertEqual(CustomerMessage.objects.filter(category=CustomerMessage.Category.RETURN_OVERDUE).count(), 1)
+        self.assertEqual(CustomerMessage.objects.get(category=CustomerMessage.Category.RETURN_OVERDUE).recipient, self.customer)
+        # and on the site: the renter's Messages page shows it, the other account's does not
+        self.client.force_login(self.other)
+        self.assertNotContains(self.client.get(reverse("gowns:messages")), "overdue")
+        self.client.force_login(self.customer)
+        self.assertContains(self.client.get(reverse("gowns:messages")), "overdue")
+
     def test_a_reminder_staff_write_by_hand_is_emailed(self):
         reservation = self._reservation(status=Reservation.Status.CONFIRMED)
         item = reservation.items.get()

@@ -52,6 +52,7 @@ from gowns.models import (
     resolve_tag_colors,
     visible_builtin_names,
 )
+from reservations import cancellation as reservation_cancellation
 from reservations import reminders as reservation_reminders
 from reservations import timeline as reservation_timeline
 from reservations.models import Reservation, ReceiptRecord, ReservationItem, ReservationStatusEvent
@@ -896,6 +897,9 @@ def _deposit_status(reservation):
         return "Returned" if reservation.deposit_is_returned else "Held"
     if reservation.status == Reservation.Status.PENDING:
         return "Awaiting verification" if reservation.payment_proof_url else "Not paid"
+    if reservation.status == Reservation.Status.CANCELLED:
+        # Approved before it was cancelled = the payment was verified and the deposit is kept (not refunded).
+        return "Paid, not refunded" if reservation.reviewed_at else "Never verified"
     return "Not held"
 
 
@@ -919,6 +923,19 @@ def reservation_records_view(request):
     )
 
     tag_colors = SiteSettings.load().tag_colors()
+    # Who cancelled each cancelled booking, when and why -- read from the status log, one query for all of them.
+    cancel_events = defaultdict(list)
+    cancelled_ids = [r.id for r in reservations if r.status == Reservation.Status.CANCELLED]
+    if cancelled_ids:
+        for event in ReservationStatusEvent.objects.filter(
+            reservation_id__in=cancelled_ids,
+            label__in=[
+                reservation_cancellation.CUSTOMER_CANCEL_LABEL, reservation_cancellation.SHOP_CANCEL_LABEL,
+                reservation_cancellation.STAFF_NOTE_LABEL,
+            ],
+        ).order_by("occurred_at", "id"):
+            cancel_events[event.reservation_id].append(event)
+
     records = []
     for r in reservations:
         items = list(r.items.all())
@@ -985,13 +1002,19 @@ def reservation_records_view(request):
                 reverse("arabela_admin:security_deposits") + "?" + urlencode({"search": r.reference_code})
                 if deposit_status in ("Held", "Returned")
                 else reverse("arabela_admin:payment_verification") + "?" + urlencode({"search": r.reference_code})
-                if deposit_status == "Awaiting verification"
+                if deposit_status in ("Awaiting verification", "Paid, not refunded")
                 else ""
             ),
             "depositLinkLabel": (
                 "Open in Security Deposits" if deposit_status in ("Held", "Returned")
                 else "Open in Payment Verification" if deposit_status == "Awaiting verification"
+                else "See the payment in Payment Verification" if deposit_status == "Paid, not refunded"
                 else ""
+            ),
+            # Only a Cancelled booking has this: who cancelled it, when, why, and where the deposit stands.
+            "cancel": (
+                reservation_cancellation.cancellation_facts(r, cancel_events[r.id])
+                if r.status == Reservation.Status.CANCELLED else None
             ),
             "receipts": [_receipt_row(rec, today) for rec in r.receipt_records.all()],
             # Everything the search box should match, lower-cased once here.
@@ -1131,6 +1154,23 @@ def active_reservations_view(request):
         reservation.has_overdue_item = any(
             item.effective_stage == ReservationItem.Stage.OVERDUE for item in reservation.items.all()
         )
+
+        # "Cancel booking": offered only while nothing in the booking has been picked up (reservations.cancellation).
+        booking_items = list(reservation.items.all())
+        reservation.can_cancel = reservation_cancellation.can_cancel(reservation, booking_items)
+        if reservation.can_cancel:
+            event = min(i.effective_event_date for i in booking_items)
+            days_to_event = (event - today).days
+            reservation.cancel_event_text = f"{event:%b} {event.day}, {event.year} " + (
+                "(today)" if days_to_event == 0
+                else f"({_plural_days(-days_to_event)} ago)" if days_to_event < 0
+                else f"(in {_plural_days(days_to_event)})"
+            )
+            reservation.cancel_urgent = days_to_event < 0          # the event is over and the gown was never collected
+            reservation.cancel_gowns = ", ".join(i.gown_name for i in booking_items)
+            reservation.cancel_default_reason = (
+                "no_show" if any(i.rental_date < today for i in booking_items) else "customer_asked"
+            )
 
     return render(
         request,
@@ -2463,6 +2503,33 @@ def reservation_reject_view(request, pk):
         actor=ReservationStatusEvent.Actor.STAFF,
     )
     return JsonResponse({"success": True, "status": reservation.status})
+
+
+@require_http_methods(["POST"])
+def reservation_cancel_view(request, pk):
+    """Cancel an approved booking that nobody has picked up (a no-show, or the customer phoned to cancel).
+
+    The deposit is not refunded; the booking stays on record as Cancelled. Everything it does -- and every refusal -- is in
+    reservations.cancellation.cancel_by_staff, so this is only the web wrapper."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        data = None
+    if not isinstance(data, dict):
+        return JsonResponse({"error": "Invalid request."}, status=400)
+    try:
+        reservation = reservation_cancellation.cancel_by_staff(
+            pk,
+            staff_name=_staff_display_name(request.user),
+            reason_key=str(data.get("reason") or ""),
+            note=str(data.get("note") or ""),
+            typed_code=str(data.get("confirm") or ""),
+        )
+    except reservation_cancellation.CannotCancel as exc:
+        return JsonResponse({"error": exc.message}, status=exc.status)
+    return JsonResponse({"success": True, "reference": reservation.reference_code, "status": reservation.status})
 
 
 @require_http_methods(["POST"])

@@ -1474,19 +1474,15 @@ class MultiUnitProductGroupingTests(TestCase):
         card = next(c for c in _products_for_category("guest-gown") if c["title"] == "Mismatched Price Gown")
         self.assertEqual(card["price"], 3500)
 
-    def test_card_is_reserved_only_when_every_unit_is_reserved(self):
-        self._gown("Half Reserved Gown", status=Gown.Status.RESERVED)
-        self._gown("Half Reserved Gown", status=Gown.Status.AVAILABLE)
+    def test_a_saved_reserved_status_alone_no_longer_marks_the_card(self):
+        # The card used to read Gown.status, which stays "Reserved" for a booking months away (or one never picked up), so a
+        # free gown looked unavailable while its own page said otherwise. Now only the real bookings and dates decide.
+        self._gown("Status Only Gown", status=Gown.Status.RESERVED)
+        self._gown("Status Only Gown", status=Gown.Status.RESERVED)
         from gowns.views import _products_for_category
-        card = next(c for c in _products_for_category("guest-gown") if c["title"] == "Half Reserved Gown")
-        self.assertFalse(card["reserved"], "one free sibling means quick-add must still work")
-
-    def test_card_is_reserved_when_every_single_unit_is_reserved(self):
-        self._gown("Fully Reserved Gown", status=Gown.Status.RESERVED)
-        self._gown("Fully Reserved Gown", status=Gown.Status.RESERVED)
-        from gowns.views import _products_for_category
-        card = next(c for c in _products_for_category("guest-gown") if c["title"] == "Fully Reserved Gown")
-        self.assertTrue(card["reserved"])
+        card = next(c for c in _products_for_category("guest-gown") if c["title"] == "Status Only Gown")
+        self.assertEqual(card["badge"], "")
+        self.assertTrue(card["can_add"], "nothing is booked, so quick-add must work")
 
     def test_a_product_with_some_but_not_all_units_out_of_stock_shows_the_smaller_count(self):
         self._gown("Partially Withdrawn Gown", status=Gown.Status.OUT_OF_STOCK)

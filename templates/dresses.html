@@ -23,11 +23,13 @@
             <a href="{% url 'gowns:product_detail' collection=item.collection_key slug=item.slug %}" class="group cursor-pointer block">
                 <div class="relative bg-transparent aspect-[3/5] mb-6 overflow-hidden flex items-center justify-center shadow-none">
                     <img alt="{{ item.title }}" class="w-full h-full transition-transform duration-700 group-hover:scale-105 object-cover" src="{{ item.image }}" />
-                    {% if item.reserved %}
+                    {% if item.badge %}
                     <div class="absolute top-3 left-0 py-2 px-4 bg-secondary-container text-on-secondary-container rounded-r-full font-label text-[0.625rem] tracking-widest uppercase font-bold pointer-events-none">
-                        Limited Availability
+                        {{ item.badge }}
                     </div>
-                    <button type="button" class="absolute bottom-3 right-3 w-10 h-10 rounded-full bg-gray-100 text-secondary flex items-center justify-center text-base border-none shadow-none cursor-not-allowed opacity-50" onclick="event.preventDefault(); event.stopPropagation();" disabled>
+                    {% endif %}
+                    {% if not item.can_add %}
+                    <button type="button" class="absolute bottom-3 right-3 w-10 h-10 rounded-full bg-gray-100 text-secondary flex items-center justify-center text-base border-none shadow-none cursor-not-allowed opacity-50" onclick="event.preventDefault(); event.stopPropagation();" title="{{ item.badge }}" aria-label="{{ item.badge }}" disabled>
                         <span class="material-symbols-outlined text-base">add</span>
                     </button>
                     {% else %}

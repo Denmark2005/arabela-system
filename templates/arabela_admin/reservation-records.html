@@ -57,6 +57,10 @@
       .dark .rr-section { border-top-color: #1d2939; }
       .rr-section-title { margin-bottom: .75rem; font-size: .75rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #667085; }
       .dark .rr-section-title { color: #98a2b3; }
+      .rr-cancelled { border: 1px solid #fecdca; background: #fef3f2; border-radius: .75rem; padding: .875rem 1rem; }
+      .dark .rr-cancelled { border-color: rgba(240, 68, 56, .4); background: rgba(240, 68, 56, .1); }
+      .rr-cancelled-line { margin-top: .75rem; font-size: .875rem; font-weight: 600; color: #912018; }
+      .dark .rr-cancelled-line { color: #fda29b; }
       .rr-kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .875rem 1.25rem; }
       .rr-kv > div { min-width: 0; overflow-wrap: anywhere; }
       .rr-mini-table { width: 100%; border-collapse: collapse; font-size: .8125rem; }
@@ -423,6 +427,7 @@
           // Card counts follow the customer filter too, so arriving from Client List
           // shows THAT customer's totals.
           countFor(mode) {
+            if (mode === 'cancelled') { return this.scopedRecords.filter(r => r.progress === 'Cancelled').length; }
             if (mode === 'needs') { return this.scopedRecords.filter(r => this.needsReceipt(r)).length; }
             const range = this.dateRange(mode);
             return this.scopedRecords.filter(r => this.inRange(r, range)).length;
@@ -437,7 +442,11 @@
             this.customTo = '';
             this.pickupYear = '';
             this.pickupMonthNum = '';
-            if (mode === 'needs') {
+            if (mode === 'cancelled') {
+              this.dateFilter = 'all';
+              this.receiptFilter = 'All';
+              this.statusFilter = 'Cancelled';
+            } else if (mode === 'needs') {
               this.dateFilter = 'all';
               this.receiptFilter = 'needs';
             } else {
@@ -448,6 +457,10 @@
           },
 
           cardActive(mode) {
+            if (mode === 'cancelled') {
+              return this.statusFilter === 'Cancelled' && !this.search && !this.pickupYear
+                && this.dateFilter === 'all' && this.receiptFilter === 'All';
+            }
             if (this.search || this.statusFilter !== 'All' || this.pickupYear) { return false; }
             if (mode === 'needs') { return this.receiptFilter === 'needs' && this.dateFilter === 'all'; }
             return this.dateFilter === mode && this.receiptFilter === 'All';
@@ -496,7 +509,8 @@
           depositClass(status) {
             switch (status) {
               case 'Returned': return 'bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500';
-              case 'Held': return 'bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400';
+              case 'Held':
+              case 'Paid, not refunded': return 'bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400';
               case 'Awaiting verification': return 'bg-blue-light-50 text-blue-light-500 dark:bg-blue-light-500/15 dark:text-blue-light-500';
               default: return 'bg-gray-100 text-gray-700 dark:bg-white/5 dark:text-white/80';
             }
@@ -1710,6 +1724,11 @@
                 <h4 class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90" x-text="countFor('month')"></h4>
                 <p class="rr-stat-hint">Rentals out any day this month</p>
               </button>
+              <button type="button" @click="applyCard('cancelled')" class="rr-stat" :class="cardActive('cancelled') && 'is-on'">
+                <p class="text-sm text-gray-500 dark:text-gray-400">Cancelled</p>
+                <h4 class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90" x-text="countFor('cancelled')"></h4>
+                <p class="rr-stat-hint">Cancelled bookings and what was paid</p>
+              </button>
               <button type="button" @click="applyCard('needs')" class="rr-stat" :class="cardActive('needs') && 'is-on'">
                 <p class="text-sm text-gray-500 dark:text-gray-400">Needs a Receipt</p>
                 <h4 class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90" x-text="countFor('needs')"></h4>
@@ -1868,6 +1887,9 @@
                         </td>
                         <td class="px-5 py-4 sm:px-6">
                           <span class="rr-badge" :class="progressClass(r.progress)" x-text="r.progress"></span>
+                          <template x-if="r.cancel">
+                            <p class="rr-clip mt-1 text-theme-xs text-gray-500 dark:text-gray-400" x-text="r.cancel.by + (r.cancel.when ? ' · ' + r.cancel.when : '')"></p>
+                          </template>
                         </td>
                         <td class="px-5 py-4 sm:px-6">
                           <span class="rr-badge" :class="depositClass(r.depositStatus)" x-text="r.depositStatus"></span>
@@ -1938,6 +1960,27 @@
               </div>
               <p class="mt-1 text-sm text-gray-500 dark:text-gray-400" x-text="viewing.reference + ' · Booked ' + viewing.booked"></p>
               <p x-show="viewing.bookedAs" class="mt-1 text-theme-xs text-gray-400" x-text="'Booked under the name: ' + viewing.bookedAs"></p>
+            </div>
+
+            <div class="rr-section" x-show="viewing.cancel">
+              <p class="rr-section-title">Cancellation</p>
+              <div class="rr-cancelled">
+                <div class="rr-kv">
+                  <div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Cancelled by</p>
+                    <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewing.cancel ? viewing.cancel.by : ''"></p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">When</p>
+                    <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewing.cancel && viewing.cancel.when ? viewing.cancel.when : 'Not recorded'"></p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Reason</p>
+                    <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewing.cancel ? viewing.cancel.why : ''"></p>
+                  </div>
+                </div>
+                <p class="rr-cancelled-line" x-text="viewing.cancel ? viewing.cancel.deposit : ''"></p>
+              </div>
             </div>
 
             <div class="rr-section">

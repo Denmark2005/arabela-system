@@ -59,6 +59,7 @@
                 <a
                   href="{% provider_login_url 'google' process='login' next=next %}"
                   id="google_auth_link"
+                  onclick="if (window.__googleTapped) { return false; } window.__googleTapped = true; this.style.opacity = '0.6';"
                   class="inline-flex items-center justify-center gap-3 w-full py-3.5 text-sm font-semibold text-gray-700 transition-colors bg-gray-100 rounded-lg px-7 hover:bg-gray-200 hover:text-gray-800 dark:bg-white/5 dark:text-white/90 dark:hover:bg-white/10"
                 >
                   <svg
@@ -115,8 +116,11 @@
     document.addEventListener('DOMContentLoaded', () => {
       // A slow connection tempts a second tap on "Continue with Google" before the
       // first has finished navigating away -- that second request reuses Google's
-      // one-time login code, which Google refuses, landing on the generic
-      // "Third-Party Login Failure" page instead of actually signing them in.
+      // one-time login code, which Google refuses. The link's own onclick (above, in
+      // the markup) already ignores a second tap from the very first moment the page
+      // exists; this script adds the dimmed look and undoes it when the page is
+      // restored with the Back button. accounts.adapters.on_authentication_error
+      // covers the taps that happen on Google's side instead.
       const googleAuthLink = document.getElementById('google_auth_link');
       if (googleAuthLink) {
         let googleAuthClicked = false;
@@ -126,6 +130,7 @@
             return;
           }
           googleAuthClicked = true;
+          window.__googleTapped = true;
           googleAuthLink.style.opacity = '0.6';
           googleAuthLink.style.pointerEvents = 'none';
         });
@@ -137,6 +142,7 @@
         window.addEventListener('pageshow', (event) => {
           if (event.persisted) {
             googleAuthClicked = false;
+            window.__googleTapped = false;
             googleAuthLink.style.opacity = '';
             googleAuthLink.style.pointerEvents = '';
           }
