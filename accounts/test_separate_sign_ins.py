@@ -227,16 +227,16 @@ class PagesKnowWhichAccountTheyAreForTests(TestCase):
 
 
 class SkippedEmailsSayWhyTests(TestCase):
-    def test_a_staff_account_is_skipped_with_a_warning_that_names_the_reason(self):
-        owner = User.objects.create_user(username="mail_owner", email="owner@gmail.com", password="x", is_staff=True)
+    def test_an_account_without_a_usable_address_is_skipped_with_a_warning_that_names_the_reason(self):
+        demo = User.objects.create_user(username="mail_demo", email="demo@example.com", password="x")
         with self.assertLogs("accounts.customer_emails", level="WARNING") as logs:
-            sent = ce._deliver(owner, ce.RECEIVED, {})
+            sent = ce._deliver(demo, ce.RECEIVED, {})
         self.assertFalse(sent)
         text = "\n".join(logs.output)
         self.assertIn("NOT sent", text)
-        self.assertIn("staff account", text)
-        self.assertIn(f"#{owner.pk}", text)
-        self.assertNotIn("owner@gmail.com", text)                                # the address itself is never logged
+        self.assertIn("placeholder", text)
+        self.assertIn(f"#{demo.pk}", text)
+        self.assertNotIn("demo@example.com", text)                               # the address itself is never logged
 
     def test_the_other_reasons_are_named_too(self):
         self.assertIn("no email address", ce._why_not_deliverable(User(username="a", email="")))

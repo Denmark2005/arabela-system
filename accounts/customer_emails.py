@@ -22,6 +22,7 @@ and the wording of each kind is built in _content() below.
 import collections
 import logging
 import queue
+import random
 import re
 import smtplib
 import socket
@@ -34,7 +35,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
-from django.db import transaction
+from django.db import connection, transaction
 from django.template.loader import render_to_string
 from django.templatetags.static import static
 from django.urls import reverse
@@ -331,8 +332,10 @@ def _account_first_name(user):
 
 
 def _deliverable_address(user):
-    """The customer's email address, or "" when this account must not be emailed."""
-    if user is None or user.is_staff or user.is_superuser:
+    """The account's email address, or "" when it must not be emailed (no account, no address, or a placeholder address).
+    Whoever booked is emailed -- including the owner or staff testing with their own booking: skipping staff accounts
+    silently dropped the owner's own test emails."""
+    if user is None:
         return ""
     address = (user.email or "").strip()
     if "@" not in address:
@@ -347,8 +350,6 @@ def _why_not_deliverable(user):
     """The plain-words reason _deliverable_address() refused this account, for the log (Render > Logs)."""
     if user is None:
         return "there is no account"
-    if user.is_staff or user.is_superuser:
-        return "it is a staff account (staff accounts are never emailed)"
     address = (user.email or "").strip()
     if "@" not in address:
         return "the account has no email address"
@@ -360,22 +361,62 @@ def _mask(address):
     return f"{name[:1]}***@{domain}"
 
 
-# ---- what happened to each email (shown on the owner's Customer emails page) -----------------------------------------
-# The last few attempts, kept in memory only: no database table, no connection from the sending thread. It starts empty
-# whenever the site restarts (a free Render service restarts after being idle); Render > Logs holds the same lines.
+# ---- what happened to each email (the owner's "Email history" on the Customer emails page) ----------------------------------
+# Every attempt is saved as a CustomerEmailLog row, so the answer to "did this customer get their email?" survives a restart.
+# Saving is a side channel like the emails themselves: a failure to save is logged and never stops an email. The last few
+# attempts are ALSO kept in memory (masked addresses): that is what the page shows until the database table exists (the
+# migration has not been applied yet) and what a test reads.
 _RECENT = collections.deque(maxlen=40)
+HISTORY_KEEP_DAYS = 180
+_WORKER_NAME = "customer-email-worker"
 
 
-def _note(kind, address, outcome, reason=""):
-    """outcome: 'sent', 'failed' or 'skipped'. The address is stored masked (j***@gmail.com), like the logs."""
+def _reference_in(text):
+    """The booking code mentioned in a notice ('... Reference: RSV-2026-0058.'), or ""."""
+    found = re.search(r"RSV-\d{4}-\d+", text or "")
+    return found.group(0) if found else ""
+
+
+def _prune_history():
+    from accounts.models import CustomerEmailLog
+
+    CustomerEmailLog.objects.filter(created_at__lt=timezone.now() - timedelta(days=HISTORY_KEEP_DAYS)).delete()
+
+
+def _save_history(kind, address, outcome, reason, reference):
+    """Writes one CustomerEmailLog row. Never raises. The sending thread has its own database connection, closed again
+    straight after the write so it never holds one of the host's few connections while it waits for the next email."""
+    in_worker = threading.current_thread().name == _WORKER_NAME
+    if in_worker and not getattr(settings, "CUSTOMER_EMAIL_HISTORY_IN_WORKER", True):
+        return
+    try:
+        from accounts.models import CustomerEmailLog
+
+        with transaction.atomic():
+            CustomerEmailLog.objects.create(
+                kind=(kind or "")[:30], reference_code=(reference or "")[:30], to_address=(address or "")[:254],
+                outcome=outcome, reason=(reason or "")[:400],
+            )
+            if random.random() < 0.02:          # now and then, so the table never grows without limit
+                _prune_history()
+    except Exception as exc:
+        logger.warning("Could not save the email history row (the email itself is unaffected): %s", exc)
+    finally:
+        if in_worker:
+            connection.close()
+
+
+def _note(kind, address, outcome, reason="", reference=""):
+    """outcome: 'sent', 'failed' or 'skipped'. Saved to the history table; the in-memory copy keeps the address masked."""
     _RECENT.appendleft({
         "at": timezone.now(), "kind": kind, "label": KIND_LABELS.get(kind, "Test email" if kind == "test" else kind),
-        "to": _mask(address) if "@" in (address or "") else "", "outcome": outcome, "reason": reason,
+        "to": _mask(address) if "@" in (address or "") else "", "outcome": outcome, "reason": reason, "reference": reference,
     })
+    _save_history(kind, address, outcome, reason, reference)
 
 
 def recent_attempts():
-    """Newest first: [{at, kind, label, to, outcome, reason}]."""
+    """Newest first, from memory: [{at, kind, label, to, outcome, reason, reference}]."""
     return list(_RECENT)
 
 
@@ -415,7 +456,7 @@ def _send_now(message, kind=""):
         try:
             message.send(fail_silently=False)
             logger.info("Customer email sent: kind=%s to=%s", kind, _mask(message.to[0]))
-            _note(kind, message.to[0], "sent")
+            _note(kind, message.to[0], "sent", reference=getattr(message, "history_reference", ""))
             return True
         except Exception as exc:
             reason = explain_send_error(exc)
@@ -424,7 +465,7 @@ def _send_now(message, kind=""):
             if attempt < _ATTEMPTS:
                 time.sleep(_RETRY_DELAY_SECONDS)
     logger.error("Customer email NOT sent: kind=%s to=%s (the in-site notice is unaffected)", kind, _mask(message.to[0]))
-    _note(kind, message.to[0], "failed", reason)
+    _note(kind, message.to[0], "failed", reason, getattr(message, "history_reference", ""))
     return False
 
 
@@ -448,13 +489,14 @@ def _enqueue(message, kind):
     global _worker
     with _worker_lock:
         if _worker is None or not _worker.is_alive():
-            _worker = threading.Thread(target=_worker_loop, name="customer-email-worker", daemon=True)
+            _worker = threading.Thread(target=_worker_loop, name=_WORKER_NAME, daemon=True)
             _worker.start()
     try:
         _QUEUE.put_nowait((message, kind))
     except queue.Full:
         logger.error("Customer email queue is full; dropped kind=%s (the in-site notice is unaffected)", kind)
-        _note(kind, message.to[0], "failed", "Too many emails were waiting to be sent, so this one was dropped.")
+        _note(kind, message.to[0], "failed", "Too many emails were waiting to be sent, so this one was dropped.",
+              getattr(message, "history_reference", ""))
 
 
 class _EmailWithLogo(EmailMultiAlternatives):
@@ -489,14 +531,17 @@ def _make_message(built, to_address, subject=None):
 
 
 def _deliver(user, kind, data):
+    reference = data.get("reference_code") or _reference_in(data.get("text", ""))
     address = _deliverable_address(user)
     if not address:
         # A warning, not an info line: the owner searching the logs for "why did nobody get an email?" must find this.
         why = _why_not_deliverable(user)
         logger.warning("Customer email NOT sent: kind=%s account=#%s -- %s", kind, getattr(user, "pk", None), why)
-        _note(kind, getattr(user, "email", "") or "", "skipped", why[:1].upper() + why[1:] + ".")
+        _note(kind, getattr(user, "email", "") or "", "skipped", why[:1].upper() + why[1:] + ".", reference)
         return False
-    _enqueue(_make_message(build_email(kind, data, inline_logo=True), address), kind)
+    message = _make_message(build_email(kind, data, inline_logo=True), address)
+    message.history_reference = reference          # shown beside the email in the owner's history
+    _enqueue(message, kind)
     return True
 
 

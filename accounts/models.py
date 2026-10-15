@@ -113,3 +113,30 @@ class LoginThrottle(models.Model):
 
     def __str__(self):
         return f'{self.key}: {self.failures} failed'
+
+
+class CustomerEmailLog(models.Model):
+    """One row for every email the site tried to send to a customer -- the owner's "Email history" (Customer emails page).
+
+    It answers "did this customer get their email?" after the site has restarted or slept, which the in-memory list could
+    not. Written by accounts/customer_emails.py after each attempt; a failure to write a row never stops an email.
+    Rows older than about six months are removed as new ones are written. The address is stored in full (the page is owner-only);
+    the server logs keep masking it."""
+
+    class Outcome(models.TextChoices):
+        SENT = 'sent', 'Sent'
+        FAILED = 'failed', 'Failed'
+        SKIPPED = 'skipped', 'Not sent'
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    kind = models.CharField(max_length=30)                      # received, approved, reminder ... or "test"
+    reference_code = models.CharField(max_length=30, blank=True)   # RSV-2026-0058, when the email is about one booking
+    to_address = models.CharField(max_length=254, blank=True)
+    outcome = models.CharField(max_length=10, choices=Outcome.choices)
+    reason = models.CharField(max_length=400, blank=True)       # why it failed / was not sent
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+
+    def __str__(self):
+        return f'{self.kind} -> {self.to_address or "(no address)"}: {self.outcome}'

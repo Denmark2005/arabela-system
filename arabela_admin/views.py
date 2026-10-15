@@ -13,6 +13,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
+from django.core.paginator import Paginator
 from django.db import DataError, DatabaseError, IntegrityError, transaction
 from django.db.models import Q, Count, Min, Prefetch
 from django.shortcuts import redirect, render
@@ -2997,6 +2998,78 @@ def _email_time_text(moment):
     return f"{local:%b} {local.day}, {local.hour % 12 or 12}:{local:%M} {local:%p}"
 
 
+_EMAIL_HISTORY_PAGE_SIZE = 25
+_EMAIL_HISTORY_FILTERS = (("all", "All"), ("sent", "Sent"), ("failed", "Failed"), ("skipped", "Not sent"))
+
+
+def _email_history_row(at, kind, to, outcome, reason, reference):
+    from accounts import customer_emails
+    return {
+        "at_text": _email_time_text(at),
+        "label": customer_emails.KIND_LABELS.get(kind, "Test email" if kind == "test" else kind),
+        "to": to, "outcome": outcome, "reason": reason, "reference": reference,
+    }
+
+
+def _email_history(request):
+    """The owner's Email history: every email the site tried to send to a customer, newest first, 25 to a page, with a
+    filter on the result and a search by address or booking code. Read from the CustomerEmailLog table; when that table does
+    not exist yet (the migration has not been applied) it falls back to the short in-memory list and says so."""
+    from accounts import customer_emails
+    from accounts.models import CustomerEmailLog
+
+    show = request.GET.get("show", "all")
+    if show not in dict(_EMAIL_HISTORY_FILTERS):
+        show = "all"
+    query = (request.GET.get("q") or "").strip()[:100]
+
+    def link(*, show_value=None, query_value=None, page_number=1):
+        params = {}
+        wanted_show = show if show_value is None else show_value
+        wanted_query = query if query_value is None else query_value
+        if wanted_show != "all":
+            params["show"] = wanted_show
+        if wanted_query:
+            params["q"] = wanted_query
+        if page_number > 1:
+            params["page"] = page_number
+        return (f"?{urlencode(params)}" if params else "?") + "#history"
+
+    try:
+        with transaction.atomic():
+            counts = {row["outcome"]: row["n"] for row in CustomerEmailLog.objects.values("outcome").annotate(n=Count("id"))}
+            rows = CustomerEmailLog.objects.all()
+            if show != "all":
+                rows = rows.filter(outcome=show)
+            if query:
+                rows = rows.filter(Q(to_address__icontains=query) | Q(reference_code__icontains=query))
+            page = Paginator(rows, _EMAIL_HISTORY_PAGE_SIZE).get_page(request.GET.get("page"))
+            shown = [
+                _email_history_row(r.created_at, r.kind, r.to_address, r.outcome, r.reason, r.reference_code) for r in page
+            ]
+    except DatabaseError:
+        return {
+            "saved": False,
+            "rows": [
+                _email_history_row(r["at"], r["kind"], r["to"], r["outcome"], r["reason"], r.get("reference", ""))
+                for r in customer_emails.recent_attempts()
+            ],
+        }
+    total_all = sum(counts.values())
+    return {
+        "saved": True, "rows": shown, "show": show, "query": query, "found": page.paginator.count, "total": total_all,
+        "page_number": page.number, "page_count": page.paginator.num_pages,
+        "newer_url": link(page_number=page.number - 1) if page.has_previous() else "",
+        "older_url": link(page_number=page.number + 1) if page.has_next() else "",
+        "filters": [
+            {"label": label, "count": total_all if key == "all" else counts.get(key, 0), "active": key == show,
+             "url": link(show_value=key)}
+            for key, label in _EMAIL_HISTORY_FILTERS
+        ],
+        "clear_url": link(query_value=""),
+    }
+
+
 @_require_owner
 def email_preview_view(request):
     """The owner's "Customer emails" page: how every email looks, how emails would go out right now, and a
@@ -3006,9 +3079,7 @@ def email_preview_view(request):
         "email_kinds": [{"key": key, "label": label} for key, label in customer_emails.KIND_LABELS.items()],
         "email_status": customer_emails.delivery_status(),
         "owner_email": request.user.email,
-        "email_recent": [
-            {**row, "at_text": _email_time_text(row["at"])} for row in customer_emails.recent_attempts()
-        ],
+        "history": _email_history(request),
     })
 
 

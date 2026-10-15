@@ -178,8 +178,9 @@ class EmailHelpersTests(SimpleTestCase):
         self.assertEqual(ce._deliverable_address(self._user("  rainer@gmail.com ")), "rainer@gmail.com")
         for email in ("", "no-at-sign", "demo@example.invalid", "a@example.com", "a@mail.test", "a@shop.example", "a@x.localhost"):
             self.assertEqual(ce._deliverable_address(self._user(email)), "", email)
-        self.assertEqual(ce._deliverable_address(self._user("owner@gmail.com", is_staff=True)), "")
-        self.assertEqual(ce._deliverable_address(self._user("owner@gmail.com", is_superuser=True)), "")
+        # whoever booked is emailed, the owner and staff included (their own test bookings must arrive too)
+        self.assertEqual(ce._deliverable_address(self._user("owner@gmail.com", is_staff=True)), "owner@gmail.com")
+        self.assertEqual(ce._deliverable_address(self._user("owner@gmail.com", is_superuser=True)), "owner@gmail.com")
         self.assertEqual(ce._deliverable_address(None), "")
 
     def test_addresses_are_masked_in_the_logs(self):
@@ -586,8 +587,7 @@ class CustomerEmailHookTests(TestCase):
     def test_accounts_without_a_usable_address_are_skipped_quietly(self):
         demo = User.objects.create_user("demo_account", email="demo@example.invalid")
         blank = User.objects.create_user("no_email_account", email="")
-        admin_booker = User.objects.create_user("staff_booker", email="boss@gmail.com", is_staff=True)
-        for person in (demo, blank, admin_booker):
+        for person in (demo, blank):
             reservation = self._reservation(customer=person)
             with self.captureOnCommitCallbacks(execute=True):
                 response = self._post("reservation_approve", [reservation.pk])
@@ -595,6 +595,14 @@ class CustomerEmailHookTests(TestCase):
             reservation.refresh_from_db()
             self.assertEqual(reservation.status, Reservation.Status.CONFIRMED)
         self.assertEqual(len(mail.outbox), 0)
+
+    def test_a_booking_made_by_the_owner_or_staff_is_emailed_like_anyone_elses(self):
+        for number, flags in enumerate(({"is_staff": True}, {"is_staff": True, "is_superuser": True}), start=1):
+            booker = User.objects.create_user(f"staff_booker_{number}", email=f"boss{number}@gmail.com", **flags)
+            reservation = self._reservation(customer=booker)
+            with self.captureOnCommitCallbacks(execute=True):
+                self.assertEqual(self._post("reservation_approve", [reservation.pk]).status_code, 200)
+        self.assertEqual(sorted(m.to[0] for m in mail.outbox), ["boss1@gmail.com", "boss2@gmail.com"])
 
     # ---- the switch, and failures that must never hurt the real work ---------------------------------------------------------------
     @override_settings(CUSTOMER_EMAILS_ENABLED=False)
@@ -645,7 +653,8 @@ class CustomerEmailHookTests(TestCase):
             self._post("reservation_approve", [reservation.pk])
         self.assertEqual(_send.call_count, 2)
 
-    @override_settings(CUSTOMER_EMAILS_BACKGROUND=True)
+    # The history rows are left out here: the real worker thread would write them on its own connection, outside the test's transaction.
+    @override_settings(CUSTOMER_EMAILS_BACKGROUND=True, CUSTOMER_EMAIL_HISTORY_IN_WORKER=False)
     def test_the_background_worker_delivers_without_holding_up_the_request(self):
         reservation = self._reservation()
         with self.captureOnCommitCallbacks(execute=True):

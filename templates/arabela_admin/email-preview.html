@@ -70,8 +70,22 @@
   .recent th { text-align: left; color: var(--muted); font-weight: 500; font-size: 13px; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--border); }
   .recent td { padding: 9px 10px 9px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
   .recent tr:last-child td { border-bottom: 0; }
+  .recent td:first-child { white-space: nowrap; }
   .pill.err { color: var(--err); background: var(--err-bg); }
   .tablewrap { overflow-x: auto; }
+  .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; }
+  .chip { display: inline-block; padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 500; }
+  .chip:hover { border-color: var(--brand); color: var(--brand); }
+  .chip.active { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .searchbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+  .searchbar .field { min-width: 240px; flex: 1 1 240px; max-width: 360px; }
+  .btn.secondary { background: var(--soft); color: var(--text); }
+  .btn.secondary:hover { background: var(--border); }
+  .pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 14px; font-size: 14px; color: var(--muted); }
+  .pager a, .pager span.off { padding: 7px 14px; border: 1px solid var(--border); border-radius: 10px; text-decoration: none; color: var(--text); font-weight: 500; }
+  .pager a:hover { border-color: var(--brand); color: var(--brand); }
+  .pager span.off { color: var(--muted); opacity: .55; }
+  .ref { color: var(--muted); font-size: 12px; }
   .linkbtn { font: inherit; background: none; border: 0; color: var(--brand); cursor: pointer; padding: 0; font-weight: 500; }
   .linkbtn:hover { text-decoration: underline; }
 </style>
@@ -149,18 +163,28 @@
     <div class="actions"><div id="result" role="status" aria-live="polite"></div></div>
   </section>
 
-  <section class="card" aria-labelledby="recent-title">
-    <h2 id="recent-title">What happened to recent emails</h2>
-    <p class="sub">Every email the site tried to send since it last started, newest first. <button type="button" class="linkbtn" id="reload-list">Refresh this list</button></p>
-    {% if email_recent %}
+  <section class="card" id="history" aria-labelledby="recent-title">
+    <h2 id="recent-title">Email history</h2>
+    {% if history.saved %}
+    <p class="sub">Every email the site tried to send to a customer, newest first. It is saved, so it is still here after the site restarts.</p>
+    <div class="filters" role="group" aria-label="Show">
+      {% for f in history.filters %}<a class="chip{% if f.active %} active{% endif %}" href="{{ f.url }}">{{ f.label }} &middot; {{ f.count }}</a>{% endfor %}
+    </div>
+    <form class="searchbar" method="get" action="#history">
+      {% if history.show != "all" %}<input type="hidden" name="show" value="{{ history.show }}">{% endif %}
+      <input class="field" type="search" name="q" value="{{ history.query }}" placeholder="Search an email address or booking code" autocomplete="off">
+      <button type="submit" class="btn">Search</button>
+      {% if history.query %}<a class="btn secondary" style="text-decoration:none;" href="{{ history.clear_url }}">Clear</a>{% endif %}
+    </form>
+    {% if history.rows %}
     <div class="tablewrap">
       <table class="recent">
         <thead><tr><th>When</th><th>Email</th><th>To</th><th>Result</th></tr></thead>
         <tbody>
-        {% for row in email_recent %}
+        {% for row in history.rows %}
           <tr>
             <td>{{ row.at_text }}</td>
-            <td>{{ row.label }}</td>
+            <td>{{ row.label }}{% if row.reference %}<div class="ref">{{ row.reference }}</div>{% endif %}</td>
             <td>{{ row.to|default:"-" }}</td>
             <td>
               {% if row.outcome == "sent" %}<span class="pill ok">Sent to Gmail</span>{% elif row.outcome == "skipped" %}<span class="pill warn">Not sent</span>{% else %}<span class="pill err">Failed</span>{% endif %}
@@ -171,9 +195,41 @@
         </tbody>
       </table>
     </div>
-    <p class="sub" style="margin:12px 0 0;"><strong>Sent to Gmail</strong> means the Google relay accepted it. If the customer still doesn't see it, check their <strong>Spam</strong>, <strong>Promotions</strong> and <strong>Updates</strong> tabs, and the <strong>Sent</strong> folder of the Gmail that owns the relay script.</p>
+    <div class="pager">
+      {% if history.newer_url %}<a href="{{ history.newer_url }}">&larr; Newer</a>{% else %}<span class="off">&larr; Newer</span>{% endif %}
+      <span>Page {{ history.page_number }} of {{ history.page_count }} &middot; {{ history.found }} email{{ history.found|pluralize }}{% if history.query or history.show != "all" %} found{% endif %}</span>
+      {% if history.older_url %}<a href="{{ history.older_url }}">Older &rarr;</a>{% else %}<span class="off">Older &rarr;</span>{% endif %}
+    </div>
+    <p class="sub" style="margin:14px 0 0;"><strong>Sent to Gmail</strong> means the Google relay accepted it. If the customer still doesn't see it, check their <strong>Spam</strong>, <strong>Promotions</strong> and <strong>Updates</strong> tabs, and the <strong>Sent</strong> folder of the Gmail that owns the relay script. Entries older than about six months are removed.</p>
+    {% elif history.total %}
+    <p class="sub" style="margin:0;">No email matches that. <a class="back" href="{{ history.clear_url }}">Show everything</a></p>
     {% else %}
-    <p class="sub" style="margin:0;">Nothing has been sent since the site last started (a free Render service restarts after it has been idle). Make a booking, approve it, or press a test button above, then refresh this list.</p>
+    <p class="sub" style="margin:0;">No email has been sent yet. Make a booking, approve it, or press a test button above, then refresh this page.</p>
+    {% endif %}
+    {% else %}
+    <p class="sub">The saved history starts once the database update (migration) has been applied on the live site. Until then this shows only the emails since the site last started.</p>
+    {% if history.rows %}
+    <div class="tablewrap">
+      <table class="recent">
+        <thead><tr><th>When</th><th>Email</th><th>To</th><th>Result</th></tr></thead>
+        <tbody>
+        {% for row in history.rows %}
+          <tr>
+            <td>{{ row.at_text }}</td>
+            <td>{{ row.label }}{% if row.reference %}<div class="ref">{{ row.reference }}</div>{% endif %}</td>
+            <td>{{ row.to|default:"-" }}</td>
+            <td>
+              {% if row.outcome == "sent" %}<span class="pill ok">Sent to Gmail</span>{% elif row.outcome == "skipped" %}<span class="pill warn">Not sent</span>{% else %}<span class="pill err">Failed</span>{% endif %}
+              {% if row.reason %}<div class="note">{{ row.reason }}</div>{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="sub" style="margin:0;">Nothing has been sent since the site last started.</p>
+    {% endif %}
     {% endif %}
   </section>
 
@@ -204,7 +260,6 @@
   var customerTo = document.getElementById('customer-to');
   var HAS_OWNER_EMAIL = {{ owner_email|yesno:"true,false" }};
   var result = document.getElementById('result');
-  document.getElementById('reload-list').addEventListener('click', function () { window.location.reload(); });
 
   function fitFrame() {
     try { frame.style.height = (frame.contentDocument.documentElement.scrollHeight + 4) + 'px'; } catch (err) { /* keep the default height */ }
@@ -245,7 +300,7 @@
     })
       .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
       .then(function (r) {
-        if (r.ok && r.data.success) { showResult(true, r.data.message + ' Refresh the list below to see it.'); }
+        if (r.ok && r.data.success) { showResult(true, r.data.message + ' Reload this page to see it in the history below.'); }
         else { showResult(false, r.data.error || 'The test email could not be sent.'); }
       })
       .catch(function () { showResult(false, 'Could not reach the server. Check your connection and try again.'); })

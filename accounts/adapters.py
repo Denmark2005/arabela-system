@@ -17,8 +17,8 @@ def _is_staff(user):
 
 def _refuse_staff(request):
     """Stop the sign-in and show the customer login page with the reason. A staff account must never be reachable by
-    "Continue with Google": it would sign the shop owner in as a customer (whose bookings are never emailed) and, since
-    the admin panel trusts any staff session, open the admin panel without its password."""
+    "Continue with Google": it would sign the shop owner in as a customer and, since the admin panel trusts any staff
+    session, open the admin panel without its password."""
     raise ImmediateHttpResponse(render(request, 'login.html', {'next': '', 'error': STAFF_GOOGLE_MESSAGE}, status=403))
 
 
