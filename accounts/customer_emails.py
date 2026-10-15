@@ -19,6 +19,7 @@ them -- and is deliberately a side channel that can never hurt the real work:
 The look lives in templates/emails/email.html (tables + inline styles, the only thing every mail app agrees on)
 and the wording of each kind is built in _content() below.
 """
+import collections
 import logging
 import queue
 import re
@@ -200,7 +201,8 @@ def _content(kind, data, shop):
             heading="We received your reservation",
             preheader="We're checking your GCash payment. You'll get another email once it's approved.",
             paragraphs=["Thanks for booking with Arabela. We're now checking your GCash payment, and you'll get "
-                        "another email as soon as your reservation is approved."],
+                        "another email as soon as your reservation is approved.",
+                        "Pick-up is at the shop, 1:00 PM to 5:00 PM only."],
             summary=True, money=True,
         )
     elif kind == APPROVED:
@@ -209,7 +211,7 @@ def _content(kind, data, shop):
             heading="Your reservation is approved",
             preheader="Your payment was verified and your booking is confirmed.",
             paragraphs=["Good news — your payment was verified and your booking is confirmed.",
-                        "We'll send you a reminder before your pick-up date."],
+                        "We'll send you a reminder before your pick-up date. Pick-up is at the shop, 1:00 PM to 5:00 PM only."],
             summary=True, money=True,
         )
     elif kind == REJECTED:
@@ -341,9 +343,40 @@ def _deliverable_address(user):
     return address
 
 
+def _why_not_deliverable(user):
+    """The plain-words reason _deliverable_address() refused this account, for the log (Render > Logs)."""
+    if user is None:
+        return "there is no account"
+    if user.is_staff or user.is_superuser:
+        return "it is a staff account (staff accounts are never emailed)"
+    address = (user.email or "").strip()
+    if "@" not in address:
+        return "the account has no email address"
+    return "the address is a placeholder (example.com, .invalid, .test ...)"
+
+
 def _mask(address):
     name, _, domain = address.partition("@")
     return f"{name[:1]}***@{domain}"
+
+
+# ---- what happened to each email (shown on the owner's Customer emails page) -----------------------------------------
+# The last few attempts, kept in memory only: no database table, no connection from the sending thread. It starts empty
+# whenever the site restarts (a free Render service restarts after being idle); Render > Logs holds the same lines.
+_RECENT = collections.deque(maxlen=40)
+
+
+def _note(kind, address, outcome, reason=""):
+    """outcome: 'sent', 'failed' or 'skipped'. The address is stored masked (j***@gmail.com), like the logs."""
+    _RECENT.appendleft({
+        "at": timezone.now(), "kind": kind, "label": KIND_LABELS.get(kind, "Test email" if kind == "test" else kind),
+        "to": _mask(address) if "@" in (address or "") else "", "outcome": outcome, "reason": reason,
+    })
+
+
+def recent_attempts():
+    """Newest first: [{at, kind, label, to, outcome, reason}]."""
+    return list(_RECENT)
 
 
 # ---- sending -------------------------------------------------------------------------------------------------------
@@ -377,17 +410,21 @@ def explain_send_error(exc):
 
 def _send_now(message, kind=""):
     """Send one email, retrying once. Never raises. Returns True when it went out."""
+    reason = ""
     for attempt in range(1, _ATTEMPTS + 1):
         try:
             message.send(fail_silently=False)
             logger.info("Customer email sent: kind=%s to=%s", kind, _mask(message.to[0]))
+            _note(kind, message.to[0], "sent")
             return True
         except Exception as exc:
+            reason = explain_send_error(exc)
             logger.warning("Customer email attempt %d/%d failed: kind=%s to=%s -- %s",
-                           attempt, _ATTEMPTS, kind, _mask(message.to[0]), explain_send_error(exc))
+                           attempt, _ATTEMPTS, kind, _mask(message.to[0]), reason)
             if attempt < _ATTEMPTS:
                 time.sleep(_RETRY_DELAY_SECONDS)
     logger.error("Customer email NOT sent: kind=%s to=%s (the in-site notice is unaffected)", kind, _mask(message.to[0]))
+    _note(kind, message.to[0], "failed", reason)
     return False
 
 
@@ -417,6 +454,7 @@ def _enqueue(message, kind):
         _QUEUE.put_nowait((message, kind))
     except queue.Full:
         logger.error("Customer email queue is full; dropped kind=%s (the in-site notice is unaffected)", kind)
+        _note(kind, message.to[0], "failed", "Too many emails were waiting to be sent, so this one was dropped.")
 
 
 class _EmailWithLogo(EmailMultiAlternatives):
@@ -453,7 +491,10 @@ def _make_message(built, to_address, subject=None):
 def _deliver(user, kind, data):
     address = _deliverable_address(user)
     if not address:
-        logger.info("Customer email skipped (no usable address): kind=%s", kind)
+        # A warning, not an info line: the owner searching the logs for "why did nobody get an email?" must find this.
+        why = _why_not_deliverable(user)
+        logger.warning("Customer email NOT sent: kind=%s account=#%s -- %s", kind, getattr(user, "pk", None), why)
+        _note(kind, getattr(user, "email", "") or "", "skipped", why[:1].upper() + why[1:] + ".")
         return False
     _enqueue(_make_message(build_email(kind, data, inline_logo=True), address), kind)
     return True
@@ -584,7 +625,9 @@ def send_test_email(kind, to_address):
         message.send(fail_silently=False)
     except Exception as exc:
         logger.warning("Test email failed: %s", explain_send_error(exc))
+        _note("test", to_address, "failed", explain_send_error(exc))
         return False, explain_send_error(exc)
+    _note("test", to_address, "sent")
     return True, f"Sent to {to_address}. It usually arrives within a minute -- check Spam too."
 
 

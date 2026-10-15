@@ -68,10 +68,12 @@ class GownPageSizesTests(TestCase):
         book(units[2], start, end, "rented_large")                      # the Large is rented
         response = self.page(units[0])
         self.assertEqual([o["code"] for o in response.context["size_options"]], ["S", "M", "L", "XL"])
-        rows = {row["size"]: row["busy"] for row in response.context["size_units"]}
-        self.assertEqual(rows["L"], [[start.isoformat(), end.isoformat()]])
-        self.assertEqual(rows["S"], [])
-        self.assertContains(response, 'id="product-size-units"')
+        plans = response.context["calendar_data"]["plans"]
+        event = start + timedelta(days=2)                                # an event whose rental lands on the rented Large
+        self.assertIsInstance(plans["S"][event.isoformat()], list)       # the Small is free that day
+        self.assertEqual(plans["L"][event.isoformat()], "booked")        # the Large is not
+        self.assertEqual(plans["*"][event.isoformat()][1], 3)            # 3 of the 4 units can be booked
+        self.assertContains(response, 'id="product-calendar-data"')
         # one size rented is not a day when EVERY unit is taken
         self.assertEqual(_blocked_dates_for_category(Gown.Category.WEDDING_GOWN, "Sized Gown One"), [])
 
@@ -84,7 +86,7 @@ class GownPageSizesTests(TestCase):
         make_unit(2, Gown.Size.LARGE, status=Gown.Status.OUT_OF_STOCK)
         response = self.page(unit)
         self.assertEqual([o["code"] for o in response.context["size_options"]], ["M"])
-        self.assertEqual(len(response.context["size_units"]), 1)
+        self.assertEqual(response.context["calendar_data"]["plans"]["*"][(self.today + timedelta(days=5)).isoformat()][1], 1)
 
     def test_blocked_dates_are_unchanged_when_every_unit_is_taken(self):
         unit = make_unit(1, Gown.Size.MEDIUM)

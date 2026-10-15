@@ -390,7 +390,7 @@
         {% endfor %}
       </div>
       <p id="product-size-note" class="hidden text-[0.75rem] leading-relaxed text-secondary" role="status" aria-live="polite"></p>
-      {{ size_units|json_script:"product-size-units" }}
+      {{ calendar_data|json_script:"product-calendar-data" }}
     </div>
 
     <!-- Rental Date Picker (with JS logic) -->
@@ -398,10 +398,10 @@
       <div>
         <label class="font-label text-[0.6875rem] tracking-widest uppercase font-bold">Select Rental Dates</label>
         <!-- Sets the expectation BEFORE the tap, so the extra highlighted days are
-             never a surprise in the first place. "up to 2 days" because a pick-up
-             that would land in the past is clamped to today (see clampedPickup). -->
+             never a surprise in the first place. "up to 2 days" because the server's plan
+             (calData) picks the earliest free day, never one in the past. -->
         <p class="mt-1.5 text-[0.75rem] leading-relaxed text-secondary">
-          Pick your <span class="font-semibold text-on-surface">event date</span> — pick-up is up to 2 days before, return 2 days after.
+          Pick your <span class="font-semibold text-on-surface">event date</span> — pick-up is up to 2 days before (or on the event day if the gown is still being cleaned), 1:00 PM to 5:00 PM only. Return is 2 days after.
         </p>
       </div>
       <div class="relative bg-white p-6 rounded-lg border border-outline-variant/15 shadow-none">
@@ -478,6 +478,7 @@
               </button>
             </div>
             <p id="product-cal-range" class="text-sm font-bold">Select dates</p>
+            <p id="product-pickup-note" class="mt-2 text-[0.75rem] font-semibold text-on-surface" hidden></p>
             <div id="product-cal-dates" class="mt-1 space-y-1" aria-hidden="true">
               <p class="product-cal-line product-cal-line--start text-sm font-bold">
                 <span class="font-label text-[0.625rem] text-secondary uppercase tracking-widest font-medium">Start Date</span>
@@ -568,7 +569,7 @@
           <p><strong>3. Use AI Recommends.</strong> Not sure what to pick? Use the AI Recommends feature — just tell it your event type and preferences, and it will suggest the most suitable gowns available in the collection for you.</p>
           <p><strong>4. Submit your reservation.</strong> Once you have chosen a gown, submit your reservation directly through the platform. No walk-in or Facebook message required.</p>
           <p><strong>5. Pay the security deposit.</strong> After submitting, you will be directed to the payment page to pay the Php 2,000.00 security deposit via GCash or cash. This confirms your booking.</p>
-          <p><strong>6. Pick up your gown.</strong> You may pick up the gown at the shop two days before your event during business hours (1:00 PM – 5:00 PM).</p>
+          <p><strong>6. Pick up your gown.</strong> You may pick up the gown at the shop up to two days before your event (on the event day itself if the gown is still being cleaned) during business hours (1:00 PM – 5:00 PM).</p>
           <p><strong>7. Return the gown.</strong> Return it to the shop within two days after your event. Once the gown is returned on time and in good condition, your security deposit will be refunded to you.</p>
           <p>Once your payment is verified, open the reservation from your Reservations page — the Order Summary &amp; Receipt panel there shows the gown, rental dates, amount breakdown, and the payment proof you uploaded, all tied to your reference number. That is your official record of the transaction.</p>
         </div>
@@ -625,7 +626,7 @@
       </div>
       <div class="max-h-0 overflow-hidden transition-[max-height] duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]" data-faq-panel>
         <p class="pt-6 text-[0.95rem] leading-7 text-on-surface-variant font-body">
-          You may pick up the gown two (2) days before your event date, and you must return it two (2) days after the event. This is the standard pickup and return window. All pickups and returns must be done in person at the shop during business hours (1:00 PM – 5:00 PM). The system does not offer delivery or courier service.
+          You may pick up the gown up to two (2) days before your event date (or on the event day itself when the gown is still being cleaned after an earlier rental), and you must return it two (2) days after the event. This is the standard pickup and return window. All pickups and returns must be done in person at the shop during business hours (1:00 PM – 5:00 PM). The system does not offer delivery or courier service.
         </p>
       </div>
     </div>
@@ -725,7 +726,21 @@
     const PRODUCT_CART_STORAGE_KEY = 'arabela_cart_' + USER_STORAGE_KEY;
 
     const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-    const today = new Date();
+    // Everything the calendar needs comes from the server (gowns/availability.py): which event dates can be booked, the pick-up day
+    // each one gets, and the shop's own day and clock (Philippine time) -- never the visitor's phone clock.
+    const calData = (function () {
+      try {
+        const el = document.getElementById('product-calendar-data');
+        const raw = el ? JSON.parse(el.textContent || 'null') : null;
+        return raw && raw.plans ? raw : null;
+      } catch (err) {
+        return null;
+      }
+    })();
+    const serverDay = calData && /^\d{4}-\d{2}-\d{2}$/.test(String(calData.today)) ? String(calData.today) : null;
+    const today = serverDay
+      ? new Date(Number(serverDay.slice(0, 4)), Number(serverDay.slice(5, 7)) - 1, Number(serverDay.slice(8, 10)))
+      : new Date();
 
     let viewYear = today.getFullYear();
     let viewMonth = today.getMonth();
@@ -806,7 +821,7 @@
       sizeButtons.forEach(function (btn) {
         btn.addEventListener('click', function () {
           if (btn.getAttribute('aria-disabled') === 'true') {
-            showSizeNote(sizeLabelOf(btn.dataset.productSize || '') + ' is already rented on your dates. Please choose another size or date.');
+            showSizeNote(sizeLabelOf(btn.dataset.productSize || '') + ' is not available on your dates. Please choose another size or date.');
             return;
           }
           selectedSize = btn.dataset.productSize || '-';
@@ -886,23 +901,17 @@
     const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const todayStr = ymd(todayMidnight);
 
-    // Pick-up normally lands 2 days before the event, but it can't be a day that has
-    // already passed -- picking an event 1 day out means collecting the gown today, not
-    // "yesterday". Clamping here (rather than refusing the event date) keeps the near-term
-    // dates bookable, just with a shorter pick-up window.
-    function clampedPickup(eventDate) {
-      const naive = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate() - 2);
-      return naive < todayMidnight ? todayMidnight : naive;
-    }
+    // The pick-up day for an event date is decided by the server's plan (pickupFor, further down): 2 days before the event when the
+    // gown is free then, otherwise the first free day, at the latest the event day.
 
     // Live preview of the window a day WOULD produce if clicked, shown on hover before
-    // anything is committed. Deliberately uses clampedPickup -- the same function the
+    // anything is committed. Deliberately uses pickupFor -- the same function the
     // real click path uses -- so the preview can never promise a pick-up date that
     // selecting the day wouldn't actually give. Only paints buttons already rendered
     // (no re-render), so moving across the grid stays cheap.
     function showRangePreview(hoveredDate) {
-      const startStr = ymd(clampedPickup(hoveredDate));
-      const endStr = ymd(new Date(hoveredDate.getFullYear(), hoveredDate.getMonth(), hoveredDate.getDate() + 2));
+      const startStr = ymd(pickupFor(hoveredDate));
+      const endStr = ymd(returnFor(hoveredDate));
       const hoveredStr = ymd(hoveredDate);
       for (const child of gridEl.children) {
         const cellDate = child.dataset ? child.dataset.date : null;
@@ -980,10 +989,15 @@
         returnDateEl.textContent = '';
         startDateEl.dataset.value = '';
         returnDateEl.dataset.value = '';
+        if (pickupNoteEl) pickupNoteEl.hidden = true;
         return;
       }
-      const a = clampedPickup(center);
-      const b = new Date(center.getFullYear(), center.getMonth(), center.getDate() + 2);
+      const a = pickupFor(center);
+      const b = returnFor(center);
+      if (pickupNoteEl) {
+        pickupNoteEl.textContent = 'Pick-up: ' + fmt(a) + ', ' + PICKUP_HOURS + ' only.';
+        pickupNoteEl.hidden = false;
+      }
       rangeEl.textContent = '';
       const wasClosed = !datesWrapEl.classList.contains('is-open');
       datesWrapEl.setAttribute('aria-hidden', 'false');
@@ -1060,79 +1074,64 @@
     }
 
     function isAdjacentToStart(d) {
-      if (!center) return false;
-      const a = new Date(center.getFullYear(), center.getMonth(), center.getDate());
-      const b = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-      const diffDays = Math.round((b.getTime() - a.getTime()) / 86400000);
-      return diffDays !== 0 && Math.abs(diffDays) <= 2;
+      if (!center || sameDay(d, center)) return false;
+      return d >= pickupFor(center) && d <= returnFor(center);
     }
 
-    // Dates the calendar must render as unavailable (server-computed -- see
-    // gowns/views.py product_detail). Parsed once; render() re-checks it on
-    // every month navigation.
-    const blockedDates = (function () {
-      try {
-        const raw = JSON.parse(gridEl.dataset.blockedDates || '[]');
-        return new Set(Array.isArray(raw) ? raw : []);
-      } catch (err) {
-        return new Set();
-      }
-    })();
-
-    // A candidate event date isn't available just because THAT day is free -- picking it
-    // commits the gown for its whole pickup..return window (clampedPickup(d) through
-    // d+2), and that window can still reach into a day some OTHER booking already has,
-    // even when the event day itself was never booked by anyone (e.g. every unit is taken
-    // Sep24-28 and a customer picks event=Sep23: pickup lands on Sep24, overlapping it).
-    // Checked against this exact same blockedDates set -- the one gowns/views.py
-    // _find_available_unit's own overlap check is built from -- so this can never wave
-    // through a selection checkout would then refuse.
-    // Each bookable unit of this gown with its size code and busy date ranges (gowns/views.py
-    // _size_options_and_units). A date is open when at least one unit -- of the CHOSEN size, once a size is
-    // picked -- is free for the whole pickup..return window: the same single-unit rule checkout's
-    // _find_available_unit applies, so the calendar can never offer what checkout would refuse.
-    const sizeUnits = (function () {
-      try {
-        const el = document.getElementById('product-size-units');
-        const raw = el ? JSON.parse(el.textContent || 'null') : null;
-        return Array.isArray(raw) && raw.length ? raw : null;
-      } catch (err) {
-        return null;
-      }
-    })();
+    // ---- Which dates can be booked, and the pick-up day each one gets ------------------------------------------------------
+    // Looked up from the server's plan: plans[size][event day] = [pick-up day, units free] or the reason it can't be booked
+    // ('booked', 'rest', 'closed'). The same rules checkout applies, so this page can never offer what checkout would refuse.
     const sizeCodes = sizeButtons.map(function (btn) { return btn.dataset.productSize || ''; });
+    const PICKUP_HOURS = (calData && calData.hours) || '1:00 PM to 5:00 PM';
+    const CLOSING_TEXT = (calData && calData.closing) || '5:00 PM';
+    const REST_DAYS = (calData && calData.restDays) || 5;
+    const pageLoadedAt = performance.now();
 
-    function windowBounds(eventDate) {
-      const end = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate() + 2);
-      return [ymd(clampedPickup(eventDate)), ymd(end)];
+    function secondsNow() {
+      return calData ? Number(calData.seconds) + (performance.now() - pageLoadedAt) / 1000 : 0;
+    }
+    // True once the shop's pick-up cut-off has passed on a page that was opened before it.
+    function pastClosingTime() {
+      return !!calData && !!calData.late && Object.keys(calData.late).length > 0 && secondsNow() >= Number(calData.closes);
+    }
+    function parseDay(iso) {
+      return new Date(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10)));
+    }
+    function returnFor(eventDate) {
+      return new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate() + 2);
     }
 
-    // How many units (of `sizeCode`, or of any size when it is not one of this gown's sizes) are free for the
-    // whole window around `eventDate`. Dates are ISO strings, so plain string comparison orders them correctly.
-    function freeUnitCount(eventDate, sizeCode) {
-      if (!sizeUnits) return 0;
-      const bounds = windowBounds(eventDate);
-      const scoped = sizeCodes.indexOf(sizeCode) >= 0;
-      let free = 0;
-      sizeUnits.forEach(function (unit) {
-        if (scoped && unit.size !== sizeCode) return;
-        const busy = Array.isArray(unit.busy) ? unit.busy : [];
-        const taken = busy.some(function (range) { return range[0] <= bounds[1] && range[1] >= bounds[0]; });
-        if (!taken) free += 1;
-      });
-      return free;
-    }
-
-    function windowOverlapsBlocked(eventDate) {
-      if (sizeUnits) return freeUnitCount(eventDate, selectedSize) === 0;
-      const start = clampedPickup(eventDate);
-      const end = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate() + 2);
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        if (blockedDates.has(ymd(d))) return true;
+    // The plan for one event day and size ('*' = any size). -> { ok, pickup (Date), count (units free, or null), reason }
+    function planOf(eventDate, sizeCode) {
+      const day = ymd(eventDate);
+      const key = calData && calData.plans[sizeCode] ? sizeCode : '*';
+      let value = calData && calData.plans[key] ? calData.plans[key][day] : undefined;
+      if (pastClosingTime() && calData.late[key] && calData.late[key][day] !== undefined) value = calData.late[key][day];
+      if (value === undefined) {
+        // Further ahead than the server planned for: nothing is booked that far out (checkout still re-checks everything).
+        const early = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate() - 2);
+        return { ok: true, pickup: early < todayMidnight ? todayMidnight : early, count: null, reason: '' };
       }
-      return false;
+      if (Array.isArray(value)) return { ok: true, pickup: parseDay(String(value[0])), count: Number(value[1]), reason: '' };
+      return { ok: false, pickup: null, count: 0, reason: String(value) };
+    }
+    function planForSelection(eventDate) {
+      return planOf(eventDate, sizeCodes.indexOf(selectedSize) >= 0 ? selectedSize : '*');
+    }
+    function pickupFor(eventDate) {
+      const plan = planForSelection(eventDate);
+      return plan.ok ? plan.pickup : eventDate;
+    }
+    function isUnavailable(eventDate) {
+      return !planForSelection(eventDate).ok;
+    }
+    function tipFor(reason) {
+      if (reason === 'closed') return "Today's pick-up closed at " + CLOSING_TEXT + '. Please choose another date.';
+      if (reason === 'rest') return 'Not available: this gown needs ' + REST_DAYS + ' days of cleaning before its next booking.';
+      return 'Unavailable';
     }
 
+    const pickupNoteEl = document.getElementById('product-pickup-note');
     const sizeNoteEl = document.getElementById('product-size-note');
     const availableCountEl = document.getElementById('product-available-count');
 
@@ -1147,30 +1146,35 @@
       return btn ? (btn.dataset.sizeName || btn.dataset.sizeLabel || code) : code;
     }
 
-    // Greys out (and makes unclickable) every size with no unit free on the chosen dates, labels it "Rented",
-    // and updates "X of N available for <date>". A chosen size that has become rented is let go with a note.
+    // Greys out (and makes unclickable) every size that can't be booked on the chosen dates, labels it, and updates
+    // "X of N available for <date>". A chosen size that has become unavailable is let go with a note.
     function updateSizeAvailability() {
-      if (!sizeUnits) return;
+      if (!calData || !sizeCodes.length) return;
       sizeButtons.forEach(function (btn) {
         const code = btn.dataset.productSize || '';
-        const rented = !!center && freeUnitCount(center, code) === 0;
+        const plan = center ? planOf(center, code) : null;
+        const rented = !!plan && !plan.ok;
         btn.setAttribute('aria-disabled', rented ? 'true' : 'false');
-        btn.title = rented ? sizeLabelOf(code) + ' is rented on your dates' : '';
+        btn.title = rented ? sizeLabelOf(code) + ' is not available on your dates' : '';
         const caption = btn.parentElement ? btn.parentElement.querySelector('.product-size-rented') : null;
-        if (caption) caption.classList.toggle('hidden', !rented);
+        if (caption) {
+          caption.textContent = plan && plan.reason === 'booked' ? 'Rented' : 'Unavailable';
+          caption.classList.toggle('hidden', !rented);
+        }
       });
       if (availableCountEl) {
-        const total = sizeUnits.length;
-        availableCountEl.textContent = center
-          ? freeUnitCount(center, '') + ' of ' + total + ' available for ' + fmt(center)
+        const total = sizeButtons.reduce(function (sum, b) { return sum + (Number(b.dataset.sizeCount) || 0); }, 0);
+        const free = center ? planOf(center, '*').count : null;
+        availableCountEl.textContent = (center && free !== null)
+          ? free + ' of ' + total + ' available for ' + fmt(center)
           : total + ' available';
       }
-      if (center && sizeCodes.indexOf(selectedSize) >= 0 && freeUnitCount(center, selectedSize) === 0) {
+      if (center && sizeCodes.indexOf(selectedSize) >= 0 && !planOf(center, selectedSize).ok) {
         const label = sizeLabelOf(selectedSize);
         selectedSize = '-';
         updateSizeButtonState();
         liveSyncEditableCartRow({ size: '-' });
-        showSizeNote(label + ' is already rented for ' + fmt(center) + '. Please choose another size or date.');
+        showSizeNote(label + ' is not available for ' + fmt(center) + '. Please choose another size or date.');
       }
     }
 
@@ -1185,6 +1189,7 @@
       const dayRect = dayBtn.getBoundingClientRect();
       calTooltipEl.style.left = (dayRect.left - cardRect.left + dayRect.width / 2) + 'px';
       calTooltipEl.style.top = (dayRect.top - cardRect.top) + 'px';
+      calTooltipEl.textContent = dayBtn.dataset.tip || 'Unavailable';
       calTooltipEl.classList.add('is-visible');
       calTooltipEl.setAttribute('aria-hidden', 'false');
     }
@@ -1239,7 +1244,8 @@
         // inventory says -- checked before the server's blocked list so past days stay
         // plainly disabled instead of claiming a gown is unavailable.
         const isPast = dateStr < todayStr;
-        const isUnavailable = !isPast && windowOverlapsBlocked(d);
+        const dayPlan = isPast ? null : planForSelection(d);
+        const isUnavailable = !!dayPlan && !dayPlan.ok;
 
         if (isPast) {
           // Greyed out like an unavailable day, but with no tooltip: "this date has
@@ -1254,8 +1260,9 @@
           // this day to do, so a tap showing it (instead of doing nothing) is
           // the more useful mobile behaviour.
           btn.dataset.unavailable = 'true';
+          btn.dataset.tip = tipFor(dayPlan.reason);
           btn.setAttribute('aria-disabled', 'true');
-          btn.setAttribute('aria-label', day + ' -- Unavailable');
+          btn.setAttribute('aria-label', day + ' -- ' + btn.dataset.tip);
           btn.addEventListener('mouseenter', function () { showCalTooltip(btn); });
           btn.addEventListener('mouseleave', hideCalTooltip);
           btn.addEventListener('touchstart', function (e) {
@@ -1288,8 +1295,8 @@
             showSizeNote('');
             updateSizeAvailability();
             maybeShowRentalTip();
-            const liveStart = clampedPickup(clicked);
-            const liveReturn = new Date(clicked.getFullYear(), clicked.getMonth(), clicked.getDate() + 2);
+            const liveStart = pickupFor(clicked);
+            const liveReturn = returnFor(clicked);
             liveSyncEditableCartRow({ rental: fmtMDY(liveStart) + ' - ' + fmtMDY(liveReturn) });
           });
         }
@@ -1344,8 +1351,8 @@
     // shows the current ones rather than an empty calendar.
     //
     // Recover the event day from the RETURN date, never the start: returnDate is
-    // exactly center + 2 days, whereas startDate goes through clampedPickup() and
-    // is pinned to today for bookings less than two days out -- so only the return
+    // exactly center + 2 days, whereas startDate is the pick-up the server planned
+    // (it moves with other bookings and with the clock) -- so only the return
     // date round-trips reliably.
     function restoreSelectionFrom(rental) {
       const parts = String(rental || '').split(' - ');
@@ -1379,9 +1386,36 @@
       }
     }
 
+    // Dates carried in from the bag that can't be booked any more (taken since, or already passed) are dropped, with a note.
+    if (center && isUnavailable(center)) {
+      const gone = center;
+      const gonePlan = planForSelection(gone);
+      center = null;
+      showSizeNote(gonePlan.reason === 'closed' ? tipFor('closed') : fmt(gone) + ' is no longer available. Please choose new dates.');
+    }
+
     setRangeText();
     render();
     updateSizeAvailability();
+
+    // A page left open past the shop's closing time updates itself: today greys out and a pick-up that was "today" moves
+    // to tomorrow, using the plan the server prepared for that moment (no new request).
+    if (calData && calData.late && Object.keys(calData.late).length) {
+      const wait = (Number(calData.closes) - secondsNow()) * 1000;
+      if (wait > 0) {
+        window.setTimeout(function () {
+          if (center && isUnavailable(center)) {
+            const reason = planForSelection(center).reason;
+            const gone = center;
+            center = null;
+            showSizeNote(reason === 'closed' ? tipFor('closed') : fmt(gone) + ' is no longer available. Please choose new dates.');
+          }
+          setRangeText();
+          render();
+          updateSizeAvailability();
+        }, wait + 300);
+      }
+    }
 
     if (bookNowBtn) {
       bookNowBtn.addEventListener('click', function () {
@@ -1396,13 +1430,14 @@
           arabelaAlert({ title: 'Choose a size', message: 'Please choose a size first.' });
           return;
         }
-        if (sizeUnits && sizeCodes.indexOf(selectedSize) >= 0 && freeUnitCount(center, selectedSize) === 0) {
-          arabelaAlert({ title: 'Size not available', message: sizeLabelOf(selectedSize) + ' is already rented for these dates. Please choose another size or date.' });
+        const finalPlan = planForSelection(center);
+        if (!finalPlan.ok) {
+          arabelaAlert({ title: 'Date not available', message: tipFor(finalPlan.reason) + (finalPlan.reason === 'booked' ? ' Please choose another size or date.' : '') });
           return;
         }
 
-        const startDate = clampedPickup(center);
-        const returnDate = new Date(center.getFullYear(), center.getMonth(), center.getDate() + 2);
+        const startDate = finalPlan.pickup;
+        const returnDate = returnFor(center);
         const resolvedId = cartContextItem && cartContextItem.id ? cartContextItem.id : '{{ slug|escapejs }}';
         const resolvedName = cartContextItem && cartContextItem.name ? cartContextItem.name : '{{ product.title|escapejs }}';
         const resolvedColl =

@@ -1767,7 +1767,10 @@ class LiveNavBadgeTests(TestCase):
     def _feed(self):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
-        return response.json()
+        data = response.json()
+        # It also says which account is signed in, so a page opened for someone else can tell (checked on its own here).
+        self.assertEqual(data.pop("user"), self.customer.pk)
+        return data
 
     # ---- the endpoint -----------------------------------------------------------------------------
     def test_a_signed_out_visitor_gets_a_json_401(self):

@@ -31,7 +31,9 @@ import json
 from accounts import login_throttle
 from accounts.models import CustomerMessage, UserProfile
 from accounts.services import CANCELLATION_FLAG_THRESHOLD
+from gowns import availability
 from gowns.models import (
+    COOLDOWN_DAYS,
     CategoryCover,
     CustomCategory,
     DEFAULT_CATEGORY_TAG_COLORS,
@@ -414,7 +416,7 @@ def _schedule_conflict(item, rental_date, return_date):
 
 def _resync_cooldown_block(item, base_date):
     """Move this item's auto-created cooldown block (if it still has one) to sit
-    right after base_date, matching reservation_submit's own [+1, +3] window.
+    right after base_date, matching reservation_submit's own [+1, +COOLDOWN_DAYS] window.
 
     If staff already released/deleted it, that choice is respected -- this never
     recreates one. getattr is safe here: Django raises RelatedObjectDoesNotExist
@@ -424,7 +426,7 @@ def _resync_cooldown_block(item, base_date):
     if block is None:
         return
     block.start_date = base_date + timedelta(days=1)
-    block.end_date = base_date + timedelta(days=3)
+    block.end_date = base_date + timedelta(days=COOLDOWN_DAYS)
     block.save(update_fields=["start_date", "end_date"])
 
 
@@ -1324,6 +1326,7 @@ def gown_catalog_view(request):
             "note": block.note,
             "active": block.covers_today,
             "delete_url": reverse("arabela_admin:gown_block_delete", args=[block.id]),
+            "preview_url": reverse("arabela_admin:gown_block_release_preview", args=[block.id]),
         })
 
     # Counted from `gowns`, already fetched above -- no extra query. Out-of-Stock
@@ -2308,6 +2311,78 @@ def gown_block_create_view(request, gown_id):
     })
 
 
+def _days_text(days):
+    """['2026-11-06', '2026-11-07', '2026-11-12'] -> 'Nov 6 - Nov 7, Nov 12' (consecutive days become one range)."""
+    runs, start, previous = [], None, None
+    for day in sorted(days):
+        if previous is not None and (day - previous).days == 1:
+            previous = day
+            continue
+        if start is not None:
+            runs.append((start, previous))
+        start = previous = day
+    if start is not None:
+        runs.append((start, previous))
+    label = lambda d: f"{d:%b} {d.day}"
+    return ", ".join(label(a) if a == b else f"{label(a)} - {label(b)}" for a, b in runs)
+
+
+@require_http_methods(["GET"])
+def gown_block_release_preview_view(request, block_id):
+    """The reminder staff read BEFORE releasing blocked days: what releasing would really open for customers.
+
+    Works it out with gowns.availability -- the same rules the customer's calendar and checkout use -- by comparing the
+    bookable event dates with this block and without it. A rental needs the event day, the 2 return days and the cleaning
+    days in a row, so freeing a gap that is too short opens nothing, and staff are told so instead of assuming."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    block = GownUnavailability.objects.select_related("gown").filter(id=block_id).first()
+    if block is None:
+        return JsonResponse({"error": "Blocked range not found"}, status=404)
+    gown = block.gown
+    need = availability.rental_days_needed()
+    if gown.status == Gown.Status.OUT_OF_STOCK:
+        return JsonResponse({"success": True, "opens": [], "need": need, "message": (
+            "Note: this gown is Out of Stock, so customers can't book it even after these days are released.")})
+
+    now = availability.now_local()
+    today = now.date()
+    horizon = availability.HORIZON_DAYS
+    units = availability.bookable_units(gown.category, gown.name)
+    unit_ids = [unit.id for unit in units]
+    bookings, blocks_with = availability.load_busy_ranges(unit_ids, today, horizon)
+    _, blocks_without = availability.load_busy_ranges(unit_ids, today, horizon, exclude_block_id=block.id)
+    before = availability.open_event_dates(units, bookings, blocks_with, now, horizon)
+    after = availability.open_event_dates(units, bookings, blocks_without, now, horizon)
+    opens = sorted(datetime.fromisoformat(day).date() for day in after - before)
+
+    # How many days in a row THIS gown is free around the released days (its other bookings and blocks stay as they are).
+    taken = list(bookings.get(gown.id, ())) + list(blocks_without.get(gown.id, ()))
+    covered = lambda day: any(start <= day <= end for start, end in taken)
+    floor, ceiling = availability.earliest_pickup_day(now), today + timedelta(days=horizon + need)
+    run_start, run_end = max(block.start_date, floor), block.end_date
+    while run_start - timedelta(days=1) >= floor and not covered(run_start - timedelta(days=1)):
+        run_start -= timedelta(days=1)
+    while run_end < ceiling and not covered(run_end + timedelta(days=1)):
+        run_end += timedelta(days=1)
+    open_ended = run_end >= ceiling
+    run_days = (run_end - run_start).days + 1
+
+    if opens:
+        message = (f"After you release this, customers will be able to choose these new event dates: {_days_text(opens)}.")
+    elif not open_ended and run_days < need:
+        message = (
+            f"Heads up: after releasing, this gown is free for only {run_days} day{'s' if run_days != 1 else ''} in a row "
+            f"({_days_text(run_start + timedelta(days=n) for n in range(run_days))}). A new rental needs {need} days in a row (the event day, "
+            f"{availability.RETURN_DAYS} return days and {availability.COOLDOWN_DAYS} cleaning days), so customers still "
+            "won't be able to book these days.")
+    else:
+        message = ("Releasing these days won't open any new event dates for customers right now "
+                   "(the gown is already bookable then, or the dates are too close to the next booking).")
+    return JsonResponse({"success": True, "opens": [day.isoformat() for day in opens], "need": need,
+                         "free_run_days": None if open_ended else run_days, "message": message})
+
+
 @require_http_methods(["POST"])
 def gown_block_delete_view(request, block_id):
     """Hand the blocked days back -- the gown is available again from this moment on."""
@@ -2916,6 +2991,12 @@ def customer_unlock_view(request, user_id):
 _EMAIL_TEST_MIN_SECONDS = 5
 
 
+def _email_time_text(moment):
+    """'Oct 15, 5:29 PM' in shop time."""
+    local = timezone.localtime(moment)
+    return f"{local:%b} {local.day}, {local.hour % 12 or 12}:{local:%M} {local:%p}"
+
+
 @_require_owner
 def email_preview_view(request):
     """The owner's "Customer emails" page: how every email looks, how emails would go out right now, and a
@@ -2925,6 +3006,9 @@ def email_preview_view(request):
         "email_kinds": [{"key": key, "label": label} for key, label in customer_emails.KIND_LABELS.items()],
         "email_status": customer_emails.delivery_status(),
         "owner_email": request.user.email,
+        "email_recent": [
+            {**row, "at_text": _email_time_text(row["at"])} for row in customer_emails.recent_attempts()
+        ],
     })
 
 
@@ -2941,10 +3025,11 @@ def email_preview_render_view(request, kind):
 @require_http_methods(["POST"])
 @_require_owner
 def email_test_send_view(request):
-    """Send a sample of one email to the signed-in owner's own address, right now, and say what happened.
+    """Send a sample of one email right now and say what happened: to the signed-in owner's own address, or -- when "to"
+    is given -- to the address of an existing CUSTOMER account (to prove delivery to a real customer's Gmail).
 
     Works whether or not customer emails are switched on: it is how the owner proves that delivery works
-    BEFORE turning them on. It can only ever mail the owner's own address, never a customer."""
+    BEFORE turning them on. It can never mail an address that is not the owner's or an existing customer's."""
     from accounts import customer_emails
     try:
         data = json.loads(request.body or "{}")
@@ -2953,7 +3038,16 @@ def email_test_send_view(request):
     kind = data.get("kind") if isinstance(data, dict) else None
     if kind not in customer_emails.KIND_LABELS:
         return JsonResponse({"error": "Choose which email to send."}, status=400)
-    if "@" not in (request.user.email or ""):
+    to_address = request.user.email
+    asked_for = (data.get("to") or "").strip() if isinstance(data, dict) else ""
+    if asked_for:
+        customer = User.objects.filter(email__iexact=asked_for, is_staff=False, is_superuser=False).first()
+        if customer is None:
+            return JsonResponse(
+                {"error": "That address is not a customer account. A test can only go to you or to a customer who has "
+                          "signed in to Arabela."}, status=400)
+        to_address = customer.email
+    elif "@" not in (request.user.email or ""):
         return JsonResponse(
             {"error": "Your admin account has no email address. Add one in Edit Profile, then try again."}, status=400)
 
@@ -2962,7 +3056,7 @@ def email_test_send_view(request):
         return JsonResponse({"error": "Please wait a few seconds between tests."}, status=429)
     request.session["email_test_sent_at"] = now
 
-    ok, message = customer_emails.send_test_email(kind, request.user.email)
+    ok, message = customer_emails.send_test_email(kind, to_address)
     if not ok:
         return JsonResponse({"error": message}, status=502)
     return JsonResponse({"success": True, "message": message})

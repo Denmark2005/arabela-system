@@ -749,6 +749,11 @@
                 arabelaAlert({ title: LOCKED_TITLE, message: err.data.error, danger: true }).then(reload, reload);
                 return;
             }
+            if (err && err.data && err.data.account_changed) {
+                var refresh = function () { window.location.reload(); };
+                arabelaAlert({ title: 'Your account changed', message: err.data.error, danger: true }).then(refresh, refresh);
+                return;
+            }
             var fallback = 'Unable to submit your reservation. Please try again.';
             var described = window.arabelaDescribeRequestError
                 ? window.arabelaDescribeRequestError(err, fallback)
@@ -824,6 +829,8 @@
                     // actually sent to the server (previously it was validated then discarded).
                     var formData = new FormData();
                     formData.append('items', JSON.stringify(submitItems));
+                    // The account this page was opened for: the server refuses to book if the sign-in has since changed.
+                    formData.append('expected_user', (document.body && document.body.dataset && document.body.dataset.userKey) || '');
                     formData.append('payment_method', 'GCash');
                     formData.append('rental_subtotal', payload.subtotal || 0);
                     formData.append('security_deposit', payload.deposit || 0);

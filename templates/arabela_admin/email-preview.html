@@ -65,6 +65,15 @@
   details ol, details ul { margin: 10px 0 0; padding-left: 22px; color: var(--text); }
   details li { margin: 6px 0; }
   code { background: var(--soft); padding: 1px 6px; border-radius: 6px; font-size: 13px; }
+  .field { font: inherit; padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--text); min-width: 260px; }
+  .recent { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .recent th { text-align: left; color: var(--muted); font-weight: 500; font-size: 13px; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--border); }
+  .recent td { padding: 9px 10px 9px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .recent tr:last-child td { border-bottom: 0; }
+  .pill.err { color: var(--err); background: var(--err-bg); }
+  .tablewrap { overflow-x: auto; }
+  .linkbtn { font: inherit; background: none; border: 0; color: var(--brand); cursor: pointer; padding: 0; font-weight: 500; }
+  .linkbtn:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -131,7 +140,41 @@
       <button type="button" class="btn" id="send-test"{% if not owner_email %} disabled{% endif %}>Send test to me</button>
       <span class="label">{% if owner_email %}Goes only to <strong>{{ owner_email }}</strong>.{% else %}Your admin account has no email address &mdash; add one in Edit Profile first.{% endif %}</span>
     </div>
+    <div class="actions">
+      <label class="label" for="customer-to">Or to a customer</label>
+      <input class="field" type="email" id="customer-to" placeholder="customer@gmail.com" autocomplete="off">
+      <button type="button" class="btn" id="send-test-customer">Send test to this customer</button>
+    </div>
+    <p class="sub" style="margin:8px 0 0;">Use this to check that an email really reaches a customer's Gmail (for example a test customer account). Only the address of an account that has signed in to Arabela is accepted.</p>
     <div class="actions"><div id="result" role="status" aria-live="polite"></div></div>
+  </section>
+
+  <section class="card" aria-labelledby="recent-title">
+    <h2 id="recent-title">What happened to recent emails</h2>
+    <p class="sub">Every email the site tried to send since it last started, newest first. <button type="button" class="linkbtn" id="reload-list">Refresh this list</button></p>
+    {% if email_recent %}
+    <div class="tablewrap">
+      <table class="recent">
+        <thead><tr><th>When</th><th>Email</th><th>To</th><th>Result</th></tr></thead>
+        <tbody>
+        {% for row in email_recent %}
+          <tr>
+            <td>{{ row.at_text }}</td>
+            <td>{{ row.label }}</td>
+            <td>{{ row.to|default:"-" }}</td>
+            <td>
+              {% if row.outcome == "sent" %}<span class="pill ok">Sent to Gmail</span>{% elif row.outcome == "skipped" %}<span class="pill warn">Not sent</span>{% else %}<span class="pill err">Failed</span>{% endif %}
+              {% if row.reason %}<div class="note">{{ row.reason }}</div>{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="sub" style="margin:12px 0 0;"><strong>Sent to Gmail</strong> means the Google relay accepted it. If the customer still doesn't see it, check their <strong>Spam</strong>, <strong>Promotions</strong> and <strong>Updates</strong> tabs, and the <strong>Sent</strong> folder of the Gmail that owns the relay script.</p>
+    {% else %}
+    <p class="sub" style="margin:0;">Nothing has been sent since the site last started (a free Render service restarts after it has been idle). Make a booking, approve it, or press a test button above, then refresh this list.</p>
+    {% endif %}
   </section>
 
   <section class="card">
@@ -157,7 +200,11 @@
   var desktop = document.getElementById('size-desktop');
   var phone = document.getElementById('size-phone');
   var button = document.getElementById('send-test');
+  var customerButton = document.getElementById('send-test-customer');
+  var customerTo = document.getElementById('customer-to');
+  var HAS_OWNER_EMAIL = {{ owner_email|yesno:"true,false" }};
   var result = document.getElementById('result');
+  document.getElementById('reload-list').addEventListener('click', function () { window.location.reload(); });
 
   function fitFrame() {
     try { frame.style.height = (frame.contentDocument.documentElement.scrollHeight + 4) + 'px'; } catch (err) { /* keep the default height */ }
@@ -183,23 +230,32 @@
   desktop.addEventListener('click', function () { setSize(false); });
   phone.addEventListener('click', function () { setSize(true); });
 
-  button.addEventListener('click', function () {
+  function sendTest(trigger, to) {
     button.disabled = true;
+    customerButton.disabled = true;
     result.className = '';
-    var original = button.textContent;
-    button.textContent = 'Sending...';
+    var original = trigger.textContent;
+    trigger.textContent = 'Sending...';
+    var body = { kind: kind.value };
+    if (to) { body.to = to; }
     fetch(TEST_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
-      body: JSON.stringify({ kind: kind.value })
+      body: JSON.stringify(body)
     })
       .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
       .then(function (r) {
-        if (r.ok && r.data.success) { showResult(true, r.data.message); }
+        if (r.ok && r.data.success) { showResult(true, r.data.message + ' Refresh the list below to see it.'); }
         else { showResult(false, r.data.error || 'The test email could not be sent.'); }
       })
       .catch(function () { showResult(false, 'Could not reach the server. Check your connection and try again.'); })
-      .then(function () { button.disabled = false; button.textContent = original; });
+      .then(function () { button.disabled = !HAS_OWNER_EMAIL; customerButton.disabled = false; trigger.textContent = original; });
+  }
+  button.addEventListener('click', function () { sendTest(button, ''); });
+  customerButton.addEventListener('click', function () {
+    var address = customerTo.value.trim();
+    if (!address) { showResult(false, "Type the customer's email address first."); customerTo.focus(); return; }
+    sendTest(customerButton, address);
   });
 })();
 </script>

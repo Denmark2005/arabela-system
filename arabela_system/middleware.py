@@ -1,9 +1,18 @@
 import logging
 import time
 
+from django.conf import settings
+from django.contrib.auth import SESSION_KEY, get_user_model
+from django.contrib.sessions.backends.base import UpdateError
+from django.contrib.sessions.exceptions import SessionInterrupted
+from django.contrib.sessions.middleware import SessionMiddleware
+from django.core.exceptions import ValidationError
 from django.db import close_old_connections
+from django.db.models import Q
 from django.db.utils import OperationalError
 from django.http import HttpResponse
+from django.utils.cache import patch_vary_headers
+from django.utils.http import http_date
 
 logger = logging.getLogger(__name__)
 
@@ -73,3 +82,105 @@ class DatabaseRetryMiddleware:
                     )
                     return HttpResponse(_BUSY_HTML, status=503)
                 time.sleep(_RETRY_DELAY_SECONDS)
+
+
+# --- Separate sign-in for the admin panel and the customer site -----------------------------------------------------
+# Both live on one web address, and a browser keeps ONE session cookie per address. With a single cookie, signing in to
+# the admin panel in one tab silently replaced the customer's sign-in in every other tab (and signing in as a customer
+# replaced the admin's), so a customer tab "changed account" on the next refresh -- and a booking made in it could be
+# saved under the wrong account. The admin area now has its own cookie, so the two sign-ins sit side by side.
+ADMIN_AREAS = ("/admin-panel/", "/admin/")
+
+
+def is_admin_area(path):
+    return path == "/admin-panel" or path.startswith(ADMIN_AREAS)
+
+
+def admin_cookie_name():
+    return f"{settings.SESSION_COOKIE_NAME}_admin"
+
+
+class SplitSessionMiddleware(SessionMiddleware):
+    """Django's SessionMiddleware with two cookies: the usual one for the customer site, a second for the admin area.
+
+    One carry-over so nobody is signed out by the change: when a request to the admin area has no admin cookie yet but
+    carries the usual cookie of a STAFF sign-in (an admin who was already signed in before this existed), that session is
+    still honoured. The usual cookie of an ordinary customer is never used in the admin area."""
+
+    @staticmethod
+    def _is_staff_session(store):
+        user_id = store.get(SESSION_KEY)
+        if not user_id:
+            return False
+        User = get_user_model()
+        try:
+            pk = User._meta.pk.to_python(user_id)
+        except ValidationError:
+            return False
+        return User.objects.filter(pk=pk, is_active=True).filter(Q(is_staff=True) | Q(is_superuser=True)).exists()
+
+    def process_request(self, request):
+        customer_name = settings.SESSION_COOKIE_NAME
+        if not is_admin_area(request.path):
+            request._session_cookie_name = customer_name
+            request.session = self.SessionStore(request.COOKIES.get(customer_name))
+            return
+        admin_name = admin_cookie_name()
+        request._session_cookie_name = admin_name
+        store = self.SessionStore(request.COOKIES.get(admin_name))
+        if admin_name not in request.COOKIES and request.COOKIES.get(customer_name):
+            carried = self.SessionStore(request.COOKIES[customer_name])
+            if self._is_staff_session(carried):
+                request._session_cookie_name = customer_name
+                store = carried
+        request.session = store
+
+    def process_response(self, request, response):
+        # Django's own SessionMiddleware.process_response, with the cookie name taken from the request instead of the
+        # setting (kept line for line so a Django upgrade is easy to compare).
+        try:
+            accessed = request.session.accessed
+            modified = request.session.modified
+            empty = request.session.is_empty()
+        except AttributeError:
+            return response
+        name = getattr(request, "_session_cookie_name", settings.SESSION_COOKIE_NAME)
+        if name in request.COOKIES and empty:
+            response.delete_cookie(
+                name,
+                path=settings.SESSION_COOKIE_PATH,
+                domain=settings.SESSION_COOKIE_DOMAIN,
+                samesite=settings.SESSION_COOKIE_SAMESITE,
+            )
+            patch_vary_headers(response, ("Cookie",))
+        else:
+            if accessed:
+                patch_vary_headers(response, ("Cookie",))
+            if (modified or settings.SESSION_SAVE_EVERY_REQUEST) and not empty:
+                if request.session.get_expire_at_browser_close():
+                    max_age = None
+                    expires = None
+                else:
+                    max_age = request.session.get_expiry_age()
+                    expires = http_date(time.time() + max_age)
+                if response.status_code < 500:
+                    try:
+                        request.session.save()
+                    except UpdateError:
+                        raise SessionInterrupted(
+                            "The request's session was deleted before the "
+                            "request completed. The user may have logged "
+                            "out in a concurrent request, for example."
+                        )
+                    response.set_cookie(
+                        name,
+                        request.session.session_key,
+                        max_age=max_age,
+                        expires=expires,
+                        domain=settings.SESSION_COOKIE_DOMAIN,
+                        path=settings.SESSION_COOKIE_PATH,
+                        secure=settings.SESSION_COOKIE_SECURE or None,
+                        httponly=settings.SESSION_COOKIE_HTTPONLY or None,
+                        samesite=settings.SESSION_COOKIE_SAMESITE,
+                    )
+        return response

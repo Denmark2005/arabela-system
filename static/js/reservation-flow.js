@@ -630,6 +630,11 @@
                     + '<span class="material-symbols-outlined" style="font-size: 0.9rem;">event</span>'
                     + (editUrl ? 'Set rental date &rarr;' : 'Rental date needed')
                     + '</span>';
+            // The day the gown is collected is the first date of the window; it can only be collected 1 PM - 5 PM.
+            var pickupLine = dated
+                ? '<p class="mt-0.5 text-[0.6875rem] text-secondary/80">Pick-up '
+                    + escapeHtml(String(it.rental).split(' - ')[0]) + ', 1:00 PM to 5:00 PM only</p>'
+                : '';
 
             var inner =
                 '<div class="w-16 h-20 shrink-0 overflow-hidden rounded-[6px] border border-black/10 bg-surface-container-low">' +
@@ -647,6 +652,7 @@
                 escapeHtml(window.arabelaSizeLabel(it.size)) +
                 '</p>' +
                 dateLine +
+                pickupLine +
                 '</div>' +
                 '<p class="shrink-0 text-sm font-medium text-on-surface tabular-nums">' +
                 formatPesoSummary(it.lineTotal) +

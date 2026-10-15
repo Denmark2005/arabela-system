@@ -14,6 +14,12 @@
  * Every badge to keep current is marked in the templates:  data-live-badge="messages" | "reservations"
  * on the button/link that holds it (+ optional data-live-badge-style for its position). Loaded only for
  * signed-in customers; the endpoint URL comes from this script tag's data-live-badges-url.
+ *
+ * It also notices when the sign-in in this browser is no longer the one this page was opened for -- another
+ * tab signed in as someone else, or signed out -- and says so with a bar at the top, instead of the page
+ * quietly acting for a different account the next time it is refreshed or a reservation is confirmed.
+ * The page's own account comes from <body data-user-key> (or this script tag's data-user-id on the few pages
+ * that are not built from base.html).
  */
 (function () {
   'use strict';
@@ -28,6 +34,32 @@
   var TIMEOUT_MS = 12000;
 
   var timer = null, inFlight = false, failures = 0, lastFetch = 0, stopped = false;
+
+  var pageUser = (document.body && document.body.dataset && document.body.dataset.userKey) || tag.getAttribute('data-user-id') || '';
+  if (pageUser === 'guest') { pageUser = ''; }
+
+  // A bar across the top of the page. The page stays as it is (nothing is changed behind the customer's back);
+  // the button reloads it for whoever is signed in now.
+  function showAccountNotice(signedOut) {
+    if (document.getElementById('arabela-account-notice')) { return; }
+    var bar = document.createElement('div');
+    bar.id = 'arabela-account-notice';
+    bar.setAttribute('role', 'alert');
+    bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483000;display:flex;flex-wrap:wrap;gap:8px 14px;' +
+      'align-items:center;justify-content:center;padding:12px 16px;background:#111;color:#fff;font:500 14px/1.4 system-ui,sans-serif;text-align:center;';
+    var text = document.createElement('span');
+    text.textContent = signedOut
+      ? 'You were signed out in another tab or window.'
+      : 'The account signed in on this browser changed in another tab or window. This page still shows the previous account.';
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = 'Reload this page';
+    button.style.cssText = 'border:1px solid #fff;background:#fff;color:#111;border-radius:6px;padding:6px 14px;font:600 13px system-ui,sans-serif;cursor:pointer;';
+    button.addEventListener('click', function () { window.location.reload(); });
+    bar.appendChild(text);
+    bar.appendChild(button);
+    document.body.appendChild(bar);
+  }
 
   function toCount(value) {
     var n = parseInt(value, 10);
@@ -82,12 +114,21 @@
       credentials: 'same-origin', cache: 'no-store', headers: { 'Accept': 'application/json' },
       signal: controller ? controller.signal : undefined
     }).then(function (res) {
-      if (res.status === 401 || res.status === 403) { stopped = true; return null; }   // signed out: stop asking
+      if (res.status === 401 || res.status === 403) {   // signed out: stop asking, and say so
+        stopped = true;
+        if (pageUser) { showAccountNotice(true); }
+        return null;
+      }
       if (!res.ok) { throw new Error('http ' + res.status); }
       if ((res.headers.get('content-type') || '').indexOf('json') === -1) { throw new Error('not json'); }
       return res.json();
     }).then(function (data) {
       if (!data) { return; }
+      if (pageUser && data.user !== undefined && String(data.user) !== String(pageUser)) {
+        stopped = true;                   // someone else is signed in now: these numbers are not this page's
+        showAccountNotice(false);
+        return;
+      }
       failures = 0;
       apply('messages', toCount(data.messages));
       apply('reservations', toCount(data.reservations));

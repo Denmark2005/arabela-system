@@ -10,9 +10,13 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import escapejs
+from django.contrib.sessions.backends.db import SessionStore
+
+from arabela_system.middleware import admin_cookie_name
 
 from accounts.models import CustomerMessage, UserProfile
 from gowns.models import (
+    COOLDOWN_DAYS,
     DEFAULT_CATEGORY_TAG_COLORS, TAG_COLOR_HEX, CustomCategory, Gown, GownRemoval, GownUnavailability,
     HiddenCategory, SiteSettings, all_category_names, resolve_tag_colors,
 )
@@ -4092,7 +4096,7 @@ class ScheduleActionsTests(TestCase):
         block.refresh_from_db()
         self.assertEqual(item.return_date, self.today + timedelta(days=7))
         self.assertEqual(item.original_return_date, self.today + timedelta(days=4))
-        self.assertEqual((block.start_date, block.end_date), (self.today + timedelta(days=8), self.today + timedelta(days=10)))
+        self.assertEqual((block.start_date, block.end_date), (self.today + timedelta(days=8), self.today + timedelta(days=7 + COOLDOWN_DAYS)))
         self.assertIn("Changed return date by customer · 3 days late", self._remarks(item))
 
     def test_return_cannot_move_earlier_or_stay_the_same(self):
@@ -5354,7 +5358,9 @@ class PreviousSignInTests(TestCase):
 
     def test_a_first_ever_sign_in_has_nothing_before_it(self):
         client = self._sign_in()
-        self.assertEqual(client.session["admin_previous_login"], "")
+        # The admin panel keeps its sign-in in its own cookie (arabela_system.middleware), not the customer-site one.
+        admin_session = SessionStore(client.cookies[admin_cookie_name()].value)
+        self.assertEqual(admin_session["admin_previous_login"], "")
         self.assertContains(client.get(self.account_page), "Not recorded for this session")
 
     def test_the_next_sign_in_shows_when_the_one_before_it_was(self):

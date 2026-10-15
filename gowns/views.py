@@ -37,8 +37,9 @@ from gowns.context_processors import (
     unread_messages_total,
 )
 from gowns.models import (
-    SIZE_CODES, Gown, GownUnavailability, group_gowns_by_name, pick_representative_gown, size_codes_of,
+    COOLDOWN_DAYS, SIZE_CODES, Gown, GownUnavailability, group_gowns_by_name, pick_representative_gown, size_codes_of,
 )
+from gowns import availability
 from gowns.photos import GRID_WIDTH, PAGE_WIDTH, sized
 from reservations import reminders, timeline
 from reservations.models import Reservation, ReservationItem, ReservationStatusEvent
@@ -56,7 +57,7 @@ def _category_by_key(collection_key: str):
 
 # How far ahead the product calendar computes availability. Four months is well past
 # any realistic booking lead time and keeps the per-day scan trivially cheap.
-_AVAILABILITY_HORIZON_DAYS = 120
+_AVAILABILITY_HORIZON_DAYS = availability.HORIZON_DAYS
 
 # Every collection grid shows this many products per page.
 _COLLECTION_PAGE_SIZE = 8
@@ -350,55 +351,19 @@ def _blocked_dates_for_category(label: str, name: str) -> list[str]:
     Tracking a SET of unit ids per day (rather than adding up counts) means a unit that
     is both booked and blocked on the same day is still just one unit off the pool.
     """
-    units, busy = _bookable_units_and_busy_ranges(label, name)
+    units, bookings, blocks = _bookable_units_and_busy_ranges(label, name)
+    busy = {unit.id: list(bookings.get(unit.id, ())) + list(blocks.get(unit.id, ())) for unit in units}
     return _days_every_unit_is_busy(units, busy)
 
 
 def _bookable_units_and_busy_ranges(label: str, name: str):
-    """This product's bookable units (same name and category, not Out-of-Stock) and, per unit id, the date ranges it is
-    spoken for within the booking horizon -- by an active booking (whole rental_date..return_date window; only stage
-    'Returned' releases it, and Rejected/Cancelled reservations never held stock) or by an admin/cooldown
-    GownUnavailability block. The single source both the calendar's blocked days and the gown page's per-size
-    availability are worked out from, using the same rules _find_available_unit checks at checkout."""
-    units = list(
-        Gown.objects.filter(category=label, name__iexact=name)
-        .exclude(status=Gown.Status.OUT_OF_STOCK)
-        .order_by("id")
-    )
-    busy = defaultdict(list)
-    if not units:
-        return units, busy
-
-    today = timezone.localdate()
-    horizon = today + timedelta(days=_AVAILABILITY_HORIZON_DAYS)
-    unit_ids = {unit.id for unit in units}
-
-    booked_items = (
-        ReservationItem.objects.filter(
-            gown_id__in=unit_ids,
-            return_date__gte=today,
-            rental_date__lte=horizon,
-        )
-        .exclude(stage=ReservationItem.Stage.RETURNED)
-        .exclude(
-            reservation__status__in=[
-                Reservation.Status.REJECTED,
-                Reservation.Status.CANCELLED,
-            ]
-        )
-        .values_list("gown_id", "rental_date", "return_date")
-    )
-    for gown_pk, rental_date, return_date in booked_items:
-        busy[gown_pk].append((rental_date, return_date))
-
-    blocks = GownUnavailability.objects.filter(
-        gown_id__in=unit_ids,
-        end_date__gte=today,
-        start_date__lte=horizon,
-    ).values_list("gown_id", "start_date", "end_date")
-    for gown_pk, start_date, end_date in blocks:
-        busy[gown_pk].append((start_date, end_date))
-    return units, busy
+    """This product's bookable units and, per unit id, its customer bookings and its blocks from today on
+    (see gowns.availability.load_busy_ranges). The single source the calendar's fully-booked days, the gown page's
+    per-size calendar and the admin's release reminder are all worked out from."""
+    units = availability.bookable_units(label, name)
+    bookings, blocks = availability.load_busy_ranges(
+        [unit.id for unit in units], timezone.localdate(), _AVAILABILITY_HORIZON_DAYS)
+    return units, bookings, blocks
 
 
 def _days_every_unit_is_busy(units, busy) -> list[str]:
@@ -425,23 +390,14 @@ def _days_every_unit_is_busy(units, busy) -> list[str]:
     )
 
 
-def _size_options_and_units(units, busy):
-    """What the gown page needs to offer ONLY the sizes staff gave this product's units, and to tell which size is
-    rented on the customer's dates: [{code, label, count}] in button order, and one {size, busy} entry per unit."""
-    code_of = SIZE_CODES
+def _size_options(units):
+    """The sizes staff gave this product's units, in button order: [{code, label, name, count}]."""
     options = []
     for code in size_codes_of(units):
-        count = sum(1 for unit in units if code_of.get(unit.size) == code)
-        name = next(value for value, c in code_of.items() if c == code)
+        count = sum(1 for unit in units if SIZE_CODES.get(unit.size) == code)
+        name = next(value for value, c in SIZE_CODES.items() if c == code)
         options.append({"code": code, "label": "Free Size" if code == "FREE" else code, "name": str(name), "count": count})
-    unit_rows = [
-        {
-            "size": code_of.get(unit.size, ""),
-            "busy": [[start.isoformat(), end.isoformat()] for start, end in sorted(busy.get(unit.id, ()))],
-        }
-        for unit in units
-    ]
-    return options, unit_rows
+    return options
 
 
 # --- Which physical unit does a cart item actually get? --------------------------
@@ -455,6 +411,9 @@ _UNIT_OUT_OF_STOCK = "out_of_stock"   # the slug/name IS a real gown, but every 
 # message that sends the customer back to the gown page to choose one of its real sizes.
 _UNIT_SIZE_NOT_OFFERED = "size_not_offered"
 _UNIT_SIZE_REQUIRED = "size_required"
+# An event date already gone, and today once the shop is closed for pick-ups (5:00 PM) -- see gowns.availability.
+_UNIT_DATE_PASSED = "date_passed"
+_UNIT_TODAY_CLOSED = "today_closed"
 
 # products.html's size buttons emit 'S' / 'M' / 'L'; Gown.size stores 'Small' / 'Medium'
 # / 'Large' / 'Extra Large' / 'Free Size'. This bridges the two so size can act as a
@@ -474,7 +433,7 @@ def _normalize_size(raw: str) -> str:
     return _SIZE_ALIASES.get((raw or "").strip().upper(), "")
 
 
-def _find_available_unit(gown_name, rental_date, return_date, *, gown_slug="", size="", already_taken=frozenset()):
+def _find_available_unit(gown_name, rental_date, return_date, *, gown_slug="", size="", already_taken=frozenset(), rest_days=0):
     """Pick the specific physical Gown row a cart item should be booked against.
 
     MUST be called inside transaction.atomic(): it takes SELECT ... FOR UPDATE row
@@ -594,6 +553,25 @@ def _find_available_unit(gown_name, rental_date, return_date, *, gown_slug="", s
         ).values_list("gown_id", flat=True)
     )
 
+    if rest_days:
+        # The gown rests `rest_days` days after the return. Those days may overlap a staff block (it is being cleaned anyway)
+        # but must never run into another customer's booking, or the next person would get it without its cleaning time.
+        busy.update(
+            ReservationItem.objects.filter(
+                gown_id__in=candidate_ids,
+                rental_date__lte=return_date + timedelta(days=rest_days),
+                return_date__gte=return_date + timedelta(days=1),
+            )
+            .exclude(stage=ReservationItem.Stage.RETURNED)
+            .exclude(
+                reservation__status__in=[
+                    Reservation.Status.REJECTED,
+                    Reservation.Status.CANCELLED,
+                ]
+            )
+            .values_list("gown_id", flat=True)
+        )
+
     free = [g for g in candidates if g.id not in busy]
     if not free:
         return (_UNIT_UNAVAILABLE, None)
@@ -606,6 +584,30 @@ def _find_available_unit(gown_name, rental_date, return_date, *, gown_slug="", s
                 return (_UNIT_ASSIGNED, gown)
 
     return (_UNIT_ASSIGNED, free[0])
+
+
+def _plan_pickup(gown_name, event_date, *, gown_slug="", size="", already_taken=frozenset(), now=None):
+    """Book an EVENT date: -> (outcome, unit, pickup_date).
+
+    The return is 2 days after the event and the gown then rests COOLDOWN_DAYS days. The pick-up is the earliest free day up to 2
+    days before the event -- when those days are taken it is the event day itself -- and never a day the shop can no longer be
+    visited (today after 5:00 PM). The same rules gowns.availability applies to the gown page calendar, here checked against the
+    locked rows (MUST run inside transaction.atomic(), like _find_available_unit)."""
+    now = now or availability.now_local()
+    problem = availability.day_problem(event_date, now)
+    if problem == "past":
+        return (_UNIT_DATE_PASSED, None, None)
+    if problem == "closed":
+        return (_UNIT_TODAY_CLOSED, None, None)
+    return_date = event_date + timedelta(days=availability.RETURN_DAYS)
+    day = max(event_date - timedelta(days=availability.EARLY_PICKUP_DAYS), availability.earliest_pickup_day(now))
+    while day <= event_date:
+        outcome, unit = _find_available_unit(
+            gown_name, day, return_date, gown_slug=gown_slug, size=size, already_taken=already_taken, rest_days=COOLDOWN_DAYS)
+        if outcome != _UNIT_UNAVAILABLE:
+            return (outcome, unit, day)
+        day += timedelta(days=1)
+    return (_UNIT_UNAVAILABLE, None, None)
 
 
 def _authoritative_price(gown_name, gown_slug, matched_gown):
@@ -710,12 +712,35 @@ def product_detail(request, collection: str, slug: str):
     # photo and price instead of blowing up on an empty list.
     display_unit = pick_representative_gown(bookable_siblings) if bookable_siblings else real_gown
 
+    now = availability.now_local()
+    calendar_data = {}
     if is_out_of_stock:
-        blocked_dates, size_options, unit_rows = [], [], []
+        blocked_dates, size_options = [], []
     else:
-        units, busy = _bookable_units_and_busy_ranges(real_gown.category, real_gown.name)
+        units, bookings, blocks = _bookable_units_and_busy_ranges(real_gown.category, real_gown.name)
+        busy = {unit.id: list(bookings.get(unit.id, ())) + list(blocks.get(unit.id, ())) for unit in units}
         blocked_dates = _days_every_unit_is_busy(units, busy)
-        size_options, unit_rows = _size_options_and_units(units, busy)
+        size_options = _size_options(units)
+        code_of = lambda unit: SIZE_CODES.get(unit.size, "")
+        plans = availability.plan_calendar(units, bookings, blocks, now, _AVAILABILITY_HORIZON_DAYS, code_of)
+        # What the next three event days (today, tomorrow and the day after, the only ones whose plan changes) turn into at
+        # 5:00 PM, so a page left open past closing time updates itself without asking the server again (once it is already
+        # past 5 PM the plans above are the late ones and nothing is needed).
+        late = {}
+        if now.time() < availability.PICKUP_CLOSES:
+            closing = now.replace(hour=availability.PICKUP_CLOSES.hour, minute=0, second=0, microsecond=0)
+            after_closing = availability.plan_calendar(units, bookings, blocks, closing, availability.EARLY_PICKUP_DAYS, code_of)
+            late = {key: dict(days) for key, days in after_closing.items()}
+        calendar_data = {
+            "plans": plans,
+            "late": late,
+            "today": now.date().isoformat(),
+            "seconds": now.hour * 3600 + now.minute * 60 + now.second,
+            "closes": availability.PICKUP_CLOSES.hour * 3600,
+            "hours": availability.PICKUP_HOURS_TEXT,
+            "closing": availability.PICKUP_CLOSES.strftime("%I:%M %p").lstrip("0"),
+            "restDays": COOLDOWN_DAYS,
+        }
     product = {
         "title": display_unit.name,
         "price": f"₱{display_unit.rental_price:,.0f}",
@@ -742,10 +767,10 @@ def product_detail(request, collection: str, slug: str):
             "collection": col,
             "collection_url": collection_url,
             "blocked_dates_json": json.dumps(blocked_dates),
-            # Only the sizes staff gave this product's units (Gown Catalog), and each unit's busy dates, so the page
-            # can grey out a size that is rented on the customer's dates and show "3 of 4 available".
+            # Only the sizes staff gave this product's units (Gown Catalog), and the whole calendar worked out by
+            # gowns.availability (which event dates can be booked, the pick-up day each one gets, and why not).
             "size_options": size_options,
-            "size_units": unit_rows,
+            "calendar_data": calendar_data,
             "related_products": _related_gowns(product["collection"], slug),
         },
     )
@@ -880,6 +905,24 @@ def reservation_submit(request):
     if not rate_limit.allowed(f"submit:{request.user.pk}", *_SUBMIT_LIMIT):
         return _too_fast()
 
+    # The checkout page says which account it was opened for. When the sign-in in this browser has changed since (another
+    # tab signed in as someone else), booking now would save the reservation -- and every email about it -- under the WRONG
+    # account, so nothing is booked and the customer is told to refresh. (An old page that sends nothing is let through.)
+    expected_user = (request.POST.get("expected_user") or "").strip()
+    if expected_user and expected_user != str(request.user.pk):
+        return JsonResponse(
+            {
+                "success": False,
+                "account_changed": True,
+                "error": (
+                    "The account signed in on this browser changed since this page was opened (for example, in another "
+                    "tab), so nothing was booked. Please reload the page, check that you are in the right account, and "
+                    "try again."
+                ),
+            },
+            status=409,
+        )
+
     # The temporary cancellation lockout used to be checked only when a hold STARTED, so a checkout page
     # that was already open still let a locked account book. Checked here too (after the body has been
     # read, so the phone gets this answer rather than a dropped connection). A hold can only still be
@@ -982,15 +1025,36 @@ def reservation_submit(request):
         # dicts are mutated in place, so the creation loop below still runs in the
         # customer's original cart order.
         assigned_unit_ids = set()
+        now = availability.now_local()
         for item in sorted(parsed_items, key=lambda i: i["gown_name"].casefold()):
-            outcome, unit = _find_available_unit(
+            # The customer books an EVENT date (checkout always sends return = event + 2). The server works out the real
+            # pick-up day itself and saves that -- the pick-up date the browser sent is never trusted.
+            event_date = item["return_date"] - timedelta(days=availability.RETURN_DAYS)
+            outcome, unit, pickup = _plan_pickup(
                 item["gown_name"],
-                item["rental_date"],
-                item["return_date"],
+                event_date,
                 gown_slug=item["gown_slug"],
                 size=item["size"],
                 already_taken=assigned_unit_ids,
+                now=now,
             )
+            if outcome in (_UNIT_DATE_PASSED, _UNIT_TODAY_CLOSED):
+                # Nothing is written yet; the bag and the checkout hold are left alone so the customer only fixes the date.
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "error": (
+                            f"The date {event_date:%b %d, %Y} for {item['gown_name']} has already passed. "
+                            "Please open it from your order summary and choose new dates."
+                            if outcome == _UNIT_DATE_PASSED else
+                            f"Today's pick-up closed at {availability.PICKUP_CLOSES.strftime('%I:%M %p').lstrip('0')}. "
+                            f"Please open {item['gown_name']} from your order summary and choose another date."
+                        ),
+                    },
+                    status=400,
+                )
+            if outcome != _UNIT_UNAVAILABLE and pickup is not None:
+                item["rental_date"] = pickup
             if outcome == _UNIT_UNAVAILABLE:
                 # Nothing has been written yet, so returning from inside the block
                 # just commits an empty transaction and releases the row locks. The
@@ -1000,9 +1064,8 @@ def reservation_submit(request):
                     {
                         "success": False,
                         "error": (
-                            f"{item['gown_name']} is no longer available for "
-                            f"{item['rental_date']:%b %d, %Y} - {item['return_date']:%b %d, %Y}. "
-                            "Please choose different dates or another gown."
+                            f"{item['gown_name']} is no longer available for {event_date:%b %d, %Y}. "
+                            "Please choose a different date or another gown."
                         ),
                     },
                     status=400,
@@ -1105,10 +1168,9 @@ def reservation_submit(request):
                 original_rental_date=item["rental_date"],
                 original_return_date=item["return_date"],
             )
-            # Automatic 3-day cooldown after the return date -- combined with the
-            # existing 2-day return buffer and the reach-back that already blocks a
-            # NEW event date whose own pickup window would touch a booked day, this
-            # adds up to the shop's full 7-days-after-the-event policy. Staff/owner
+            # Automatic cooldown (COOLDOWN_DAYS = 5) right after the return date, which is itself 2 days after the
+            # event: the gown is off the market for 7 days after the event (2 to return it + 5 to check, wash
+            # and repair it). Staff/owner
             # can shorten or delete it early from Gown Catalog's Blocked Dates, the
             # exact same tool they already use for a cleaning/repair gap -- see
             # GownUnavailability.Reason.COOLDOWN and arabela_admin/views.py's
@@ -1117,7 +1179,7 @@ def reservation_submit(request):
                 GownUnavailability.objects.create(
                     gown=item["matched_gown"],
                     start_date=item["return_date"] + timedelta(days=1),
-                    end_date=item["return_date"] + timedelta(days=3),
+                    end_date=item["return_date"] + timedelta(days=COOLDOWN_DAYS),
                     reason=GownUnavailability.Reason.COOLDOWN,
                     note="Auto-added post-rental cooldown. Shorten or release it once "
                          "the gown's checked and ready to go out again.",
@@ -1404,6 +1466,8 @@ def notification_badges(request):
     response = JsonResponse({
         "messages": unread_messages_total(request.user),
         "reservations": reservations_with_news_count(request.user),
+        # Who is signed in right now, so a page opened for someone else (the sign-in changed in another tab) can say so.
+        "user": request.user.pk,
     })
     response["Cache-Control"] = "no-store"
     return response

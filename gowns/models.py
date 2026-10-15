@@ -396,6 +396,13 @@ class GownSlugSequence(models.Model):
             return f'{base}-{suffix}'
 
 
+# After every rental the gown rests for this many days starting the day after its return date (checking, washing, repairs).
+# The return is 2 days after the event, so the gown is off the market for 2 + COOLDOWN_DAYS = 7 days after the event.
+# One number used by checkout (gowns.views.reservation_submit) and by the admin's return/reschedule
+# (arabela_admin.views._resync_cooldown_block), so they can never disagree.
+COOLDOWN_DAYS = 5
+
+
 class GownUnavailability(models.Model):
     """A date range where one physical gown unit is off the rental pool for a reason
     other than a customer booking -- cleaning, repair, alterations.

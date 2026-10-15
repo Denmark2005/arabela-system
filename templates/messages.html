@@ -613,7 +613,7 @@
     })();
   </script>
   <!-- Keeps the badges above current on a page that stays open (see the script's own header). -->
-  {% load static %}<script defer src="{% static 'js/customer-badges-live.js' %}?v={{ site_asset_version }}" data-live-badges-url="{% url 'gowns:notification_badges' %}"></script>
+  {% load static %}<script defer src="{% static 'js/customer-badges-live.js' %}?v={{ site_asset_version }}" data-live-badges-url="{% url 'gowns:notification_badges' %}" data-user-id="{{ request.user.id }}"></script>
   {% include "partials/reservation_hold_banner.html" %}
 </body>
 </html>

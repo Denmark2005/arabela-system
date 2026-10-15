@@ -99,7 +99,9 @@ MIDDLEWARE = [
     # DEBUG=False, since Django's dev-server auto-serving of static files only
     # ever worked because DEBUG was True. No separate static file host required.
     'whitenoise.middleware.WhiteNoiseMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
+    # Django's SessionMiddleware with a separate sign-in cookie for the admin area, so signing in to the admin panel in one tab
+    # can no longer swap the customer's account in another tab (see arabela_system/middleware.py).
+    'arabela_system.middleware.SplitSessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',

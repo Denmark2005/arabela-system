@@ -128,13 +128,13 @@ def _body_for(kind, item, today):
     if kind == PICKUP_TOMORROW:
         return (
             f"Reminder: your rental of {gown} starts tomorrow, "
-            f"{item.rental_date:%B %d, %Y}. Please visit Arabela to pick up your gown. "
+            f"{item.rental_date:%B %d, %Y}. Please visit Arabela to pick up your gown (1:00 PM to 5:00 PM only). "
             f"Reference: {code}."
         )
     if kind == PICKUP_TODAY:
         return (
             f"Reminder: your rental of {gown} starts today, "
-            f"{item.rental_date:%B %d, %Y}. Your gown is ready for pick-up at Arabela. "
+            f"{item.rental_date:%B %d, %Y}. Your gown is ready for pick-up at Arabela until 5:00 PM today. "
             f"Reference: {code}."
         )
     if kind == RETURN_TOMORROW:
@@ -190,13 +190,13 @@ def _group_body_for(kind, items, today):
     if kind == PICKUP_TOMORROW:
         return (
             f"Reminder: your rental of {gowns} starts tomorrow, "
-            f"{first.rental_date:%B %d, %Y}. Please visit Arabela to pick up your gowns. "
+            f"{first.rental_date:%B %d, %Y}. Please visit Arabela to pick up your gowns (1:00 PM to 5:00 PM only). "
             f"Reference: {code}."
         )
     if kind == PICKUP_TODAY:
         return (
             f"Reminder: your rental of {gowns} starts today, "
-            f"{first.rental_date:%B %d, %Y}. Your gowns are ready for pick-up at Arabela. "
+            f"{first.rental_date:%B %d, %Y}. Your gowns are ready for pick-up at Arabela until 5:00 PM today. "
             f"Reference: {code}."
         )
     if kind == RETURN_TOMORROW:

@@ -395,11 +395,19 @@
       removeGownBlock(block) {
         if (this.releasingBlockId) { return; }
         this.blockError = '';
-        adminConfirm({
+        // First ask the server what releasing would really open for customers (a rental needs 8 free days in a row: the
+        // event day, 2 return days and the cleaning days) and show that in the confirmation. If the preview can't be
+        // fetched the confirmation still appears without it -- the reminder must never get in the way of releasing.
+        const preview = block.preview_url
+          ? fetch(block.preview_url, { headers: { 'Accept': 'application/json' } })
+              .then(r => (r.ok ? r.json() : null)).catch(() => null)
+          : Promise.resolve(null);
+        preview.then((info) => adminConfirm({
           title: 'Release blocked dates',
-          message: block.range + ' (' + block.reason + ') — the gown becomes bookable again immediately. This can\'t be undone.',
+          message: block.range + ' (' + block.reason + ') — the gown becomes bookable again immediately. This can\'t be undone.'
+            + (info && info.message ? '\n\n' + info.message : ''),
           confirmText: 'Release dates',
-        }).then((confirmed) => {
+        })).then((confirmed) => {
           if (!confirmed) { return; }
           this.releasingBlockId = block.id;
           fetch(block.delete_url, {

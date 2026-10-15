@@ -1,23 +1,47 @@
+from allauth.core.exceptions import ImmediateHttpResponse
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from django.contrib.auth import get_user_model
+from django.shortcuts import render
 
 from .models import UserProfile
+
+STAFF_GOOGLE_MESSAGE = (
+    "This Google account is used by an Arabela staff account, so it can't be used to book gowns. "
+    "Please continue with a different Google account."
+)
+
+
+def _is_staff(user):
+    return bool(user is not None and (user.is_staff or user.is_superuser))
+
+
+def _refuse_staff(request):
+    """Stop the sign-in and show the customer login page with the reason. A staff account must never be reachable by
+    "Continue with Google": it would sign the shop owner in as a customer (whose bookings are never emailed) and, since
+    the admin panel trusts any staff session, open the admin panel without its password."""
+    raise ImmediateHttpResponse(render(request, 'login.html', {'next': '', 'error': STAFF_GOOGLE_MESSAGE}, status=403))
 
 
 class ArabelaSocialAccountAdapter(DefaultSocialAccountAdapter):
     def pre_social_login(self, request, sociallogin):
-        # Prevent duplicate accounts: if a local user already has this email, connect it.
+        # A Google sign-in that was already linked to a staff account (an older sign-in that matched by email).
         if sociallogin.is_existing:
+            if _is_staff(sociallogin.user):
+                _refuse_staff(request)
             return
 
         email = (sociallogin.user.email or '').strip().lower()
         if not email:
             return
 
-        User = get_user_model()
-        existing_user = User.objects.filter(email__iexact=email).first()
-        if existing_user:
-            sociallogin.connect(request, existing_user)
+        # Prevent duplicate accounts: if a local CUSTOMER already has this email, connect it. A staff account with the
+        # same email is never connected to (and is refused when it is the only match).
+        matches = get_user_model().objects.filter(email__iexact=email)
+        customer = matches.filter(is_staff=False, is_superuser=False).order_by('pk').first()
+        if customer:
+            sociallogin.connect(request, customer)
+        elif matches.exists():
+            _refuse_staff(request)
 
     def save_user(self, request, sociallogin, form=None):
         user = super().save_user(request, sociallogin, form=form)
