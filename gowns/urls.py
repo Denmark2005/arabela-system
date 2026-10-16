@@ -75,6 +75,9 @@ urlpatterns = [
     path("messages/delete/", views.messages_delete, name="messages_delete"),
     path("notifications/badges/", views.notification_badges, name="notification_badges"),
     path("profile/", views.profile, name="profile"),
+    path("profile/addresses/save/", views.profile_address_save, name="profile_address_save"),
+    path("profile/addresses/<int:pk>/delete/", views.profile_address_delete, name="profile_address_delete"),
+    path("profile/addresses/import/", views.profile_address_import, name="profile_address_import"),
 ]
 
 # Backward-compatibility: the old bare-slug paths (e.g. /wedding/, /how-it-works/) now

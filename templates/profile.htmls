@@ -370,6 +370,7 @@
         </a>
       </footer>
     </main>
+    {{ saved_addresses|json_script:"saved-addresses-data" }}
     <script>
       const transitionOverlay = document.getElementById("page-transition");
       const pageLinks = document.querySelectorAll(".js-page-link");
@@ -451,11 +452,18 @@
       const addressList = document.getElementById("address-list");
       const emptyAddressNotice = document.getElementById("empty-address-notice");
       const editAddressTitle = document.getElementById("edit-address-title");
-      const addressEntries = [];
+      // The customer's addresses are saved ON THEIR ACCOUNT (accounts.SavedAddress), so they follow them to another phone. The server sends the
+      // list with the page and answers every change with the new list. (They used to live in this browser only -- see importLegacyAddresses.)
+      let addressEntries = [];
       const USER_STORAGE_KEY = document.body?.dataset?.userKey || "guest";
-      const ADDRESS_STORAGE_KEY = `arabela_profile_addresses_v1_${USER_STORAGE_KEY}`;
-      let editingAddressIndex = null;
+      const LEGACY_ADDRESS_STORAGE_KEY = `arabela_profile_addresses_v1_${USER_STORAGE_KEY}`;
+      const LEGACY_IMPORTED_FLAG = `arabela_profile_addresses_imported_${USER_STORAGE_KEY}`;
+      const ADDRESS_SAVE_URL = "{% url 'gowns:profile_address_save' %}";
+      const ADDRESS_IMPORT_URL = "{% url 'gowns:profile_address_import' %}";
+      const ADDRESS_DELETE_URL = "{% url 'gowns:profile_address_delete' 0 %}";
+      let editingAddressId = null;
       let saveAnimationTimeoutId = null;
+      let addressRequestPending = false;
 
       function clearFieldError(inputEl, errorEl) {
         if (inputEl) {
@@ -494,16 +502,33 @@
         clearFieldError(profileFirstNameInput, profileFirstNameError);
         clearFieldError(profileLastNameInput, profileLastNameError);
       }
-      function saveAddressEntries() {
-        try {
-          localStorage.setItem(ADDRESS_STORAGE_KEY, JSON.stringify(addressEntries));
-        } catch (error) {
-          // Ignore storage quota/privacy mode issues.
-        }
+      function escapeHtml(value) {
+        return String(value == null ? "" : value)
+          .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
       }
-      function loadAddressEntries() {
+      function csrfToken() {
+        const field = document.querySelector('input[name="csrfmiddlewaretoken"]');
+        if (field && field.value) return field.value;
+        const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+        return match ? decodeURIComponent(match[1]) : "";
+      }
+      // POST JSON to the server; resolves { ok, status, data } (data is {} when the answer was not JSON).
+      function postJson(url, body) {
+        return fetch(url, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken() },
+          body: JSON.stringify(body || {}),
+        }).then(function (res) {
+          return res.json().catch(function () { return {}; }).then(function (data) {
+            return { ok: res.ok, status: res.status, data: data };
+          });
+        });
+      }
+      // What this page used to keep in the browser (before addresses lived on the account), read only to copy it over once.
+      function readLegacyAddresses() {
         try {
-          const raw = localStorage.getItem(ADDRESS_STORAGE_KEY);
+          const raw = localStorage.getItem(LEGACY_ADDRESS_STORAGE_KEY);
           if (!raw) return [];
           const parsed = JSON.parse(raw);
           if (!Array.isArray(parsed)) return [];
@@ -524,6 +549,28 @@
           return [];
         }
       }
+      function showAddressRequestError(result) {
+        const errors = (result && result.data && result.data.errors) || null;
+        if (errors) {
+          const fields = {
+            addressLine: [addressLineInput, addressLineError],
+            postalCode: [postalCodeInput, postalCodeError],
+            city: [cityInput, cityError],
+            phone: [phoneInput, phoneError],
+          };
+          let shown = false;
+          Object.keys(errors).forEach(function (key) {
+            if (fields[key]) {
+              showFieldError(fields[key][0], fields[key][1], errors[key]);
+              shown = true;
+            }
+          });
+          if (shown) return;
+        }
+        const message = (result && result.data && (result.data.error || (result.data.errors && result.data.errors.form)))
+          || "Something went wrong. Please try again.";
+        arabelaAlert({ title: "Address not saved", message: message });
+      }
 
       function openEditProfile() {
         clearProfileErrors();
@@ -538,7 +585,7 @@
         const isEditMode = mode === "edit";
         clearAddressErrors();
         if (!isEditMode) {
-          editingAddressIndex = null;
+          editingAddressId = null;
           if (editAddressTitle) {
             editAddressTitle.textContent = "Add address";
           }
@@ -657,26 +704,47 @@
             return;
           }
 
-          if (entry.isDefault) {
-            addressEntries.forEach(function (item) {
-              item.isDefault = false;
+          if (addressRequestPending) return;          // a second tap while the first is still being saved
+          addressRequestPending = true;
+          const saveBtn = editAddressForm.querySelector('button[type="submit"]');
+          const saveLabel = saveBtn ? saveBtn.textContent : "";
+          if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.textContent = "Saving...";          // the server answers in a moment; the customer can see something is happening
+          }
+          const payload = {
+            addressLine: entry.addressLine,
+            city: entry.city,
+            postalCode: entry.postalCode,
+            phone: entry.phone,
+            isDefault: entry.isDefault,
+          };
+          if (editingAddressId !== null) payload.id = editingAddressId;
+          postJson(ADDRESS_SAVE_URL, payload)
+            .then(function (result) {
+              if (result.ok && result.data && result.data.success) {
+                addressEntries = result.data.addresses || [];
+                renderAddressList({ showSkeleton: true });
+                editAddressForm.reset();
+                editingAddressId = null;
+                if (editAddressTitle) {
+                  editAddressTitle.textContent = "Add address";
+                }
+                closeEditAddress();
+                return;
+              }
+              showAddressRequestError(result);
+            })
+            .catch(function () {
+              arabelaAlert({ title: "Address not saved", message: "We could not reach the server. Check your connection and try again. Nothing was saved." });
+            })
+            .then(function () {
+              addressRequestPending = false;
+              if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.textContent = saveLabel;
+              }
             });
-          }
-
-          if (editingAddressIndex !== null && addressEntries[editingAddressIndex]) {
-            addressEntries[editingAddressIndex] = entry;
-          } else {
-            addressEntries.push(entry);
-          }
-          saveAddressEntries();
-
-          renderAddressList({ showSkeleton: true });
-          editAddressForm.reset();
-          editingAddressIndex = null;
-          if (editAddressTitle) {
-            editAddressTitle.textContent = "Add address";
-          }
-          closeEditAddress();
         });
       }
       function renderAddressList(options) {
@@ -693,30 +761,21 @@
         }
         emptyAddressNotice.classList.add("hidden");
 
-        const orderedEntries = addressEntries
-          .map(function (item, originalIndex) {
-            return { item: item, originalIndex: originalIndex };
-          })
-          .sort(function (a, b) {
-            if (a.item.isDefault === b.item.isDefault) return a.originalIndex - b.originalIndex;
-            return a.item.isDefault ? -1 : 1;
-          });
-
-        const cardsMarkup = orderedEntries
-          .map(function (record) {
-            const item = record.item;
+        // The server sends them default first, then in the order they were added.
+        const cardsMarkup = addressEntries
+          .map(function (item) {
             return `
-              <article class="rounded-lg border border-gray-200 bg-white p-4 address-card-enter" data-index="${record.originalIndex}">
+              <article class="rounded-lg border border-gray-200 bg-white p-4 address-card-enter" data-id="${item.id}">
                 <div class="mb-2 flex items-center justify-between gap-3">
-                  <p class="text-sm font-medium text-gray-900">${item.addressLine || "Address"}</p>
+                  <p class="text-sm font-medium text-gray-900">${escapeHtml(item.addressLine) || "Address"}</p>
                   <div class="flex items-center gap-2">
                     ${item.isDefault ? '<span class="rounded-full bg-gray-100 px-2.5 py-1 text-[0.65rem] font-medium uppercase tracking-wide text-gray-600">Default address</span>' : ""}
-                    <button class="inline-flex h-6 w-6 items-center justify-center text-secondary transition-colors hover:text-secondary/70" type="button" data-action="edit-address" data-index="${record.originalIndex}" aria-label="Edit address">
+                    <button class="inline-flex h-6 w-6 items-center justify-center text-secondary transition-colors hover:text-secondary/70" type="button" data-action="edit-address" data-id="${item.id}" aria-label="Edit address">
                       <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                         <path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
                       </svg>
                     </button>
-                    <button class="inline-flex h-6 w-6 items-center justify-center text-secondary transition-colors hover:text-secondary/70" type="button" data-action="delete-address" data-index="${record.originalIndex}" aria-label="Delete address">
+                    <button class="inline-flex h-6 w-6 items-center justify-center text-secondary transition-colors hover:text-secondary/70" type="button" data-action="delete-address" data-id="${item.id}" aria-label="Delete address">
                       <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                         <path d="M19 7l-1 12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 7m3 0V5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m-9 0h10" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
                       </svg>
@@ -724,9 +783,9 @@
                   </div>
                 </div>
                 <div class="space-y-1 text-sm text-gray-700">
-                  ${item.city ? `<p>${item.city}</p>` : ""}
-                  ${item.postalCode ? `<p>${item.postalCode}</p>` : ""}
-                  ${item.phone ? `<p>${item.phone}</p>` : ""}
+                  ${item.city ? `<p>${escapeHtml(item.city)}</p>` : ""}
+                  ${item.postalCode ? `<p>${escapeHtml(item.postalCode)}</p>` : ""}
+                  ${item.phone ? `<p>${escapeHtml(item.phone)}</p>` : ""}
                 </div>
               </article>
             `;
@@ -765,19 +824,33 @@
           const actionBtn = event.target.closest("button[data-action]");
           if (!actionBtn) return;
           const action = actionBtn.getAttribute("data-action");
-          const idx = Number(actionBtn.getAttribute("data-index"));
-          if (!Number.isInteger(idx) || !addressEntries[idx]) return;
+          const id = Number(actionBtn.getAttribute("data-id"));
+          const current = addressEntries.find(function (entry) { return entry.id === id; });
+          if (!Number.isInteger(id) || !current) return;
 
           if (action === "delete-address") {
-            addressEntries.splice(idx, 1);
-            saveAddressEntries();
-            renderAddressList();
+            if (addressRequestPending) return;
+            addressRequestPending = true;
+            postJson(ADDRESS_DELETE_URL.replace(/\/0\/delete\/$/, "/" + id + "/delete/"), {})
+              .then(function (result) {
+                if (result.ok && result.data && result.data.success) {
+                  addressEntries = result.data.addresses || [];
+                  renderAddressList();
+                  return;
+                }
+                showAddressRequestError(result);
+              })
+              .catch(function () {
+                arabelaAlert({ title: "Address not deleted", message: "We could not reach the server. Check your connection and try again. Nothing was deleted." });
+              })
+              .then(function () {
+                addressRequestPending = false;
+              });
             return;
           }
 
           if (action === "edit-address") {
-            const current = addressEntries[idx];
-            editingAddressIndex = idx;
+            editingAddressId = id;
             if (addressLineInput) addressLineInput.value = current.addressLine || "";
             if (postalCodeInput) postalCodeInput.value = current.postalCode || "";
             if (cityInput) cityInput.value = current.city || "";
@@ -806,14 +879,39 @@
           clearFieldError(inputEl, errorEl);
         });
       });
-      const persistedAddresses = loadAddressEntries();
-      if (persistedAddresses.length) {
-        persistedAddresses.forEach(function (entry) {
-          addressEntries.push(entry);
-        });
+      // One time: an account with no saved addresses takes over the ones this browser had (the old, browser-only way of saving them), so
+      // nobody loses an address. Once tried it is never tried again, so deleting every address later cannot bring old ones back.
+      function importLegacyAddresses() {
+        let alreadyTried = false;
+        try { alreadyTried = !!localStorage.getItem(LEGACY_IMPORTED_FLAG); } catch (error) {}
+        if (alreadyTried) return;
+        const legacy = readLegacyAddresses();
+        if (!legacy.length) return;
+        postJson(ADDRESS_IMPORT_URL, { addresses: legacy })
+          .then(function (result) {
+            if (!(result.ok && result.data && result.data.success)) return;
+            try {
+              localStorage.setItem(LEGACY_IMPORTED_FLAG, "1");
+              // Everything copied: the browser's own copy is not needed. If some entries could not be kept, leave it where it is.
+              if (!result.data.skipped) localStorage.removeItem(LEGACY_ADDRESS_STORAGE_KEY);
+            } catch (error) {}
+            addressEntries = result.data.addresses || [];
+            renderAddressList({ showSkeleton: true });
+          })
+          .catch(function () {});
+      }
+
+      try {
+        const sent = JSON.parse(document.getElementById("saved-addresses-data").textContent || "[]");
+        addressEntries = Array.isArray(sent) ? sent : [];
+      } catch (error) {
+        addressEntries = [];
+      }
+      if (addressEntries.length) {
         renderAddressList({ showSkeleton: true });
       } else {
         renderAddressList();
+        importLegacyAddresses();
       }
     </script>
   {% include "partials/reservation_hold_banner.html" %}

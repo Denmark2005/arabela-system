@@ -140,3 +140,36 @@ class CustomerEmailLog(models.Model):
 
     def __str__(self):
         return f'{self.kind} -> {self.to_address or "(no address)"}: {self.outcome}'
+
+
+class SavedAddress(models.Model):
+    """One of a customer's saved addresses (Profile -> Addresses).
+
+    These used to live only in the browser (localStorage), so a default address never followed a customer to another phone or survived
+    clearing the browser. They are kept on the account now; the checkout fills its boxes from the default one (else the first).
+
+    At most one address per customer is the default -- the database itself refuses a second one (the partial unique constraint below), so
+    two taps or two devices at once can never leave two defaults. The limits and the field checks (4-digit postal code, 11-digit phone)
+    are applied in gowns.views (_clean_saved_address), the same ones the profile page has always applied in the browser."""
+
+    MAX_PER_CUSTOMER = 5
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='saved_addresses')
+    address_line = models.CharField(max_length=255)
+    city = models.CharField(max_length=100)
+    postal_code = models.CharField(max_length=10)
+    phone = models.CharField(max_length=20)
+    is_default = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # The default first, then in the order they were added.
+        ordering = ['-is_default', 'id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user'], condition=models.Q(is_default=True), name='one_default_address_per_customer',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.address_line}, {self.city} ({"default" if self.is_default else "saved"})'

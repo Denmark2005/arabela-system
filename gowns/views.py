@@ -19,7 +19,7 @@ from django.utils.dateparse import parse_datetime
 from django.views.decorators.http import require_http_methods
 
 from accounts import rate_limit
-from accounts.models import CustomerMessage, UserProfile
+from accounts.models import CustomerMessage, SavedAddress, UserProfile
 from accounts.services import (
     cancel_lockout_notice,
     record_abandoned_hold,
@@ -821,6 +821,8 @@ def reservation(request):
             "profile_display_name": profile_display_name,
             "profile_first_name": profile_first_name,
             "profile_last_name": profile_last_name,
+            # The default (else first) one fills the checkout's boxes -- saved on the account, so it works on any phone or laptop.
+            "saved_addresses": _saved_addresses_for(request.user) if request.user.is_authenticated else [],
             "checkout_lockout_seconds": lockout_seconds,
             "checkout_lockout_message": lockout_message,
         },
@@ -1581,5 +1583,184 @@ def profile(request):
             "display_name": profile.display_name,
             "profile_first_name": first_name,
             "profile_last_name": last_name,
+            "saved_addresses": _saved_addresses_for(request.user),
         },
     )
+
+
+# ---- saved addresses (Profile -> Addresses) -------------------------------------------------------------------------------
+# Kept on the account (accounts.models.SavedAddress), so a default address follows a customer to another phone. The page talks to
+# these three endpoints; every one answers with the customer's whole, up-to-date list so the page never has to guess.
+# [0-9], not \d: \d also matches digits of other scripts.
+def _address_dict(address):
+    return {
+        "id": address.id, "addressLine": address.address_line, "city": address.city,
+        "postalCode": address.postal_code, "phone": address.phone, "isDefault": address.is_default,
+    }
+
+
+def _saved_addresses_for(user):
+    """The customer's saved addresses as plain dicts, default first -- what the profile page and the checkout both read."""
+    return [_address_dict(address) for address in SavedAddress.objects.filter(user=user)]
+
+
+def _clean_saved_address(data, *, lenient=False):
+    """(cleaned fields, {field: message}) for one address as the page sends it.
+
+    The same checks the profile page has always made in the browser (all four boxes required, a 4-digit postal code, an 11-digit
+    phone), now made on the server too, because the browser's checks can be skipped. `lenient` is for the one-time copy of addresses
+    saved in the browser before this existed: those must not be lost for failing a rule they were never held to, so only the
+    address itself is required and long text is cut to fit."""
+    if not isinstance(data, dict):
+        return None, {"form": "That address could not be read."}
+
+    def text(key):
+        value = data.get(key)
+        return value.strip() if isinstance(value, str) else ""
+
+    address_line, city, postal_code, phone = text("addressLine"), text("city"), text("postalCode"), text("phone")
+    cleaned = {
+        "address_line": address_line, "city": city, "postal_code": postal_code, "phone": phone,
+        "is_default": data.get("isDefault") is True,
+    }
+    errors = {}
+    if lenient:
+        if not address_line:
+            errors["addressLine"] = "This field is required."
+        cleaned["address_line"] = address_line[:255]
+        cleaned["city"] = city[:100]
+        cleaned["postal_code"] = postal_code[:10]
+        cleaned["phone"] = phone[:20]
+        return cleaned, errors
+    if not address_line:
+        errors["addressLine"] = "This field is required."
+    elif len(address_line) > 255:
+        errors["addressLine"] = "Address is too long."
+    if not postal_code:
+        errors["postalCode"] = "This field is required."
+    elif not re.fullmatch(r"[0-9]{4}", postal_code):
+        errors["postalCode"] = "Zip code is not valid"
+    if not city:
+        errors["city"] = "This field is required."
+    elif len(city) > 100:
+        errors["city"] = "City is too long."
+    if not phone:
+        errors["phone"] = "This field is required."
+    elif not re.fullmatch(r"[0-9]{11}", phone):
+        errors["phone"] = "Number invalid"
+    return cleaned, errors
+
+
+def _address_request(request):
+    """(user, data, None) for a signed-in customer's JSON request, else (None, None, the JsonResponse to send back)."""
+    if not request.user.is_authenticated:
+        return None, None, JsonResponse({"success": False, "error": "Please sign in again."}, status=401)
+    try:
+        data = json.loads(request.body or "{}")
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        data = None
+    if not isinstance(data, dict):
+        return None, None, JsonResponse({"success": False, "error": "Invalid request."}, status=400)
+    return request.user, data, None
+
+
+def _lock_customer(user):
+    """Serialises one customer's address changes (two taps, two devices), so the limit and the one-default rule hold even then.
+    Must run inside transaction.atomic()."""
+    UserProfile.objects.get_or_create(user=user)
+    UserProfile.objects.select_for_update().get(user=user)
+
+
+@require_http_methods(["POST"])
+def profile_address_save(request):
+    """Add an address ({addressLine, city, postalCode, phone, isDefault}) or, with an "id", change one of the customer's own."""
+    user, data, refusal = _address_request(request)
+    if refusal:
+        return refusal
+    address_id = data.get("id")
+    if address_id is not None and (isinstance(address_id, bool) or not isinstance(address_id, int)):
+        return JsonResponse({"success": False, "error": "Invalid request."}, status=400)
+    cleaned, errors = _clean_saved_address(data)
+    if errors:
+        return JsonResponse({"success": False, "errors": errors}, status=400)
+
+    with transaction.atomic():
+        _lock_customer(user)
+        if address_id is None:
+            if SavedAddress.objects.filter(user=user).count() >= SavedAddress.MAX_PER_CUSTOMER:
+                return JsonResponse({
+                    "success": False,
+                    "error": f"You can save up to {SavedAddress.MAX_PER_CUSTOMER} addresses. Delete one to add another.",
+                }, status=400)
+            address = SavedAddress(user=user)
+        else:
+            address = SavedAddress.objects.filter(user=user, pk=address_id).first()
+            if address is None:
+                return JsonResponse({
+                    "success": False, "error": "That address no longer exists. Please refresh the page.",
+                }, status=404)
+        if cleaned["is_default"]:
+            others = SavedAddress.objects.filter(user=user, is_default=True)
+            if address.pk:
+                others = others.exclude(pk=address.pk)
+            others.update(is_default=False)      # before this one is saved, so the one-default rule is never broken even for an instant
+        address.address_line = cleaned["address_line"]
+        address.city = cleaned["city"]
+        address.postal_code = cleaned["postal_code"]
+        address.phone = cleaned["phone"]
+        address.is_default = cleaned["is_default"]
+        address.save()
+    return JsonResponse({"success": True, "addresses": _saved_addresses_for(user)})
+
+
+@require_http_methods(["POST"])
+def profile_address_delete(request, pk):
+    """Delete one of the customer's own addresses. Deleting one that is already gone is not an error (a double tap)."""
+    user, data, refusal = _address_request(request)
+    if refusal:
+        return refusal
+    with transaction.atomic():
+        _lock_customer(user)
+        SavedAddress.objects.filter(user=user, pk=pk).delete()
+    return JsonResponse({"success": True, "addresses": _saved_addresses_for(user)})
+
+
+@require_http_methods(["POST"])
+def profile_address_import(request):
+    """One-time copy of the addresses a customer saved in this browser before they lived on the account.
+
+    Only ever copies into an account that has none (so a second device, or a second call, can never duplicate or overwrite anything), keeps
+    at most the limit, drops exact repeats, and keeps at most one default -- the first one marked. Answers with the list as it now is."""
+    user, data, refusal = _address_request(request)
+    if refusal:
+        return refusal
+    entries = data.get("addresses")
+    if not isinstance(entries, list) or len(entries) > 50:
+        return JsonResponse({"success": False, "error": "Invalid request."}, status=400)
+
+    with transaction.atomic():
+        _lock_customer(user)
+        if SavedAddress.objects.filter(user=user).exists():
+            return JsonResponse({"success": True, "imported": 0, "skipped": 0, "addresses": _saved_addresses_for(user)})
+        seen, cleaned_entries, skipped = set(), [], 0
+        for entry in entries:
+            cleaned, errors = _clean_saved_address(entry, lenient=True)
+            key = (cleaned["address_line"], cleaned["city"], cleaned["postal_code"], cleaned["phone"]) if cleaned else None
+            if errors or key in seen:
+                skipped += 1
+                continue
+            seen.add(key)
+            cleaned_entries.append(cleaned)
+        skipped += max(0, len(cleaned_entries) - SavedAddress.MAX_PER_CUSTOMER)
+        cleaned_entries = cleaned_entries[:SavedAddress.MAX_PER_CUSTOMER]
+        default_taken = False
+        for cleaned in cleaned_entries:
+            is_default = cleaned["is_default"] and not default_taken
+            default_taken = default_taken or is_default
+            SavedAddress.objects.create(
+                user=user, address_line=cleaned["address_line"], city=cleaned["city"], postal_code=cleaned["postal_code"],
+                phone=cleaned["phone"], is_default=is_default,
+            )
+        return JsonResponse({
+            "success": True, "imported": len(cleaned_entries), "skipped": skipped, "addresses": _saved_addresses_for(user),
+        })

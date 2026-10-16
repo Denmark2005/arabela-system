@@ -405,6 +405,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
+{{ saved_addresses|json_script:"saved-addresses-data" }}
 <script src="{% static 'js/checkout-fields.js' %}?v={{ site_asset_version }}"></script>
 <script>
     (function () {
@@ -419,6 +420,7 @@
         var DRAFT_KEY = 'arabela_checkout_draft_' + USER_STORAGE_KEY;
         var DRAFT_FIELD_IDS = ['first_name', 'last_name', 'address', 'city', 'postal', 'phone', 'gcash_reference'];
         var PROFILE_ADDRESS_STORAGE_KEY = 'arabela_profile_addresses_v1_' + USER_STORAGE_KEY;
+        var PROFILE_ADDRESS_IMPORTED_FLAG = 'arabela_profile_addresses_imported_' + USER_STORAGE_KEY;
         var PROFILE_FIRST_NAME = "{{ profile_first_name|default:''|escapejs }}";
         var PROFILE_LAST_NAME = "{{ profile_last_name|default:''|escapejs }}";
         var PROFILE_DISPLAY_NAME = "{{ profile_display_name|default:''|escapejs }}";
@@ -504,7 +506,17 @@
             return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
         }
 
+        // The customer's saved addresses come from their ACCOUNT (sent with this page, so any phone or laptop has them). An account with none
+        // yet falls back to what this browser kept before addresses lived on the account -- until the profile page has copied those over
+        // (it sets the imported flag, after which an empty account really means "no addresses").
         function getStoredProfileAddresses() {
+            try {
+                var sent = JSON.parse((document.getElementById('saved-addresses-data') || {}).textContent || '[]');
+                if (Array.isArray(sent) && sent.length) return sent;
+            } catch (errSent) {}
+            try {
+                if (localStorage.getItem(PROFILE_ADDRESS_IMPORTED_FLAG)) return [];
+            } catch (errFlag) {}
             try {
                 var raw = localStorage.getItem(PROFILE_ADDRESS_STORAGE_KEY);
                 if (!raw) return [];
