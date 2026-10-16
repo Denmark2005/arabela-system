@@ -2,6 +2,8 @@ from django.contrib.auth import logout
 from django.shortcuts import redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 
+from accounts import login_next
+
 
 def _allowed_next_url(request, candidate) -> str:
     url = (candidate or '').strip()
@@ -34,8 +36,12 @@ def login_view(request):
     the customer there once the Google round-trip completes."""
     if request.user.is_authenticated:
         return redirect('gowns:homepage')
+    next_url = _allowed_next_url(request, request.GET.get('next'))
+    # Remember where they are headed for a few minutes: if Google's answer arrives twice (see accounts.login_next), the repeat
+    # puts them back there instead of on the homepage.
+    login_next.remember(request, next_url)
     return render(request, 'login.html', {
-        'next': _allowed_next_url(request, request.GET.get('next')),
+        'next': next_url,
         'error': SIGN_IN_PROBLEMS.get(request.GET.get('problem', ''), ''),
     })
 

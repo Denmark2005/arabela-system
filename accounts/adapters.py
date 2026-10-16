@@ -6,6 +6,9 @@ from allauth.socialaccount.providers.base import AuthError
 from django.contrib.auth import get_user_model
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.utils.http import urlencode
+
+from . import login_next
 
 logger = logging.getLogger(__name__)
 
@@ -31,16 +34,19 @@ def _refuse_staff(request):
 class ArabelaSocialAccountAdapter(DefaultSocialAccountAdapter):
     def on_authentication_error(self, request, provider, error=None, exception=None, extra_context=None):
         """Google's answer could not be used. Instead of allauth's bare "Third-Party Login Failure" page:
-          * someone who is ALREADY signed in just goes to the homepage. The usual cause is the same Google answer arriving
-            twice (a second tap on the account, a refresh, a slow connection): the first one signed them in and only the
-            repeat failed -- there is nothing to tell them;
-          * anyone else goes back to the login page, which says what happened and to try once more.
+          * someone who is ALREADY signed in goes back to where they were headed (usually the checkout page), or the homepage when
+            that is not known. The usual cause is the same Google answer arriving twice -- a second tap on the account, a slow
+            connection, or Chrome replaying the whole sign-in when "Desktop site" is switched on or off. The first answer already
+            signed them in and only the repeat failed, so there is nothing to tell them and they must not lose their place;
+          * anyone else goes back to the login page, which says what happened and to try once more (keeping where they were headed).
         The login page is a redirect (not the callback URL itself), so a refresh can never replay the failed answer."""
+        destination = login_next.recall(request)
         if request.user.is_authenticated:
-            raise ImmediateHttpResponse(redirect("gowns:homepage"))
+            raise ImmediateHttpResponse(redirect(destination or reverse("gowns:homepage")))
         logger.warning("Google sign-in did not finish: error=%s exception=%r", error, exception)
         problem = "cancelled" if error in (AuthError.CANCELLED, AuthError.DENIED) else "incomplete"
-        raise ImmediateHttpResponse(redirect(f"{reverse('accounts:login')}?problem={problem}"))
+        query = {"problem": problem, **({"next": destination} if destination else {})}
+        raise ImmediateHttpResponse(redirect(f"{reverse('accounts:login')}?{urlencode(query)}"))
 
     def pre_social_login(self, request, sociallogin):
         # A Google sign-in that was already linked to a staff account (an older sign-in that matched by email).
