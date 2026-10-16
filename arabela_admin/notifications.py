@@ -199,7 +199,7 @@ def build_items(user):
     # A gown still at Pick-up never left the shop, so it cannot be overdue for return -- that is a missed pick-up, below.
     overdue_items = (
         ReservationItem.objects.filter(return_date__lt=today)
-        .exclude(stage__in=[ReservationItem.Stage.RETURNED, ReservationItem.Stage.PICKUP])
+        .exclude(stage__in=[*ReservationItem.FINISHED_STAGES, ReservationItem.Stage.PICKUP])
         .exclude(reservation__status__in=[
             Reservation.Status.REJECTED,
             Reservation.Status.CANCELLED,
@@ -247,9 +247,10 @@ def build_items(user):
     late_by_booking = {}
     for it in late_pickup_items:
         late_by_booking.setdefault(it.reservation_id, []).append(it)
+    # "Partly out" = a gown really went out. A gown the shop already cancelled never did, so it doesn't count.
     partly_out = set(
         ReservationItem.objects.filter(reservation_id__in=late_by_booking)
-        .exclude(stage=ReservationItem.Stage.PICKUP)
+        .exclude(stage__in=[ReservationItem.Stage.PICKUP, ReservationItem.Stage.CANCELLED])
         .values_list("reservation_id", flat=True)
     )
     for reservation_id, group in list(late_by_booking.items())[:10]:

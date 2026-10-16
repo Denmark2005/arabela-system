@@ -76,7 +76,9 @@ class Reservation(models.Model):
         automatic) keeps its recorded date."""
         if self.deposit_returned_at:
             return timezone.localtime(self.deposit_returned_at).date()
-        items = list(self.items.all())
+        # A gown cancelled before pick-up never went out, so it can't hold the deposit up: what counts is every gown
+        # that was really rented.
+        items = [i for i in self.items.all() if i.stage != ReservationItem.Stage.CANCELLED]
         if not items or any(i.stage != ReservationItem.Stage.RETURNED for i in items):
             return None
         return max(i.returned_on or timezone.localtime(i.updated_at).date() for i in items)
@@ -250,6 +252,14 @@ class ReservationItem(models.Model):
         RETURN = 'Return', 'Return'
         OVERDUE = 'Overdue', 'Overdue'
         RETURNED = 'Returned', 'Returned'
+        # Staff cancelled just this gown (it was never picked up); the rest of the booking carries on. Like RETURNED
+        # it is final -- the gown holds nothing any more -- but it never went out, so it is NOT a rental that was
+        # completed. See reservations.cancellation.cancel_gowns_by_staff.
+        CANCELLED = 'Cancelled', 'Cancelled'
+
+    # Stages in which a gown holds nothing any more: it is back, or its booking line was cancelled. Every "is this gown
+    # still tied up?" question (availability, the calendar, conflicts, the delete guard) leaves these out.
+    FINISHED_STAGES = (Stage.RETURNED, Stage.CANCELLED)
 
     class ReturnCondition(models.TextChoices):
         """Set by staff on the Mark Returned step (post-checkin, before the deposit is
@@ -346,7 +356,8 @@ class ReservationItem(models.Model):
             Reservation.Status.PENDING, Reservation.Status.CONFIRMED, Reservation.Status.ACTIVE,
         ):
             return False
-        return not self.reservation.items.exclude(stage=self.Stage.PICKUP).exists()
+        # A sibling the shop already cancelled never went out, so it doesn't stop the customer cancelling the rest.
+        return not self.reservation.items.exclude(stage__in=[self.Stage.PICKUP, self.Stage.CANCELLED]).exists()
 
     @property
     def gown_held_by_another_active_item(self):
@@ -356,7 +367,7 @@ class ReservationItem(models.Model):
         cancel). The same physical gown can be booked again for a later, non-overlapping
         date range, so a second ReservationItem pointing at it is normal; finishing THIS
         one must never clobber the status a still-active sibling booking depends on.
-        Excludes Returned items and Rejected/Cancelled reservations. Also excludes
+        Excludes finished items (Returned, or cancelled by the shop) and Rejected/Cancelled reservations. Also excludes
         PENDING ones: Gown.status only becomes Reserved when a booking is APPROVED
         (reservation_approve_view), so a booking still awaiting approval never made the
         gown Reserved and must not keep it Reserved either -- before this, one stale
@@ -369,7 +380,7 @@ class ReservationItem(models.Model):
         return (
             ReservationItem.objects.filter(gown_id=self.gown_id)
             .exclude(id=self.id)
-            .exclude(stage=self.Stage.RETURNED)
+            .exclude(stage__in=self.FINISHED_STAGES)
             .exclude(reservation__status__in=[
                 Reservation.Status.PENDING, Reservation.Status.REJECTED, Reservation.Status.CANCELLED,
             ])

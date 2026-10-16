@@ -50,6 +50,7 @@ RECEIVED = "received"
 APPROVED = "approved"
 REJECTED = "rejected"
 CANCELLED = "cancelled"
+GOWN_CANCELLED = "gown_cancelled"
 DEPOSIT_SETTLED = "deposit_settled"
 REMINDER = "reminder"
 OVERDUE = "overdue"
@@ -61,6 +62,7 @@ KIND_LABELS = {
     APPROVED: "Reservation approved",
     REJECTED: "Reservation rejected",
     CANCELLED: "Reservation cancelled by Arabela",
+    GOWN_CANCELLED: "Gown cancelled by Arabela",
     DEPOSIT_SETTLED: "Security deposit settled",
     REMINDER: "Pick-up / return reminder",
     OVERDUE: "Overdue notice",
@@ -77,6 +79,10 @@ EVENT_KINDS = {
     # staff cancelled it (reservations.cancellation.SHOP_CANCEL_LABEL; a test keeps the two in step). The customer's own
     # "Reservation cancelled" is deliberately NOT here: they did it themselves.
     "Reservation cancelled by Arabela": CANCELLED,
+    # staff cancelled only some gowns of a booking (reservations.cancellation.GOWN_CANCEL_LABEL / GOWNS_CANCEL_LABEL): the rest of the
+    # reservation carries on, so it gets its own wording instead of "your reservation was cancelled".
+    "Gown cancelled by Arabela": GOWN_CANCELLED,
+    "Gowns cancelled by Arabela": GOWN_CANCELLED,
     "Security deposit settled": DEPOSIT_SETTLED,
 }
 # A staff double-click on Approve writes the same event twice; the second one is not emailed.
@@ -242,6 +248,16 @@ def _content(kind, data, shop):
                   "text": data.get("reason") or "Please contact the shop for details."},
             summary=True,
         )
+    elif kind == GOWN_CANCELLED:
+        content.update(
+            subject=f"A gown in your reservation {code} was cancelled",
+            heading="A gown in your reservation was cancelled",
+            preheader="Arabela cancelled part of your reservation. The rest is unchanged.",
+            paragraphs=[f"Arabela cancelled part of your reservation {code}. The rest of your reservation is unchanged.",
+                        f"If you have any questions, including about your payment, {reach_us}"],
+            note={"tone": "quiet", "title": "What was cancelled",
+                  "text": data.get("reason") or "Please contact the shop for details."},
+        )
     elif kind == DEPOSIT_SETTLED:
         content.update(
             subject=f"Your security deposit is settled - {code}",
@@ -331,7 +347,11 @@ def build_email(kind, data, *, base_url=None, shop=None, inline_logo=False):
 
 # ---- the data behind each kind ---------------------------------------------------------------------------------
 def _reservation_data(reservation, text=""):
-    items = [(item.gown_name, _date_range(item.rental_date, item.return_date)) for item in reservation.items.all()]
+    # A gown the shop cancelled before pick-up is no longer part of the reservation, so it isn't listed as if it still were
+    # (unless every gown was cancelled, when the cancelled booking lists them all).
+    every = list(reservation.items.all())
+    kept = [item for item in every if item.stage != item.Stage.CANCELLED] or every
+    items = [(item.gown_name, _date_range(item.rental_date, item.return_date)) for item in kept]
     return {
         "first_name": _first_name(reservation.customer_name),
         "reference_code": reservation.reference_code,
@@ -576,15 +596,19 @@ def _email_for_event(event_id, kind):
     event = ReservationStatusEvent.objects.select_related("reservation__customer").get(pk=event_id)
     # Only an EARLIER identical event suppresses this one. (If both a double-click's events looked at "any other
     # one", each would skip itself and the customer would get nothing.)
-    if ReservationStatusEvent.objects.filter(
+    earlier = ReservationStatusEvent.objects.filter(
         reservation_id=event.reservation_id, label=event.label, pk__lt=event.pk,
         occurred_at__gte=event.occurred_at - DUPLICATE_WINDOW,
-    ).exists():
+    )
+    if kind == GOWN_CANCELLED:
+        # Two DIFFERENT gowns cancelled a minute apart are two real notices; only the very same line twice is a double click.
+        earlier = earlier.filter(detail=event.detail)
+    if earlier.exists():
         logger.info("Customer email skipped (same event just sent): kind=%s", kind)
         return
     reservation = event.reservation
     data = _reservation_data(reservation, text=event.detail if kind == DEPOSIT_SETTLED else "")
-    if kind in (REJECTED, CANCELLED):
+    if kind in (REJECTED, CANCELLED, GOWN_CANCELLED):
         data["reason"] = event.detail
     _deliver(reservation.customer, kind, data)
 
@@ -656,6 +680,8 @@ def sample_data(kind):
     }
     if kind == CANCELLED:
         data["reason"] = "The gown was not picked up."
+    if kind == GOWN_CANCELLED:
+        data["reason"] = "Wedding Gown 17 and Evening Gown 4: The gowns were not picked up."
     data["text"] = {
         DEPOSIT_SETTLED: "Your security deposit has been settled. This reservation is complete.",
         REMINDER: "Reminder: Wedding Gown 17 is due back tomorrow, October 17, 2026. Returning on time keeps your "

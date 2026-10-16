@@ -164,7 +164,8 @@ def bookable_units(label: str, name: str):
 def load_busy_ranges(unit_ids, today: date, horizon_days: int, exclude_block_id=None):
     """(bookings_by_unit, blocks_by_unit): the date ranges each unit is spoken for from today on.
 
-    bookings = customers' reservations (stage 'Returned' releases a unit; Rejected/Cancelled never held it);
+    bookings = customers' reservations (a gown that is Returned, or that staff cancelled before pick-up, releases its unit;
+    Rejected/Cancelled bookings never held it);
     blocks = GownUnavailability rows (staff blocks and the automatic cooldown). `exclude_block_id` leaves one block out,
     which is how the admin asks "what would opening up if staff released this one?". Reads a little past the horizon so
     the rest days of the last bookable events are checked against real bookings too."""
@@ -175,7 +176,7 @@ def load_busy_ranges(unit_ids, today: date, horizon_days: int, exclude_block_id=
         return bookings, blocks
     booked = (
         ReservationItem.objects.filter(gown_id__in=unit_ids, return_date__gte=today, rental_date__lte=far)
-        .exclude(stage=ReservationItem.Stage.RETURNED)
+        .exclude(stage__in=ReservationItem.FINISHED_STAGES)
         .exclude(reservation__status__in=[Reservation.Status.REJECTED, Reservation.Status.CANCELLED])
         .values_list("gown_id", "rental_date", "return_date")
     )

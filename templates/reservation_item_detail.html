@@ -269,7 +269,7 @@
               {% elif variation == "cancelled" %}
                 <span class="mb-6 inline-flex w-fit items-center gap-1.5 rounded-full bg-neutral-100 px-3 py-1 text-[0.625rem] font-bold uppercase tracking-widest text-neutral-600">
                   <span class="material-symbols-outlined text-[14px]">cancel</span>
-                  Reservation Cancelled
+                  {% if gown_cancelled %}Gown Cancelled{% else %}Reservation Cancelled{% endif %}
                 </span>
               {% elif variation == "returned" %}
                 <span class="mb-6 inline-flex w-fit items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-600 px-3 py-1 text-[0.625rem] font-bold uppercase tracking-widest">
@@ -341,10 +341,10 @@
               {% elif variation == "rejected" or variation == "cancelled" %}
                 <div class="{% if variation == 'rejected' %}bg-red-50 border-red-200{% else %}bg-neutral-50 border-neutral-200{% endif %} border-l-2 p-6">
                   <label class="mb-2 block text-[0.6875rem] font-semibold uppercase tracking-[0.1rem] {% if variation == 'rejected' %}text-red-800{% else %}text-neutral-600{% endif %}">
-                    {% if variation == "rejected" %}Reason for rejection{% else %}Cancelled reservation{% endif %}
+                    {% if variation == "rejected" %}Reason for rejection{% elif gown_cancelled %}Cancelled gown{% else %}Cancelled reservation{% endif %}
                   </label>
                   <p class="text-sm leading-relaxed {% if variation == 'rejected' %}text-red-700/80{% else %}text-secondary/70{% endif %}">
-                    {% if variation == "rejected" %}{{ rejection_reason|default:"No specific reason was provided. Please contact us if you'd like more details." }}{% else %}This reservation was cancelled and will not be fulfilled.{% endif %}
+                    {% if variation == "rejected" %}{{ rejection_reason|default:"No specific reason was provided. Please contact us if you'd like more details." }}{% elif gown_cancelled %}Arabela cancelled this gown, so it will not be fulfilled. The rest of your reservation is unchanged. Please check your Messages for the reason, or contact Arabela if you have any questions.{% else %}This reservation was cancelled and will not be fulfilled.{% endif %}
                   </p>
                 </div>
               {% else %}
@@ -484,7 +484,7 @@
           {% for si in reservation_items %}
             <div class="flex items-start justify-between gap-4 border-b border-black/5 pb-5">
               <div>
-                <p class="text-sm font-medium text-secondary">{{ si.gown_name }}</p>
+                <p class="text-sm font-medium text-secondary">{{ si.gown_name }}{% if si.stage == "Cancelled" %} <span class="text-xs font-normal text-secondary/60">&middot; Cancelled</span>{% endif %}</p>
                 <p class="text-xs text-secondary/60">{% if si.size %}Size {{ si.size }} &middot; {% endif %}{{ si.rental_date|date:"M d" }}&ndash;{{ si.return_date|date:"M d, Y" }}</p>
               </div>
               <p class="whitespace-nowrap text-sm font-semibold text-secondary">PHP {{ si.rental_price|floatformat:2 }}</p>

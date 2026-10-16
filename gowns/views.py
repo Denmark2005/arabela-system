@@ -461,7 +461,7 @@ def _find_available_unit(gown_name, rental_date, return_date, *, gown_slug="", s
     above -- keep the two in sync:
       * Out-of-Stock units are not in the bookable pool at all.
       * A ReservationItem whose window overlaps occupies its unit, unless its stage is
-        'Returned' or its reservation is Rejected/Cancelled.
+        'Returned' or 'Cancelled' (staff cancelled just that gown) or its reservation is Rejected/Cancelled.
       * A GownUnavailability whose [start_date, end_date] overlaps occupies its unit.
       * Gown.status == 'Reserved' does NOT disqualify anything -- that flag is set for
         the whole life of a booking (arabela_admin.views.reservation_approve_view), so
@@ -552,7 +552,7 @@ def _find_available_unit(gown_name, rental_date, return_date, *, gown_slug="", s
             rental_date__lte=return_date,
             return_date__gte=rental_date,
         )
-        .exclude(stage=ReservationItem.Stage.RETURNED)
+        .exclude(stage__in=ReservationItem.FINISHED_STAGES)
         .exclude(
             reservation__status__in=[
                 Reservation.Status.REJECTED,
@@ -578,7 +578,7 @@ def _find_available_unit(gown_name, rental_date, return_date, *, gown_slug="", s
                 rental_date__lte=return_date + timedelta(days=rest_days),
                 return_date__gte=return_date + timedelta(days=1),
             )
-            .exclude(stage=ReservationItem.Stage.RETURNED)
+            .exclude(stage__in=ReservationItem.FINISHED_STAGES)
             .exclude(
                 reservation__status__in=[
                     Reservation.Status.REJECTED,
@@ -1254,7 +1254,7 @@ def _variation_for(reservation, item):
         return "pending"
     if reservation.status == Reservation.Status.REJECTED:
         return "rejected"
-    if reservation.status == Reservation.Status.CANCELLED:
+    if reservation.status == Reservation.Status.CANCELLED or item.stage == ReservationItem.Stage.CANCELLED:
         return "cancelled"
     if item.stage == ReservationItem.Stage.RETURNED:
         return "returned"
@@ -1278,6 +1278,11 @@ def reservation_item_detail(request, item_id):
             "reservation": reservation,
             "item": item,
             "variation": _variation_for(reservation, item),
+            # Only THIS gown was cancelled (by the shop) and the rest of the booking carries on -- the page says so
+            # instead of claiming the whole reservation was cancelled.
+            "gown_cancelled": (
+                item.stage == ReservationItem.Stage.CANCELLED and reservation.status != Reservation.Status.CANCELLED
+            ),
             "gown_photo": gown_photo,
             "rejection_reason": (
                 (reservation.notes or "").strip()
@@ -1321,6 +1326,8 @@ def reservation_item_cancel(request, item_id):
     # by another still-active reservation -- cancelling this one must never clobber
     # the Reserved status that sibling booking still legitimately needs.
     for sibling in reservation.items.select_related('gown').all():
+        if sibling.stage == ReservationItem.Stage.CANCELLED:
+            continue    # the shop already cancelled this one and released its gown
         if (sibling.gown_id and sibling.gown.status == Gown.Status.RESERVED
                 and not sibling.gown_held_by_another_active_item):
             sibling.gown.status = Gown.Status.AVAILABLE

@@ -1140,7 +1140,8 @@
                       {% endif %}
                       <td class="px-5 py-4 sm:px-6">
                         <div class="flex items-center gap-2">
-                          <p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ item.gown_name }}</p>
+                          <p class="text-gray-500 text-theme-sm dark:text-gray-400"{% if item.stage == "Cancelled" %} style="text-decoration: line-through; opacity: .65;"{% endif %}>{{ item.gown_name }}</p>
+                          {% if item.stage == "Cancelled" %}<span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">Cancelled</span>{% endif %}
                           {% if item_count > 1 %}
                           <span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ forloop.counter }} of {{ item_count }}</span>
                           {% endif %}

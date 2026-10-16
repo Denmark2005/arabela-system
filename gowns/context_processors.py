@@ -247,7 +247,7 @@ def reservations_with_news_count(user):
     active_items = (
         ReservationItem.objects
         .filter(reservation__customer=user)
-        .exclude(stage=ReservationItem.Stage.RETURNED)
+        .exclude(stage__in=ReservationItem.FINISHED_STAGES)
         .exclude(reservation__status__in=[Reservation.Status.REJECTED, Reservation.Status.CANCELLED])
     )
 

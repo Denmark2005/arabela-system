@@ -1135,7 +1135,7 @@
                         {% endif %}
                         <td class="px-5 py-4 sm:px-6">
                           <div class="flex items-center gap-2">
-                            <p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ item.gown_name }}</p>
+                            <p class="text-gray-500 text-theme-sm dark:text-gray-400"{% if item.stage == "Cancelled" %} style="text-decoration: line-through; opacity: .65;"{% endif %}>{{ item.gown_name }}</p>
                             {% if item_count > 1 %}
                             <span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ forloop.counter }} of {{ item_count }}</span>
                             {% endif %}
@@ -1153,7 +1153,7 @@
                             <span class="inline-flex items-center rounded-full px-2 py-0.5 text-theme-xs font-medium {% if remark.tone == 'warning' %}bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400{% elif remark.tone == 'success' %}bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500{% elif remark.tone == 'primary' %}bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400{% elif remark.tone == 'danger' %}bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500{% else %}bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400{% endif %}">{{ remark.text }}</span>
                             {% endfor %}
                           </div>
-                          {% if item.stage != "Returned" %}
+                          {% if item.stage != "Returned" and item.stage != "Cancelled" %}
                           <div class="mt-1.5 flex flex-wrap items-center gap-2" data-item-actions="{{ item.id }}">
                             <button type="button"
                               class="resv-remind-btn inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
@@ -1177,6 +1177,19 @@
                                  the page on every click -- exactly the "unnecessary movement" this was
                                  built to avoid. -->
                             <button type="button" class="resv-mark-returned-btn inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200" data-item-id="{{ item.id }}">Mark Returned</button>
+                            {% endif %}
+                            {% if item.can_cancel_gown %}
+                            <!-- Cancels just this gown (nobody picked it up); the rest of the booking carries on.
+                                 Opens the small confirm window in partials/cancel_booking.html. -->
+                            <button type="button" class="cb-open-btn cb-open-btn--small{% if item.cancel_urgent %} cb-open-btn--urgent{% endif %}"
+                              title="{% if item.cancel_urgent %}The event date has passed and this gown was never picked up{% else %}Cancel just this gown{% endif %}"
+                              data-mode="gown" data-ids="{{ item.id }}"
+                              data-url="{% url 'arabela_admin:reservation_cancel_gowns' r.id %}"
+                              data-ref="{{ r.reference_code }}"
+                              data-customer="{{ r.display_customer_name }}"
+                              data-gowns="{{ item.gown_name }}"
+                              data-event="{{ item.cancel_event_text }}"
+                              data-reason="{{ item.cancel_default_reason }}">Cancel gown</button>
                             {% endif %}
                           </div>
                           {% endif %}
@@ -1209,7 +1222,7 @@
                           </p>
                           {% if item.returned_on %}
                           <p class="mt-1 text-theme-xs text-gray-400 dark:text-gray-400">Returned {{ item.returned_on|date:"M j" }}</p>
-                          {% elif item.stage != "Returned" %}
+                          {% elif item.stage != "Returned" and item.stage != "Cancelled" %}
                           <button type="button" class="resv-change-date-btn mt-1.5 inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
                             data-kind="return" data-item-id="{{ item.id }}"
                             data-current="{{ item.return_date|date:'Y-m-d' }}"
@@ -1258,6 +1271,20 @@
                               data-event="{{ r.cancel_event_text }}"
                               data-deposit="&#8369;{{ r.security_deposit|floatformat:'2g' }}"
                               data-reason="{{ r.cancel_default_reason }}">Cancel booking</button>
+                            {% endif %}
+                            {% if r.show_cancel_unpicked %}
+                            <!-- A booking where some gowns went out or came back, so it can't be cancelled whole: one button
+                                 cancels every gown nobody picked up. The exact gowns are sent, so one that changed since this
+                                 page loaded is refused instead of cancelled by surprise. -->
+                            <button type="button" class="cb-open-btn{% if r.unpicked_urgent %} cb-open-btn--urgent{% endif %}"
+                              title="Cancel the {{ r.unpicked_count }} gowns nobody picked up. Gowns that went out or came back are not touched."
+                              data-mode="gowns" data-ids="{{ r.unpicked_ids }}"
+                              data-url="{% url 'arabela_admin:reservation_cancel_gowns' r.id %}"
+                              data-ref="{{ r.reference_code }}"
+                              data-customer="{{ r.display_customer_name }}"
+                              data-gowns="{{ r.unpicked_names }}"
+                              data-event="{{ r.unpicked_event_text }}"
+                              data-reason="{{ r.unpicked_default_reason }}">Cancel all not picked up ({{ r.unpicked_count }})</button>
                             {% endif %}
                           </div>
                         </td>

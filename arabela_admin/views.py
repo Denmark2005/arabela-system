@@ -155,7 +155,7 @@ def dashboard_view(request):
     next_month_start = (month_start + timedelta(days=32)).replace(day=1)
     reservations_this_month = (
         Reservation.objects.exclude(status__in=_NON_RENTAL_STATUSES)
-        .annotate(first_pickup=Min("items__rental_date"))
+        .annotate(first_pickup=Min("items__rental_date", filter=~Q(items__stage=ReservationItem.Stage.CANCELLED)))
         .filter(first_pickup__gte=month_start, first_pickup__lt=next_month_start)
         .count()
     )
@@ -310,6 +310,16 @@ def _plural_days(n):
     return f"{n} day{'s' if n != 1 else ''}"
 
 
+def _event_when_text(event, today):
+    """An event date the way the cancel windows show it: 'Oct 21, 2026 (in 5 days)', '(today)' or '(3 days ago)'."""
+    days = (event - today).days
+    return f"{event:%b} {event.day}, {event.year} " + (
+        "(today)" if days == 0
+        else f"({_plural_days(-days)} ago)" if days < 0
+        else f"(in {_plural_days(days)})"
+    )
+
+
 def _item_remarks(item, today=None):
     """The status remarks staff read, as [{"text", "tone"}] -- ONE definition used by both
     Active Reservations and the (read-only) Rental Schedule, so the two can never word or
@@ -326,6 +336,9 @@ def _item_remarks(item, today=None):
     scheduled_return = item.original_return_date or item.return_date
     stage = _effective_stage(item, today)
     remarks = []
+
+    if stage == ReservationItem.Stage.CANCELLED:
+        return [{"text": "Cancelled \u00b7 never picked up", "tone": "muted"}]
 
     if stage == ReservationItem.Stage.RETURNED:
         when = item.returned_on
@@ -369,11 +382,12 @@ def _item_remarks(item, today=None):
 def _holding_items(gown_ids):
     """Bookings that really hold these physical gowns -- the same rule checkout's
     _find_available_unit and the customer calendar use: every booking except one
-    already Returned, or whose reservation was Rejected/Cancelled (those never held
-    stock). Pending ones count: they're awaiting payment approval, not released."""
+    already Returned, one the shop cancelled before pick-up, or whose reservation was
+    Rejected/Cancelled (those never held stock). Pending ones count: they're awaiting
+    payment approval, not released."""
     return (
         ReservationItem.objects.filter(gown_id__in=gown_ids)
-        .exclude(stage=ReservationItem.Stage.RETURNED)
+        .exclude(stage__in=ReservationItem.FINISHED_STAGES)
         .exclude(reservation__status__in=_NON_RENTAL_STATUSES)
     )
 
@@ -485,6 +499,8 @@ def _calendar_events(reservations, holds_by_gown=None, tag_colors=None):
     tag_colors = tag_colors or {}
     for reservation in reservations:
         for item in reservation.items.all():
+            if item.stage == ReservationItem.Stage.CANCELLED:
+                continue    # the shop cancelled this gown before it went out: nothing to put on the calendar
             label = f"{reservation.display_customer_name} — {item.gown_name}"
             gown_code, tag_color, tag_hex = _item_gown_tag(item, tag_colors)
             base_props = {
@@ -639,6 +655,8 @@ def rental_history_view(request):
     """Every gown that has gone out, one row per gown (ReservationItem), bucketed by
     rental_date and excluding bookings that never became rentals.
 
+    Gowns the shop cancelled before pick-up are left out too: they never went out.
+
     Counts GOWNS, not bookings -- a three-gown reservation is three rows here but one
     in Reservation Records' monthly breakdown and the dashboard's Reservations This
     Month tile, so this page's month totals are expected to be higher than those.
@@ -648,6 +666,7 @@ def rental_history_view(request):
         ReservationItem.objects.exclude(
             reservation__status__in=_NON_RENTAL_STATUSES
         )
+        .exclude(stage=ReservationItem.Stage.CANCELLED)
         .select_related("reservation__customer__profile")
         .order_by("-rental_date", "-id")
     )
@@ -698,7 +717,8 @@ def security_deposits_view(request):
     )
     for r in reservations:
         r.all_items_returned = all(
-            i.stage == ReservationItem.Stage.RETURNED for i in r.items.all()
+            i.stage == ReservationItem.Stage.RETURNED
+            for i in r.items.all() if i.stage != ReservationItem.Stage.CANCELLED
         )
 
     # The deposit follows the gowns (see Reservation.deposit_returned_on): Returned the
@@ -849,6 +869,8 @@ def _reservation_window(items):
     reservation can have a different window per gown."""
     if not items:
         return None, None
+    # A gown the shop cancelled never went out, so it doesn't stretch the booking's window (unless nothing else is left).
+    items = [i for i in items if i.stage != ReservationItem.Stage.CANCELLED] or items
     return min(i.rental_date for i in items), max(i.return_date for i in items)
 
 
@@ -874,6 +896,10 @@ def _reservation_progress(reservation, items, today):
         return reservation.status
     if not items:
         return reservation.status
+    # A gown the shop cancelled before pick-up is no longer part of the rental: progress is about the gowns left.
+    items = [i for i in items if i.stage != ReservationItem.Stage.CANCELLED]
+    if not items:
+        return "Cancelled"
     returned = [i.stage == ReservationItem.Stage.RETURNED for i in items]
     if all(returned):
         return "Completed"
@@ -1155,21 +1181,44 @@ def active_reservations_view(request):
             item.effective_stage == ReservationItem.Stage.OVERDUE for item in reservation.items.all()
         )
 
-        # "Cancel booking": offered only while nothing in the booking has been picked up (reservations.cancellation).
+        # "Cancel booking": offered only while nothing in the booking has been picked up (reservations.cancellation). A gown
+        # the shop already cancelled is no longer part of the booking, so it is left out of every question below.
         booking_items = list(reservation.items.all())
+        live_items = [i for i in booking_items if i.stage != ReservationItem.Stage.CANCELLED]
         reservation.can_cancel = reservation_cancellation.can_cancel(reservation, booking_items)
         if reservation.can_cancel:
-            event = min(i.effective_event_date for i in booking_items)
-            days_to_event = (event - today).days
-            reservation.cancel_event_text = f"{event:%b} {event.day}, {event.year} " + (
-                "(today)" if days_to_event == 0
-                else f"({_plural_days(-days_to_event)} ago)" if days_to_event < 0
-                else f"(in {_plural_days(days_to_event)})"
-            )
-            reservation.cancel_urgent = days_to_event < 0          # the event is over and the gown was never collected
-            reservation.cancel_gowns = ", ".join(i.gown_name for i in booking_items)
+            event = min(i.effective_event_date for i in live_items)
+            reservation.cancel_event_text = _event_when_text(event, today)
+            reservation.cancel_urgent = (event - today).days < 0   # the event is over and the gown was never collected
+            reservation.cancel_gowns = ", ".join(i.gown_name for i in live_items)
             reservation.cancel_default_reason = (
-                "no_show" if any(i.rental_date < today for i in booking_items) else "customer_asked"
+                "no_show" if any(i.rental_date < today for i in live_items) else "customer_asked"
+            )
+
+        # "Cancel gown": every gown still waiting for pick-up can be cancelled on its own, in any booking that has more than
+        # one gown left (a booking with just one is cancelled with Cancel booking above). And when two or more are waiting
+        # while another gown has already gone out or come back -- so the whole booking can't be cancelled -- one button
+        # cancels all of those at once.
+        for item in booking_items:
+            item.can_cancel_gown = False
+        waiting = [i for i in live_items if i.stage == ReservationItem.Stage.PICKUP]
+        gown_cancel_ok = reservation_cancellation.can_cancel_gowns(reservation) and len(live_items) > 1
+        if gown_cancel_ok:
+            for item in waiting:
+                item.can_cancel_gown = True
+                item.cancel_event_text = _event_when_text(item.effective_event_date, today)
+                item.cancel_urgent = item.effective_event_date < today
+                item.cancel_default_reason = "no_show" if item.rental_date < today else "customer_asked"
+        reservation.show_cancel_unpicked = gown_cancel_ok and len(waiting) >= 2 and not reservation.can_cancel
+        if reservation.show_cancel_unpicked:
+            first_event = min(i.effective_event_date for i in waiting)
+            reservation.unpicked_count = len(waiting)
+            reservation.unpicked_ids = ",".join(str(i.id) for i in waiting)
+            reservation.unpicked_names = ", ".join(i.gown_name for i in waiting)
+            reservation.unpicked_event_text = _event_when_text(first_event, today)
+            reservation.unpicked_urgent = first_event < today
+            reservation.unpicked_default_reason = (
+                "no_show" if any(i.rental_date < today for i in waiting) else "customer_asked"
             )
 
     return render(
@@ -1525,7 +1574,7 @@ def _gown_blocking_reservation_item(gown):
     the single delete and the bulk delete so the two can't drift."""
     return (
         gown.reservation_items
-        .exclude(stage=ReservationItem.Stage.RETURNED)
+        .exclude(stage__in=ReservationItem.FINISHED_STAGES)
         .exclude(reservation__status__in=[Reservation.Status.REJECTED, Reservation.Status.CANCELLED])
         .select_related("reservation__customer__profile")
         .first()
@@ -2533,6 +2582,45 @@ def reservation_cancel_view(request, pk):
 
 
 @require_http_methods(["POST"])
+def reservation_cancel_gowns_view(request, pk):
+    """Cancel one or more gowns of an approved booking -- the ones nobody picked up -- and leave the rest of the booking alone.
+
+    Sends the exact gowns ("items": [ids]) the staff member saw in the confirm window, so a gown that changed in the meantime is
+    refused instead of being cancelled by surprise. Everything it does -- and every refusal -- is in
+    reservations.cancellation.cancel_gowns_by_staff, so this is only the web wrapper."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        data = None
+    if not isinstance(data, dict):
+        return JsonResponse({"error": "Invalid request."}, status=400)
+    item_ids = data.get("items")
+    if (not isinstance(item_ids, list) or not item_ids or len(item_ids) > 200
+            or any(isinstance(i, bool) or not isinstance(i, int) for i in item_ids)):
+        return JsonResponse({"error": "Choose which gown to cancel."}, status=400)
+    try:
+        result = reservation_cancellation.cancel_gowns_by_staff(
+            pk,
+            item_ids,
+            staff_name=_staff_display_name(request.user),
+            reason_key=str(data.get("reason") or ""),
+            note=str(data.get("note") or ""),
+        )
+    except reservation_cancellation.CannotCancel as exc:
+        return JsonResponse({"error": exc.message}, status=exc.status)
+    return JsonResponse({
+        "success": True,
+        "reference": result.reservation.reference_code,
+        "count": len(result.cancelled),
+        "gowns": ", ".join(item.gown_name for item in result.cancelled),
+        "booking_cancelled": result.booking_cancelled,
+        "booking_complete": result.booking_complete,
+    })
+
+
+@require_http_methods(["POST"])
 def reservation_item_mark_returned_view(request, item_id):
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
@@ -2557,10 +2645,13 @@ def reservation_item_mark_returned_view(request, item_id):
         return JsonResponse({"error": "Choose Returned or Returned — needs repair."}, status=400)
     needs_repair = condition == ReservationItem.ReturnCondition.NEEDS_REPAIR
 
+    if item.stage == ReservationItem.Stage.CANCELLED:
+        return JsonResponse({"error": "This gown was cancelled, so it can't be checked in. Please refresh the page."}, status=409)
+
     # Claim the check-in only while the gown is not back yet: one conditional UPDATE, so a second click (another staff
     # member, an old page, a double tap) can never log it twice or move the real return date to a later day.
     today, now = timezone.localdate(), timezone.now()
-    claimed = ReservationItem.objects.filter(id=item.id).exclude(stage=ReservationItem.Stage.RETURNED).update(
+    claimed = ReservationItem.objects.filter(id=item.id).exclude(stage__in=ReservationItem.FINISHED_STAGES).update(
         stage=ReservationItem.Stage.RETURNED, returned_on=today, return_condition=condition, updated_at=now,
     )
     if not claimed:
@@ -2585,7 +2676,7 @@ def reservation_item_mark_returned_view(request, item_id):
     # The security deposit follows the gowns: once the LAST gown on the booking is back it
     # counts as settled (Reservation.deposit_returned_on), and the customer's timeline says so
     # once. Neutral wording on purpose -- any deduction (late days, damage) is settled in person.
-    if (not item.reservation.items.exclude(stage=ReservationItem.Stage.RETURNED).exists()
+    if (not item.reservation.items.exclude(stage__in=ReservationItem.FINISHED_STAGES).exists()
             and not item.reservation.status_events.filter(label="Security deposit settled").exists()):
         ReservationStatusEvent.record(
             item.reservation, "Security deposit settled",
@@ -2650,6 +2741,10 @@ def reservation_item_send_reminder_view(request, item_id):
         return JsonResponse(
             {"error": "This gown has already been returned."}, status=400
         )
+    if item.stage == ReservationItem.Stage.CANCELLED:
+        return JsonResponse(
+            {"error": "This gown was cancelled, so there is nothing to remind the customer about."}, status=400
+        )
 
     body = (data.get("body") or "").strip()
     if not body:
@@ -2693,6 +2788,8 @@ def _load_open_item(request, item_id):
         )
     if item.stage == ReservationItem.Stage.RETURNED:
         return None, JsonResponse({"error": "This gown has already been returned."}, status=400)
+    if item.stage == ReservationItem.Stage.CANCELLED:
+        return None, JsonResponse({"error": "This gown was cancelled. Please refresh the page."}, status=409)
     return item, None
 
 
@@ -2717,9 +2814,18 @@ def reservation_item_mark_picked_up_view(request, item_id):
             ),
         }, status=400)
 
+    # Claim the pick-up only while the gown is still waiting for it: one conditional UPDATE, so a pick-up marked at the
+    # same moment another staff member cancels this gown (or marks it too) can never overwrite what they did.
+    claimed = ReservationItem.objects.filter(id=item.id, stage=ReservationItem.Stage.PICKUP).update(
+        stage=ReservationItem.Stage.RESERVED, picked_up_on=today, updated_at=timezone.now(),
+    )
+    if not claimed:
+        return JsonResponse(
+            {"error": "This gown just changed (it may have been cancelled or marked picked up). Please refresh the page."},
+            status=409,
+        )
     item.stage = ReservationItem.Stage.RESERVED
     item.picked_up_on = today
-    item.save(update_fields=["stage", "picked_up_on", "updated_at"])
     ReservationStatusEvent.record(
         item.reservation, f"{item.gown_name} picked up", item=item,
         detail="The gown is now with the customer.",

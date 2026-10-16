@@ -414,7 +414,7 @@
           {% for reservation in reservations %}
             {% for item in reservation.items.all %}
               <div class="res-card group cursor-pointer p-5 sm:p-6"
-                   data-status-key="{% if reservation.status == 'Pending' %}pending{% elif reservation.status == 'Rejected' %}rejected{% elif reservation.status == 'Cancelled' %}cancelled{% elif item.stage == 'Returned' %}returned{% elif item.stage == 'Overdue' %}overdue{% elif item.stage == 'Pick-up' %}pickup{% else %}rented{% endif %}"
+                   data-status-key="{% if reservation.status == 'Pending' %}pending{% elif reservation.status == 'Rejected' %}rejected{% elif reservation.status == 'Cancelled' or item.stage == 'Cancelled' %}cancelled{% elif item.stage == 'Returned' %}returned{% elif item.stage == 'Overdue' %}overdue{% elif item.stage == 'Pick-up' %}pickup{% else %}rented{% endif %}"
                    onclick="transitionTo('{% url 'gowns:reservation_item_detail' item.id %}')">
 
                 <!-- Line 1: status chip + reference code -->
@@ -425,6 +425,8 @@
                     <span class="res-chip bg-red-50 text-red-600"><span class="material-symbols-outlined">cancel</span>Reservation Rejected</span>
                   {% elif reservation.status == "Cancelled" %}
                     <span class="res-chip bg-neutral-100 text-neutral-600"><span class="material-symbols-outlined">cancel</span>Reservation Cancelled</span>
+                  {% elif item.stage == "Cancelled" %}
+                    <span class="res-chip bg-neutral-100 text-neutral-600"><span class="material-symbols-outlined">cancel</span>Gown Cancelled</span>
                   {% elif item.stage == "Returned" %}
                     <span class="res-chip bg-neutral-100 text-neutral-600"><span class="material-symbols-outlined">inventory_2</span>Reservation Completed</span>
                   {% elif item.stage == "Overdue" %}
@@ -443,7 +445,7 @@
                     <p class="res-title truncate text-lg font-semibold text-[#1b1c1c]">{{ item.gown_name }}</p>
                     <p class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-secondary/70">
                       {% if item.size and item.size != "-" %}<span>Size {{ item.size }}</span><span class="text-secondary/25">&middot;</span>{% endif %}
-                      {% if reservation.status == "Cancelled" or reservation.status == "Rejected" %}
+                      {% if reservation.status == "Cancelled" or reservation.status == "Rejected" or item.stage == "Cancelled" %}
                         <span><span class="font-medium text-secondary">Was scheduled:</span> {{ item.rental_date|date:"M d, Y" }}</span>
                       {% elif item.stage == "Returned" %}
                         <span><span class="font-medium text-secondary">Returned on:</span> {{ item.returned_on|date:"M d, Y" }}</span>
