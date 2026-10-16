@@ -84,7 +84,16 @@ function getProductDetailUrl(item, idx) {
   return `/collections/${encodeURIComponent(col)}/products/${encodeURIComponent(slug)}/?cart_item_index=${idx}`;
 }
 function renderCart() {
-  const cart = JSON.parse(localStorage.getItem(CART_STORAGE_KEY) || '[]');
+  let cart = JSON.parse(localStorage.getItem(CART_STORAGE_KEY) || '[]');
+  // One row per gown + size + dates (static/js/cart-lines.js): duplicate rows left by earlier Book Now taps merge into one.
+  if (window.arabelaCartLines) {
+    const tidied = window.arabelaCartLines.tidy(cart);
+    if (tidied.changed) {
+      cart = tidied.cart;
+      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+      if (typeof syncCartToServer === 'function') syncCartToServer(cart);
+    }
+  }
   const cartItemsDiv = document.getElementById('cart-items');
   const cartTotalSpan = document.getElementById('selection-cart-total');
   const cartSubtotalSpan = document.getElementById('selection-cart-subtotal');
@@ -198,6 +207,15 @@ function proceedReservationFromSelection() {
     return;
   }
 
+  // Never more of a gown than exists: checkout would refuse the extra one at the very last step.
+  if (window.arabelaCartLines) {
+    const tooMany = window.arabelaCartLines.overbooked(cart);
+    if (tooMany.length) {
+      arabelaAlert({ title: 'Too many of one gown', message: window.arabelaCartLines.overbookedMessage(tooMany) });
+      return;
+    }
+  }
+
   let subtotal = 0;
   let itemCount = 0;
   const items = cart.map((item) => {
@@ -216,6 +234,8 @@ function proceedReservationFromSelection() {
       lineTotal: lineTotal,
       rental: item.rental || '',
       slug: item.id || '',
+      // How many of this gown exist in this size, so checkout can check the same thing.
+      maxQty: Number(item.maxQty) > 0 ? Number(item.maxQty) : undefined,
       // Carried so the Order Summary can link each row back to its gown page.
       // Without the collection there is no valid product URL to build.
       id: item.id || '',

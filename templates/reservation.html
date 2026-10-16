@@ -468,18 +468,24 @@
                 var it = items[i];
                 var dates = splitRentalDates(it.rental);
                 if (!dates) return null;   // an item is missing its rental dates
-                result.push({
-                    gown_name: it.name || '',
-                    // The cart-drawer checkout path stores the slug under "id" (see
-                    // addCollectionItem in base.html), never a separate "slug" key --
-                    // same fallback templates/selection.html's own submit path already
-                    // uses. it.slug is only ever populated by the alternate route.
-                    gown_slug: it.slug || it.id || '',
-                    size: stripSizePrefix(it.size),
-                    rental_price: it.unitPrice || 0,
-                    rental_date: dates.start,
-                    return_date: dates.end
-                });
+                // The Order Summary shows (x2) and charges for 2, so 2 gowns are booked: one submitted item per gown. The
+                // server gives each its own unit (and refuses the lot if there are not that many free). Before this a row
+                // with a quantity of 2 was charged as 2 but booked as 1.
+                var copies = Math.max(1, Math.min(parseInt(it.qty, 10) || 1, 20));
+                for (var c = 0; c < copies; c++) {
+                    result.push({
+                        gown_name: it.name || '',
+                        // The cart-drawer checkout path stores the slug under "id" (see
+                        // addCollectionItem in base.html), never a separate "slug" key --
+                        // same fallback templates/selection.html's own submit path already
+                        // uses. it.slug is only ever populated by the alternate route.
+                        gown_slug: it.slug || it.id || '',
+                        size: stripSizePrefix(it.size),
+                        rental_price: it.unitPrice || 0,
+                        rental_date: dates.start,
+                        return_date: dates.end
+                    });
+                }
             }
             return result;
         }

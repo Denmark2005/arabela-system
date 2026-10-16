@@ -1490,6 +1490,7 @@
         } catch (err) {
           cart = [];
         }
+        const cartLines = window.arabelaCartLines || null;     // static/js/cart-lines.js
 
         const hasRequestedCartIndex =
           Number.isInteger(requestedCartIndex) && requestedCartIndex >= 0 && requestedCartIndex < cart.length;
@@ -1531,9 +1532,32 @@
               qty: prevQty
             };
           } else {
-            cart.push(item);
+            // One row per gown + size + dates. Pressing Book Now again on the very same choice -- after going Back from the
+            // selection, or just tapping it twice -- must not stack another identical row: it is already in the selection,
+            // so Book Now simply opens the selection again.
+            const alreadyThere = !!cartLines && cart.some(function (row) { return cartLines.sameLine(row, item); });
+            if (!alreadyThere) {
+              // And a gown can't be in the selection more often than it exists in this size: checkout gives every gown its own
+              // unit and would refuse the extra one at the very last step, after the form and the receipt were filled in.
+              const most = Number(item.maxQty) || 0;
+              if (cartLines && most > 0 && cartLines.heldOf(cart, item) >= most) {
+                const sizeText = item.size && item.size !== '-' ? ' (size ' + item.size + ')' : '';
+                const note = resolvedName + sizeText + ' is already in your selection, and only ' + most + (most === 1 ? ' exists' : ' exist')
+                  + ' in this size, so it can\u2019t be added again. To change its dates, open it from your selection.';
+                if (typeof window.arabelaConfirm === 'function') {
+                  window.arabelaConfirm({ title: 'Already in your selection', message: note, confirmText: 'View my selection', cancelText: 'Stay here' })
+                    .then(function (ok) { if (ok) window.location.href = "{% url 'gowns:selection' %}"; });
+                } else {
+                  arabelaAlert({ title: 'Already in your selection', message: note });
+                }
+                return;
+              }
+              cart.push(item);
+            }
           }
         }
+        // Rows that turned out to be the very same row (a row edited into another's dates, an older saved bag) become one row.
+        if (cartLines) cart = cartLines.tidy(cart).cart;
         localStorage.setItem(PRODUCT_CART_STORAGE_KEY, JSON.stringify(cart));
         localStorage.setItem('arabela_book_now_context', JSON.stringify(item));
         if (typeof syncCartToServer === 'function') syncCartToServer(cart);

@@ -722,6 +722,7 @@
   {% endblock %}
 
   <script src="{% static 'js/picked-file.js' %}?v={{ site_asset_version }}"></script>
+  <script src="{% static 'js/cart-lines.js' %}?v={{ site_asset_version }}"></script>
   <script src="{% static 'js/reservation-flow.js' %}?v={{ site_asset_version }}"></script>
   {% if url_name == "collection_all" or url_name == "collection_wedding" or url_name == "collection_evening_gown" or url_name == "collection_long_gown" or url_name == "collection_luxury_gown" or url_name == "collection_mother_gown" or url_name == "collection_suit" or url_name == "collection_filipiniana" or url_name == "collection_guest_gown" or url_name == "collection_dresses" or url_name == "collection_kids_gown" or url_name == "collection_barong" or url_name == "collection_ball_gown_tulle" or url_name == "collection_bridesmaid_dresses" or url_name == "collection_custom" or url_name == "search_results" %}
   <script src="{% static 'js/collection-sort.js' %}?v={{ site_asset_version }}"></script>
@@ -849,7 +850,17 @@
     function renderCartDrawer() {
       const lines = document.getElementById('cart-lines');
       if (!lines) return;
-      const cart = getDrawerCart();
+      let cart = getDrawerCart();
+      // One row per gown + size + dates (static/js/cart-lines.js). A bag that picked up duplicate rows -- Book Now tapped twice, or a
+      // bag saved before that was checked -- is merged back into one row each and saved, so the drawer, the selection page and
+      // checkout all show the same thing.
+      if (window.arabelaCartLines) {
+        const tidied = window.arabelaCartLines.tidy(cart);
+        if (tidied.changed) {
+          cart = tidied.cart;
+          setDrawerCart(cart);
+        }
+      }
       if (!cart.length) {
         lines.innerHTML = '<p class="cart-reveal text-[0.6875rem] uppercase tracking-widest text-secondary py-4">No items in your selection.</p>';
         activateCartLinesIfOpen();

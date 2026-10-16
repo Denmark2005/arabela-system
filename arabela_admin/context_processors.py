@@ -39,7 +39,7 @@ def site_asset_version(request):
     the newest mtime across the scripts base.html loads, so touching any of them
     invalidates the URL.
     """
-    names = ("reservation-flow.js", "collection-sort.js", "customer-badges-live.js", "picked-file.js")
+    names = ("reservation-flow.js", "collection-sort.js", "customer-badges-live.js", "picked-file.js", "cart-lines.js")
     newest = 0
     for name in names:
         try:

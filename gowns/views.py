@@ -1075,16 +1075,26 @@ def reservation_submit(request):
                 # just commits an empty transaction and releases the row locks. The
                 # checkout hold is deliberately NOT cleared -- the customer still has
                 # a bag and can retry with different dates.
-                return JsonResponse(
-                    {
-                        "success": False,
-                        "error": (
-                            f"{item['gown_name']} is no longer available for {event_date:%b %d, %Y}. "
-                            "Please choose a different date or another gown."
-                        ),
-                    },
-                    status=400,
+                #
+                # When the SAME gown is in the request more than once, that -- not the date -- is usually why: each one needs its
+                # own unit, so a gown that exists once can only be booked once. Saying "no longer available" there sent customers
+                # hunting for a different date; say what is really wrong instead.
+                copies = sum(
+                    1 for other in parsed_items
+                    if other["gown_name"].casefold() == item["gown_name"].casefold()
+                    and _normalize_size(other["size"]) == _normalize_size(item["size"])
                 )
+                if copies > 1:
+                    error = (
+                        f"{item['gown_name']} is in your selection {copies} times, but there aren't {copies} of it free for "
+                        f"{event_date:%b %d, %Y}. Please remove the extra ones from your selection and try again."
+                    )
+                else:
+                    error = (
+                        f"{item['gown_name']} is no longer available for {event_date:%b %d, %Y}. "
+                        "Please choose a different date or another gown."
+                    )
+                return JsonResponse({"success": False, "error": error}, status=400)
             if outcome == _UNIT_OUT_OF_STOCK:
                 # The slug/name is a real gown that staff have pulled from the
                 # collection (status Out-of-Stock). Unlike a genuine placeholder

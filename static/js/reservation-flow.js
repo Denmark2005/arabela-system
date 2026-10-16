@@ -491,6 +491,20 @@
             window.arabelaPromptForDates(undated);
             return false;
         }
+        // Never more of a gown than exists (static/js/cart-lines.js): checkout would refuse the extra one at the very last step.
+        var storedBag = [];
+        try { storedBag = JSON.parse(localStorage.getItem('arabela_cart_' + userKey) || '[]'); } catch (errBag) { storedBag = []; }
+        if (window.arabelaCartLines) {
+            var tooMany = window.arabelaCartLines.overbooked(storedBag);
+            if (tooMany.length) {
+                alertMessage('Too many of one gown', window.arabelaCartLines.overbookedMessage(tooMany));
+                return false;
+            }
+        }
+        for (var m = 0; m < items.length; m++) {
+            var bagLine = storedBag[cartIndexes[m]];
+            if (bagLine && Number(bagLine.maxQty) > 0) items[m].maxQty = Number(bagLine.maxQty);
+        }
         var deposit = itemCount * DEPOSIT_PER_ITEM;
         var payload = {
             items: items,
