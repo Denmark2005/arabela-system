@@ -412,6 +412,11 @@
         var CART_STORAGE_KEY = 'arabela_cart_' + USER_STORAGE_KEY;
         var RESERVATION_STORAGE_KEY = 'arabela_reservation_cart_' + USER_STORAGE_KEY;
         var BOOK_NOW_CONTEXT_KEY = 'arabela_book_now_context';
+        // What the customer has typed so far, kept for this tab only (sessionStorage). The page can reload under them -- Chrome's
+        // "Desktop site" switch re-runs the Google sign-in -- and a reload used to leave the form empty. (The receipt photo can't
+        // be kept: a browser never lets a page re-fill a file.)
+        var DRAFT_KEY = 'arabela_checkout_draft_' + USER_STORAGE_KEY;
+        var DRAFT_FIELD_IDS = ['first_name', 'last_name', 'address', 'city', 'postal', 'phone', 'gcash_reference'];
         var PROFILE_ADDRESS_STORAGE_KEY = 'arabela_profile_addresses_v1_' + USER_STORAGE_KEY;
         var PROFILE_FIRST_NAME = "{{ profile_first_name|default:''|escapejs }}";
         var PROFILE_LAST_NAME = "{{ profile_last_name|default:''|escapejs }}";
@@ -699,6 +704,7 @@
         }
 
         function clearReservationSelections() {
+            try { sessionStorage.removeItem(DRAFT_KEY); } catch (errDraft) {}
             try {
                 localStorage.removeItem(CART_STORAGE_KEY);
                 localStorage.removeItem(BOOK_NOW_CONTEXT_KEY);
@@ -772,8 +778,42 @@
             arabelaAlert({ title: titles[described.kind] || 'Reservation not submitted', message: message, danger: true });
         }
 
+        function saveCheckoutDraft() {
+            try {
+                var draft = {};
+                DRAFT_FIELD_IDS.forEach(function (id) {
+                    var el = document.getElementById(id);
+                    if (el) draft[id] = el.value;
+                });
+                sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+            } catch (errSave) {}
+        }
+
+        // Only fills a field that is still empty, so nothing the browser or the customer already put there is overwritten.
+        function restoreCheckoutDraft() {
+            try {
+                var draft = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || 'null');
+                if (!draft || typeof draft !== 'object') return;
+                DRAFT_FIELD_IDS.forEach(function (id) {
+                    var el = document.getElementById(id);
+                    if (el && !el.value.trim() && typeof draft[id] === 'string' && draft[id]) el.value = draft[id];
+                });
+            } catch (errRestore) {}
+        }
+
+        function watchCheckoutDraft() {
+            DRAFT_FIELD_IDS.forEach(function (id) {
+                var el = document.getElementById(id);
+                if (!el) return;
+                el.addEventListener('input', saveCheckoutDraft);
+                el.addEventListener('change', saveCheckoutDraft);
+            });
+        }
+
         document.addEventListener('DOMContentLoaded', function () {
+            restoreCheckoutDraft();            // what they had typed comes back first; the profile only fills what is still blank
             prefillReservationFromProfile();
+            watchCheckoutDraft();
 
             var btn = document.getElementById('confirm-rental-btn');
 
