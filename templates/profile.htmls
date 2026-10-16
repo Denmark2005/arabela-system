@@ -201,13 +201,14 @@
           </div>
           <form class="px-5 pb-5" id="edit-profile-form" method="post" action="{% url 'gowns:profile' %}">
             {% csrf_token %}
+            {# w-full + min-w-0: a box with no width of its own took the width of its text (the phone's wider font made the last-name box run past the window), where the address boxes below always had w-full #}
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div>
-                <input class="edit-input h-11 rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none" id="profile-first-name-input" type="text" name="first_name" placeholder="First name" value="{{ profile_first_name }}" />
+              <div class="min-w-0">
+                <input class="edit-input h-11 w-full min-w-0 rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none" id="profile-first-name-input" type="text" name="first_name" placeholder="First name" value="{{ profile_first_name }}" />
                 <p class="hidden field-error-text mt-1" id="profile-first-name-error"></p>
               </div>
-              <div>
-                <input class="edit-input h-11 rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none" id="profile-last-name-input" type="text" name="last_name" placeholder="Last name" value="{{ profile_last_name }}" />
+              <div class="min-w-0">
+                <input class="edit-input h-11 w-full min-w-0 rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none" id="profile-last-name-input" type="text" name="last_name" placeholder="Last name" value="{{ profile_last_name }}" />
                 <p class="hidden field-error-text mt-1" id="profile-last-name-error"></p>
               </div>
             </div>

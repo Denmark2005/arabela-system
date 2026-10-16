@@ -405,6 +405,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{% static 'js/checkout-fields.js' %}?v={{ site_asset_version }}"></script>
 <script>
     (function () {
         var RESERVATION_FIELD_IDS = ['first_name', 'last_name', 'address', 'city', 'postal', 'phone'];
@@ -525,40 +526,21 @@
             return addresses[0];
         }
 
-        function prefillReservationFromProfile() {
-            var firstNameInput = document.getElementById('first_name');
-            var lastNameInput = document.getElementById('last_name');
-            var addressInput = document.getElementById('address');
-            var cityInput = document.getElementById('city');
-            var postalInput = document.getElementById('postal');
-            var phoneInput = document.getElementById('phone');
-
+        // What the profile says for each checkout box ('' where it says nothing): the name saved on the account and the default (else the
+        // first) saved address. The profile is the source of truth for a box's starting value -- see static/js/checkout-fields.js.
+        function profileDefaults() {
             var fallbackName = splitDisplayName(PROFILE_DISPLAY_NAME);
-            var prefillFirstName = PROFILE_FIRST_NAME || fallbackName.firstName || '';
-            var prefillLastName = PROFILE_LAST_NAME || fallbackName.lastName || '';
-
-            if (firstNameInput && !firstNameInput.value.trim() && prefillFirstName) {
-                firstNameInput.value = prefillFirstName;
-            }
-            if (lastNameInput && !lastNameInput.value.trim() && prefillLastName) {
-                lastNameInput.value = prefillLastName;
-            }
-
-            var preferredAddress = pickPreferredAddress(getStoredProfileAddresses());
-            if (!preferredAddress) return;
-
-            if (addressInput && !addressInput.value.trim()) {
-                addressInput.value = String(preferredAddress.addressLine || '').trim();
-            }
-            if (cityInput && !cityInput.value.trim()) {
-                cityInput.value = String(preferredAddress.city || '').trim();
-            }
-            if (postalInput && !postalInput.value.trim()) {
-                postalInput.value = String(preferredAddress.postalCode || '').trim();
-            }
-            if (phoneInput && !phoneInput.value.trim()) {
-                phoneInput.value = String(preferredAddress.phone || '').trim();
-            }
+            var preferred = pickPreferredAddress(getStoredProfileAddresses()) || {};
+            function clean(v) { return String(v == null ? '' : v).trim(); }
+            return {
+                first_name: clean(PROFILE_FIRST_NAME || fallbackName.firstName),
+                last_name: clean(PROFILE_LAST_NAME || fallbackName.lastName),
+                address: clean(preferred.addressLine),
+                city: clean(preferred.city),
+                postal: clean(preferred.postalCode),
+                phone: clean(preferred.phone),
+                gcash_reference: ''
+            };
         }
 
         function clearReservationValidationVisuals() {
@@ -780,25 +762,40 @@
 
         function saveCheckoutDraft() {
             try {
+                var defaults = profileDefaults();
                 var draft = {};
                 DRAFT_FIELD_IDS.forEach(function (id) {
                     var el = document.getElementById(id);
-                    if (el) draft[id] = el.value;
+                    // Each value is saved with the profile default it was typed against, so a default that changes later wins.
+                    if (el) draft[id] = { value: el.value, base: defaults[id] || '' };
                 });
                 sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
             } catch (errSave) {}
         }
 
-        // Only fills a field that is still empty, so nothing the browser or the customer already put there is overwritten.
-        function restoreCheckoutDraft() {
+        function readCheckoutDraft() {
             try {
                 var draft = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || 'null');
-                if (!draft || typeof draft !== 'object') return;
-                DRAFT_FIELD_IDS.forEach(function (id) {
-                    var el = document.getElementById(id);
-                    if (el && !el.value.trim() && typeof draft[id] === 'string' && draft[id]) el.value = draft[id];
-                });
-            } catch (errRestore) {}
+                return draft && typeof draft === 'object' ? draft : null;
+            } catch (errRead) {
+                return null;
+            }
+        }
+
+        // The starting value of every box (static/js/checkout-fields.js has the rule): the profile default -- unless what the customer
+        // typed in this same checkout is remembered -- and, with no default, what they typed before. A box that already has something
+        // (the browser's own autofill) is left alone.
+        function fillCheckoutFields() {
+            var defaults = profileDefaults();
+            var draft = readCheckoutDraft();
+            var rule = window.arabelaCheckoutFields;
+            DRAFT_FIELD_IDS.forEach(function (id) {
+                var el = document.getElementById(id);
+                if (!el || el.value.trim()) return;
+                var base = defaults[id] || '';
+                var value = rule ? rule.chooseValue(base, draft ? draft[id] : null) : base;
+                if (value) el.value = value;
+            });
         }
 
         function watchCheckoutDraft() {
@@ -811,8 +808,7 @@
         }
 
         document.addEventListener('DOMContentLoaded', function () {
-            restoreCheckoutDraft();            // what they had typed comes back first; the profile only fills what is still blank
-            prefillReservationFromProfile();
+            fillCheckoutFields();
             watchCheckoutDraft();
 
             var btn = document.getElementById('confirm-rental-btn');
