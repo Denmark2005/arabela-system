@@ -406,6 +406,8 @@
 
 {% block extra_scripts %}
 {{ saved_addresses|json_script:"saved-addresses-data" }}
+{# The sizes each gown comes in: this page hides the search overlay, whose catalog says it elsewhere (reservation-flow.js arabelaSizesOf). #}
+{{ gown_sizes|json_script:"gown-sizes-data" }}
 <script src="{% static 'js/checkout-fields.js' %}?v={{ site_asset_version }}"></script>
 <script>
     (function () {
@@ -714,16 +716,16 @@
             }
         }
 
-        // Gowns still missing a rental date, as reported by the Order Summary
-        // renderer once it has drawn the rows. Kept here so the click handler can
+        // Gowns that can't be booked yet -- no rental date, or a size still to choose -- as reported by the Order Summary
+        // renderer once it has drawn the rows: [{name, url, needsSize, needsDates}]. Kept here so the click handler can
         // reuse the same list for its dialog instead of re-deriving it.
         var reservationDateGaps = [];
 
         // Called by reservation-flow.js after it renders the summary. Surfacing the
         // problem here -- on load, next to the button -- is the whole point: the old
         // flow only revealed it after the form was filled and payment uploaded.
-        window.onReservationDateGaps = function (undated) {
-            reservationDateGaps = undated || [];
+        window.onReservationDateGaps = function (gaps) {
+            reservationDateGaps = gaps || [];
             var warn = document.getElementById('reservation-date-warning');
             var text = document.getElementById('reservation-date-warning-text');
             var confirmBtn = document.getElementById('confirm-rental-btn');
@@ -739,9 +741,14 @@
             var listed = names.length === 1
                 ? names[0]
                 : names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1];
-            text.textContent = names.length === 1
-                ? listed + ' still needs a rental date. Tap it above to choose one.'
-                : listed + ' still need rental dates. Tap each one above to choose.';
+            var anySize = reservationDateGaps.some(function (g) { return g.needsSize; });
+            var anyDates = reservationDateGaps.some(function (g) { return g.needsDates; });
+            var one = names.length === 1;
+            var what = !anySize ? (one ? 'a rental date' : 'rental dates')
+                : !anyDates ? (one ? 'a size' : 'sizes')
+                : 'a size or a rental date';
+            text.textContent = (one ? listed + ' still needs ' : listed + ' still need ') + what
+                + (one ? '. Tap it above to choose one.' : '. Tap each one above to choose.');
             warn.classList.remove('hidden');
             if (confirmBtn) confirmBtn.disabled = true;
         };
@@ -848,7 +855,7 @@
                     // snapshot, storage that failed to read). Unlike the old
                     // dead-end alert, this names the gown and offers the way there.
                     if (reservationDateGaps.length) {
-                        window.arabelaPromptForDates(reservationDateGaps);
+                        window.arabelaPromptForGaps(reservationDateGaps);
                         return;
                     }
 

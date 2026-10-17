@@ -123,7 +123,11 @@ function renderCart() {
         <div class="flex flex-col justify-center gap-2">
           <h3 class="font-headline font-bold text-lg tracking-tight uppercase">${item.name}</h3>
           <div class="flex flex-col gap-1">
-            <p class="text-[0.75rem] text-secondary tracking-widest uppercase">Size: ${window.arabelaSizeLabel(item.size)}</p>
+            ${window.arabelaNeedsSize(item)
+              ? `<a href="${getProductDetailUrl(item, idx)}" class="inline-flex items-center gap-1 text-[0.75rem] font-semibold tracking-widest uppercase text-[#b45309] no-underline hover:underline underline-offset-4">
+                   <span class="material-symbols-outlined" style="font-size: 0.9rem;">straighten</span>Select size
+                 </a>`
+              : `<p class="text-[0.75rem] text-secondary tracking-widest uppercase">Size: ${window.arabelaSizeLabel(item.size)}</p>`}
             ${window.arabelaHasRentalDates(item)
               ? `<p class="text-[0.75rem] text-secondary tracking-widest uppercase">Rental: ${item.rental}</p>`
               : `<a href="${getProductDetailUrl(item, idx)}" class="inline-flex items-center gap-1 text-[0.75rem] font-semibold tracking-widest uppercase text-[#b45309] no-underline hover:underline underline-offset-4">
@@ -196,13 +200,16 @@ function proceedReservationFromSelection() {
   // Refuse to hand off a bag that can't be booked. Checkout would otherwise take
   // the whole form and the payment upload before failing, with no way back to the
   // gown -- so stop here, name the gowns, and offer to jump straight to the first.
-  const undated = cart
-    .map((item, idx) => ({ item, idx }))
-    .filter(({ item }) => !window.arabelaHasRentalDates(item));
-  if (undated.length) {
-    window.arabelaPromptForDates(undated.map(({ item, idx }) => ({
+  // A gown can't be booked without dates, nor without a size when it comes in several.
+  const gaps = cart
+    .map((item, idx) => ({ item, idx, needsSize: window.arabelaNeedsSize(item), needsDates: !window.arabelaHasRentalDates(item) }))
+    .filter((line) => line.needsSize || line.needsDates);
+  if (gaps.length) {
+    window.arabelaPromptForGaps(gaps.map(({ item, idx, needsSize, needsDates }) => ({
       name: item.name,
-      url: getProductDetailUrl(item, idx)
+      url: getProductDetailUrl(item, idx),
+      needsSize,
+      needsDates
     })));
     return;
   }

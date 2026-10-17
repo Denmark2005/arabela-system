@@ -124,6 +124,37 @@
         return ['S', 'M', 'L', 'XL', 'FREE'].indexOf(t) >= 0 ? t : '';
     };
 
+    // The size codes a gown comes in ('S', 'M', 'L', 'XL', 'FREE'), from the search catalog the pages carry (gowns.context_processors
+    // _build_search_catalog) -- the same list the + button on a collection card reads. The checkout page hides the search overlay, so it
+    // carries just the sizes instead (#gown-sizes-data, same rows). null when neither is on this page or it has no such gown: nothing is
+    // then asked of the customer here, and the server still refuses a gown that needs a size.
+    var sizesCatalog = null;
+    window.arabelaSizesOf = function (slug, collection) {
+        try {
+            if (sizesCatalog === null) {
+                var el = document.getElementById('search-catalog-data') || document.getElementById('gown-sizes-data');
+                if (!el) return null;                       // not drawn yet: look again next time instead of remembering "nothing"
+                var rows = JSON.parse(el.textContent || '[]');
+                sizesCatalog = Array.isArray(rows) ? rows : [];
+            }
+            var coll = collection ? String(collection).trim() : '';
+            var row = sizesCatalog.filter(function (r) { return r && r.slug === slug && (!coll || r.collection_key === coll); })[0]
+                || sizesCatalog.filter(function (r) { return r && r.slug === slug; })[0];
+            return row && Array.isArray(row.sizes) ? row.sizes : null;
+        } catch (err) {
+            return null;
+        }
+    };
+
+    // THE one definition of "this line still needs a size": the gown comes in more than one size and none is chosen yet. A gown with a
+    // single size never needs asking (the quick-add fills it in), and a gown whose sizes cannot be read is never held back here -- the
+    // server still refuses it at checkout, in words that send the customer to the gown page.
+    window.arabelaNeedsSize = function (item) {
+        if (!item || window.arabelaSizeCode(item.size)) return false;
+        var sizes = window.arabelaSizesOf(String(item.id == null ? '' : item.id).trim(), item.collection);
+        return !!sizes && sizes.length > 1;
+    };
+
     // Rebuilds a gown's product URL from a stored line. Mirrors base.html's and
     // selection.html's getProductDetailUrl, but the query parameter varies by
     // caller: `cart_item_index` edits a drawer row, `edit_reservation_item` edits
@@ -138,30 +169,52 @@
             + '/?' + (paramName || 'cart_item_index') + '=' + index;
     }
 
-    // The one dialog shown whenever undated gowns block a step forward. Uses
-    // arabelaConfirm rather than arabelaAlert on purpose: an alert's single "Got
-    // it" button is exactly what made the old checkout failure a dead end. This
-    // names the gowns and its primary button navigates straight to the first one.
-    // `entries` is [{name, url}, ...].
-    window.arabelaPromptForDates = function (entries) {
+    // The one dialog shown whenever gowns that cannot be booked yet block a step forward -- a size still to choose, a rental date still to
+    // pick, or both. Uses arabelaConfirm rather than arabelaAlert on purpose: an alert's single "Got it" button is exactly what made the
+    // old checkout failure a dead end. This names the gowns and its primary button navigates straight to the first one's page, where the
+    // size and the dates are both chosen. `entries` is [{name, url, needsSize, needsDates}, ...].
+    window.arabelaPromptForGaps = function (entries) {
         if (!entries || !entries.length) return;
         var names = entries.map(function (e) { return e.name || 'a gown'; });
         var listed = names.length === 1
             ? names[0]
             : names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1];
         var many = names.length > 1;
+        var anySize = entries.some(function (e) { return e.needsSize; });
+        var anyDates = entries.some(function (e) { return e.needsDates; });
+        var first = many ? ' We will start with ' + names[0] + '.' : '';
+        var title, message;
+        if (!anySize) {
+            title = many ? 'These gowns need rental dates' : 'This gown needs a rental date';
+            message = listed + (many ? ' have no rental dates yet.' : ' has no rental date yet.')
+                + ' Pick the date of your event and we will set the pick-up and return days for you.' + first;
+        } else if (!anyDates) {
+            title = many ? 'These gowns need sizes' : 'This gown needs a size';
+            message = listed + (many ? ' have no size yet.' : ' has no size yet.')
+                + ' Choose the size you want and we will check it on your dates.' + first;
+        } else {
+            title = many ? 'These gowns need a size or a rental date' : 'This gown needs a size and a rental date';
+            message = many
+                ? listed + ' still need a size or a rental date. Choose them on each gown\u2019s page, and we will set the pick-up and return days for you.' + first
+                : listed + ' has no size or rental date yet. Choose the size you want and pick the date of your event, and we will set the pick-up and return days for you.';
+        }
         window.arabelaConfirm({
-            title: many ? 'These gowns need rental dates' : 'This gown needs a rental date',
-            message: listed + (many ? ' have no rental dates yet.' : ' has no rental date yet.')
-                + ' Pick the date of your event and we will set the pick-up and return days for you.'
-                + (many ? ' We will start with ' + names[0] + '.' : ''),
-            confirmText: 'Set dates',
+            title: title,
+            message: message,
+            confirmText: anySize ? 'Select size' : 'Set dates',
             cancelText: 'Not now'
         }).then(function (ok) {
             if (!ok) return;
             var target = entries[0].url;
             if (target) window.location.href = target;
         });
+    };
+
+    // The earlier name, for a page that was opened before this script was updated: every entry there is a gown missing its dates.
+    window.arabelaPromptForDates = function (entries) {
+        window.arabelaPromptForGaps((entries || []).map(function (e) {
+            return { name: e.name, url: e.url, needsDates: true, needsSize: !!e.needsSize };
+        }));
     };
 
     function maybeMigrateGuestReservationPayload() {
@@ -478,17 +531,22 @@
         // back to the gown. Deliberately BEFORE the hold starts and before the
         // drawer is cleared, so nothing is committed and the cart survives intact
         // -- which is also why ?cart_item_index= still resolves from here.
-        var undated = [];
+        // What can't be booked yet is a gown with no dates, or one that comes in several sizes and has none chosen.
+        var gaps = [];
         for (var u = 0; u < items.length; u++) {
-            if (!window.arabelaHasRentalDates(items[u])) {
-                undated.push({
+            var lacksSize = window.arabelaNeedsSize(items[u]);
+            var lacksDates = !window.arabelaHasRentalDates(items[u]);
+            if (lacksSize || lacksDates) {
+                gaps.push({
                     name: items[u].name,
-                    url: buildProductUrl(items[u], cartIndexes[u], 'cart_item_index')
+                    url: buildProductUrl(items[u], cartIndexes[u], 'cart_item_index'),
+                    needsSize: lacksSize,
+                    needsDates: lacksDates
                 });
             }
         }
-        if (undated.length) {
-            window.arabelaPromptForDates(undated);
+        if (gaps.length) {
+            window.arabelaPromptForGaps(gaps);
             return false;
         }
         // Never more of a gown than exists (static/js/cart-lines.js): checkout would refuse the extra one at the very last step.
@@ -618,7 +676,7 @@
 
         var items = data.items || [];
         var html = '';
-        var undated = [];
+        var gaps = [];
         for (var j = 0; j < items.length; j++) {
             var it = items[j];
             var qtyNote =
@@ -626,11 +684,12 @@
                     ? ' <span class="text-secondary font-normal normal-case">(\u00d7' + it.qty + ')</span>'
                     : '';
             var dated = window.arabelaHasRentalDates(it);
+            var lacksSize = window.arabelaNeedsSize(it);
             // Round trip back to this exact row of the snapshot. The drawer cart is
             // deliberately empty once checkout has begun, so ?cart_item_index= can't
             // resolve from here -- edit_reservation_item addresses the snapshot.
             var editUrl = buildProductUrl(it, j, 'edit_reservation_item');
-            if (!dated) undated.push({ name: it.name, url: editUrl });
+            if (!dated || lacksSize) gaps.push({ name: it.name, url: editUrl, needsDates: !dated, needsSize: lacksSize });
 
             // The date line is the whole point of this row: either it states the
             // rental window, or it is the control that goes and sets one.
@@ -650,6 +709,14 @@
                     + escapeHtml(String(it.rental).split(' - ')[0]) + ', 1:00 PM to 5:00 PM only</p>'
                 : '';
 
+            // A gown that comes in several sizes and has none chosen: the size line is the control that goes and chooses one.
+            var sizeLine = lacksSize
+                ? '<p class="mt-0.5"><span class="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-[#b45309]">'
+                    + '<span class="material-symbols-outlined" style="font-size: 0.9rem;">straighten</span>'
+                    + (editUrl ? 'Select size &rarr;' : 'Size needed')
+                    + '</span></p>'
+                : '<p class="mt-0.5 text-[0.75rem] text-secondary">Size: ' + escapeHtml(window.arabelaSizeLabel(it.size)) + '</p>';
+
             var inner =
                 '<div class="w-16 h-20 shrink-0 overflow-hidden rounded-[6px] border border-black/10 bg-surface-container-low">' +
                 '<img class="w-full h-full object-cover" alt="' +
@@ -662,9 +729,7 @@
                 '<p class="text-sm font-medium text-on-surface leading-snug">' +
                 escapeHtml(it.name) +
                 '</p>' +
-                '<p class="mt-0.5 text-[0.75rem] text-secondary">Size: ' +
-                escapeHtml(window.arabelaSizeLabel(it.size)) +
-                '</p>' +
+                sizeLine +
                 dateLine +
                 pickupLine +
                 '</div>' +
@@ -677,8 +742,8 @@
             // before this shipped have no id, and a broken link is worse than none.
             if (editUrl) {
                 html += '<a href="' + attrEscape(editUrl) + '"'
-                    + ' class="res-item-row' + (dated ? '' : ' res-item-row--needs-date') + ' flex gap-4 items-start no-underline"'
-                    + ' aria-label="' + attrEscape((dated ? 'Change rental dates for ' : 'Set a rental date for ') + (it.name || 'this gown')) + '">'
+                    + ' class="res-item-row' + (dated && !lacksSize ? '' : ' res-item-row--needs-date') + ' flex gap-4 items-start no-underline"'
+                    + ' aria-label="' + attrEscape((lacksSize ? 'Choose a size for ' : dated ? 'Change rental dates for ' : 'Set a rental date for ') + (it.name || 'this gown')) + '">'
                     + inner + '</a>';
             } else {
                 html += '<div class="flex gap-4 items-start">' + inner + '</div>';
@@ -688,10 +753,10 @@
 
         setTotals(data.subtotal, data.deposit, data.total, data.itemCount);
 
-        // Tell the page which gowns still block checkout, so Confirm Rental can be
+        // Tell the page which gowns still block checkout (no dates, or a size still to choose), so Confirm Rental can be
         // held back up front instead of failing after the form and the upload.
         if (typeof window.onReservationDateGaps === 'function') {
-            window.onReservationDateGaps(undated);
+            window.onReservationDateGaps(gaps);
         }
     };
 

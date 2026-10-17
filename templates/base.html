@@ -876,6 +876,14 @@
         // at Confirm Rental. The link is the same product URL the thumbnail uses.
         const dated = window.arabelaHasRentalDates(item);
         const editUrl = getProductDetailUrl(item, index);
+        // The same for the size: a gown that comes in several sizes can't be booked until one is chosen. The link goes to the gown's page
+        // (the same one the date link uses), where the buttons show which sizes are free. The row keeps its size line either way, so
+        // the checkout hand-off, which reads the first .text-on-secondary-container, always reads the size and nothing else.
+        const sizeLine = window.arabelaNeedsSize(item)
+          ? `<p class="text-[0.6875rem] text-on-secondary-container mt-1"><a href="${editUrl}" class="inline-flex items-center gap-1 font-semibold text-[#b45309] no-underline hover:underline underline-offset-4">
+               <span class="material-symbols-outlined" style="font-size: 0.85rem;">straighten</span>Select size
+             </a></p>`
+          : `<p class="text-[0.6875rem] text-on-secondary-container mt-1">Size: ${window.arabelaSizeLabel(item.size)}</p>`;
         const rentalLine = dated
           ? `<p class="text-[0.6875rem] text-on-secondary-container mt-1">Rental: ${item.rental}</p>`
           : `<a href="${editUrl}" class="mt-1 inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-[#b45309] no-underline hover:underline underline-offset-4">
@@ -890,7 +898,7 @@
               <div class="flex justify-between items-start gap-2">
                 <div>
                   <h3 class="text-sm font-medium text-secondary leading-tight">${item.name || 'Untitled'}</h3>
-                  <p class="text-[0.6875rem] text-on-secondary-container mt-1">Size: ${window.arabelaSizeLabel(item.size)}</p>
+                  ${sizeLine}
                   ${rentalLine}
                 </div>
                 <button type="button" class="text-secondary hover:text-error transition-colors shrink-0" onclick="cartRemoveLine(this)" aria-label="Remove item">
@@ -1039,37 +1047,16 @@
       updateCartTotals();
     }
 
-    // The sizes a product comes in, from the search catalog every page already carries (gowns.context_processors
-    // _build_search_catalog). null when it can't be read -- then the item is added exactly as before.
-    let catalogSizesCache = null;
-    function catalogSizesFor(slug, collection) {
-      try {
-        if (catalogSizesCache === null) {
-          const el = document.getElementById('search-catalog-data');
-          const rows = el ? JSON.parse(el.textContent || '[]') : [];
-          catalogSizesCache = Array.isArray(rows) ? rows : [];
-        }
-        const row = catalogSizesCache.find(function (r) {
-          return r && r.slug === slug && (!collection || r.collection_key === collection);
-        }) || catalogSizesCache.find(function (r) { return r && r.slug === slug; });
-        return row && Array.isArray(row.sizes) ? row.sizes : null;
-      } catch (err) {
-        return null;
-      }
-    }
-
     window.addCollectionItem = function (item) {
       if (!item || !item.id) return;
-      // A gown is booked in one of ITS sizes. Quick-add fills in the only size; a gown that comes in several sizes
-      // opens its page instead, so the customer chooses one there (and sees which sizes are free on their dates).
+      // A gown is booked in one of ITS sizes. Quick-add fills in the only size (static/js/reservation-flow.js knows which sizes a gown
+      // comes in). A gown that comes in several goes into the bag with no size, exactly like one with no dates: its row says "Select
+      // size", and the gown's page (which shows which sizes are free on the customer's dates) is where it gets chosen.
       if (!item.size || item.size === '-') {
         const itemColl = item.collection ? String(item.collection).trim() : 'wedding';
-        const sizes = catalogSizesFor(String(item.id), itemColl);
+        const sizes = window.arabelaSizesOf ? window.arabelaSizesOf(String(item.id), itemColl) : null;
         if (sizes && sizes.length === 1) {
           item = Object.assign({}, item, { size: sizes[0] });
-        } else if (sizes && sizes.length > 1) {
-          window.location.href = '/collections/' + encodeURIComponent(itemColl) + '/products/' + encodeURIComponent(String(item.id)) + '/';
-          return;
         }
       }
       // "Still needs finishing" now means only the date -- size is optional, so a

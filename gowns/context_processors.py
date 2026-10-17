@@ -153,7 +153,7 @@ def _build_search_catalog(categories: list[dict] | None = None) -> list[dict]:
                         kwargs={"collection": collection_key, "slug": rep.slug},
                     ),
                     # The sizes this product's units come in (S, M, L, XL, FREE) -- the bag's quick-add uses it to fill in
-                    # the only size, or to send the customer to the gown page to choose when there are several.
+                    # the only size, and the bag / selection / checkout use it to ask for one when there are several.
                     "sizes": size_codes_of(group),
                 }
             )
@@ -222,6 +222,9 @@ def featured_search_items(request):
     return {
         "featured_search_items": featured,
         "search_overlay_catalog": catalog,
+        # Just the sizes each product comes in: the checkout page hides the search overlay (and with it the catalog above), but still has
+        # to tell a gown that needs a size from one that doesn't. See static/js/reservation-flow.js arabelaSizesOf.
+        "gown_sizes": [{"slug": row["slug"], "collection_key": row["collection_key"], "sizes": row["sizes"]} for row in catalog],
         "search_overlay_collections_meta": collections_meta,
         "category_tiles": category_tiles,
         "home_category_tiles": home_category_tiles,
