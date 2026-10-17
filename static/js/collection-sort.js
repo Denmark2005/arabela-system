@@ -15,20 +15,8 @@
     return document.querySelector('[data-collection-sort-root]');
   }
 
-  function getVisibleAllGrid(root) {
-    if (!root || root.id !== 'all-collections-root') return null;
-    var panels = root.querySelectorAll('.all-collection-panel');
-    for (var i = 0; i < panels.length; i++) {
-      if (panels[i].style.display !== 'none') {
-        return panels[i].querySelector('.grid');
-      }
-    }
-    return root.querySelector('.all-collection-panel .grid');
-  }
-
   function getGrid(root) {
     if (!root) return null;
-    if (root.id === 'all-collections-root') return getVisibleAllGrid(root);
     var g = root.querySelector(':scope > .grid');
     if (g) return g;
     return root.querySelector('.grid');
@@ -322,8 +310,32 @@
     });
   }
 
+  // A collection page (and All) is sorted by the SERVER over the whole list and then cut into pages, so the sort lives in the address
+  // (?sort=priceAsc) and Apply / Clear simply go to that address (page 1 again). The page says so with the #collection-sort-server marker.
+  // Pages without it (the search results, one unpaginated list) keep re-ordering their cards in the browser, below.
+  function serverMarker() {
+    return document.getElementById('collection-sort-server');
+  }
+
+  function goToSort(mode) {
+    var url = new URL(window.location.href);
+    if (mode) url.searchParams.set('sort', mode); else url.searchParams.delete('sort');
+    url.searchParams.delete('page');
+    window.location.assign(url.pathname + url.search);
+  }
+
+  function labelForMode(mode) {
+    var drawer = getCollectionDrawer();
+    var btn = drawer && drawer.querySelector('[data-sort-option][data-sort-mode="' + mode + '"]');
+    return btn ? (btn.getAttribute('data-sort-label') || '') : '';
+  }
+
   // options.silent: re-order at once with no loading step (a page opening with its sort already chosen).
   window.applyCollectionSort = function (mode, label, options) {
+    if (serverMarker()) {
+      goToSort(mode);
+      return;
+    }
     if (options && options.silent) {
       sortGrid(mode);
     } else {
@@ -335,6 +347,16 @@
   };
 
   window.resetCollectionSort = function () {
+    var marker = serverMarker();
+    if (marker) {
+      clearPersist();
+      hideChip();
+      sortDrawerPendingMode = null;
+      sortDrawerPendingLabel = null;
+      clearDrawerPendingSelection();
+      if (marker.getAttribute('data-sort-mode')) goToSort('');        // a sort is on: back to the normal order; none: nothing to undo
+      return;
+    }
     var root = getRoot();
     var grid = getGrid(root);
     if (grid && grid.__sortOriginalOrder && grid.__sortOriginalOrder.length) {
@@ -350,6 +372,7 @@
   };
 
   window.applyStoredCollectionSortIfAny = function () {
+    if (serverMarker()) return;                                       // the server already sent the list in the chosen order
     var data = readPersist();
     if (!data || !data.mode) return;
     sortGrid(data.mode);
@@ -432,6 +455,21 @@
   function boot() {
     initDrawer();
     initChipDismiss();
+    var marker = serverMarker();
+    if (marker) {
+      // The address is the one truth: show the sort it asks for as the active one, or no sort at all.
+      var current = marker.getAttribute('data-sort-mode') || '';
+      var currentLabel = current ? labelForMode(current) : '';
+      if (current && currentLabel) {
+        persist(current, currentLabel);
+        showChip(currentLabel);
+      } else {
+        clearPersist();
+        hideChip();
+      }
+      if (typeof window.syncCollectionSortDrawerVisuals === 'function') window.syncCollectionSortDrawerVisuals();
+      return;
+    }
     var root = getRoot();
     var defaultMode = root && root.getAttribute('data-default-sort-mode');
     if (defaultMode && !readPersist()) {

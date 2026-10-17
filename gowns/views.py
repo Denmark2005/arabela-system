@@ -178,23 +178,42 @@ def collections(request):
     return render(request, 'collections.html', {})
 
 
+# The choices in the Sort by drawer (static/js/collection-sort.js uses the same names).
+_SORT_MODES = ("az", "za", "priceAsc", "priceDesc")
+
+
+def _sort_products(products, mode):
+    """The WHOLE list in the order the customer picked (Sort by), before it is cut into pages -- so page 1 really holds the cheapest
+    8 of the category, not just the cheapest of whatever 8 happened to be on screen. Equal titles / prices keep their normal order."""
+    if mode == "az":
+        return sorted(products, key=lambda item: item["title"].casefold())
+    if mode == "za":
+        return sorted(products, key=lambda item: item["title"].casefold(), reverse=True)
+    if mode == "priceAsc":
+        return sorted(products, key=lambda item: item["price"])
+    if mode == "priceDesc":
+        return sorted(products, key=lambda item: item["price"], reverse=True)
+    return products
+
+
+def _listing_context(request, products):
+    """What a collection page (or All) needs: the chosen sort applied to the whole list, then 8 to a page. An unknown ?sort= is ignored
+    and a missing/non-numeric/out-of-range ?page= clamps to a real page (get_page), so a stale or hand-edited link never errors."""
+    mode = request.GET.get("sort")
+    mode = mode if mode in _SORT_MODES else ""
+    paginator = Paginator(_sort_products(products, mode), _COLLECTION_PAGE_SIZE)
+    page_obj = paginator.get_page(request.GET.get("page"))
+    # server_sort tells the sort drawer's script that THIS page is sorted by the server (the choice lives in the address, ?sort=)
+    return {"products": page_obj.object_list, "page_obj": page_obj, "sort_mode": mode, "server_sort": True}
+
+
 def _render_collection(request, template_name, collection_key):
     if _category_by_key(collection_key) is None:
         # A built-in category the owner removed: its page is gone with it.
         raise Http404("No such collection")
-    paginator = Paginator(_products_for_category(collection_key), _COLLECTION_PAGE_SIZE)
-    # get_page() clamps a missing/non-numeric/out-of-range "page" to a valid page
-    # instead of raising, so a stale or hand-edited ?page= link can never 404/500.
-    page_obj = paginator.get_page(request.GET.get("page"))
-    return render(
-        request,
-        template_name,
-        {
-            "products": page_obj.object_list,
-            "page_obj": page_obj,
-            "label": _label_for(collection_key),
-        },
-    )
+    context = _listing_context(request, _products_for_category(collection_key))
+    context["label"] = _label_for(collection_key)
+    return render(request, template_name, context)
 
 
 def collection_wedding(request):
@@ -266,18 +285,15 @@ def featured_women_collections(request):
 
 
 def collection_all(request):
-    """Rent → All: cycle through every category's product grid (same slugs/prices as each collection page)."""
+    """Rent → All: every product of every category together (the same cards, slugs and prices as each collection page), in the category
+    order and each category's own order, 8 to a page with Previous / Next exactly like a collection page. (It used to show one category at
+    a time behind a Next button, so a customer landing on All only saw the first category.)"""
     categories = all_categories()
-    products = _products_by_category(categories)
-    panels = [
-        {
-            "collection_key": category["key"],
-            "label": category["label"],
-            "products": products[category["key"]],
-        }
-        for category in categories
-    ]
-    return render(request, "all.html", {"all_panels": panels})
+    by_category = _products_by_category(categories)
+    products = [item for category in categories for item in by_category[category["key"]]]
+    context = _listing_context(request, products)
+    context["label"] = ""
+    return render(request, "all.html", context)
 
 
 def _best_match_rank(title: str, needle: str) -> int:
