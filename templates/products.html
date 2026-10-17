@@ -15,6 +15,13 @@
     background-color: transparent !important;
     color: inherit !important;
   }
+  /* A size this gown is not made in (staff have no unit of it in Gown Catalog): shown so the whole range is visible, never
+     choosable. Faded and dashed, without the line-through -- that look is reserved for "rented on your dates". */
+  .product-size-na {
+    opacity: 0.35;
+    border-style: dashed;
+    cursor: not-allowed;
+  }
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
@@ -380,12 +387,16 @@
         <label class="font-label text-[0.6875rem] tracking-widest uppercase font-bold">Select Size</label>
         <button type="button" class="font-label text-[0.625rem] tracking-widest uppercase underline underline-offset-4 decoration-outline-variant">Size Guide</button>
       </div>
-      {# Only the sizes staff gave this gown's units in Gown Catalog (gowns.views._size_options_and_units). #}
+      {% comment %}Small to Extra Large every time (gowns.views._size_choices). Only the sizes staff gave this gown's units in Gown Catalog carry data-product-size and can be chosen; the others are greyed, carry data-size-not-offered instead, and the script never treats them as a size of this gown.{% endcomment %}
       <div class="flex flex-wrap gap-3">
-        {% for option in size_options %}
+        {% for option in size_choices %}
         <div class="flex flex-col items-center gap-1">
+        {% if option.offered %}
           <button type="button" data-product-size="{{ option.code }}" data-size-label="{{ option.label }}" data-size-name="{{ option.name }}" data-size-count="{{ option.count }}" aria-pressed="false" class="product-size-btn {% if option.code == 'FREE' %}px-4 min-w-12{% else %}w-12{% endif %} h-12 flex items-center justify-center border border-outline-variant/30 text-secondary font-body text-sm hover:bg-on-surface hover:text-white hover:border-on-surface transition-all">{{ option.label }}</button>
           <span class="product-size-rented hidden font-label text-[0.5625rem] tracking-widest uppercase text-secondary/60">Rented</span>
+        {% else %}
+          <button type="button" data-size-not-offered="{{ option.code }}" data-size-name="{{ option.name }}" aria-disabled="true" aria-label="{{ option.name }}, not available in this size" title="This gown is not available in {{ option.name }}" class="product-size-na w-12 h-12 flex items-center justify-center border border-outline-variant/30 text-secondary font-body text-sm">{{ option.label }}</button>
+        {% endif %}
         </div>
         {% endfor %}
       </div>
@@ -838,6 +849,14 @@
       if (sizeButtons.length === 1) selectedSize = sizeButtons[0].dataset.productSize || '-';
       updateSizeButtonState();
     }
+
+    // A size this gown is not made in is shown but never chosen: tapping it says why (the same note line the "rented on your dates"
+    // sizes use). These buttons are not in sizeButtons on purpose, so no size rule below ever counts or re-enables them.
+    document.querySelectorAll('[data-size-not-offered]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        showSizeNote('This gown is not available in ' + (btn.dataset.sizeName || btn.dataset.sizeNotOffered) + '.');
+      });
+    });
 
     // Both entry points describe "the line being edited"; they differ only in
     // where it is stored and what the fields are called (the snapshot renames

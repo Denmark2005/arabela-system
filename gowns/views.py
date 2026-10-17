@@ -416,6 +416,30 @@ def _size_options(units):
     return options
 
 
+# The sizes the gown page always shows, smallest to largest. Only the ones staff really gave the gown can be chosen.
+_SIZE_LADDER = ("S", "M", "L", "XL")
+
+
+def _size_choices(options):
+    """What the gown page draws: Small to Extra Large every time, each with `offered` -- True only for a size staff gave this product's
+    units in Gown Catalog (those are the clickable ones; the rest are shown greyed out). Free Size is added only when the gown comes in
+    it, and a gown that comes in nothing but Free Size shows just that one button (a row of greyed S-XL would mean nothing there).
+    `options` is _size_options(): the offered sizes, which stay the single list every other rule (bag, calendar, checkout) uses."""
+    by_code = {option["code"]: option for option in options}
+    if not by_code:
+        return []
+    if set(by_code) == {"FREE"}:
+        return [dict(by_code["FREE"], offered=True)]
+    choices = []
+    for code in (*_SIZE_LADDER, "FREE"):
+        if code in by_code:
+            choices.append(dict(by_code[code], offered=True))
+        elif code in _SIZE_LADDER:
+            name = next(value for value, c in SIZE_CODES.items() if c == code)
+            choices.append({"code": code, "label": code, "name": str(name), "count": 0, "offered": False})
+    return choices
+
+
 # --- Which physical unit does a cart item actually get? --------------------------
 # Outcomes of _find_available_unit(). Strings rather than booleans so call sites read
 # as prose. (The 4th outcome the original comment anticipated is now here.)
@@ -785,6 +809,7 @@ def product_detail(request, collection: str, slug: str):
             # Only the sizes staff gave this product's units (Gown Catalog), and the whole calendar worked out by
             # gowns.availability (which event dates can be booked, the pick-up day each one gets, and why not).
             "size_options": size_options,
+            "size_choices": _size_choices(size_options),
             "calendar_data": calendar_data,
             "related_products": _related_gowns(product["collection"], slug),
         },
