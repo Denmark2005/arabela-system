@@ -2542,15 +2542,21 @@ def reservation_reject_view(request, pk):
     changes = {"status": Reservation.Status.REJECTED, "reviewed_at": now, "updated_at": now}
     if reason:
         changes["notes"] = reason
-    claimed = Reservation.objects.filter(id=pk, status=Reservation.Status.PENDING).update(**changes)
-    if not claimed:
-        return _already_reviewed_response(pk)
-    reservation = Reservation.objects.get(id=pk)
-    ReservationStatusEvent.record(
-        reservation, "Reservation rejected",
-        detail=reason or "Please contact the shop for details.",
-        actor=ReservationStatusEvent.Actor.STAFF,
-    )
+    with transaction.atomic():
+        claimed = Reservation.objects.filter(id=pk, status=Reservation.Status.PENDING).update(**changes)
+        if not claimed:
+            return _already_reviewed_response(pk)
+        reservation = Reservation.objects.get(id=pk)
+        # These gowns never went out, so there is no rental to rest from: the automatic rest block checkout added after each one is
+        # dropped with the booking (the same rule cancelling an approved booking follows, reservations.cancellation._release_gowns).
+        # Without this the rejected booking's dates came free but the 5 days after them stayed blocked on that gown -- and every
+        # other size of the same design was fine, which made it look like a size problem.
+        GownUnavailability.objects.filter(auto_for_item__reservation=reservation).delete()
+        ReservationStatusEvent.record(
+            reservation, "Reservation rejected",
+            detail=reason or "Please contact the shop for details.",
+            actor=ReservationStatusEvent.Actor.STAFF,
+        )
     return JsonResponse({"success": True, "status": reservation.status})
 
 
