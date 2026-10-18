@@ -109,6 +109,7 @@ class Gown(models.Model):
         MEDIUM = 'Medium', 'Medium'
         LARGE = 'Large', 'Large'
         EXTRA_LARGE = 'Extra Large', 'Extra Large'
+        EXTRA_EXTRA_LARGE = 'Extra Extra Large', 'Extra Extra Large'
         FREE_SIZE = 'Free Size', 'Free Size'
 
     class Condition(models.TextChoices):
@@ -219,12 +220,13 @@ SIZE_CODES = {
     Gown.Size.MEDIUM: "M",
     Gown.Size.LARGE: "L",
     Gown.Size.EXTRA_LARGE: "XL",
+    Gown.Size.EXTRA_EXTRA_LARGE: "XXL",
     Gown.Size.FREE_SIZE: "FREE",
 }
 
 
 def size_codes_of(units):
-    """The size codes these units come in, in button order (S, M, L, XL, Free Size), each once."""
+    """The size codes these units come in, in button order (S, M, L, XL, XXL, Free Size), each once."""
     present = {unit.size for unit in units}
     return [code for value, code in SIZE_CODES.items() if value in present]
 

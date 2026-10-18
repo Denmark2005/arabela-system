@@ -214,7 +214,7 @@ class AddBridesmaidsTests(TestCase):
         slug = self.dresses().get(name="Black Bridesmaid Dress 3", size="Large").slug
         html = self.client.get(f"/collections/bridesmaid-dresses/products/{slug}/").content.decode()
         self.assertEqual(re.findall(r'data-product-size="([A-Z]+)"', html), ["L", "XL"])
-        self.assertEqual(re.findall(r'data-size-not-offered="([A-Z]+)"', html), ["S", "M"])
+        self.assertEqual(re.findall(r'data-size-not-offered="([A-Z]+)"', html), ["S", "M", "XXL"])
         self.assertIn("Black Bridesmaid Dress 3", html)
 
     def test_search_finds_them_by_colour(self):

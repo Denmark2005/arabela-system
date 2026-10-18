@@ -152,7 +152,7 @@ def _build_search_catalog(categories: list[dict] | None = None) -> list[dict]:
                         "gowns:product_detail",
                         kwargs={"collection": collection_key, "slug": rep.slug},
                     ),
-                    # The sizes this product's units come in (S, M, L, XL, FREE) -- the bag's quick-add uses it to fill in
+                    # The sizes this product's units come in (S, M, L, XL, XXL, FREE) -- the bag's quick-add uses it to fill in
                     # the only size, and the bag / selection / checkout use it to ask for one when there are several.
                     "sizes": size_codes_of(group),
                 }

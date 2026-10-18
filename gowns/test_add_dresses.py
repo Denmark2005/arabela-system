@@ -127,4 +127,4 @@ class AddDressesTests(TestCase):
         slug = self.dresses().get(name="Light Pink Dress 2", size="Large").slug
         html = self.client.get(f"/collections/dresses/products/{slug}/").content.decode()
         self.assertEqual(re.findall(r'data-product-size="([A-Z]+)"', html), ["L", "XL"])
-        self.assertEqual(re.findall(r'data-size-not-offered="([A-Z]+)"', html), ["S", "M"])
+        self.assertEqual(re.findall(r'data-size-not-offered="([A-Z]+)"', html), ["S", "M", "XXL"])

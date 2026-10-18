@@ -175,7 +175,7 @@ class AddSuitsTests(TestCase):
         slug = self.suits().filter(name="Chinese Collar Light Gray 1").first().slug
         html = self.client.get(f"{url}products/{slug}/").content.decode()
         self.assertEqual(re.findall(r'data-product-size="([A-Z]+)"', html), ["M", "XL"])
-        self.assertEqual(re.findall(r'data-size-not-offered="([A-Z]+)"', html), ["S", "L"])
+        self.assertEqual(re.findall(r'data-size-not-offered="([A-Z]+)"', html), ["S", "L", "XXL"])
         self.assertIn("₱1,500", html)
         coat = self.suits().filter(name="Coat Sequence Black 1").first().slug
         html = self.client.get(f"{url}products/{coat}/").content.decode()

@@ -433,13 +433,13 @@ def _size_options(units):
 
 
 # The sizes the gown page always shows, smallest to largest. Only the ones staff really gave the gown can be chosen.
-_SIZE_LADDER = ("S", "M", "L", "XL")
+_SIZE_LADDER = ("S", "M", "L", "XL", "XXL")
 
 
 def _size_choices(options):
-    """What the gown page draws: Small to Extra Large every time, each with `offered` -- True only for a size staff gave this product's
+    """What the gown page draws: Small to Extra Extra Large every time, each with `offered` -- True only for a size staff gave this product's
     units in Gown Catalog (those are the clickable ones; the rest are shown greyed out). Free Size is added only when the gown comes in
-    it, and a gown that comes in nothing but Free Size shows just that one button (a row of greyed S-XL would mean nothing there).
+    it, and a gown that comes in nothing but Free Size shows just that one button (a row of greyed S-XXL would mean nothing there).
     `options` is _size_options(): the offered sizes, which stay the single list every other rule (bag, calendar, checkout) uses."""
     by_code = {option["code"]: option for option in options}
     if not by_code:
@@ -472,7 +472,7 @@ _UNIT_DATE_PASSED = "date_passed"
 _UNIT_TODAY_CLOSED = "today_closed"
 
 # products.html's size buttons emit 'S' / 'M' / 'L'; Gown.size stores 'Small' / 'Medium'
-# / 'Large' / 'Extra Large' / 'Free Size'. This bridges the two so size can act as a
+# / 'Large' / 'Extra Large' / 'Extra Extra Large' / 'Free Size'. This bridges the two so size can act as a
 # PREFERENCE between free units. It is deliberately never a filter: an unmapped, blank
 # or mistyped size must never make a genuinely bookable gown look booked.
 _SIZE_ALIASES = {
@@ -480,6 +480,7 @@ _SIZE_ALIASES = {
     "M": Gown.Size.MEDIUM, "MEDIUM": Gown.Size.MEDIUM,
     "L": Gown.Size.LARGE, "LARGE": Gown.Size.LARGE,
     "XL": Gown.Size.EXTRA_LARGE, "EXTRA LARGE": Gown.Size.EXTRA_LARGE,
+    "XXL": Gown.Size.EXTRA_EXTRA_LARGE, "EXTRA EXTRA LARGE": Gown.Size.EXTRA_EXTRA_LARGE, "2XL": Gown.Size.EXTRA_EXTRA_LARGE,
     "FREE": Gown.Size.FREE_SIZE, "FREE SIZE": Gown.Size.FREE_SIZE,
 }
 

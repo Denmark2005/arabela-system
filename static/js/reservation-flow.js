@@ -115,16 +115,16 @@
         return t.toUpperCase() === 'FREE' ? 'Free Size' : t;
     };
 
-    // The size BUTTON code ('S', 'M', 'L', 'XL', 'FREE') for any shape a stored size arrives in: the drawer's bare
+    // The size BUTTON code ('S', 'M', 'L', 'XL', 'XXL', 'FREE') for any shape a stored size arrives in: the drawer's bare
     // 'M', the checkout snapshot's 'Size: M', or a full name such as 'Medium' or 'Free Size'. '' when it is none of them.
     window.arabelaSizeCode = function (size) {
         var t = String(size == null ? '' : size).replace(/^\s*Size:\s*/i, '').trim().toUpperCase();
-        var names = { 'SMALL': 'S', 'MEDIUM': 'M', 'LARGE': 'L', 'EXTRA LARGE': 'XL', 'FREE SIZE': 'FREE' };
+        var names = { 'SMALL': 'S', 'MEDIUM': 'M', 'LARGE': 'L', 'EXTRA LARGE': 'XL', 'EXTRA EXTRA LARGE': 'XXL', '2XL': 'XXL', 'FREE SIZE': 'FREE' };
         if (names[t]) return names[t];
-        return ['S', 'M', 'L', 'XL', 'FREE'].indexOf(t) >= 0 ? t : '';
+        return ['S', 'M', 'L', 'XL', 'XXL', 'FREE'].indexOf(t) >= 0 ? t : '';
     };
 
-    // The size codes a gown comes in ('S', 'M', 'L', 'XL', 'FREE'), from the search catalog the pages carry (gowns.context_processors
+    // The size codes a gown comes in ('S', 'M', 'L', 'XL', 'XXL', 'FREE'), from the search catalog the pages carry (gowns.context_processors
     // _build_search_catalog) -- the same list the + button on a collection card reads. The checkout page hides the search overlay, so it
     // carries just the sizes instead (#gown-sizes-data, same rows). null when neither is on this page or it has no such gown: nothing is
     // then asked of the customer here, and the server still refuses a gown that needs a size.

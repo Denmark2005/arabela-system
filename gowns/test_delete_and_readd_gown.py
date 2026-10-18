@@ -79,7 +79,7 @@ class DeleteAndReaddTests(TestCase):
         self.assertNotEqual(new.slug, old_slug)                                          # so is the web address
 
         self.assertContains(self.collection(), NAME)                                     # one card again
-        self.assertEqual(self.sizes_on(self.page(new.slug).content.decode()), (["S"], ["M", "L", "XL"]))   # only Small clickable
+        self.assertEqual(self.sizes_on(self.page(new.slug).content.decode()), (["S"], ["M", "L", "XL", "XXL"]))   # only Small clickable
         self.assertEqual(self.page(old_slug).status_code, 404)                           # the old address does NOT come back to life
 
     def test_the_removal_log_keeps_both_old_gowns_and_the_neighbour_is_untouched(self):
@@ -99,7 +99,7 @@ class DeleteAndReaddTests(TestCase):
         self.assertEqual(self.add("Small").status_code, 200)
         self.assertEqual(Gown.objects.filter(name=NAME).count(), 2)
         html = self.page(self.large.slug).content.decode()
-        self.assertEqual(self.sizes_on(html), (["S", "L"], ["M", "XL"]))
+        self.assertEqual(self.sizes_on(html), (["S", "L"], ["M", "XL", "XXL"]))
         cards = [h for h in self.collection().content.decode().split('"') if "/products/" in h and "black-bridesmaid-dress-4" in h]
         self.assertEqual(len(set(cards)), 1)                                             # still ONE card, not two
         self.assertContains(self.collection(), "2 available")

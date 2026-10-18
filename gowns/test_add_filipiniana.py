@@ -167,7 +167,7 @@ class AddFilipinianaTests(TestCase):
         slug = self.gowns().get(name="Beige Filipiniana 1").slug                             # Large, 1,500
         html = self.client.get(f"{url}products/{slug}/").content.decode()
         self.assertEqual(re.findall(r'data-product-size="([A-Z]+)"', html), ["L"])
-        self.assertEqual(re.findall(r'data-size-not-offered="([A-Z]+)"', html), ["S", "M", "XL"])
+        self.assertEqual(re.findall(r'data-size-not-offered="([A-Z]+)"', html), ["S", "M", "XL", "XXL"])
         self.assertIn("₱1,500", html)
         slug = self.gowns().get(name="Gold Filipiniana 1").slug                              # XL, 3,000
         html = self.client.get(f"{url}products/{slug}/").content.decode()

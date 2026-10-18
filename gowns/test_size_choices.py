@@ -1,4 +1,4 @@
-"""The gown page's size row: Small to Extra Large every time, and only the sizes staff really have in Gown Catalog can be chosen.
+"""The gown page's size row: Small to Extra Extra Large every time, and only the sizes staff really have in Gown Catalog can be chosen.
 
 The report (Oct 2026): the page only drew the sizes a gown comes in (a Wedding Gown in Medium showed a lone "M"). The owner wants the
 whole range visible, with the sizes the shop has clickable and the rest greyed out. The list of OFFERED sizes (context `size_options`)
@@ -16,7 +16,7 @@ from gowns.views import _size_choices, _size_options
 
 
 def option(code, count=1):
-    names = {"S": "Small", "M": "Medium", "L": "Large", "XL": "Extra Large", "FREE": "Free Size"}
+    names = {"S": "Small", "M": "Medium", "L": "Large", "XL": "Extra Large", "XXL": "Extra Extra Large", "FREE": "Free Size"}
     return {"code": code, "label": "Free Size" if code == "FREE" else code, "name": names[code], "count": count}
 
 
@@ -25,29 +25,39 @@ def shape(choices):
 
 
 class SizeChoicesTests(SimpleTestCase):
-    def test_only_small_offered_greys_the_other_three(self):
-        self.assertEqual(shape(_size_choices([option("S")])), [("S", True), ("M", False), ("L", False), ("XL", False)])
+    def test_only_small_offered_greys_the_other_four(self):
+        self.assertEqual(shape(_size_choices([option("S")])),
+                         [("S", True), ("M", False), ("L", False), ("XL", False), ("XXL", False)])
 
     def test_only_medium_offered(self):
-        self.assertEqual(shape(_size_choices([option("M")])), [("S", False), ("M", True), ("L", False), ("XL", False)])
+        self.assertEqual(shape(_size_choices([option("M")])),
+                         [("S", False), ("M", True), ("L", False), ("XL", False), ("XXL", False)])
 
-    def test_three_sizes_offered_leave_extra_large_greyed(self):
+    def test_three_sizes_offered_leave_extra_large_and_xxl_greyed(self):
         self.assertEqual(shape(_size_choices([option("S"), option("M"), option("L")])),
-                         [("S", True), ("M", True), ("L", True), ("XL", False)])
+                         [("S", True), ("M", True), ("L", True), ("XL", False), ("XXL", False)])
 
     def test_every_size_offered(self):
+        self.assertEqual(shape(_size_choices([option(c) for c in ("S", "M", "L", "XL", "XXL")])),
+                         [("S", True), ("M", True), ("L", True), ("XL", True), ("XXL", True)])
+
+    def test_a_gown_without_xxl_still_has_the_xxl_button_greyed(self):
         self.assertEqual(shape(_size_choices([option(c) for c in ("S", "M", "L", "XL")])),
-                         [("S", True), ("M", True), ("L", True), ("XL", True)])
+                         [("S", True), ("M", True), ("L", True), ("XL", True), ("XXL", False)])
+
+    def test_xxl_alone_greys_the_rest_and_is_the_clickable_one(self):
+        self.assertEqual(shape(_size_choices([option("XXL")])),
+                         [("S", False), ("M", False), ("L", False), ("XL", False), ("XXL", True)])
 
     def test_the_row_always_runs_smallest_to_largest_whatever_order_the_sizes_arrive_in(self):
-        self.assertEqual([c["code"] for c in _size_choices([option("XL"), option("S")])], ["S", "M", "L", "XL"])
+        self.assertEqual([c["code"] for c in _size_choices([option("XXL"), option("XL"), option("S")])], ["S", "M", "L", "XL", "XXL"])
 
     def test_a_gown_that_is_only_free_size_shows_just_that_button(self):
         self.assertEqual(shape(_size_choices([option("FREE")])), [("FREE", True)])
 
     def test_free_size_next_to_other_sizes_comes_last_and_is_not_added_when_the_gown_lacks_it(self):
         self.assertEqual(shape(_size_choices([option("FREE"), option("S")])),
-                         [("S", True), ("M", False), ("L", False), ("XL", False), ("FREE", True)])
+                         [("S", True), ("M", False), ("L", False), ("XL", False), ("XXL", False), ("FREE", True)])
         self.assertNotIn("FREE", [c["code"] for c in _size_choices([option("S")])])
 
     def test_no_sizes_draws_nothing(self):
@@ -77,38 +87,39 @@ class GownPageSizeRowTests(TestCase):
     def greyed(self, html):
         return re.findall(r'data-size-not-offered="([A-Z]+)"', html)
 
-    def test_a_medium_only_gown_shows_all_four_but_only_medium_can_be_chosen(self):
+    def test_a_medium_only_gown_shows_all_five_but_only_medium_can_be_chosen(self):
         unit = self.make_unit(1, Gown.Size.MEDIUM)
         response = self.page(unit)
         html = response.content.decode()
         self.assertEqual(self.chosen(html), ["M"])
-        self.assertEqual(self.greyed(html), ["S", "L", "XL"])
+        self.assertEqual(self.greyed(html), ["S", "L", "XL", "XXL"])
         self.assertEqual([o["code"] for o in response.context["size_options"]], ["M"])     # the offered list is unchanged
 
     def test_a_small_only_gown_makes_small_the_clickable_one(self):
         unit = self.make_unit(2, Gown.Size.SMALL, name="Small Only Gown")
         html = self.page(unit).content.decode()
         self.assertEqual(self.chosen(html), ["S"])
-        self.assertEqual(self.greyed(html), ["M", "L", "XL"])
+        self.assertEqual(self.greyed(html), ["M", "L", "XL", "XXL"])
 
-    def test_the_row_reads_small_to_extra_large_left_to_right(self):
+    def test_the_row_reads_small_to_extra_extra_large_left_to_right(self):
         unit = self.make_unit(3, Gown.Size.LARGE, name="Order Gown")
         html = self.page(unit).content.decode()
         order = re.findall(r'data-(?:product-size|size-not-offered)="([A-Z]+)"', html)
-        self.assertEqual(order, ["S", "M", "L", "XL"])
+        self.assertEqual(order, ["S", "M", "L", "XL", "XXL"])
 
-    def test_three_sizes_in_the_shop_leave_only_extra_large_greyed(self):
+    def test_three_sizes_in_the_shop_leave_extra_large_and_xxl_greyed(self):
         units = [self.make_unit(i, size, name="Barong Like") for i, size in
                  enumerate((Gown.Size.SMALL, Gown.Size.MEDIUM, Gown.Size.LARGE), start=4)]
         html = self.page(units[0]).content.decode()
         self.assertEqual(self.chosen(html), ["S", "M", "L"])
-        self.assertEqual(self.greyed(html), ["XL"])
+        self.assertEqual(self.greyed(html), ["XL", "XXL"])
 
     def test_every_size_in_the_shop_greys_nothing(self):
         units = [self.make_unit(i, size, name="Full Range Gown") for i, size in
-                 enumerate((Gown.Size.SMALL, Gown.Size.MEDIUM, Gown.Size.LARGE, Gown.Size.EXTRA_LARGE), start=8)]
+                 enumerate((Gown.Size.SMALL, Gown.Size.MEDIUM, Gown.Size.LARGE, Gown.Size.EXTRA_LARGE,
+                            Gown.Size.EXTRA_EXTRA_LARGE), start=8)]
         html = self.page(units[0]).content.decode()
-        self.assertEqual(self.chosen(html), ["S", "M", "L", "XL"])
+        self.assertEqual(self.chosen(html), ["S", "M", "L", "XL", "XXL"])
         self.assertEqual(self.greyed(html), [])
 
     def test_a_size_staff_marked_out_of_stock_is_greyed_not_offered(self):
@@ -124,7 +135,7 @@ class GownPageSizeRowTests(TestCase):
         self.make_unit(15, Gown.Size.EXTRA_LARGE, name="Growing Gown")
         html = self.page(unit).content.decode()
         self.assertEqual(self.chosen(html), ["S", "XL"])
-        self.assertEqual(self.greyed(html), ["M", "L"])
+        self.assertEqual(self.greyed(html), ["M", "L", "XXL"])
 
     def test_a_free_size_gown_shows_only_its_own_button(self):
         unit = self.make_unit(16, Gown.Size.FREE_SIZE, name="Free Gown")
