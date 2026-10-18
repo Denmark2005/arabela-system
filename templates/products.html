@@ -22,6 +22,82 @@
     border-style: dashed;
     cursor: not-allowed;
   }
+  /* ---- Size Guide (static/js/size-guide.js): only the measurement table, in the shop's own look (white, dark labels, grey small text, Poppins). No scrollbars, nothing sliding. ---- */
+  html.sg-lock { overflow: hidden; scrollbar-gutter: stable; }
+  .sg-root { position: fixed; inset: 0; z-index: 200; display: none; align-items: center; justify-content: center; padding: 0.75rem; }
+  .sg-root.is-open { display: flex; }
+  .sg-backdrop { position: absolute; inset: 0; background: rgba(11,12,12,0.45); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); opacity: 0; transition: opacity 0.25s ease; }
+  .sg-root.is-visible .sg-backdrop { opacity: 1; }
+  .sg-panel {
+    position: relative; width: min(100%, 56rem); max-height: 100%; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none;
+    font-family: "Poppins", "Inter", sans-serif; background: #ffffff; color: #1b1c1c; border-radius: 8px; border: 1px solid rgba(11,12,12,0.08);
+    padding: 3.25rem 1.5rem 1.5rem; box-shadow: 0 24px 60px rgba(11,12,12,0.22);
+    opacity: 0; transform: translateY(10px) scale(0.985); transition: opacity 0.25s ease, transform 0.35s cubic-bezier(0.16,1,0.3,1);
+  }
+  .sg-panel::-webkit-scrollbar { display: none; }
+  .sg-root.is-visible .sg-panel { opacity: 1; transform: none; }
+  .sg-panel:focus { outline: none; }
+  .sg-close {
+    position: absolute; top: 0.75rem; right: 0.75rem; width: 2.25rem; height: 2.25rem; border-radius: 9999px; border: 0; background: #f0eded; color: #1b1c1c;
+    display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: background-color 0.2s ease;
+  }
+  .sg-close:hover { background: #e5e2e1; }
+  .sg-close:focus-visible { outline: 2px solid #0b0c0c; outline-offset: 2px; }
+  .sg-table { width: 100%; border-collapse: collapse; text-align: left; font: inherit; }
+  .sg-table th, .sg-table td { padding: 0.85rem 0.75rem; vertical-align: top; text-align: left; border-bottom: 1px solid #ebe8e7; }
+  .sg-table thead th {
+    font-size: 0.625rem; line-height: 1.5; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; color: #1b1c1c;
+    vertical-align: bottom; border-bottom-color: #c4c7c7;
+  }
+  .sg-table tbody tr:last-child th, .sg-table tbody tr:last-child td { border-bottom: 0; }
+  .sg-table tbody th { font-size: 0.875rem; font-weight: 600; color: #0b0c0c; white-space: nowrap; }
+  .sg-cm, .sg-in { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .sg-cm { font-size: 0.875rem; font-weight: 500; color: #1b1c1c; }
+  .sg-in { font-size: 0.75rem; color: #615e57; }
+  .sg-table tbody tr.is-selected th, .sg-table tbody tr.is-selected td { background: #f0eded; }
+  .sg-table tbody tr.is-selected th { box-shadow: inset 3px 0 0 #0b0c0c; }
+  .sg-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+  /* narrower than a wide desktop: every cell is two tidy lines (centimetres, then inches) so none wraps unevenly */
+  @media (max-width: 960px) { .sg-cm, .sg-in { display: block; } }
+  /* a phone: the same panel, a little tighter, so all four columns fit and nothing needs scrolling */
+  @media (max-width: 640px) {
+    .sg-panel { padding: 3rem 0.5rem 0.9rem; }
+    .sg-table th, .sg-table td { padding: 0.65rem 0.3rem; }
+    .sg-table thead th { font-size: 0.5625rem; letter-spacing: 0.06em; }
+    .sg-table tbody th, .sg-cm { font-size: 0.75rem; }
+    .sg-in { font-size: 0.6875rem; }
+    .sg-table thead th:first-child, .sg-table tbody th { padding-left: 0.5rem; }
+  }
+  @media (max-width: 380px) {
+    .sg-table thead th { font-size: 0.5rem; letter-spacing: 0.04em; }
+    .sg-table tbody th, .sg-cm { font-size: 0.6875rem; letter-spacing: -0.01em; }
+    .sg-in { font-size: 0.625rem; letter-spacing: -0.01em; }
+  }
+  @media (max-width: 340px) {
+    .sg-root { padding: 0.5rem; }
+    .sg-panel { padding-left: 0.2rem; padding-right: 0.2rem; }
+    .sg-table th, .sg-table td { padding-left: 0.2rem; padding-right: 0.2rem; }
+    .sg-table thead th { font-size: 0.4375rem; letter-spacing: 0.02em; }
+    .sg-table tbody th, .sg-cm { font-size: 0.625rem; }
+    .sg-in { font-size: 0.5625rem; }
+    .sg-table thead th:first-child, .sg-table tbody th { padding-left: 0.35rem; }
+  }
+  /* a phone held sideways is short: less space around the table so it still fits without scrolling */
+  @media (max-height: 480px) {
+    .sg-root { padding: 0.5rem; }
+    .sg-panel { padding: 2.5rem 1rem 0.6rem; }
+    .sg-table th, .sg-table td { padding: 0.3rem 0.5rem; }
+    .sg-table thead th { font-size: 0.5625rem; }
+    .sg-table tbody th, .sg-cm { font-size: 0.75rem; line-height: 1.3; }
+    .sg-in { font-size: 0.6875rem; line-height: 1.3; }
+    .sg-close { top: 0.4rem; right: 0.5rem; }
+  }
+  /* people who ask their device for less motion get the same panel with a plain fade */
+  @media (prefers-reduced-motion: reduce) {
+    .sg-backdrop, .sg-panel, .sg-close { transition: none !important; }
+    .sg-panel { transform: none !important; }
+  }
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
@@ -385,7 +461,7 @@
     <div class="space-y-4">
       <div class="flex justify-between items-center">
         <label class="font-label text-[0.6875rem] tracking-widest uppercase font-bold">Select Size</label>
-        <button type="button" class="font-label text-[0.625rem] tracking-widest uppercase underline underline-offset-4 decoration-outline-variant">Size Guide</button>
+        {% if size_guide %}<button type="button" id="size-guide-open" data-size-guide-open aria-haspopup="dialog" aria-controls="size-guide-root" aria-expanded="false" class="font-label text-[0.625rem] tracking-widest uppercase underline underline-offset-4 decoration-outline-variant hover:text-secondary transition-colors">Size Guide</button>{% endif %}
       </div>
       {% comment %}Small to Extra Extra Large every time (gowns.views._size_choices). Only the sizes staff gave this gown's units in Gown Catalog carry data-product-size and can be chosen; the others are greyed, carry data-size-not-offered instead, and the script never treats them as a size of this gown.{% endcomment %}
       <div class="flex flex-wrap gap-3">
@@ -687,9 +763,38 @@
     </div>
   </div>
 </section>
+{% if size_guide %}
+{% comment %}The Size Guide (gowns/size_guides.py draws its rows; static/js/size-guide.js opens it and highlights the size chosen on the page). Just the table, fixed over the page.{% endcomment %}
+<div id="size-guide-root" class="sg-root" hidden>
+  <div class="sg-backdrop" data-size-guide-close></div>
+  <div class="sg-panel" role="dialog" aria-modal="true" aria-label="{{ size_guide.title }}" tabindex="-1">
+    <button type="button" class="sg-close" data-size-guide-close aria-label="Close the size guide">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <table class="sg-table">
+      <caption class="sg-sr">{{ size_guide.title }} in centimetres and inches</caption>
+      <thead>
+        <tr>
+          <th scope="col">Size</th>
+          {% for column in size_guide.columns %}<th scope="col">{{ column }} (cm / in)</th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in size_guide.rows %}
+        <tr data-size-code="{{ row.code }}">
+          <th scope="row">{{ row.code }}</th>
+          {% for value in row.values %}<td><span class="sg-cm">{{ value.cm }}</span> <span class="sg-in">{{ value.inch }}</span></td>{% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block extra_scripts %}
+{% if size_guide %}<script src="{% static 'js/size-guide.js' %}?v={{ site_asset_version }}" defer></script>{% endif %}
 <script>
   (function () {
     const titleEl = document.getElementById('product-cal-title');

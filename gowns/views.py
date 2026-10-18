@@ -41,6 +41,7 @@ from gowns.models import (
 )
 from gowns import availability
 from gowns.photos import GRID_WIDTH, PAGE_WIDTH, sized
+from gowns.size_guides import size_guide_for
 from reservations import reminders, timeline
 from reservations.models import Reservation, ReservationItem, ReservationStatusEvent
 
@@ -800,6 +801,7 @@ def product_detail(request, collection: str, slug: str):
             "closing": availability.PICKUP_CLOSES.strftime("%I:%M %p").lstrip("0"),
             "restDays": COOLDOWN_DAYS,
         }
+    size_choices = _size_choices(size_options)
     product = {
         "title": display_unit.name,
         "price": f"₱{display_unit.rental_price:,.0f}",
@@ -826,7 +828,9 @@ def product_detail(request, collection: str, slug: str):
             # Only the sizes staff gave this product's units (Gown Catalog), and the whole calendar worked out by
             # gowns.availability (which event dates can be booked, the pick-up day each one gets, and why not).
             "size_options": size_options,
-            "size_choices": _size_choices(size_options),
+            "size_choices": size_choices,
+            # The measurements table behind the "Size Guide" link (gowns/size_guides.py): only categories that have one get the link.
+            "size_guide": size_guide_for(real_gown.category, size_choices),
             "calendar_data": calendar_data,
             "related_products": _related_gowns(product["collection"], slug),
         },
