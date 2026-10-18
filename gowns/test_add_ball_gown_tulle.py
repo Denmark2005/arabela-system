@@ -30,12 +30,12 @@ LIST = [
     ("Light Blue", 1500), ("Yellow & Black", 1500), ("Green", 1500), ("Red", 1500),
     ("Pink", 4000), ("Green", 4000), ("Black & Beige", 4000), ("Light Purple", 4000), ("Pink", 4000), ("White", 4000), ("White", 4000),
     ("Light Green", 4000), ("Pink & Light Blue", 4000), ("Light Blue", 4000), ("Dusty Blue", 4000), ("Pink & Beige", 4000),
-    ("Pink & Gray", 4000), ("Purple", 4000), ("Pink & Light Blue", 4000), ("Light Blue & Pink", 4000), ("Pink", 4000),
+    ("Pink & Gray", 4000), ("Purple", 4000), ("Pink & Light Blue", 4000), ("Pink & Light Blue", 4000), ("Pink", 4000),
     ("Pink & Gray", 4000), ("Light Green", 4000), ("Pink", 4000),
 ]
 FIELD_COLOUR = {"Emerald Green": "Emerald", "Navy Blue": "Navy", "Red & Black": "Red and Black", "Yellow & Black": "Yellow and Black",
                 "Black & Beige": "Black and Beige", "Pink & Light Blue": "Pink and Light Blue", "Pink & Beige": "Pink and Beige",
-                "Pink & Gray": "Pink and Grey", "Light Blue & Pink": "Light Blue and Pink"}
+                "Pink & Gray": "Pink and Grey"}
 
 
 def make_photos(folder):
@@ -140,7 +140,7 @@ class AddBallGownTulleTests(TestCase):
         self.assertEqual(by_colour["Dusty Blue"], {"DB"})
         self.assertEqual(by_colour["Light Pink"], {"LP"})
         self.assertEqual(by_colour["Light Blue"], {"LB"})
-        self.assertEqual(len(by_colour), 25)
+        self.assertEqual(len(by_colour), 24)
         for code in {next(iter(c)) for c in by_colour.values()}:
             self.assertRegex(code, r"^[A-Z]{2}$")
 

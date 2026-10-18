@@ -35,7 +35,7 @@ LIST = (
     ("Pink", "4000"), ("Green", "4000"), ("Black & Beige", "4000"), ("Light Purple", "4000"), ("Pink", "4000"),
     ("White", "4000"), ("White", "4000"), ("Light Green", "4000"), ("Pink & Light Blue", "4000"), ("Light Blue", "4000"),
     ("Dusty Blue", "4000"), ("Pink & Beige", "4000"), ("Pink & Gray", "4000"), ("Purple", "4000"), ("Pink & Light Blue", "4000"),
-    ("Light Blue & Pink", "4000"), ("Pink", "4000"), ("Pink & Gray", "4000"), ("Light Green", "4000"), ("Pink", "4000"),
+    ("Pink & Light Blue", "4000"), ("Pink", "4000"), ("Pink & Gray", "4000"), ("Light Green", "4000"), ("Pink", "4000"),
 )
 # The colour FIELD where it differs from the colour in the gown's name: the admin's preset spelling.
 _FIELD_COLOUR = {"Emerald Green": "Emerald", "Navy Blue": "Navy", "Gray": "Grey"}
