@@ -308,7 +308,15 @@ def build_email(kind, data, *, base_url=None, shop=None, inline_logo=False):
     use the logo attached to the email (see _make_message); the admin preview uses the hosted copy instead."""
     base_url = base_url if base_url is not None else site_base_url()
     shop = shop if shop is not None else shop_info()
-    content = _content(kind, data, shop)
+    return render_email(_content(kind, data, shop), data, base_url=base_url, shop=shop, inline_logo=inline_logo)
+
+
+def render_email(content, data, *, base_url=None, shop=None, inline_logo=False):
+    """The shop's one email layout filled with `content` (what _content() returns, or the owner emails' own). Optional keys
+    beyond _content()'s: `highlight` {label, value} -- a big boxed value such as a confirmation code; `button_url` -- a full
+    link for the button; `button_path` -- a path on the shop's own site (used when there is no `button_url_name`)."""
+    base_url = base_url if base_url is not None else site_base_url()
+    shop = shop if shop is not None else shop_info()
     inline_logo = bool(inline_logo and _logo_bytes())
 
     rows = []
@@ -330,8 +338,9 @@ def build_email(kind, data, *, base_url=None, shop=None, inline_logo=False):
         "paragraphs_html": [_html_text(p) for p in content["paragraphs"]],
         "note": dict(content["note"], html=_html_text(content["note"]["text"])) if content["note"] else None,
         "rows": rows,
+        "highlight": content.get("highlight"),
         "button_label": content["button_label"],
-        "button_url": base_url + reverse(content["button_url_name"]),
+        "button_url": content.get("button_url") or base_url + (content.get("button_path") or reverse(content["button_url_name"])),
         "logo_url": f"cid:{_LOGO_CID}" if inline_logo else base_url + static("images/email/arabela-logo-white.png"),
         "home_url": base_url + "/",
         "shop": shop,

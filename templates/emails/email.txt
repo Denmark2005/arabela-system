@@ -6,7 +6,9 @@
 
 {% for paragraph in paragraphs %}{{ paragraph }}
 
-{% endfor %}{% if note %}{{ note.title|upper }}
+{% endfor %}{% if highlight %}{{ highlight.label|upper }}: {{ highlight.value }}
+
+{% endif %}{% if note %}{{ note.title|upper }}
 {{ note.text }}
 
 {% endif %}{% if rows %}{% for row in rows %}{{ row.label }}: {{ row.value }}{% if row.sub %} ({{ row.sub }}){% endif %}

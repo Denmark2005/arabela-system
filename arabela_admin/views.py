@@ -29,7 +29,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 import json
 
-from accounts import login_throttle
+from accounts import login_throttle, owner_recovery
 from accounts.models import CustomerMessage, UserProfile
 from accounts.services import CANCELLATION_FLAG_THRESHOLD
 from gowns import availability
@@ -3707,7 +3707,10 @@ def admin_login_view(request):
     # "remembered" session survives simply loading this URL (bookmark, back/forward, etc).
     if _is_admin_staff(request):
         return redirect("arabela_admin:dashboard")
-    return render(request, "arabela_admin/admin-login.html")
+    notice = ""
+    if request.GET.get("reset") == "done":      # sent here by the Forgot password page after a new password was saved
+        notice = "Your password was changed. Sign in with your new password."
+    return render(request, "arabela_admin/admin-login.html", {"notice": notice})
 
 
 @require_http_methods(["POST"])
@@ -3752,6 +3755,7 @@ def page_view(request, page: str):
     return render(request, "arabela_admin/account-settings.html", {
         "admin_username": request.user.get_username(),
         "previous_login": _previous_login(request),
+        "recovery": owner_recovery.status(request.user),
     })
 
 

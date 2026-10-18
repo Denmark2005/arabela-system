@@ -115,6 +115,22 @@ class LoginThrottle(models.Model):
         return f'{self.key}: {self.failures} failed'
 
 
+class OwnerRecovery(models.Model):
+    """The shop owner's CONFIRMED recovery email -- the one address a password-reset link may be sent to (accounts/owner_recovery.py).
+
+    Deliberately not the profile's Email box: that box can be typed into with no proof, so it must never decide who can reset the admin
+    password. A row exists only after a code mailed to the address was typed back, so a mistyped or made-up address is never stored.
+    Only the owner can have one; staff and customers never get a reset link."""
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='owner_recovery')
+    email = models.EmailField(max_length=254)
+    verified_at = models.DateTimeField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.user_id}: {self.email}'
+
+
 class CustomerEmailLog(models.Model):
     """One row for every email the site tried to send to a customer -- the owner's "Email history" (Customer emails page).
 

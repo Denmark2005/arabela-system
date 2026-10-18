@@ -1,5 +1,11 @@
 from django.urls import path
 
+from .recovery_views import (
+    forgot_password_view,
+    recovery_send_code_view,
+    recovery_verify_code_view,
+    reset_password_view,
+)
 from .views import (
     rental_schedule_view,
     dashboard_view,
@@ -73,6 +79,10 @@ app_name = "arabela_admin"
 
 urlpatterns = [
     path("admin-login/", admin_login_view, name="admin_login"),
+    path("forgot-password/", forgot_password_view, name="forgot_password"),
+    path("reset-password/<uidb64>/<token>/", reset_password_view, name="reset_password"),
+    path("api/recovery-email/send-code/", recovery_send_code_view, name="recovery_send_code"),
+    path("api/recovery-email/verify/", recovery_verify_code_view, name="recovery_verify_code"),
     path("logout/", admin_logout_view, name="admin_logout"),
     path("", dashboard_view, name="dashboard"),
     path("rental-schedule/", rental_schedule_view, name="rental_schedule"),

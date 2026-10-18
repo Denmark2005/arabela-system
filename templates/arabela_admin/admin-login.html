@@ -28,6 +28,9 @@
       animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
     }
 
+    /* The page draws its own show/hide eye on the password box; hide the browser's built-in one (Edge adds a second, overlapping eye). */
+    #password::-ms-reveal, #password::-ms-clear { display: none; }
+
     .input-error-state {
       border-color: #ba1a1a !important;
       border-width: 2px !important;
@@ -84,6 +87,9 @@
                   Enter your username to sign in!
                 </p>
               </div>
+              {% if notice %}
+              <div role="status" style="border: 1px solid #a6e0bf; background: #ecfdf3; color: #05603a; border-radius: 0.5rem; padding: 0.75rem 1rem; margin-bottom: 1.25rem; font-size: 0.875rem; line-height: 1.5;">{{ notice }}</div>
+              {% endif %}
               <div>
                 <form id="login_form" method="POST" action="{% url 'arabela_admin:admin_login' %}" novalidate>
                   {% csrf_token %}
@@ -198,6 +204,7 @@
                           Keep me logged in
                         </label>
                       </div>
+                      <a href="{% url 'arabela_admin:forgot_password' %}" class="text-sm hero-action-link">Forgot password?</a>
                     </div>
                     <div>
                       <button
