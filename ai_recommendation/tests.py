@@ -348,6 +348,15 @@ class LiveCatalogPromptTests(TestCase):
         self.assertIn("...and 2 more", prompt)
         self.assertEqual(sum(1 for line in prompt.splitlines() if "Cap Gown" in line), 2)
 
+    def test_a_category_with_more_than_twenty_five_gowns_is_listed_in_full(self):
+        # the cap used to be 25: gowns 26 and up were invisible to the AI, so it could never recommend a newly added one by name
+        for n in range(1, 41):
+            _make_gown(n, name=f"Batch Gown {n:02d}")
+        prompt = views._system_prompt()
+        self.assertEqual(sum(1 for line in prompt.splitlines() if line.strip().startswith("- Batch Gown")), 40)
+        self.assertNotIn("more (use the browse-all link above)", prompt)
+        self.assertGreaterEqual(views.MAX_GOWNS_PER_CATEGORY, 100)
+
     def test_the_prompt_tells_the_ai_to_ask_for_women_or_men_first(self):
         prompt = views._system_prompt()
         self.assertIn("women's gown or a men's outfit", prompt)

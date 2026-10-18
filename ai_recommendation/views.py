@@ -93,9 +93,11 @@ def _ai_chat_rate_limit_reply(request):
     return None
 
 
-# Gowns listed to the AI per category before the rest is left to the category's browse link --
-# keeps the prompt small if the catalog ever grows large.
-MAX_GOWNS_PER_CATEGORY = 25
+# Gowns listed to the AI per category before the rest is left to the category's browse link -- only a safety cap, so the prompt can
+# never grow without limit. It was 25, which hid gowns from the AI the moment a category passed 25 (Wedding 28, Filipiniana 30 and
+# Kids 33 live products: 16 gowns it could not recommend by name). A listed gown costs about 25 tokens, so 100 per category keeps even
+# a full shop (hundreds of products) far inside what the model reads, while every real product stays visible to it.
+MAX_GOWNS_PER_CATEGORY = 100
 
 _ALL_COLLECTIONS_PATH = "/collections/all/"
 
