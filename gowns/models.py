@@ -105,6 +105,7 @@ class Gown(models.Model):
         BRIDESMAID_DRESSES = 'Bridesmaid Dresses', 'Bridesmaid Dresses'
 
     class Size(models.TextChoices):
+        EXTRA_SMALL = 'Extra Small', 'Extra Small'      # Kids Gown only (see EXTRA_SMALL_CATEGORY): the admin and the server both enforce it
         SMALL = 'Small', 'Small'
         MEDIUM = 'Medium', 'Medium'
         LARGE = 'Large', 'Large'
@@ -216,6 +217,7 @@ class Gown(models.Model):
 # The short code the customer site uses for each size (the size buttons, the bag, checkout), in the order the buttons are
 # shown. A product's sizes are exactly the sizes staff gave its physical units in Gown Catalog -- nothing else is offered.
 SIZE_CODES = {
+    Gown.Size.EXTRA_SMALL: "XS",
     Gown.Size.SMALL: "S",
     Gown.Size.MEDIUM: "M",
     Gown.Size.LARGE: "L",
@@ -224,9 +226,13 @@ SIZE_CODES = {
     Gown.Size.FREE_SIZE: "FREE",
 }
 
+# Extra Small exists for ONE category only. The gown page shows an XS button only on Kids Gown pages, the admin's size list offers it only when the
+# category is Kids Gown, and Add/Edit Gown refuse it for any other category (arabela_admin.views._validate_gown_fields).
+EXTRA_SMALL_CATEGORY = Gown.Category.KIDS_GOWN
+
 
 def size_codes_of(units):
-    """The size codes these units come in, in button order (S, M, L, XL, XXL, Free Size), each once."""
+    """The size codes these units come in, in button order (XS, S, M, L, XL, XXL, Free Size), each once."""
     present = {unit.size for unit in units}
     return [code for value, code in SIZE_CODES.items() if value in present]
 

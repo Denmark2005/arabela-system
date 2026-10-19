@@ -37,7 +37,7 @@ from gowns.context_processors import (
     unread_messages_total,
 )
 from gowns.models import (
-    COOLDOWN_DAYS, SIZE_CODES, Gown, GownUnavailability, group_gowns_by_name, pick_representative_gown, size_codes_of,
+    COOLDOWN_DAYS, EXTRA_SMALL_CATEGORY, SIZE_CODES, Gown, GownUnavailability, group_gowns_by_name, pick_representative_gown, size_codes_of,
 )
 from gowns import availability
 from gowns.photos import GRID_WIDTH, PAGE_WIDTH, sized
@@ -435,23 +435,29 @@ def _size_options(units):
 
 # The sizes the gown page always shows, smallest to largest. Only the ones staff really gave the gown can be chosen.
 _SIZE_LADDER = ("S", "M", "L", "XL", "XXL")
+# Kids Gown's ladder starts one size smaller (XS, greyed until staff add one) and has no greyed XXL (a child's chart ends at XL; an XXL still shows if staff ever gave one).
+_KIDS_SIZE_LADDER = ("XS", "S", "M", "L", "XL", "XXL")
+_KIDS_SHOWN_ONLY_WHEN_OFFERED = ("XXL",)
 
 
-def _size_choices(options):
+def _size_choices(options, category=""):
     """What the gown page draws: Small to Extra Extra Large every time, each with `offered` -- True only for a size staff gave this product's
     units in Gown Catalog (those are the clickable ones; the rest are shown greyed out). Free Size is added only when the gown comes in
     it, and a gown that comes in nothing but Free Size shows just that one button (a row of greyed S-XXL would mean nothing there).
+    A Kids Gown also gets an Extra Small button in front (and no greyed XXL) -- no other category ever shows XS.
     `options` is _size_options(): the offered sizes, which stay the single list every other rule (bag, calendar, checkout) uses."""
     by_code = {option["code"]: option for option in options}
     if not by_code:
         return []
     if set(by_code) == {"FREE"}:
         return [dict(by_code["FREE"], offered=True)]
+    kids = category == EXTRA_SMALL_CATEGORY
+    ladder = _KIDS_SIZE_LADDER if kids else _SIZE_LADDER
     choices = []
-    for code in (*_SIZE_LADDER, "FREE"):
+    for code in (*ladder, "FREE"):
         if code in by_code:
             choices.append(dict(by_code[code], offered=True))
-        elif code in _SIZE_LADDER:
+        elif code in ladder and not (kids and code in _KIDS_SHOWN_ONLY_WHEN_OFFERED):
             name = next(value for value, c in SIZE_CODES.items() if c == code)
             choices.append({"code": code, "label": code, "name": str(name), "count": 0, "offered": False})
     return choices
@@ -473,10 +479,11 @@ _UNIT_DATE_PASSED = "date_passed"
 _UNIT_TODAY_CLOSED = "today_closed"
 
 # products.html's size buttons emit 'S' / 'M' / 'L'; Gown.size stores 'Small' / 'Medium'
-# / 'Large' / 'Extra Large' / 'Extra Extra Large' / 'Free Size'. This bridges the two so size can act as a
+# / 'Large' / 'Extra Large' / 'Extra Extra Large' / 'Free Size' (and 'Extra Small', Kids Gown only). This bridges the two so size can act as a
 # PREFERENCE between free units. It is deliberately never a filter: an unmapped, blank
 # or mistyped size must never make a genuinely bookable gown look booked.
 _SIZE_ALIASES = {
+    "XS": Gown.Size.EXTRA_SMALL, "EXTRA SMALL": Gown.Size.EXTRA_SMALL,
     "S": Gown.Size.SMALL, "SMALL": Gown.Size.SMALL,
     "M": Gown.Size.MEDIUM, "MEDIUM": Gown.Size.MEDIUM,
     "L": Gown.Size.LARGE, "LARGE": Gown.Size.LARGE,
@@ -801,7 +808,7 @@ def product_detail(request, collection: str, slug: str):
             "closing": availability.PICKUP_CLOSES.strftime("%I:%M %p").lstrip("0"),
             "restDays": COOLDOWN_DAYS,
         }
-    size_choices = _size_choices(size_options)
+    size_choices = _size_choices(size_options, real_gown.category)
     product = {
         "title": display_unit.name,
         "price": f"₱{display_unit.rental_price:,.0f}",

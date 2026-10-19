@@ -150,8 +150,8 @@ BALL_GOWN_TULLE_GUIDE = {
     ],
 }
 
-# Kids Gown: the chart is by AGE, with the shop's size tag beside it. The shop's own sizes are S, M, L and XL; the chart's first row (3-4 years, "XS") is a size the
-# shop does not make, so it has the code "XS", which no size button on the gown page ever matches (it is shown, never highlighted).
+# Kids Gown: the chart is by AGE, with the shop's size tag beside it. Kids Gown is the one category that can have an Extra Small (XS, 3-4 years): the shop makes
+# none today, but the day staff add one its gown page gets a real XS button and this first row (code "XS") is highlighted like any other.
 KIDS_GUIDE = {
     "title": "Kids Gown size guide",
     "first_heading": "Age",

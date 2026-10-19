@@ -199,9 +199,9 @@ class SizeGuideDataTests(SimpleTestCase):
         self.assertEqual([r["label"] for r in suit["rows"]], [r["code"] for r in suit["rows"]])
         self.assertEqual(suit["headings"], ["Chest / Bust (cm / in)", "Shoulder Width (cm / in)", "Sleeve Length (cm / in)", "Waist (cm / in)"])
 
-    def test_the_kids_xs_row_is_shown_but_no_size_button_on_the_gown_page_can_match_it(self):
+    def test_the_kids_xs_row_matches_the_real_xs_size_button_kids_gowns_can_have(self):
         from gowns.models import SIZE_CODES
-        self.assertNotIn("XS", set(SIZE_CODES.values()))                                  # the gown page's size buttons never include XS
+        self.assertIn("XS", set(SIZE_CODES.values()))                                      # Kids Gown can have an Extra Small button now
         self.assertEqual(KIDS_GUIDE["rows"][0]["code"], "XS")
 
     def test_each_category_owns_its_own_copy_of_a_shared_chart(self):

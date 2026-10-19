@@ -2340,7 +2340,7 @@
 
           <div class="col-span-2 lg:col-span-1">
             <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Category</label>
-            <select x-model="newGownCategory" @change="nameConflict = null" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
+            <select x-model="newGownCategory" @change="nameConflict = null; if ($event.target.value !== 'Kids Gown' && newGownSize === 'Extra Small') newGownSize = 'Medium'" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
               {% for row in category_rows %}
               <option value="{{ row.key }}">{{ row.label }}</option>
               {% endfor %}
@@ -2356,6 +2356,8 @@
           <div class="col-span-2 lg:col-span-1">
             <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Size</label>
             <select x-model="newGownSize" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
+              {# Extra Small is for Kids Gown only: hidden (and disabled, for browsers that ignore `hidden` on an option) for every other category. The server refuses it for them too. #}
+              <option value="Extra Small" :hidden="newGownCategory !== 'Kids Gown'" :disabled="newGownCategory !== 'Kids Gown'">Extra Small (XS) - Kids Gown only</option>
               <option value="Small">Small</option>
               <option value="Medium">Medium</option>
               <option value="Large">Large</option>

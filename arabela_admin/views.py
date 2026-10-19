@@ -35,6 +35,7 @@ from accounts.services import CANCELLATION_FLAG_THRESHOLD
 from gowns import availability
 from gowns.models import (
     COOLDOWN_DAYS,
+    EXTRA_SMALL_CATEGORY,
     CategoryCover,
     CustomCategory,
     DEFAULT_CATEGORY_TAG_COLORS,
@@ -1958,6 +1959,8 @@ def _validate_gown_fields(name, category, color_name, color_code, size, design_v
         return "Color name must be 40 characters or fewer."
     if size not in Gown.Size.values:
         return "Please choose a valid size."
+    if size == Gown.Size.EXTRA_SMALL and category != EXTRA_SMALL_CATEGORY:
+        return f"Extra Small is only for {EXTRA_SMALL_CATEGORY}. Please choose another size."
     if len(design_variant) > 60:
         return "Design variant must be 60 characters or fewer."
 

@@ -178,7 +178,7 @@ class AddKidsGownsTests(TestCase):
         slug = self.gowns().filter(name="Red Kids Gown 1").first().slug                    # Small only
         html = self.client.get(f"{url}products/{slug}/").content.decode()
         self.assertEqual(re.findall(r'data-product-size="([A-Z]+)"', html), ["S"])
-        self.assertEqual(re.findall(r'data-size-not-offered="([A-Z]+)"', html), ["M", "L", "XL", "XXL"])
+        self.assertEqual(re.findall(r'data-size-not-offered="([A-Z]+)"', html), ["XS", "M", "L", "XL"])         # a Kids Gown page: XS in front, no greyed XXL
         self.assertIn("₱2,500", html)
 
     def test_a_kids_gown_cannot_be_booked_in_a_size_it_does_not_come_in(self):
