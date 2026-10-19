@@ -25,8 +25,9 @@ from gowns.models import Gown
 
 CATEGORY = Gown.Category.KIDS_GOWN
 _SIZE = {"S": Gown.Size.SMALL, "M": Gown.Size.MEDIUM, "L": Gown.Size.LARGE, "XL": Gown.Size.EXTRA_LARGE}
-# The age band each size stands for (for the size guide).
-AGE_BANDS = {"S": "1-3 years", "M": "4-6 years", "L": "7-9 years", "XL": "10-12 years"}
+# The age band each size stands for, as the owner's Kids Gown size chart says it (gowns/size_guides.py KIDS_GUIDE shows it on the gown page; its first row,
+# 3-4 years "XS", is a size the shop does not make).
+AGE_BANDS = {"S": "5-6 years", "M": "7-8 years", "L": "9-10 years", "XL": "11-12 years"}
 # (gown name, photo file, colour, sizes, price) -- the owner's order; photo n is list item n.
 KIDS_GOWNS = (
     ("Red Kids Gown 1", "Kids Gown 01.jpg", "Red", "S", "2500"),

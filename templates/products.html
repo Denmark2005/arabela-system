@@ -68,6 +68,7 @@
     .sg-table tbody th, .sg-cm { font-size: 0.75rem; }
     .sg-in { font-size: 0.6875rem; }
     .sg-table thead th:first-child, .sg-table tbody th { padding-left: 0.5rem; }
+    .sg-table tbody th { white-space: normal; }   /* Kids Gown's first column is an age ("11-12 Years"): two lines on a phone */
   }
   @media (max-width: 380px) {
     .sg-table thead th { font-size: 0.5rem; letter-spacing: 0.04em; }
@@ -775,14 +776,14 @@
       <caption class="sg-sr">{{ size_guide.title }} in centimetres and inches</caption>
       <thead>
         <tr>
-          <th scope="col">Size</th>
-          {% for column in size_guide.columns %}<th scope="col">{{ column }} (cm / in)</th>{% endfor %}
+          <th scope="col">{{ size_guide.first_heading }}</th>
+          {% for heading in size_guide.headings %}<th scope="col">{{ heading }}</th>{% endfor %}
         </tr>
       </thead>
       <tbody>
         {% for row in size_guide.rows %}
         <tr data-size-code="{{ row.code }}">
-          <th scope="row">{{ row.code }}</th>
+          <th scope="row">{{ row.label }}</th>
           {% for value in row.values %}<td><span class="sg-cm">{{ value.cm }}</span> <span class="sg-in">{{ value.inch }}</span></td>{% endfor %}
         </tr>
         {% endfor %}

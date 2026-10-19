@@ -11,7 +11,7 @@ from django.urls import reverse
 
 from gowns.models import Gown
 from gowns.size_guides import (
-    BALL_GOWN_TULLE_GUIDE, BARONG_GUIDE, BRIDESMAID_GUIDE, DRESSES_GUIDE, EVENING_GUIDE, FILIPINIANA_GUIDE, GUEST_GUIDE, LONG_GUIDE, LUXURY_GUIDE, MOTHER_GUIDE, SIZE_GUIDES, SUIT_GUIDE, WEDDING_GUIDE, size_guide_for,
+    BALL_GOWN_TULLE_GUIDE, BARONG_GUIDE, BRIDESMAID_GUIDE, DRESSES_GUIDE, EVENING_GUIDE, FILIPINIANA_GUIDE, GUEST_GUIDE, KIDS_GUIDE, LONG_GUIDE, LUXURY_GUIDE, MOTHER_GUIDE, SIZE_GUIDES, SUIT_GUIDE, WEDDING_GUIDE, size_guide_for,
 )
 
 GUIDE_JS = Path(settings.BASE_DIR) / "static" / "js" / "size-guide.js"
@@ -94,6 +94,16 @@ BALL_GOWN_TULLE_CHART = {
     "XL": ["101–107 cm", '(40–42")', "81–87 cm", '(32–34")', "109–114 cm", '(43–45")'],
 }
 
+# The owner's Kids Gown chart: by AGE, with the shop's size tag beside it (typed from its own screenshot). Order = the chart's rows; XS is a size the shop does not make.
+KIDS_CHART = {
+    "XS": ["Size 3–4", "(XS)", "56–58 cm", '(22–23")', "53–56 cm", '(21–22")', "76–86 cm", '(30–34")'],
+    "S": ["Size 5–6", "(Small)", "61–64 cm", '(24–25")', "58–61 cm", '(23–24")', "91–102 cm", '(36–40")'],
+    "M": ["Size 7–8", "(Medium)", "66–69 cm", '(26–27")', "64–66 cm", '(25–26")', "107–117 cm", '(42–46")'],
+    "L": ["Size 9–10", "(Large)", "71–74 cm", '(28–29")', "66–69 cm", '(26–27")', "122–127 cm", '(48–50")'],
+    "XL": ["Size 11–12", "(XL)", "76–81 cm", '(30–32")', "71–74 cm", '(28–29")', "132–137 cm", '(52–54")'],
+}
+KIDS_AGES = {"XS": "3–4 Years", "S": "5–6 Years", "M": "7–8 Years", "L": "9–10 Years", "XL": "11–12 Years"}
+
 # category label -> (collection address, guide, chart, headings, units per row of the chart)
 CATEGORY_CASES = {
     "Filipiniana": ("filipiniana", FILIPINIANA_GUIDE, WEDDING_CHART, ["Size", "Bust (cm / in)", "Waist (cm / in)", "Hips (cm / in)"]),
@@ -106,6 +116,7 @@ CATEGORY_CASES = {
     "Long Gown": ("long-gown", LONG_GUIDE, LONG_CHART, ["Size", "Bust (cm / in)", "Waist (cm / in)", "Hips (cm / in)"]),
     "Bridesmaid Dresses": ("bridesmaid-dresses", BRIDESMAID_GUIDE, BRIDESMAID_CHART, ["Size", "Bust (cm / in)", "Waist (cm / in)", "Hips (cm / in)"]),
     "Ball Gown Tulle": ("ball-gown-tulle", BALL_GOWN_TULLE_GUIDE, BALL_GOWN_TULLE_CHART, ["Size", "Bust (cm / in)", "Waist (cm / in)", "Hips (cm / in)"]),
+    "Kids Gown": ("kids-gown", KIDS_GUIDE, KIDS_CHART, ["Age", "Size", "Chest / Bust (cm / in)", "Waist (cm / in)", "Approx. Length (Shoulder to Hem)"]),
 }
 
 
@@ -166,6 +177,33 @@ class SizeGuideDataTests(SimpleTestCase):
                 self.assertIsNot(guide["rows"][0], other["rows"][0])
         self.assertIsNot(BRIDESMAID_GUIDE["rows"], BALL_GOWN_TULLE_GUIDE["rows"])
 
+    def test_the_kids_gown_chart_is_by_age_and_exactly_the_shops_numbers(self):
+        self.assertEqual(KIDS_GUIDE["first_heading"], "Age")
+        self.assertEqual(KIDS_GUIDE["headings"], ["Size", "Chest / Bust (cm / in)", "Waist (cm / in)", "Approx. Length (Shoulder to Hem)"])
+        self.assertEqual([row["code"] for row in KIDS_GUIDE["rows"]], list(KIDS_CHART))
+        for row in KIDS_GUIDE["rows"]:
+            flat = [part for item in row["values"] for part in item]
+            self.assertEqual(flat, KIDS_CHART[row["code"]], row["code"])
+            self.assertEqual(row["label"], KIDS_AGES[row["code"]])
+            self.assertEqual(len(row["values"]), len(KIDS_GUIDE["columns"]))
+
+    def test_the_kids_guide_builds_age_labels_while_other_guides_stay_plain(self):
+        choices = [{"code": c, "offered": c == "M"} for c in ("S", "M", "L", "XL", "XXL")]
+        kids = size_guide_for("Kids Gown", choices)
+        self.assertEqual(kids["first_heading"], "Age")
+        self.assertEqual([r["label"] for r in kids["rows"]], list(KIDS_AGES.values()))
+        self.assertEqual(kids["rows"][2]["values"][0], {"cm": "Size 7–8", "inch": "(Medium)"})
+        self.assertEqual(kids["rows"][2]["values"][1], {"cm": "66–69 cm", "inch": '(26–27")'})
+        suit = size_guide_for("Suit", choices)
+        self.assertEqual(suit["first_heading"], "Size")
+        self.assertEqual([r["label"] for r in suit["rows"]], [r["code"] for r in suit["rows"]])
+        self.assertEqual(suit["headings"], ["Chest / Bust (cm / in)", "Shoulder Width (cm / in)", "Sleeve Length (cm / in)", "Waist (cm / in)"])
+
+    def test_the_kids_xs_row_is_shown_but_no_size_button_on_the_gown_page_can_match_it(self):
+        from gowns.models import SIZE_CODES
+        self.assertNotIn("XS", set(SIZE_CODES.values()))                                  # the gown page's size buttons never include XS
+        self.assertEqual(KIDS_GUIDE["rows"][0]["code"], "XS")
+
     def test_each_category_owns_its_own_copy_of_a_shared_chart(self):
         # changing one category's numbers later must never change another's
         self.assertIsNot(FILIPINIANA_GUIDE["rows"], DRESSES_GUIDE["rows"])
@@ -180,11 +218,11 @@ class SizeGuideDataTests(SimpleTestCase):
             self.assertEqual(guide["columns"], ["Bust", "Waist", "Hips"])
 
     def test_these_categories_have_a_guide_for_now(self):
-        self.assertEqual(list(SIZE_GUIDES), ["Suit", "Wedding Gown", "Filipiniana", "Dresses", "Barong", "Mother Gown", "Guest Gown", "Evening Gown", "Luxury Gown", "Long Gown", "Bridesmaid Dresses", "Ball Gown Tulle"])
+        self.assertEqual(list(SIZE_GUIDES), ["Suit", "Wedding Gown", "Filipiniana", "Dresses", "Barong", "Mother Gown", "Guest Gown", "Evening Gown", "Luxury Gown", "Long Gown", "Bridesmaid Dresses", "Ball Gown Tulle", "Kids Gown"])
 
     def test_other_categories_and_free_size_get_no_guide(self):
         every_size = [{"code": c, "offered": True} for c in ("S", "M", "L", "XL", "XXL")]
-        self.assertIsNone(size_guide_for("Kids Gown", every_size))
+        self.assertIsNone(size_guide_for("Debut Gown", every_size))                         # a category the owner added later: no chart yet
         self.assertIsNone(size_guide_for("", every_size))
         self.assertIsNone(size_guide_for("Wedding Gown", [{"code": "FREE", "offered": True}]))
         self.assertIsNone(size_guide_for("Suit", [{"code": "FREE", "offered": True}, {"code": "S", "offered": False}]))
@@ -250,8 +288,8 @@ class SizeGuidePageTests(TestCase):
         self.assertNotIn(">Size Guide<", html)
 
     def test_a_gown_of_another_category_has_no_size_guide_link(self):
-        unit = make_unit(8, Gown.Size.MEDIUM, category=Gown.Category.KIDS_GOWN, name="Plain Gown")
-        response = self.page(unit, collection="kids-gown")
+        unit = make_unit(8, Gown.Size.MEDIUM, category="Debut Gown", name="Plain Gown")            # an owner-added category has no chart yet
+        response = self.page(unit, collection="wedding")
         self.assertEqual(response.status_code, 200)
         html = response.content.decode()
         self.assertNotIn("size-guide-open", html)
@@ -380,7 +418,7 @@ class OtherCategorySizeGuideTests(TestCase):
                 self.assertNotIn("size-guide-root", html)
 
     def test_a_category_without_numbers_yet_still_has_no_link(self):
-        for n, (label, collection) in enumerate((("Kids Gown", "kids-gown"),), start=500):
+        for n, (label, collection) in enumerate((("Debut Gown", "wedding"),), start=500):
             with self.subTest(label=label):
                 unit = make_unit(n, Gown.Size.LARGE, category=label, name=f"{label} Plain")
                 response = self.client.get(reverse("gowns:product_detail", kwargs={"collection": collection, "slug": unit.slug}))

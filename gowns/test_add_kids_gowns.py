@@ -83,8 +83,8 @@ class TheListTests(SimpleTestCase):
         for index, (name, *_rest) in enumerate(KIDS_GOWNS):
             self.assertEqual([str(s) for s in SIZES_BY_NAME[name]], [owners[index]], f"Kids Gown {index + 1:02d} {name}")
 
-    def test_the_age_bands_for_the_size_guide_cover_one_to_twelve_without_gaps(self):
-        self.assertEqual(AGE_BANDS, {"S": "1-3 years", "M": "4-6 years", "L": "7-9 years", "XL": "10-12 years"})
+    def test_the_age_bands_are_the_ones_on_the_owners_size_chart(self):
+        self.assertEqual(AGE_BANDS, {"S": "5-6 years", "M": "7-8 years", "L": "9-10 years", "XL": "11-12 years"})
 
 
 class AddKidsGownsTests(TestCase):

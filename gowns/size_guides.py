@@ -4,10 +4,14 @@ One table per category, kept here as plain data (not in the database) so the num
 and change in one place. A category with no table has no Size Guide link at all -- the link used to be there on every gown and did
 nothing. To give another category a guide, add its entry to SIZE_GUIDES below; the page, the animation and the tests follow it.
 
-Suit, Wedding Gown, Filipiniana, Dresses, Barong, Mother Gown, Guest Gown, Evening Gown, Luxury Gown, Long Gown, Bridesmaid Dresses and Ball Gown Tulle have one so far. The sizes run S, M, L, XL, XXL like the size buttons on the gown
+Suit, Wedding Gown, Filipiniana, Dresses, Barong, Mother Gown, Guest Gown, Evening Gown, Luxury Gown, Long Gown, Bridesmaid Dresses, Ball Gown Tulle and Kids Gown have one so far. The sizes run S, M, L, XL, XXL like the size buttons on the gown
 page (the Mother Gown, Guest Gown, Evening Gown, Luxury Gown, Long Gown, Bridesmaid Dresses and Ball Gown Tulle charts stop at XL, so their tables have four rows). Each measurement is written exactly as the shop's chart prints it (centimetres first, inches after), so nothing is converted or
 rounded here. The page shows only the table, and a category's columns are its own (a suit lists chest, shoulder, sleeve and waist; a
-wedding gown lists bust, waist and hips)."""
+wedding gown lists bust, waist and hips).
+
+A guide may also say more than the plain "Size" column: `first_heading` / a row's `label` (Kids Gown's first column is the child's age, "5-6 Years") and
+`headings` (the exact column headings, when they are not "<column> (cm / in)"). A row's `code` is still the size on the gown page (S, M, L, XL) -- that is
+what the highlight follows."""
 
 SUIT_GUIDE = {
     "title": "Suit size guide",
@@ -146,6 +150,22 @@ BALL_GOWN_TULLE_GUIDE = {
     ],
 }
 
+# Kids Gown: the chart is by AGE, with the shop's size tag beside it. The shop's own sizes are S, M, L and XL; the chart's first row (3-4 years, "XS") is a size the
+# shop does not make, so it has the code "XS", which no size button on the gown page ever matches (it is shown, never highlighted).
+KIDS_GUIDE = {
+    "title": "Kids Gown size guide",
+    "first_heading": "Age",
+    "columns": ["Size tag", "Chest / Bust", "Waist", "Approximate Length"],
+    "headings": ["Size", "Chest / Bust (cm / in)", "Waist (cm / in)", "Approx. Length (Shoulder to Hem)"],
+    "rows": [
+        {"code": "XS", "label": "3–4 Years", "values": [("Size 3–4", "(XS)"), ("56–58 cm", '(22–23")'), ("53–56 cm", '(21–22")'), ("76–86 cm", '(30–34")')]},
+        {"code": "S", "label": "5–6 Years", "values": [("Size 5–6", "(Small)"), ("61–64 cm", '(24–25")'), ("58–61 cm", '(23–24")'), ("91–102 cm", '(36–40")')]},
+        {"code": "M", "label": "7–8 Years", "values": [("Size 7–8", "(Medium)"), ("66–69 cm", '(26–27")'), ("64–66 cm", '(25–26")'), ("107–117 cm", '(42–46")')]},
+        {"code": "L", "label": "9–10 Years", "values": [("Size 9–10", "(Large)"), ("71–74 cm", '(28–29")'), ("66–69 cm", '(26–27")'), ("122–127 cm", '(48–50")')]},
+        {"code": "XL", "label": "11–12 Years", "values": [("Size 11–12", "(XL)"), ("76–81 cm", '(30–32")'), ("71–74 cm", '(28–29")'), ("132–137 cm", '(52–54")')]},
+    ],
+}
+
 # Keyed by the category's name as the shop writes it (Gown.category), not by its web address.
 SIZE_GUIDES = {
     "Suit": SUIT_GUIDE,
@@ -160,6 +180,7 @@ SIZE_GUIDES = {
     "Long Gown": LONG_GUIDE,
     "Bridesmaid Dresses": BRIDESMAID_GUIDE,
     "Ball Gown Tulle": BALL_GOWN_TULLE_GUIDE,
+    "Kids Gown": KIDS_GUIDE,
 }
 
 
@@ -175,8 +196,12 @@ def size_guide_for(category_label, size_choices):
     offered = {choice["code"] for choice in size_choices if choice.get("offered")}
     if not offered.intersection(row["code"] for row in guide["rows"]):
         return None
+
     rows = [
-        {"code": row["code"], "values": [{"cm": cm, "inch": inch} for cm, inch in row["values"]]}
+        {"code": row["code"], "label": row.get("label", row["code"]), "values": [{"cm": cm, "inch": inch} for cm, inch in row["values"]]}
         for row in guide["rows"]
     ]
-    return {"title": guide["title"], "columns": guide["columns"], "rows": rows}
+    headings = guide.get("headings") or [f"{column} (cm / in)" for column in guide["columns"]]
+    return {
+        "title": guide["title"], "first_heading": guide.get("first_heading", "Size"), "columns": guide["columns"], "headings": headings, "rows": rows,
+    }
