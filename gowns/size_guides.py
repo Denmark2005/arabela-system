@@ -4,8 +4,8 @@ One table per category, kept here as plain data (not in the database) so the num
 and change in one place. A category with no table has no Size Guide link at all -- the link used to be there on every gown and did
 nothing. To give another category a guide, add its entry to SIZE_GUIDES below; the page, the animation and the tests follow it.
 
-Suit, Wedding Gown, Filipiniana, Dresses, Barong, Mother Gown and Guest Gown have one so far. The sizes run S, M, L, XL, XXL like the size buttons on the gown
-page (the Mother Gown and Guest Gown charts stop at XL, so their tables have four rows). Each measurement is written exactly as the shop's chart prints it (centimetres first, inches after), so nothing is converted or
+Suit, Wedding Gown, Filipiniana, Dresses, Barong, Mother Gown, Guest Gown and Evening Gown have one so far. The sizes run S, M, L, XL, XXL like the size buttons on the gown
+page (the Mother Gown, Guest Gown and Evening Gown charts stop at XL, so their tables have four rows). Each measurement is written exactly as the shop's chart prints it (centimetres first, inches after), so nothing is converted or
 rounded here. The page shows only the table, and a category's columns are its own (a suit lists chest, shoulder, sleeve and waist; a
 wedding gown lists bust, waist and hips)."""
 
@@ -87,6 +87,18 @@ GUEST_GUIDE = {
     ],
 }
 
+# The owner's Evening Gown chart prints inches first, then (cm); like every other guide it is shown centimetres first -- the numbers are the owner's, unchanged.
+EVENING_GUIDE = {
+    "title": "Evening Gown size guide",
+    "columns": ["Bust", "Waist", "Hips"],
+    "rows": [
+        {"code": "S", "values": [("81–86 cm", '(32–34")'), ("61–66 cm", '(24–26")'), ("86–91 cm", '(34–36")')]},
+        {"code": "M", "values": [("89–91 cm", '(35–36")'), ("68–72 cm", '(27–28")'), ("94–98 cm", '(37–38")')]},
+        {"code": "L", "values": [("94–99 cm", '(37–39")'), ("73–79 cm", '(29–31")'), ("99–107 cm", '(39–42")')]},
+        {"code": "XL", "values": [("101–107 cm", '(40–42")'), ("81–87 cm", '(32–34")'), ("109–114 cm", '(43–45")')]},
+    ],
+}
+
 # Keyed by the category's name as the shop writes it (Gown.category), not by its web address.
 SIZE_GUIDES = {
     "Suit": SUIT_GUIDE,
@@ -96,6 +108,7 @@ SIZE_GUIDES = {
     "Barong": BARONG_GUIDE,
     "Mother Gown": MOTHER_GUIDE,
     "Guest Gown": GUEST_GUIDE,
+    "Evening Gown": EVENING_GUIDE,
 }
 
 
