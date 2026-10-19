@@ -4,8 +4,8 @@ One table per category, kept here as plain data (not in the database) so the num
 and change in one place. A category with no table has no Size Guide link at all -- the link used to be there on every gown and did
 nothing. To give another category a guide, add its entry to SIZE_GUIDES below; the page, the animation and the tests follow it.
 
-Suit, Wedding Gown, Filipiniana, Dresses and Barong have one so far. The sizes run S, M, L, XL, XXL like the size buttons on the gown
-page. Each measurement is written exactly as the shop's chart prints it (centimetres first, inches after), so nothing is converted or
+Suit, Wedding Gown, Filipiniana, Dresses, Barong, Mother Gown and Guest Gown have one so far. The sizes run S, M, L, XL, XXL like the size buttons on the gown
+page (the Mother Gown and Guest Gown charts stop at XL, so their tables have four rows). Each measurement is written exactly as the shop's chart prints it (centimetres first, inches after), so nothing is converted or
 rounded here. The page shows only the table, and a category's columns are its own (a suit lists chest, shoulder, sleeve and waist; a
 wedding gown lists bust, waist and hips)."""
 
@@ -65,6 +65,28 @@ BARONG_GUIDE = {
     ],
 }
 
+MOTHER_GUIDE = {
+    "title": "Mother Gown size guide",
+    "columns": ["Bust", "Waist", "Hips"],
+    "rows": [
+        {"code": "S", "values": [("84–88 cm", '(33–34.5")'), ("66–70 cm", '(26–27.5")'), ("90–94 cm", '(35.5–37")')]},
+        {"code": "M", "values": [("89–93 cm", '(35–36.5")'), ("71–75 cm", '(28–29.5")'), ("95–99 cm", '(37.5–39")')]},
+        {"code": "L", "values": [("94–100 cm", '(37–39.5")'), ("76–82 cm", '(30–32")'), ("100–106 cm", '(39.5–41.5")')]},
+        {"code": "XL", "values": [("101–108 cm", '(40–42.5")'), ("83–90 cm", '(32.5–35.5")'), ("107–114 cm", '(42–45")')]},
+    ],
+}
+
+GUEST_GUIDE = {
+    "title": "Guest Gown size guide",
+    "columns": ["Bust", "Waist", "Hips"],
+    "rows": [
+        {"code": "S", "values": [("82–86 cm", '(32–34")'), ("64–68 cm", '(25–27")'), ("88–92 cm", '(34.5–36")')]},
+        {"code": "M", "values": [("87–91 cm", '(34.5–36")'), ("69–73 cm", '(27–29")'), ("93–97 cm", '(36.5–38")')]},
+        {"code": "L", "values": [("92–98 cm", '(36.5–38.5")'), ("74–80 cm", '(29–31.5")'), ("98–104 cm", '(38.5–41")')]},
+        {"code": "XL", "values": [("99–106 cm", '(39–42")'), ("81–88 cm", '(32–34.5")'), ("105–112 cm", '(41.5–44")')]},
+    ],
+}
+
 # Keyed by the category's name as the shop writes it (Gown.category), not by its web address.
 SIZE_GUIDES = {
     "Suit": SUIT_GUIDE,
@@ -72,6 +94,8 @@ SIZE_GUIDES = {
     "Filipiniana": FILIPINIANA_GUIDE,
     "Dresses": DRESSES_GUIDE,
     "Barong": BARONG_GUIDE,
+    "Mother Gown": MOTHER_GUIDE,
+    "Guest Gown": GUEST_GUIDE,
 }
 
 
