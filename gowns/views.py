@@ -1398,6 +1398,10 @@ def reservation_item_cancel(request, item_id):
             sibling.gown.status = Gown.Status.AVAILABLE
             sibling.gown.save(update_fields=["status", "updated_at"])
 
+    # The automatic 5-day rest after each gown's rental goes too: a cancelled booking never had a rental to rest from, so those
+    # days must be bookable again right away (rejecting and the shop's own Cancel already do the same).
+    GownUnavailability.objects.filter(auto_for_item__reservation=reservation).delete()
+
     # Repeat cancellations auto-flag the account for admin review (see
     # accounts.services.CANCELLATION_FLAG_THRESHOLD). No-op below the threshold.
     sync_cancellation_flag(request.user)

@@ -13,6 +13,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
+from django.core.validators import URLValidator
 from django.core.paginator import Paginator
 from django.db import DataError, DatabaseError, IntegrityError, transaction
 from django.db.models import Q, Count, Min, Prefetch
@@ -169,9 +170,13 @@ def dashboard_view(request):
             "registered_customers": User.objects.filter(
                 is_staff=False, is_superuser=False
             ).count(),
+            # Bookings still in progress: approved, with at least one gown that is waiting for pick-up, out, or late.
+            # A booking's status stays "Confirmed" forever, so counting the status alone also counted every finished
+            # rental and the number only ever grew. (Active Reservations still lists finished ones, labelled Completed.)
             "active_rentals": Reservation.objects.filter(
-                status__in=_SCHEDULED_STATUSES
-            ).count(),
+                status__in=_SCHEDULED_STATUSES,
+                items__stage__in=[s for s in ReservationItem.Stage.values if s not in ReservationItem.FINISHED_STAGES],
+            ).distinct().count(),
             "gown_total": gown_total,
             "gown_available": gowns.filter(status=Gown.Status.AVAILABLE).count(),
             "gown_reserved": gowns.filter(status=Gown.Status.RESERVED).count(),
@@ -1186,6 +1191,9 @@ def active_reservations_view(request):
         # the shop already cancelled is no longer part of the booking, so it is left out of every question below.
         booking_items = list(reservation.items.all())
         live_items = [i for i in booking_items if i.stage != ReservationItem.Stage.CANCELLED]
+        # Every gown still part of the booking is back: shown as Completed (a booking's own status stays "Confirmed"),
+        # and not counted in the dashboard's Active Rentals tile.
+        reservation.is_completed = bool(live_items) and all(i.stage == ReservationItem.Stage.RETURNED for i in live_items)
         reservation.can_cancel = reservation_cancellation.can_cancel(reservation, booking_items)
         if reservation.can_cancel:
             event = min(i.effective_event_date for i in live_items)
@@ -2502,6 +2510,14 @@ def _already_reviewed_response(pk):
     return JsonResponse({"error": f"This reservation was {done}. Please refresh the page."}, status=409)
 
 
+def _gown_names_text(reservation):
+    """'Wedding Gown 1', 'A and B', 'A, B and C' -- the gowns of a booking, for a message to the customer."""
+    names = [item.gown_name for item in reservation.items.all()]
+    if len(names) <= 1:
+        return "".join(names)
+    return ", ".join(names[:-1]) + " and " + names[-1]
+
+
 @require_http_methods(["POST"])
 def reservation_approve_view(request, pk):
     if not _is_admin_staff(request):
@@ -2519,6 +2535,16 @@ def reservation_approve_view(request, pk):
         reservation, "Reservation approved",
         detail="Your payment was verified. Your booking is confirmed.",
         actor=ReservationStatusEvent.Actor.STAFF,
+    )
+    # The customer is waiting on this answer, so it also rings their bell (the email is sent separately from the line above).
+    # General messages are never emailed, so this does not double up.
+    CustomerMessage.objects.create(
+        recipient=reservation.customer,
+        category=CustomerMessage.Category.GENERAL,
+        body=(
+            f"Good news! Your reservation {reservation.reference_code} ({_gown_names_text(reservation)}) was approved. "
+            "Your payment was verified and your booking is confirmed."
+        ),
     )
 
     # Flip any linked inventory gowns to Reserved so the catalog reflects the booking.
@@ -2559,6 +2585,15 @@ def reservation_reject_view(request, pk):
             reservation, "Reservation rejected",
             detail=reason or "Please contact the shop for details.",
             actor=ReservationStatusEvent.Actor.STAFF,
+        )
+        CustomerMessage.objects.create(
+            recipient=reservation.customer,
+            category=CustomerMessage.Category.GENERAL,
+            body=(
+                f"Your reservation {reservation.reference_code} ({_gown_names_text(reservation)}) was not approved. "
+                + (f"Reason: {reason} " if reason else "")
+                + "Please contact the shop if you have any questions about your payment."
+            ),
         )
     return JsonResponse({"success": True, "status": reservation.status})
 
@@ -3762,6 +3797,23 @@ def page_view(request, page: str):
     })
 
 
+_FACEBOOK_URL_MAX = 200   # SiteSettings.facebook_url is a URLField (200 characters)
+
+
+def _facebook_url_error(value):
+    """None when `value` may be saved as the shop's Facebook address (blank, or a normal http/https web address), else the
+    sentence to show the owner. Anything else -- javascript:, data:, a bare word -- would be printed as a link on every page."""
+    if not value:
+        return None
+    if len(value) > _FACEBOOK_URL_MAX:
+        return f"The Facebook address is too long (the limit is {_FACEBOOK_URL_MAX} characters)."
+    try:
+        URLValidator(schemes=["http", "https"])(value)
+    except ValidationError:
+        return "Enter the Facebook address as a full web link that starts with https:// (for example https://www.facebook.com/yourpage)."
+    return None
+
+
 @require_http_methods(["POST"])
 def save_profile_view(request):
     """Save admin staff profile information (name/email/bio, personal to the
@@ -3772,6 +3824,14 @@ def save_profile_view(request):
 
     try:
         data = json.loads(request.body)
+
+        # The shop's Facebook address is printed as a link on every page, so it must be a real web address -- checked
+        # BEFORE anything is saved, so a refused value leaves the whole profile untouched. Owner only, like the save below.
+        if 'facebook' in data and _is_owner(request):
+            data['facebook'] = str(data['facebook'] or '').strip()
+            facebook_error = _facebook_url_error(data['facebook'])
+            if facebook_error:
+                return JsonResponse({"error": facebook_error}, status=400)
 
         # Update User fields
         if 'firstName' in data:

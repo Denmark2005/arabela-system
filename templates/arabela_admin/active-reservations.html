@@ -1239,6 +1239,8 @@
                                Rental Schedule calendar (item.stage -> Overdue) has to be visible
                                here too, not just on the calendar itself. -->
                           <p class="inline-flex rounded-full bg-error-50 px-2 py-0.5 text-theme-xs font-medium text-error-700 dark:bg-error-500/15 dark:text-error-500" title="At least one item in this booking is overdue">Overdue</p>
+                          {% elif r.is_completed %}
+                          <p class="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400" title="Every gown in this booking has been returned">Completed</p>
                           {% elif r.status == 'Confirmed' %}
                           <p class="inline-flex rounded-full bg-success-50 px-2 py-0.5 text-theme-xs font-medium text-success-700 dark:bg-success-500/15 dark:text-success-500">Confirmed</p>
                           {% elif r.status == 'Active' %}
