@@ -1,4 +1,5 @@
 import json
+import logging
 from unittest.mock import MagicMock, patch
 
 import requests
@@ -33,6 +34,11 @@ class ChatViewTests(TestCase):
     def setUp(self):
         cache.clear()  # the rate limiter below is stateful; start every test clean
         self.url = reverse("ai_recommendation:chat")
+        pause = patch.object(views, "_pause")  # a failing call is retried after a short wait; a test must not really wait
+        pause.start()
+        self.addCleanup(pause.stop)
+        self.addCleanup(views.logger.setLevel, views.logger.level)
+        views.logger.setLevel(logging.CRITICAL)  # the failed attempts are logged on purpose; keep them out of the test output
 
     def _post(self, message="What gowns do you have?", history=None, **overrides):
         payload = {"message": message}
@@ -127,6 +133,140 @@ class ChatViewTests(TestCase):
     def test_malformed_json_body_is_rejected(self):
         response = self.client.post(self.url, data="not json", content_type="application/json")
         self.assertEqual(response.status_code, 400)
+
+
+@override_settings(GEMINI_API_KEY="test-key", GEMINI_MODEL="main-model", GEMINI_FALLBACK_MODEL="backup-model")
+class GeminiRetryTests(TestCase):
+    """Google answers "503 high demand" in short bursts (4 of 8 identical requests in a row, measured live), and the chat used to
+    show "trouble thinking" on the first one. A busy model is now retried after a short pause, then the backup model gets its turn.
+    Every call to Google is mocked: a test must never reach the real API."""
+
+    def setUp(self):
+        cache.clear()
+        self.url = reverse("ai_recommendation:chat")
+        pause = patch.object(views, "_pause")
+        self.pause = pause.start()
+        self.addCleanup(pause.stop)
+        self.addCleanup(views.logger.setLevel, views.logger.level)
+        views.logger.setLevel(logging.CRITICAL)
+        self.calls = []
+
+    def _chat(self, answers):
+        """Sends one customer message while requests.post answers with `answers` in order (an exception object is raised). The
+        list must match the number of calls exactly: running out of answers means the chat tried more than expected.
+        Returns (the chat's JSON reply, the model of each call to Google in order)."""
+        with patch.object(views.requests, "post", side_effect=answers) as mock_post:
+            response = self.client.post(self.url, data=json.dumps({"message": "women"}), content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+        self.calls = mock_post.call_args_list
+        models = [call.args[0].split("/models/")[1].split(":")[0] for call in self.calls]
+        self.assertEqual(mock_post.call_count, len(answers), "the chat made a different number of calls than the test expected")
+        return response.json(), models
+
+    @staticmethod
+    def _ok(text="Here are some women's gowns."):
+        return _mock_response(200, _candidate_reply(text))
+
+    def test_a_busy_503_is_retried_on_the_same_model_and_the_customer_gets_the_answer(self):
+        data, models = self._chat([_mock_response(503), self._ok()])
+        self.assertEqual(data["reply"], "Here are some women's gowns.")
+        self.assertNotIn("error", data)
+        self.assertEqual(models, ["main-model", "main-model"])
+        self.pause.assert_called_once_with(1.0)
+
+    def test_two_busy_answers_in_a_row_still_succeed_on_the_third_try(self):
+        data, models = self._chat([_mock_response(503), _mock_response(503), self._ok()])
+        self.assertEqual(data["reply"], "Here are some women's gowns.")
+        self.assertEqual(models, ["main-model"] * 3)
+        self.assertEqual([c.args[0] for c in self.pause.call_args_list], [1.0, 2.0])
+
+    def test_after_three_busy_answers_the_backup_model_answers(self):
+        data, models = self._chat([_mock_response(503)] * 3 + [self._ok("From the backup.")])
+        self.assertEqual(data["reply"], "From the backup.")
+        self.assertEqual(models, ["main-model"] * 3 + ["backup-model"])
+
+    def test_when_every_model_is_busy_the_customer_gets_the_overloaded_message(self):
+        data, models = self._chat([_mock_response(503)] * 6)
+        self.assertEqual(data["reply"], views.OVERLOADED_REPLY)
+        self.assertEqual(data["error"], "http_503")
+        self.assertEqual(models, ["main-model"] * 3 + ["backup-model"] * 3)
+
+    def test_a_retired_model_404_goes_straight_to_the_backup_without_waiting(self):
+        data, models = self._chat([_mock_response(404), self._ok("From the backup.")])
+        self.assertEqual(data["reply"], "From the backup.")
+        self.assertEqual(models, ["main-model", "backup-model"])
+        self.pause.assert_not_called()
+
+    def test_a_spent_quota_429_goes_straight_to_the_backup_model(self):
+        data, models = self._chat([_mock_response(429), self._ok("From the backup.")])
+        self.assertEqual(data["reply"], "From the backup.")
+        self.assertEqual(models, ["main-model", "backup-model"])
+        self.pause.assert_not_called()
+
+    def test_quota_spent_on_both_models_shows_the_busy_message(self):
+        data, models = self._chat([_mock_response(429), _mock_response(429)])
+        self.assertEqual(data["reply"], views.BUSY_REPLY)
+        self.assertEqual(data["error"], "rate_limited")
+
+    def test_a_refused_request_400_is_not_retried(self):
+        data, models = self._chat([_mock_response(400), _mock_response(400)])
+        self.assertEqual(data["reply"], views.FALLBACK_REPLY)
+        self.assertEqual(data["error"], "http_400")
+        self.assertEqual(models, ["main-model", "backup-model"])
+        self.pause.assert_not_called()
+
+    def test_a_dropped_connection_is_retried(self):
+        data, models = self._chat([requests.ConnectionError, self._ok()])
+        self.assertEqual(data["reply"], "Here are some women's gowns.")
+        self.assertEqual(models, ["main-model", "main-model"])
+
+    def test_a_timeout_stops_everything_at_once(self):
+        data, models = self._chat([requests.Timeout])
+        self.assertEqual(data["reply"], views.TIMEOUT_REPLY)
+        self.assertEqual(data["error"], "timeout")
+        self.assertEqual(models, ["main-model"])
+        self.pause.assert_not_called()
+
+    @override_settings(GEMINI_FALLBACK_MODEL="")
+    def test_no_backup_model_means_only_the_main_model_is_tried(self):
+        data, models = self._chat([_mock_response(503)] * 3)
+        self.assertEqual(data["reply"], views.OVERLOADED_REPLY)
+        self.assertEqual(models, ["main-model"] * 3)
+
+    @override_settings(GEMINI_FALLBACK_MODEL="main-model")
+    def test_a_backup_that_is_the_same_model_is_not_tried_twice(self):
+        data, models = self._chat([_mock_response(503)] * 3)
+        self.assertEqual(models, ["main-model"] * 3)
+
+    def test_no_new_attempt_starts_once_the_cutoff_has_passed(self):
+        with patch.object(views, "RETRY_CUTOFF_SECONDS", -1):          # every moment counts as "too late" after a failure
+            data, models = self._chat([_mock_response(503)])
+        self.assertEqual(models, ["main-model"])
+        self.assertEqual(data["reply"], views.OVERLOADED_REPLY)
+
+    def test_the_error_reported_is_the_main_models_not_the_backups(self):
+        data, models = self._chat([_mock_response(503)] * 3 + [_mock_response(404)])
+        self.assertEqual(data["error"], "http_503")
+        self.assertEqual(data["reply"], views.OVERLOADED_REPLY)
+
+    def test_an_attempt_never_waits_longer_than_the_overall_limit(self):
+        self._chat([_mock_response(503), self._ok()])
+        for call in self.calls:
+            self.assertLessEqual(call.kwargs["timeout"], views.REQUEST_TIMEOUT_SECONDS)
+            self.assertGreaterEqual(call.kwargs["timeout"], 1)
+
+    def test_every_failed_attempt_is_written_to_the_log(self):
+        with self.assertLogs(views.logger, "WARNING") as logs:
+            self._chat([_mock_response(503), _mock_response(503), self._ok()])
+        self.assertEqual(len(logs.output), 2)
+        self.assertIn("main-model: HTTP 503 (attempt 1)", logs.output[0])
+        self.assertIn("main-model: HTTP 503 (attempt 2)", logs.output[1])
+
+    def test_a_500_is_retried_like_a_503_but_keeps_the_general_apology(self):
+        data, models = self._chat([_mock_response(500)] * 6)
+        self.assertEqual(data["reply"], views.FALLBACK_REPLY)
+        self.assertEqual(data["error"], "http_500")
+        self.assertEqual(len(models), 6)
 
 
 class SystemPromptTests(TestCase):

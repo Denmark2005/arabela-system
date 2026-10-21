@@ -1,5 +1,7 @@
 import json
+import logging
 import re
+import time
 from urllib.parse import urlparse
 
 import requests
@@ -11,6 +13,8 @@ from django.views.decorators.http import require_POST
 
 from gowns.context_processors import _build_search_catalog, all_categories, category_url
 from gowns.models import SiteSettings
+
+logger = logging.getLogger(__name__)
 
 GEMINI_URL_TEMPLATE = (
     "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
@@ -33,6 +37,15 @@ MAX_OUTPUT_TOKENS = 3072
 # The old 20s ceiling was clipping legitimate answers into the error fallback.
 REQUEST_TIMEOUT_SECONDS = 45
 
+# Google answers "503 This model is currently experiencing high demand" in short bursts (measured: 4 of 8 identical requests in a row),
+# and the old code gave up on the first one. A busy or failing model is retried after a short pause, then the backup model
+# (settings.GEMINI_FALLBACK_MODEL) gets the same tries. No new attempt starts once RETRY_CUTOFF_SECONDS have passed, and every
+# attempt is limited to what is left of REQUEST_TIMEOUT_SECONDS, so the longest a customer can wait is the same as before.
+GEMINI_ATTEMPTS_PER_MODEL = 3
+RETRY_PAUSES_SECONDS = (1.0, 2.0)       # before the 2nd and the 3rd attempt on the same model
+RETRY_CUTOFF_SECONDS = 20
+RETRYABLE_STATUSES = frozenset({500, 502, 503, 504})
+
 FALLBACK_REPLY = (
     "Sorry, I'm having trouble thinking right now. Please try again in a moment, "
     "or reach us directly through Facebook or by phone -- you'll find both in the site footer."
@@ -46,6 +59,12 @@ BUSY_REPLY = (
 TIMEOUT_REPLY = (
     "Sorry, that one took me too long to think through. Please try asking again, "
     "or keep it a little shorter."
+)
+
+# Gemini itself said it is overloaded (HTTP 503) and every retry and the backup model were busy too.
+OVERLOADED_REPLY = (
+    "I'm very busy right now and couldn't answer that one. Please send it again in a few seconds -- "
+    "or message us on Facebook and our team will help you straight away."
 )
 
 # Protects the Gemini quota/cost and the endpoint itself from a sudden flood of
@@ -251,6 +270,67 @@ def _extract_reply(data: dict) -> str | None:
         return None
 
 
+def _pause(seconds: float) -> None:
+    """The short wait between two attempts. Its own function so a test can skip the waiting."""
+    time.sleep(seconds)
+
+
+def _models_to_try() -> list[str]:
+    """The main model first, then the backup (when one is set and it is a different model)."""
+    models = [settings.GEMINI_MODEL]
+    backup = (getattr(settings, "GEMINI_FALLBACK_MODEL", "") or "").strip()
+    if backup and backup != settings.GEMINI_MODEL:
+        models.append(backup)
+    return models
+
+
+def _ask_gemini(body: dict):
+    """Sends the conversation to Gemini. Returns (response, None) for the first HTTP 200, or (None, error_code) when nothing worked.
+
+    * A busy or failing model (HTTP 500/502/503/504, or a connection error) is tried up to GEMINI_ATTEMPTS_PER_MODEL times with a
+      short pause, because Google's "high demand" 503 usually clears within seconds.
+    * A refusal that waiting will not fix (429 quota, 404 retired model, 400/401/403) moves straight on to the backup model.
+    * A timeout ends everything at once: the time is already spent.
+    * The error code reported is the main model's first failure ("http_503", "network", "rate_limited", ...), which is what the
+      customer actually ran into; every failed attempt is also written to the log.
+    """
+    started = time.monotonic()
+    first_failure = None
+    for model in _models_to_try():
+        url = GEMINI_URL_TEMPLATE.format(model=model)
+        for attempt in range(GEMINI_ATTEMPTS_PER_MODEL):
+            elapsed = time.monotonic() - started
+            if first_failure is not None and elapsed > RETRY_CUTOFF_SECONDS:
+                return None, first_failure
+            try:
+                resp = requests.post(
+                    url,
+                    params={"key": settings.GEMINI_API_KEY},
+                    json=body,
+                    timeout=max(REQUEST_TIMEOUT_SECONDS - elapsed, 1),
+                )
+            except requests.Timeout:
+                logger.warning("Gemini %s: timed out (attempt %d)", model, attempt + 1)
+                return None, "timeout"
+            except requests.RequestException as exc:
+                failure, retryable = "network", True
+                logger.warning("Gemini %s: connection problem %s (attempt %d)", model, type(exc).__name__, attempt + 1)
+            else:
+                if resp.status_code == 200:
+                    return resp, None
+                if resp.status_code == 429:
+                    failure, retryable = "rate_limited", False
+                else:
+                    failure, retryable = f"http_{resp.status_code}", resp.status_code in RETRYABLE_STATUSES
+                logger.warning("Gemini %s: HTTP %s (attempt %d)", model, resp.status_code, attempt + 1)
+            if first_failure is None:
+                first_failure = failure
+            if not retryable or attempt == GEMINI_ATTEMPTS_PER_MODEL - 1:
+                break
+            _pause(RETRY_PAUSES_SECONDS[min(attempt, len(RETRY_PAUSES_SECONDS) - 1)])
+    return None, first_failure
+
+
 @require_POST
 def chat(request):
     limited = _ai_chat_rate_limit_reply(request)
@@ -287,25 +367,12 @@ def chat(request):
         "generationConfig": {"temperature": 0.7, "maxOutputTokens": MAX_OUTPUT_TOKENS},
     }
 
-    url = GEMINI_URL_TEMPLATE.format(model=settings.GEMINI_MODEL)
-    try:
-        resp = requests.post(
-            url,
-            params={"key": settings.GEMINI_API_KEY},
-            json=body,
-            timeout=REQUEST_TIMEOUT_SECONDS,
-        )
-    except requests.Timeout:
-        return JsonResponse({"reply": TIMEOUT_REPLY, "error": "timeout"})
-    except requests.RequestException:
-        return JsonResponse({"reply": FALLBACK_REPLY, "error": "network"})
-
-    # 429 = the free-tier quota is spent. Say so plainly instead of the generic
-    # error, so the customer knows waiting actually helps.
-    if resp.status_code == 429:
-        return JsonResponse({"reply": BUSY_REPLY, "error": "rate_limited"})
-    if resp.status_code != 200:
-        return JsonResponse({"reply": FALLBACK_REPLY, "error": f"http_{resp.status_code}"})
+    resp, failure = _ask_gemini(body)
+    if resp is None:
+        # 429 = the quota is spent: say so plainly, so the customer knows waiting helps. 503 = Google is overloaded even after the
+        # retries and the backup model. Everything else keeps the general apology.
+        reply = {"timeout": TIMEOUT_REPLY, "rate_limited": BUSY_REPLY, "http_503": OVERLOADED_REPLY}.get(failure, FALLBACK_REPLY)
+        return JsonResponse({"reply": reply, "error": failure})
 
     try:
         data = resp.json()

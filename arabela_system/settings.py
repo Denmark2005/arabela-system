@@ -426,6 +426,8 @@ LOGGING = {
 # same questions in ~1.2s with no thinking overhead and a far larger free quota.
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '').strip()
 GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite')
+# Tried when the main model keeps answering 'high demand' (503) or is refused/retired. Empty = no backup model.
+GEMINI_FALLBACK_MODEL = os.getenv('GEMINI_FALLBACK_MODEL', 'gemini-flash-lite-latest').strip()
 
 
 # Error alerts (Sentry, free plan): off unless SENTRY_DSN is set -- on Render's Environment page, never in .env on a laptop that shares the
