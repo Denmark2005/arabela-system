@@ -1,8 +1,10 @@
+import json
 from datetime import timedelta
 
 from django.conf import settings
 from django.db import IntegrityError, models, transaction
 from django.utils import timezone
+from django.utils.formats import date_format
 
 
 class Reservation(models.Model):
@@ -25,9 +27,10 @@ class Reservation(models.Model):
         CASH = 'Cash', 'Cash'
 
     class Channel(models.TextChoices):
-        """How the booking reached the shop. Online = the customer booked on the website; the other three were recorded by
-        staff in the admin's New Booking page (arabela_admin/new_booking.py) for a customer who came to the shop, messaged on
-        Facebook, or phoned -- so every booking, however it arrived, holds its gown on the same calendar."""
+        """How the booking reached the shop. Online = the customer booked on the website; Walk-in = recorded by staff in the
+        admin's New Booking page (arabela_admin/new_booking.py) for a customer who came to the shop -- so every booking, however
+        it arrived, holds its gown on the same calendar. Facebook and Phone are no longer offered there; they stay only so a
+        booking recorded earlier keeps its label."""
         ONLINE = 'Online', 'Online'
         WALK_IN = 'Walk-in', 'Walk-in'
         FACEBOOK = 'Facebook', 'Facebook'
@@ -132,7 +135,7 @@ class Reservation(models.Model):
 
     @property
     def is_staff_recorded(self):
-        """Recorded by staff in the admin (walk-in, Facebook, phone) rather than booked on the website."""
+        """Recorded by staff in the admin (a walk-in) rather than booked on the website."""
         return self.channel != self.Channel.ONLINE
 
     def receipts_cover_payment(self, receipts=None):
@@ -142,6 +145,33 @@ class Reservation(models.Model):
         if ReceiptRecord.Covers.BOTH in labels:
             return True
         return ReceiptRecord.Covers.RENTAL in labels and ReceiptRecord.Covers.DEPOSIT in labels
+
+    def receipt_proofs(self, deposit_only=False):
+        """The shop's own receipt photos (ReceiptRecord) as plain dicts for the admin's proof popups. A booking recorded at the
+        counter has no GCash screenshot from the customer, so these photos ARE its proof of payment. `deposit_only` keeps the
+        receipts that cover the security deposit ("Deposit" and "Rental + deposit"); a receipt nobody labelled says nothing
+        either way (see receipts_cover_payment), so it is left out there. Oldest first, the order they were handed over."""
+        covers_deposit = (ReceiptRecord.Covers.DEPOSIT, ReceiptRecord.Covers.BOTH)
+        rows = []
+        for rec in sorted(self.receipt_records.all(), key=lambda r: (r.uploaded_at, r.id)):
+            if deposit_only and rec.covers not in covers_deposit:
+                continue
+            rows.append({
+                "url": rec.photo_url,
+                "label": f"{rec.covers} receipt" if rec.covers else "Receipt (not labelled)",
+                "when": date_format(timezone.localtime(rec.uploaded_at), "M j, Y · g:i A"),
+            })
+        return rows
+
+    @property
+    def receipts_json(self):
+        """Every receipt photo, as JSON text for a template to hand to the page's script (escape it with escapejs)."""
+        return json.dumps(self.receipt_proofs())
+
+    @property
+    def deposit_receipts_json(self):
+        """Only the receipts that cover the security deposit, as JSON text (the Security Deposits page)."""
+        return json.dumps(self.receipt_proofs(deposit_only=True))
 
     @property
     def display_customer_name(self):

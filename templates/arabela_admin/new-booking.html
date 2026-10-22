@@ -1148,7 +1148,7 @@
             <!-- Breadcrumb End -->
 
             <div class="nb-wrap" x-data="newBooking()">
-              <p class="nb-lead">Record a booking that didn't come through the website: a walk-in, a Facebook message, or a phone call. It gets the next booking number, holds the gown on the calendar and the customer website, and then works like any online booking in Active Reservations.</p>
+              <p class="nb-lead">Record a booking for a customer who walked into the shop. It gets the next booking number, holds the gown on the calendar and the customer website, and then works like any online booking in Active Reservations.</p>
 
               <!-- Saved -->
               <template x-if="saved">
@@ -1167,15 +1167,6 @@
                 <!-- ===== 1. Customer ===== -->
                 <section class="nb-card" aria-labelledby="nb-step-1">
                   <h3 class="nb-step" id="nb-step-1"><span class="nb-step-no">1</span>Customer</h3>
-
-                  <div style="margin-bottom: 1rem;">
-                    <span class="nb-label" id="nb-channel-label">How did the booking come in? <span class="nb-req">*</span></span>
-                    <div class="nb-seg" role="radiogroup" aria-labelledby="nb-channel-label">
-                      {% for value, label in channels %}
-                      <label :class="channel === '{{ value }}' && 'is-on'"><input type="radio" name="nb-channel" value="{{ value }}" x-model="channel"> {{ label }}</label>
-                      {% endfor %}
-                    </div>
-                  </div>
 
                   <div class="nb-grid nb-grid--2">
                     <div>
@@ -1429,7 +1420,7 @@
     </div>
     <!-- ===== Page Wrapper End ===== -->
   <script>
-    // New Booking: a walk-in / Facebook / phone booking recorded by staff. Every rule is checked again by the server
+    // New Booking: a walk-in booking recorded by staff. Every rule is checked again by the server
     // (arabela_admin/new_booking.py -> reservations/staff_booking.py); this page is the friendly front of it.
     function newBooking() {
       var URLS = {

@@ -1,6 +1,5 @@
-"""Bookings that staff record in the admin's New Booking page: a customer who walked into the shop, messaged on Facebook, or
-phoned. The web side (the form, the gown search, the availability check) is arabela_admin/new_booking.py; this is everything
-that decides and saves.
+"""Bookings that staff record in the admin's New Booking page: a customer who walked into the shop. The web side (the form, the
+gown search, the availability check) is arabela_admin/new_booking.py; this is everything that decides and saves.
 
 A recorded booking is an ordinary Reservation -- the same booking number series, the same gown lines, the same automatic rest
 days -- so Active Reservations, the Rental Schedule, Security Deposits, Reservation Records and the customer website's calendar
@@ -32,7 +31,7 @@ RECORDED_LABEL = "Booking recorded at the shop"            # the customer's time
 STAFF_NOTE_LABEL = "Booking recorded by staff"              # staff-only: who, how it came in, payment, note
 APPROVED_LABEL = "Reservation approved"                     # the same line Approve writes (and the same email, if any)
 
-STAFF_CHANNELS = (Reservation.Channel.WALK_IN, Reservation.Channel.FACEBOOK, Reservation.Channel.PHONE)
+STAFF_CHANNELS = (Reservation.Channel.WALK_IN,)
 
 
 class BookingError(Exception):
@@ -214,7 +213,7 @@ def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, a
     Returns the new Reservation."""
     now = now or availability.now_local()
     if channel not in STAFF_CHANNELS:
-        raise BookingError("Choose how the booking came in: Walk-in, Facebook, or Phone call.")
+        raise BookingError("Only walk-in bookings can be recorded here. Bookings from the website come in by themselves.")
     note = re.sub(r"\s+", " ", note or "").strip()[:NOTE_MAX]
     check_payment(paid=paid, payment_method=payment_method, receipts=receipts, lines=lines)
     if notebook_number:

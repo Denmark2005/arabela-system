@@ -1,6 +1,6 @@
 """The admin's New Booking page and the "Check availability" answers it shares with Gown Catalog.
 
-Staff (and the owner) record a booking that didn't come through the website: a walk-in, a Facebook message, a phone call.
+Staff (and the owner) record a booking for a customer who walked into the shop (it didn't come through the website).
 Everything that decides and saves is reservations/staff_booking.py; the availability rules are gowns/availability.py (the
 same ones the customer website and checkout use). This module is only the web side: the page, its small JSON lookups, and
 turning the form into a call to staff_booking.record_booking.
@@ -84,7 +84,6 @@ def new_booking_view(request):
         "max_gowns": staff_booking.MAX_GOWNS,
         "max_receipts": staff_booking.MAX_RECEIPTS,
         "note_max": staff_booking.NOTE_MAX,
-        "channels": [(value, label) for value, label in Reservation.Channel.choices if value != Reservation.Channel.ONLINE],
         "covers_choices": ReceiptRecord.Covers.values,
     })
 
@@ -260,7 +259,7 @@ def booking_create_view(request):
             recorded_by=request.user,
             is_owner=is_owner,
             staff_name=_staff_display_name(request.user),
-            channel=(post.get("channel") or "").strip(),
+            channel=(post.get("channel") or Reservation.Channel.WALK_IN).strip(),
             name=name,
             phone=phone,
             account=account,

@@ -1,4 +1,4 @@
-"""New Booking: walk-in / Facebook / phone bookings recorded by staff (arabela_admin/new_booking.py, reservations/staff_booking.py),
+"""New Booking: walk-in bookings recorded by staff (arabela_admin/new_booking.py, reservations/staff_booking.py),
 the shared "Check availability" answer (gowns.availability.check_unit), and how such a booking -- often with no website account --
 then behaves everywhere else: Pending Approval, Active Reservations, Reservation Records, the reminders, the staff bell, the
 customer emails, cancelling, and the customer website's calendar and checkout."""
@@ -10,7 +10,9 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connection
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -318,15 +320,16 @@ class RecordBookingTests(Base):
     def test_the_customer_fields_are_checked(self):
         gown = make_gown(29)
         for kwargs, words in ((dict(name=""), "name"), (dict(name="12345"), "real name"), (dict(phone="12345"), "mobile number"),
-                              (dict(channel="Online"), "Walk-in, Facebook, or Phone"), (dict(notebook="bad*no"), "notebook")):
+                              (dict(channel="Online"), "Only walk-in"), (dict(channel="Facebook"), "Only walk-in"),
+                              (dict(channel="Phone"), "Only walk-in"), (dict(notebook="bad*no"), "notebook")):
             response = self.post_booking([self.line(gown)], **kwargs)
             self.assertEqual(response.status_code, 400, kwargs)
             self.assertIn(words, response.json()["error"], kwargs)
-        good = self.post_booking([self.line(gown)], phone="+63 917 765 4321", channel="Facebook", notebook=" 0457 ")
+        good = self.post_booking([self.line(gown)], phone="+63 917 765 4321", notebook=" 0457 ")
         self.assertEqual(good.status_code, 200, good.content)
         reservation = Reservation.objects.get(reference_code=good.json()["reference_code"])
         self.assertEqual((reservation.phone, reservation.channel, reservation.notebook_number),
-                         ("09177654321", Reservation.Channel.FACEBOOK, "0457"))
+                         ("09177654321", Reservation.Channel.WALK_IN, "0457"))
 
     def test_a_notebook_number_and_a_receipt_photo_can_be_used_only_once(self):
         first = self.post_booking([self.line(make_gown(30))], notebook="A-12", receipts=(("Rental + deposit", b"same"),))
@@ -528,3 +531,126 @@ class PagesTests(Base):
         html = self.client.get(reverse("arabela_admin:gown_catalog")).content.decode()
         self.assertIn("Check a date", html)
         self.assertIn("arabelaAvailability.inline", html)
+
+
+class WalkInOnlyTests(Base):
+    def test_the_form_has_no_facebook_or_phone_choice(self):
+        html = self.client.get(reverse("arabela_admin:new_booking")).content.decode()
+        self.assertNotIn("How did the booking come in", html)
+        self.assertNotIn('name="nb-channel"', html)
+        self.assertNotIn("Phone call", html)
+        self.assertNotIn("a Facebook message", html)
+        self.assertIn("walked into the shop", html)
+
+    def test_a_booking_sent_without_a_channel_is_a_walk_in(self):
+        gown = make_gown(120)
+        data = {"name": "Lorna Reyes", "phone": "0917 123 4567", "address": "Antipolo", "lines": json.dumps([self.line(gown)]),
+                "paid": "1", "payment_method": "Cash", "note": "", "receipt_1": jpeg("only.jpg", b"w1"),
+                "receipt_1_covers": "Rental + deposit"}
+        response = self.client.post(reverse("arabela_admin:booking_create"), data=data)
+        self.assertEqual(response.status_code, 200, response.content)
+        reservation = Reservation.objects.get(reference_code=response.json()["reference_code"])
+        self.assertEqual(reservation.channel, Reservation.Channel.WALK_IN)
+
+    def test_facebook_phone_and_online_bookings_are_refused_and_nothing_is_saved(self):
+        gown = make_gown(121)
+        for channel in ("Facebook", "Phone", "Online"):
+            response = self.post_booking([self.line(gown)], channel=channel, receipts=(("Rental + deposit", channel.encode()),))
+            self.assertEqual(response.status_code, 400, channel)
+            self.assertIn("Only walk-in", response.json()["error"], channel)
+        self.assertFalse(Reservation.objects.exists())
+        self.assertFalse(ReceiptRecord.objects.exists())
+
+
+class ReceiptPhotosInProofPopupsTests(Base):
+    """A booking recorded at the counter has no customer GCash screenshot: the shop's receipt photos are its proof."""
+
+    def paid_booking(self, number, receipts, **kwargs):
+        response = self.post_booking([self.line(make_gown(number))], receipts=receipts, **kwargs)
+        self.assertEqual(response.status_code, 200, response.content)
+        return Reservation.objects.get(reference_code=response.json()["reference_code"])
+
+    def test_the_receipts_as_the_popups_read_them(self):
+        reservation = self.paid_booking(130, (("Rental", b"p1"), ("Deposit", b"p2")))
+        ReceiptRecord.objects.create(reservation=reservation, photo_url="https://example.test/r/nolabel.jpg", covers="")
+        everything = reservation.receipt_proofs()
+        self.assertEqual([row["label"] for row in everything], ["Rental receipt", "Deposit receipt", "Receipt (not labelled)"])
+        self.assertEqual(everything[0]["url"], "https://example.test/r/receipt1.jpg")
+        self.assertIn("·", everything[0]["when"])
+        deposit = reservation.receipt_proofs(deposit_only=True)
+        self.assertEqual([row["label"] for row in deposit], ["Deposit receipt"])      # a Rental-only or unlabelled receipt says nothing about it
+        self.assertEqual(json.loads(reservation.receipts_json), everything)
+        self.assertEqual(json.loads(reservation.deposit_receipts_json), deposit)
+
+    def test_one_receipt_for_both_counts_for_the_deposit(self):
+        reservation = self.paid_booking(131, (("Rental + deposit", b"p3"),))
+        self.assertEqual([row["label"] for row in reservation.receipt_proofs(deposit_only=True)], ["Rental + deposit receipt"])
+
+    def test_a_booking_with_no_receipts_has_none(self):
+        response = self.post_booking([self.line(make_gown(132))], paid=False, receipts=())
+        reservation = Reservation.objects.get(reference_code=response.json()["reference_code"])
+        self.assertEqual(reservation.receipt_proofs(), [])
+        self.assertEqual(reservation.receipts_json, "[]")
+        self.assertEqual(reservation.deposit_receipts_json, "[]")
+
+    def test_security_deposits_shows_only_the_deposit_receipts(self):
+        self.paid_booking(133, (("Rental", b"p4"), ("Deposit", b"p5")))
+        html = self.client.get(reverse("arabela_admin:security_deposits")).content.decode()
+        self.assertIn("receipt2.jpg", html)                       # the Deposit one
+        self.assertNotIn("receipt1.jpg", html)                    # the Rental one is not about the deposit
+        self.assertIn("!viewingPayment.proofUrl && !(viewingPayment.receipts || []).length", html)
+
+    def test_security_deposits_shows_nothing_for_a_rental_only_receipt(self):
+        reservation = Reservation.objects.create(customer=None, customer_name="Walk In", phone="09171234567",
+                                                 channel=Reservation.Channel.WALK_IN, status=Reservation.Status.CONFIRMED)
+        ReservationItem.objects.create(reservation=reservation, gown=make_gown(134), gown_name="Walkin Gown", size="Medium",
+                                       rental_date=self.event, return_date=self.event + timedelta(days=4))
+        ReceiptRecord.objects.create(reservation=reservation, photo_url="https://example.test/r/rentalonly.jpg", covers="Rental")
+        html = self.client.get(reverse("arabela_admin:security_deposits")).content.decode()
+        self.assertIn(reservation.reference_code.replace("-", "\\u002D"), html)    # the booking is on the page (escapejs writes "-" as -) ...
+        self.assertNotIn("rentalonly.jpg", html)                  # ... but its Rental receipt is not offered as deposit proof
+
+    def test_the_other_pages_show_every_receipt(self):
+        self.paid_booking(135, (("Rental", b"p7"), ("Deposit", b"p8")))
+        pending = self.post_booking([self.line(make_gown(136))], paid=False, receipts=(("Rental", b"p9"),))
+        self.assertEqual(pending.status_code, 200, pending.content)
+        for name, popup_var, expected in (("payment_verification", "viewingPayment", ("receipt1.jpg", "receipt2.jpg")),
+                                          ("rental_history", "viewingRental", ("receipt1.jpg", "receipt2.jpg")),
+                                          ("dashboard", "receiptPreview", ("receipt1.jpg",))):      # the dashboard lists the Pending one
+            html = self.client.get(reverse(f"arabela_admin:{name}")).content.decode()
+            for piece in expected:
+                self.assertIn(piece, html, (name, piece))
+            self.assertIn(f"!{popup_var}.proofUrl && !({popup_var}.receipts || []).length", html, name)
+
+    def test_payment_verification_says_a_shop_receipt_is_attached(self):
+        self.paid_booking(137, (("Rental + deposit", b"p10"),))
+        html = self.client.get(reverse("arabela_admin:payment_verification")).content.decode()
+        self.assertIn("Shop receipt attached", html)
+        self.assertNotIn("No proof uploaded", html)
+
+    def test_an_online_booking_without_proof_still_says_so(self):
+        self.online_booking(make_gown(138), self.event - timedelta(days=2), self.event + timedelta(days=2),
+                            status=Reservation.Status.PENDING)
+        html = self.client.get(reverse("arabela_admin:payment_verification")).content.decode()
+        self.assertIn("No proof uploaded", html)
+        self.assertNotIn("Shop receipt attached", html)
+
+    def test_the_pages_do_not_ask_the_database_once_per_booking(self):
+        numbers = iter(range(200, 400))
+
+        def add(count):
+            for _ in range(count):
+                number = next(numbers)
+                self.paid_booking(number, (("Rental + deposit", f"q{number}".encode()),))
+
+        def queries(name):
+            with CaptureQueriesContext(connection) as captured:
+                self.assertEqual(self.client.get(reverse(f"arabela_admin:{name}")).status_code, 200)
+            return len(captured.captured_queries)
+
+        pages = ("payment_verification", "security_deposits", "rental_history", "dashboard")
+        add(3)
+        few = {name: queries(name) for name in pages}
+        add(4)
+        for name in pages:
+            self.assertLessEqual(queries(name), few[name] + 1, name)

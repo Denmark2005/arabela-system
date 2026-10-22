@@ -1180,7 +1180,7 @@
                         <div class="flex flex-wrap items-center gap-2">
                           {% with dup=r.gcash_duplicate_codes %}
                             <button type="button"
-                            @click="viewingPayment = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"—"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:0 }}', date: '{{ r.created_at|date:"M j, Y"|escapejs }}', status: '{{ r.status|escapejs }}', proofUrl: '{{ r.payment_proof_url|escapejs }}', gcashRef: '{{ r.gcash_reference|escapejs }}', gcashDup: '{{ dup|escapejs }}' }; openReceiptModal = true"
+                            @click="viewingPayment = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"—"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:0 }}', date: '{{ r.created_at|date:"M j, Y"|escapejs }}', status: '{{ r.status|escapejs }}', proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.deposit_receipts_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', gcashDup: '{{ dup|escapejs }}' }; openReceiptModal = true"
                             class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View Payment</button>
                             {% if dup %}<span class="inline-flex items-center rounded-full bg-error-50 px-2 py-0.5 text-theme-xs font-medium text-error-700 dark:bg-error-500/15 dark:text-error-500" title="The same GCash reference number is also on {{ dup }}">Same GCash ref as {{ dup }}</span>{% endif %}
                             {% endwith %}
@@ -1207,7 +1207,7 @@
 
             <div x-show="openReceiptModal" x-cloak class="fixed inset-0 flex items-center justify-center p-5 overflow-y-auto z-99999">
               <div class="modal-close-btn fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]"></div>
-              <div @click.outside="openReceiptModal = false" class="no-scrollbar relative w-full overflow-y-auto rounded-3xl bg-white p-4 dark:bg-gray-900 lg:p-8" :style="viewingPayment.proofUrl ? 'max-width: min(1100px, 92vw);' : 'max-width: 700px;'">
+              <div @click.outside="openReceiptModal = false" class="no-scrollbar relative w-full overflow-y-auto rounded-3xl bg-white p-4 dark:bg-gray-900 lg:p-8" :style="(viewingPayment.proofUrl || (viewingPayment.receipts || []).length) ? 'max-width: min(1100px, 92vw);' : 'max-width: 700px;'">
                 <button
                   type="button"
                   @click="openReceiptModal = false"
@@ -1248,7 +1248,22 @@
                       </a>
                     </div>
                   </template>
-                  <template x-if="!viewingPayment.proofUrl">
+                  <!-- The shop's own receipt photos (a booking recorded at the counter has no customer GCash screenshot). -->
+                  <template x-for="(rc, rcIndex) in (viewingPayment.receipts || [])" :key="rcIndex">
+                    <div>
+                      <p class="mb-3 text-sm font-medium text-gray-800 dark:text-white/90"><span x-text="rc.label"></span> <span class="text-xs font-normal text-gray-500 dark:text-gray-400" x-text="'· attached ' + rc.when"></span></p>
+                      <div class="mb-3 flex w-full justify-center">
+                        <div class="admin-photo-frame overflow-hidden rounded-2xl bg-gray-100 dark:bg-gray-800">
+                          <img :src="rc.url" :alt="rc.label" style="display: block; max-height: 75vh; max-width: 100%; width: auto; height: auto;" />
+                        </div>
+                      </div>
+                      <a :href="rc.url" target="_blank" rel="noopener" class="mb-6 inline-flex items-center gap-1.5 text-theme-xs font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400">
+                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
+                        View Full Image
+                      </a>
+                    </div>
+                  </template>
+                  <template x-if="!viewingPayment.proofUrl && !(viewingPayment.receipts || []).length">
                     <div class="mb-6 flex h-[212px] items-center justify-center overflow-hidden rounded-2xl bg-gray-100 text-sm text-gray-400 dark:bg-gray-800">
                       No proof of payment uploaded
                     </div>

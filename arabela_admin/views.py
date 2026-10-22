@@ -128,6 +128,7 @@ def dashboard_view(request):
     quick_verify_reservations = (
         Reservation.objects.filter(status=Reservation.Status.PENDING)
         .select_related("customer__profile")
+        .prefetch_related("receipt_records")
         .order_by("-created_at")[:5]
     )
 
@@ -620,6 +621,7 @@ def payment_verification_view(request):
     reservations = (
         Reservation.objects.all()
         .select_related("customer__profile")
+        .prefetch_related("receipt_records")
         .order_by("-created_at")
     )
     now = timezone.now()
@@ -675,6 +677,7 @@ def rental_history_view(request):
         )
         .exclude(stage=ReservationItem.Stage.CANCELLED)
         .select_related("reservation__customer__profile")
+        .prefetch_related("reservation__receipt_records")
         .order_by("-rental_date", "-id")
     )
 
@@ -720,7 +723,7 @@ def security_deposits_view(request):
     reservations = list(
         Reservation.objects.filter(status__in=_SCHEDULED_STATUSES)
         .select_related("customer__profile")
-        .prefetch_related("items")
+        .prefetch_related("items", "receipt_records")
     )
     for r in reservations:
         r.all_items_returned = all(
