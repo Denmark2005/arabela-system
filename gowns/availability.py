@@ -154,6 +154,175 @@ def open_event_dates(units, bookings_by_unit, blocks_by_unit, now, horizon_days)
     return {day for day, value in calendar["*"].items() if isinstance(value, list)}
 
 
+# --- ONE physical gown on ONE event date: the admin's "Check availability" and bookings staff record (walk-in, Facebook,
+# phone). Same rules as the gown page and checkout -- plan_unit above -- so the answer can never disagree with them; the only
+# extra is the walk-in who takes the gown at the counter (a fixed pick-up day, the shop's 5 PM pick-up time doesn't apply to a
+# customer who is standing there).
+OWNER_BACKDATE_DAYS = 30         # the owner may record a booking up to this many days back (a missed walk-in, a correction)
+
+# Why a check said no (`reason`), besides plan_unit's own 'booked' / 'rest'.
+OUT_OF_STOCK = "out_of_stock"
+PAST = "past"
+CLOSED = "closed"
+PICKUP_IN_FUTURE = "pickup_in_future"
+PICKUP_AFTER_EVENT = "pickup_after_event"
+
+
+def unit_busy(unit_id, start: date, end: date):
+    """What holds ONE physical gown on any day of start..end (the past included), as (bookings, blocks): lists of
+    (start, end, row). The same rule as load_busy_ranges: a gown line that is back or that staff cancelled, and a Rejected or
+    Cancelled booking, hold nothing; every block counts (staff blocks and the automatic rest days)."""
+    items = (
+        ReservationItem.objects.filter(gown_id=unit_id, rental_date__lte=end, return_date__gte=start)
+        .exclude(stage__in=ReservationItem.FINISHED_STAGES)
+        .exclude(reservation__status__in=[Reservation.Status.REJECTED, Reservation.Status.CANCELLED])
+        .select_related("reservation__customer__profile")
+        .order_by("rental_date", "id")
+    )
+    blocks = (
+        GownUnavailability.objects.filter(gown_id=unit_id, start_date__lte=end, end_date__gte=start)
+        .select_related("auto_for_item__reservation")
+        .order_by("start_date", "id")
+    )
+    return [(i.rental_date, i.return_date, i) for i in items], [(b.start_date, b.end_date, b) for b in blocks]
+
+
+def _conflict(row_start, row_end, row):
+    """One thing in the way, the way staff read it: who has the gown (and the booking number), or why it is blocked."""
+    if isinstance(row, ReservationItem):
+        reservation = row.reservation
+        label = f"{reservation.display_customer_name} ({reservation.reference_code})"
+        if reservation.status == Reservation.Status.PENDING:
+            label += " · awaiting payment approval"
+        return {"kind": "booking", "start": row_start, "end": row_end, "label": label,
+                "reference": reservation.reference_code}
+    if row.auto_for_item_id and row.auto_for_item is not None:
+        label = f"Rest days after {row.auto_for_item.reservation.reference_code}"
+    else:
+        label = f"Blocked for {row.get_reason_display().lower()}"
+    return {"kind": "block", "start": row_start, "end": row_end, "label": label, "reference": ""}
+
+
+def check_unit(gown, event: date, *, picked_up_on=None, now=None, backdate_days=0):
+    """Can this exact gown be booked for this event date? -> dict
+        ok, reason, event, pickup, return_date, rest_until, conflicts (list of _conflict dicts).
+
+    picked_up_on: the customer takes the gown at the counter -- the pick-up is that fixed day (today; the owner may enter an
+    earlier day to record a walk-in after the fact). Otherwise the pick-up is planned exactly like checkout: the earliest free
+    day up to 2 days before the event, never a day the shop is closed for pick-ups.
+    backdate_days: how far back a date may be (0 for staff, OWNER_BACKDATE_DAYS for the owner)."""
+    now = now or now_local()
+    today = now.date()
+    return_day = event + timedelta(days=RETURN_DAYS)
+    rest_until = return_day + timedelta(days=COOLDOWN_DAYS)
+    result = {"ok": False, "reason": "", "event": event, "pickup": None, "return_date": return_day,
+              "rest_until": rest_until, "conflicts": []}
+    if gown.status == Gown.Status.OUT_OF_STOCK:
+        result["reason"] = OUT_OF_STOCK
+        return result
+    oldest = today - timedelta(days=max(0, backdate_days))
+
+    if picked_up_on is not None:
+        if picked_up_on > today:
+            result["reason"] = PICKUP_IN_FUTURE
+            return result
+        if picked_up_on < oldest or event < oldest:
+            result["reason"] = PAST
+            return result
+        if picked_up_on > event:
+            result["reason"] = PICKUP_AFTER_EVENT
+            return result
+        bookings, blocks = unit_busy(gown.id, picked_up_on, rest_until)
+        in_the_way = [r for r in bookings + blocks if r[0] <= return_day and r[1] >= picked_up_on]
+        if in_the_way:
+            result["reason"] = "booked"
+            result["conflicts"] = [_conflict(*r) for r in in_the_way]
+            return result
+        resting_into = [r for r in bookings if r[0] <= rest_until and r[1] > return_day]
+        if COOLDOWN_DAYS and resting_into:
+            result["reason"] = "rest"
+            result["conflicts"] = [_conflict(*r) for r in resting_into]
+            return result
+        result.update(ok=True, pickup=picked_up_on)
+        return result
+
+    # A planned pick-up can't be in the past: a booking for a date already gone is one where the customer already has the gown.
+    if event < today:
+        result["reason"] = PAST
+        return result
+    if day_problem(event, now) == "closed":
+        result["reason"] = CLOSED
+        return result
+    earliest = earliest_pickup_day(now)
+    first = max(event - timedelta(days=EARLY_PICKUP_DAYS), earliest)
+    bookings, blocks = unit_busy(gown.id, first, rest_until)
+    pickup, reason = plan_unit(
+        event, [(s, e) for s, e, _ in bookings], [(s, e) for s, e, _ in blocks], earliest,
+    )
+    if pickup is None:
+        result["reason"] = reason
+        if reason == "booked":
+            # Even a pick-up on the event day itself would touch these -- they are what makes the date impossible.
+            rows = [r for r in bookings + blocks if r[0] <= return_day and r[1] >= event]
+        else:
+            rows = [r for r in bookings if r[0] <= rest_until and r[1] > return_day]
+        result["conflicts"] = [_conflict(*r) for r in rows]
+        return result
+    result.update(ok=True, pickup=pickup)
+    return result
+
+
+def next_free_event(gown, after: date, now=None, horizon_days=HORIZON_DAYS):
+    """The first event date after `after` (and not before today) on which this exact gown can be booked with a planned
+    pick-up, or None within the calendar's horizon -- what "the next free date" means everywhere a gown is checked."""
+    now = now or now_local()
+    today = now.date()
+    if gown.status == Gown.Status.OUT_OF_STOCK:
+        return None
+    bookings, blocks = load_busy_ranges([gown.id], today, horizon_days)
+    earliest = earliest_pickup_day(now)
+    day = max(after + timedelta(days=1), today)
+    last = today + timedelta(days=horizon_days)
+    while day <= last:
+        if not day_problem(day, now) and plan_unit(day, bookings.get(gown.id, ()), blocks.get(gown.id, ()), earliest)[0]:
+            return day
+        day += timedelta(days=1)
+    return None
+
+
+def check_message(gown, result, with_names=True) -> str:
+    """The sentence staff read for a check_unit result. with_names=False leaves out what is in the way -- for a screen that
+    lists those itself underneath (with links), so nothing is said twice."""
+    label = f"{gown.name} ({gown.gown_id})"
+    reason = result["reason"]
+    if result["ok"]:
+        return (
+            f"Available. Pick-up {_day_text(result['pickup'])}, event {_day_text(result['event'])}, "
+            f"return {_day_text(result['return_date'])}. After that the gown rests until {_day_text(result['rest_until'])}."
+        )
+    if reason == OUT_OF_STOCK:
+        return f"{label} is Out-of-Stock, so it can't be booked."
+    if reason == PAST:
+        return ("That date has already passed. If the customer already has the gown, tick \"Customer takes the gown now\" "
+                "and enter the day they took it (only the owner can enter an earlier day).")
+    if reason == CLOSED:
+        return (f"Today's pick-up time ended at {PICKUP_CLOSES.strftime('%I:%M %p').lstrip('0')}. If the customer is here and "
+                "takes the gown now, tick \"Customer takes the gown now\".")
+    if reason == PICKUP_IN_FUTURE:
+        return "\"Customer takes the gown now\" means the gown leaves today -- the pick-up day can't be later than today."
+    if reason == PICKUP_AFTER_EVENT:
+        return "The pick-up day can't be after the event date."
+    names = "; ".join(f"{c['label']}, {_day_text(c['start'])} – {_day_text(c['end'])}" for c in result["conflicts"]) if with_names else ""
+    if reason == "rest":
+        return (f"Not available. {label} would not get its {COOLDOWN_DAYS} rest days before the next booking"
+                + (f" ({names})." if names else "."))
+    return f"Not available. {label} is already taken on these dates" + (f": {names}." if names else ".")
+
+
+def _day_text(day: date) -> str:
+    return f"{day:%b} {day.day}, {day.year}"
+
+
 def bookable_units(label: str, name: str):
     """A product's physical gowns: same name and category, not Out-of-Stock."""
     return list(

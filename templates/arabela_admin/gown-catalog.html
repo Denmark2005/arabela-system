@@ -826,7 +826,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits' || page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits' || page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -989,6 +989,15 @@
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
                 class="menu-dropdown mt-2 flex flex-col gap-1 pl-9"
               >
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:new_booking' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'new-booking' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    New Booking
+                  </a>
+                </li>
                 <li>
                   <a
                     href="{% url 'arabela_admin:calendar' %}"
@@ -2157,6 +2166,10 @@
                     <option value="due">Due for a check ({{ check_stale_days }}+ days)</option>
                   </select>
                 </div>
+                <!-- Can a gown be booked for a customer's date? (partials/availability_check.html) -->
+                <div class="w-full sm:w-auto">
+                  <button type="button" class="ca-open-btn" title="Can a gown be booked for a customer's event date?">Check a date</button>
+                </div>
                 <div class="w-full sm:w-auto">
                   <button
                     type="button"
@@ -2786,6 +2799,18 @@
         </div>
       </div>
 
+      <!-- Check availability: can THIS gown be booked for an event date? The same answer New Booking and the customer website
+           give (partials/availability_check.html). Read-only; a free date offers "Book it". -->
+      <div class="mt-6 border-t border-gray-100 pt-5 dark:border-gray-800"
+           x-init="$watch('viewingGown', () => window.arabelaAvailability && window.arabelaAvailability.clear($refs.caInlineOut))">
+        <p class="mb-2 text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Check availability</p>
+        <div class="ca-row">
+          <input type="date" class="ca-field" x-ref="caInlineDate" aria-label="Event date to check">
+          <button type="button" class="ca-btn" @click="window.arabelaAvailability.inline($refs.caInlineDate, viewingGown.id, $refs.caInlineOut)">Check</button>
+        </div>
+        <div class="ca-out" x-ref="caInlineOut" aria-live="polite"></div>
+      </div>
+
       <!-- Blocked Dates: staff-declared days this unit is out of the pool. Status above is
            a right-now switch; this is the dated version -- the gap after a return while the
            gown is being washed or repaired, which nothing else in the system can express. -->
@@ -3037,6 +3062,7 @@
   <script defer src="{% static 'js/picked-file.js' %}?v={{ site_asset_version }}"></script>
   <script defer src="{% static 'arabela_admin/global-search.js' %}"></script>
 
+{% include "arabela_admin/partials/availability_check.html" %}
 {% include "arabela_admin/partials/dialog.html" %}
 </body>
 </html>

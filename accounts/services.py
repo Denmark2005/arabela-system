@@ -92,7 +92,11 @@ def sync_cancellation_flag(user) -> int:
     every subsequent cancel past that count. Flagging (the top tier) is one-way:
     only an admin can lift it (via the Client List), so a customer can't clear it
     by having reservations approved afterwards. Returns the total attempt count.
+
+    A booking staff recorded for a customer with no website account (user is None) has no account to count against.
     """
+    if user is None:
+        return 0
     count = count_cancellation_attempts(user)
     profile, _ = UserProfile.objects.get_or_create(user=user)
 

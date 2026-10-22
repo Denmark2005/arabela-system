@@ -638,6 +638,11 @@ def on_status_event_saved(sender, instance, created, **kwargs):
     kind = EVENT_KINDS.get(instance.label)
     if kind is None or instance.staff_only or instance.item_id:
         return
+    # A booking staff recorded for a walk-in with no website account has nobody to email (and no "skipped" line belongs in
+    # the owner's email history for it either).
+    from reservations.models import Reservation
+    if not Reservation.objects.filter(pk=instance.reservation_id, customer__isnull=False).exists():
+        return
     pk = instance.pk
     transaction.on_commit(lambda: _guarded(_email_for_event, pk, kind))
 

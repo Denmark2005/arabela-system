@@ -18,9 +18,10 @@ shop floor. (Which entries are NEW to a given person is tracked in their own bro
 static/arabela_admin/notifications-live.js; nothing about it is stored on the server.)
 """
 import hashlib
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from urllib.parse import urlencode
 
+from django.db.models import Q
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
@@ -55,6 +56,7 @@ _KIND_GROUP = {
     "payment": "payment",
     "overdue": "returns",
     "late_pickup": "returns",
+    "call": "returns",
     "inventory": "inventory",
     "customer": "customer",
     "staff": "staff",
@@ -167,7 +169,12 @@ def build_items(user):
             kind="reservation",
             level="info",
             actor=r.display_customer_name,
-            text="is waiting for approval on",
+            # A booking staff recorded at the counter (or from Facebook / a phone call) that is still unpaid: the thing to do
+            # is take the payment, not check an online proof.
+            text=(
+                f"has a {r.get_channel_display().lower()} booking waiting for payment:"
+                if r.is_staff_recorded and not r.payment_proof_url else "is waiting for approval on"
+            ),
             subject=r.reference_code,
             module="Reservations",
             url=_searchable("arabela_admin:pending_approval", r.reference_code),
@@ -287,6 +294,48 @@ def build_items(user):
             url=_searchable("arabela_admin:active_reservations", reservation.reference_code),
             when=first_day,
             sort=datetime.combine(first_day, time.min),
+        ))
+
+    # --- Calls to make: bookings with no website account ---------------------------
+    # A customer who booked online is reminded automatically (reservations/reminders.py) a day before their pick-up and
+    # their return. A walk-in, Facebook or phone booking recorded without an account can't be messaged, so the same two
+    # moments come to staff instead, with the phone number to call. Overdue returns and missed pick-ups of these bookings
+    # are already in the two lists above.
+    soon = today + timedelta(days=1)
+    calls = (
+        ReservationItem.objects.filter(
+            reservation__customer__isnull=True,
+            reservation__status__in=_SCHEDULED_STATUSES,
+        )
+        .filter(
+            Q(stage=ReservationItem.Stage.PICKUP, rental_date__gte=today, rental_date__lte=soon)
+            | Q(stage__in=[ReservationItem.Stage.RESERVED, ReservationItem.Stage.RETURN, ReservationItem.Stage.OVERDUE],
+                return_date__gte=today, return_date__lte=soon)
+        )
+        .select_related("reservation")
+        .order_by("rental_date", "id")
+    )
+    call_groups = {}
+    for it in calls:
+        what = "pickup" if it.stage == ReservationItem.Stage.PICKUP else "return"
+        day = it.rental_date if what == "pickup" else it.return_date
+        call_groups.setdefault((it.reservation_id, what, day), []).append(it)
+    for (reservation_id, what, day), group in list(call_groups.items())[:10]:
+        reservation = group[0].reservation
+        when_text = "today" if day == today else "tomorrow"
+        gowns = group[0].gown_name if len(group) == 1 else f"{group[0].gown_name} and {len(group) - 1} more"
+        phone = reservation.phone or "no phone on file"
+        items.append(_item(
+            key=f"call:{what}:{reservation_id}:{day.isoformat()}",
+            kind="call",
+            level="warning" if day == today else "info",
+            actor=f"Call {reservation.display_customer_name} ({phone}):",
+            text=(f"pick-up of {gowns} is {when_text} for" if what == "pickup" else f"return of {gowns} is due {when_text} for"),
+            subject=reservation.reference_code,
+            module="Reservations",
+            url=_searchable("arabela_admin:active_reservations", reservation.reference_code),
+            when=day,
+            sort=datetime.combine(day, time.min),
         ))
 
     # --- Inventory needing attention ----------------------------------------------

@@ -1,0 +1,181 @@
+{% comment %}
+  "Attach receipt" for a booking staff recorded (walk-in, Facebook, phone) that is still waiting for payment in Pending Approval:
+  when the customer pays, staff attach the shop's receipt photo here and then press Approve. Uploads through the same endpoint
+  Reservation Records uses (arabela_admin.views.receipt_upload_view), so the same checks apply -- including "this exact photo is
+  already on another booking".
+
+  Self-contained like partials/cancel_booking.html: its own styles (the admin's compiled CSS only has the pack's own classes),
+  markup and script. Every button with class ar-open-btn opens it, handing over data-ref and data-customer.
+{% endcomment %}
+<style>
+  .ar-overlay { position: fixed; inset: 0; z-index: 100000; display: none; align-items: center; justify-content: center; padding: 1rem; background: rgba(16, 24, 40, .62); }
+  .ar-overlay.is-open { display: flex; }
+  .ar-card { width: 100%; max-width: 30rem; max-height: calc(100vh - 2rem); overflow-y: auto; background: #fff; color: #1d2939; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 24px 48px -12px rgba(16, 24, 40, .35); }
+  .dark .ar-card { background: #101828; color: #f2f4f7; border: 1px solid #1d2939; }
+  .ar-title { margin: 0 0 .25rem; font-size: 1.125rem; font-weight: 600; }
+  .ar-lead { margin: 0 0 1rem; font-size: .875rem; color: #667085; }
+  .dark .ar-lead { color: #98a2b3; }
+  .ar-label { display: block; margin: 0 0 .35rem; font-size: .8125rem; font-weight: 500; }
+  .ar-field { display: block; width: 100%; box-sizing: border-box; margin: 0 0 .9rem; padding: .6rem .75rem; border: 1px solid #d0d5dd; border-radius: .6rem; background: #fff; color: inherit; font: inherit; font-size: .875rem; }
+  .dark .ar-field { background: #0c111d; border-color: #344054; }
+  .ar-field:focus { outline: 2px solid #465fff; outline-offset: 1px; border-color: #465fff; }
+  .ar-pick { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0 0 .9rem; }
+  .ar-preview { display: none; align-items: center; gap: .75rem; margin: 0 0 .9rem; font-size: .8125rem; overflow-wrap: anywhere; }
+  .ar-preview.is-on { display: flex; }
+  .ar-preview img { width: 4rem; height: 4rem; object-fit: cover; border-radius: .45rem; background: #f2f4f7; flex: none; }
+  .ar-error { display: none; margin: 0 0 .9rem; padding: .6rem .75rem; border-radius: .6rem; background: #fef3f2; color: #b42318; font-size: .8125rem; }
+  .ar-error.is-on { display: block; }
+  .dark .ar-error { background: rgba(240, 68, 56, .16); color: #fda29b; }
+  .ar-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .6rem; }
+  .ar-btn { border-radius: .6rem; padding: .6rem 1.1rem; font: inherit; font-size: .875rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; }
+  .ar-btn--ghost { background: #fff; color: #344054; border-color: #d0d5dd; }
+  .dark .ar-btn--ghost { background: transparent; color: #d0d5dd; border-color: #344054; }
+  .ar-btn--primary { background: #465fff; color: #fff; }
+  .ar-btn--primary:hover:not(:disabled) { background: #3641f5; }
+  .ar-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .ar-btn:focus-visible, .ar-open-btn:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+  .ar-open-btn { display: inline-flex; align-items: center; gap: .4rem; border: 1px solid #d0d5dd; background: #fff; color: #344054; border-radius: .5rem; padding: .375rem .75rem; font-size: .75rem; line-height: 1.25; font-weight: 500; cursor: pointer; }
+  .ar-open-btn:hover { background: #f9fafb; }
+  .dark .ar-open-btn { background: transparent; color: #d0d5dd; border-color: #344054; }
+  .ar-hidden { display: none !important; }
+</style>
+
+<div class="ar-overlay" id="ar-overlay" aria-hidden="true">
+  <div class="ar-card" role="dialog" aria-modal="true" aria-labelledby="ar-title">
+    <h2 class="ar-title" id="ar-title">Attach the shop's receipt</h2>
+    <p class="ar-lead" id="ar-lead"></p>
+
+    <span class="ar-label">Receipt photo</span>
+    <div class="ar-pick">
+      <button type="button" class="ar-btn ar-btn--ghost" id="ar-camera-btn">Take photo</button>
+      <button type="button" class="ar-btn ar-btn--ghost" id="ar-file-btn">Choose from gallery</button>
+    </div>
+    <input type="file" class="ar-hidden" id="ar-camera" accept="image/png,image/jpeg,image/webp" capture="environment">
+    <input type="file" class="ar-hidden" id="ar-file" accept="image/png,image/jpeg,image/webp">
+    <div class="ar-preview" id="ar-preview"><img id="ar-preview-img" alt="Selected receipt"><span id="ar-preview-name"></span></div>
+
+    <label class="ar-label" for="ar-covers">This receipt is for</label>
+    <select class="ar-field" id="ar-covers">
+      <option value="Rental + deposit">Rental + deposit</option>
+      <option value="Rental">Rental only</option>
+      <option value="Deposit">Deposit only</option>
+    </select>
+
+    <p class="ar-error" id="ar-error" role="alert"></p>
+    <div class="ar-actions">
+      <button type="button" class="ar-btn ar-btn--ghost" id="ar-close">Close</button>
+      <button type="button" class="ar-btn ar-btn--primary" id="ar-upload">Attach receipt</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var UPLOAD_URL = '{% url "arabela_admin:receipt_upload" %}';
+    var overlay = document.getElementById('ar-overlay');
+    if (!overlay) { return; }
+    var lead = document.getElementById('ar-lead');
+    var errorEl = document.getElementById('ar-error');
+    var preview = document.getElementById('ar-preview');
+    var previewImg = document.getElementById('ar-preview-img');
+    var previewName = document.getElementById('ar-preview-name');
+    var covers = document.getElementById('ar-covers');
+    var uploadBtn = document.getElementById('ar-upload');
+    var current = null, file = null, preparing = false, busy = false, opener = null;
+
+    function csrf() {
+      var m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+      return m ? decodeURIComponent(m[1]) : '';
+    }
+    function showError(text) { errorEl.textContent = text || ''; errorEl.classList.toggle('is-on', !!text); }
+    function reset() {
+      if (previewImg.src) { URL.revokeObjectURL(previewImg.src); }
+      file = null; preparing = false; busy = false;
+      previewImg.removeAttribute('src'); previewName.textContent = ''; preview.classList.remove('is-on');
+      covers.value = 'Rental + deposit'; uploadBtn.disabled = false; uploadBtn.textContent = 'Attach receipt';
+      showError('');
+    }
+    function open(btn) {
+      opener = btn;
+      current = { ref: btn.dataset.ref, customer: btn.dataset.customer };
+      reset();
+      lead.textContent = 'For ' + current.customer + ' · ' + current.ref + '. Attach it when the customer pays, then press Approve.';
+      overlay.classList.add('is-open');
+      overlay.setAttribute('aria-hidden', 'false');
+      document.getElementById('ar-camera-btn').focus();
+    }
+    function close() {
+      if (busy) { return; }
+      overlay.classList.remove('is-open');
+      overlay.setAttribute('aria-hidden', 'true');
+      reset();
+      if (opener) { opener.focus(); }
+    }
+    function picked(input) {
+      var chosen = input.files && input.files[0];
+      input.value = '';
+      if (!chosen) { return; }
+      preparing = true; showError('');
+      previewName.textContent = 'Preparing photo...'; preview.classList.add('is-on');
+      var prepare = window.arabelaPreparePhotoForUpload || function (f) { return Promise.resolve(f); };
+      prepare(chosen).then(function (ready) {
+        preparing = false; file = ready;
+        if (previewImg.src) { URL.revokeObjectURL(previewImg.src); }
+        previewImg.src = URL.createObjectURL(ready);
+        previewName.textContent = chosen.name;
+      }, function (err) {
+        preparing = false; file = null; preview.classList.remove('is-on');
+        showError((err && err.message) || 'That photo could not be opened. Please choose it again.');
+      });
+    }
+    function upload() {
+      if (busy) { return; }
+      if (preparing) { showError('Still preparing the photo, one moment.'); return; }
+      if (!file) { showError("Please attach a photo of the shop's receipt."); return; }
+      busy = true; uploadBtn.disabled = true; uploadBtn.textContent = 'Attaching...'; showError('');
+      var form = new FormData();
+      form.append('reference_code', current.ref);
+      form.append('photo', file, file.name || 'receipt.jpg');
+      form.append('covers', covers.value);
+      fetch(UPLOAD_URL, { method: 'POST', headers: { 'X-CSRFToken': csrf() }, body: form, credentials: 'same-origin' })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (data) { return { ok: r.ok, data: data }; }); })
+        .then(function (res) {
+          busy = false;
+          if (!res.ok || !res.data.success) {
+            uploadBtn.disabled = false; uploadBtn.textContent = 'Attach receipt';
+            showError(res.data.error || 'Could not attach this receipt. Please try again.');
+            return;
+          }
+          // The row says how many receipts it now has; the booking still waits for Approve.
+          document.querySelectorAll('[data-receipt-count-for="' + current.ref + '"]').forEach(function (el) {
+            var n = (parseInt(el.dataset.count || '0', 10) || 0) + 1;
+            el.dataset.count = String(n);
+            el.textContent = n === 1 ? '1 receipt attached' : n + ' receipts attached';
+            el.classList.remove('ar-hidden');
+          });
+          document.querySelectorAll('.resv-btn-approve[data-ref="' + current.ref + '"]').forEach(function (b) {
+            b.dataset.receipts = String((parseInt(b.dataset.receipts || '0', 10) || 0) + 1);
+          });
+          close();
+        })
+        .catch(function (err) {
+          busy = false; uploadBtn.disabled = false; uploadBtn.textContent = 'Attach receipt';
+          showError(window.arabelaDescribeRequestError ? window.arabelaDescribeRequestError(err, 'Could not attach this receipt. Please try again.')
+                                                      : 'Could not attach this receipt. Please try again.');
+        });
+    }
+
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest && e.target.closest('.ar-open-btn');
+      if (btn) { e.preventDefault(); open(btn); }
+    });
+    document.getElementById('ar-camera-btn').addEventListener('click', function () { document.getElementById('ar-camera').click(); });
+    document.getElementById('ar-file-btn').addEventListener('click', function () { document.getElementById('ar-file').click(); });
+    document.getElementById('ar-camera').addEventListener('change', function () { picked(this); });
+    document.getElementById('ar-file').addEventListener('change', function () { picked(this); });
+    document.getElementById('ar-close').addEventListener('click', close);
+    uploadBtn.addEventListener('click', upload);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && overlay.classList.contains('is-open')) { close(); } });
+  })();
+</script>

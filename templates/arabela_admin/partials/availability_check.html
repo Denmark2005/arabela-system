@@ -1,0 +1,223 @@
+{% comment %}
+  Gown Catalog's "Check availability": can THIS physical gown be booked for an event date? Read-only, nothing is saved.
+  Two ways in, one answer (arabela_admin.new_booking.availability_check_view -> gowns.availability.check_unit, the same rules
+  as the customer website, checkout and New Booking):
+    * the "Check a date" button at the top of the catalog opens the window below (find any gown, pick a date);
+    * the small "Check availability" box in a gown's own view window (arabelaAvailability.inline).
+  A free date offers "Book it", which opens New Booking already filled in with that gown and date.
+
+  Self-contained like partials/cancel_booking.html: its own styles, markup and script.
+{% endcomment %}
+<style>
+  .ca-open-btn { display: inline-flex; width: 100%; align-items: center; justify-content: center; gap: .5rem; border: 1px solid #d0d5dd; background: #fff; color: #344054; border-radius: 999px; padding: .625rem 1rem; font-size: .875rem; font-weight: 500; cursor: pointer; white-space: nowrap; }
+  .ca-open-btn:hover { background: #f9fafb; }
+  .dark .ca-open-btn { background: #1d2939; color: #d0d5dd; border-color: #344054; }
+  .ca-overlay { position: fixed; inset: 0; z-index: 100000; display: none; align-items: center; justify-content: center; padding: 1rem; background: rgba(16, 24, 40, .62); }
+  .ca-overlay.is-open { display: flex; }
+  .ca-card { width: 100%; max-width: 34rem; max-height: calc(100vh - 2rem); overflow-y: auto; background: #fff; color: #1d2939; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 24px 48px -12px rgba(16, 24, 40, .35); }
+  .dark .ca-card { background: #101828; color: #f2f4f7; border: 1px solid #1d2939; }
+  .ca-title { margin: 0 0 .25rem; font-size: 1.125rem; font-weight: 600; }
+  .ca-lead { margin: 0 0 1rem; font-size: .875rem; color: #667085; }
+  .dark .ca-lead { color: #98a2b3; }
+  .ca-label { display: block; margin: 0 0 .35rem; font-size: .8125rem; font-weight: 500; }
+  .ca-field { display: block; width: 100%; box-sizing: border-box; padding: .6rem .75rem; border: 1px solid #d0d5dd; border-radius: .6rem; background: #fff; color: inherit; font: inherit; font-size: .875rem; }
+  .dark .ca-field { background: #0c111d; border-color: #344054; color-scheme: dark; }
+  .ca-field:focus { outline: 2px solid #465fff; outline-offset: 1px; border-color: #465fff; }
+  .ca-row { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+  .ca-row .ca-field { flex: 1 1 10rem; width: auto; }
+  .ca-btn { border-radius: .6rem; padding: .6rem 1.1rem; font: inherit; font-size: .875rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; background: #465fff; color: #fff; }
+  .ca-btn:hover:not(:disabled) { background: #3641f5; }
+  .ca-btn--ghost { background: #fff; color: #344054; border-color: #d0d5dd; }
+  .ca-btn--ghost:hover:not(:disabled) { background: #f9fafb; }
+  .dark .ca-btn--ghost { background: transparent; color: #d0d5dd; border-color: #344054; }
+  .ca-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .ca-btn:focus-visible, .ca-open-btn:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+  .ca-results { margin-top: .5rem; border: 1px solid #e4e7ec; border-radius: .7rem; max-height: 14rem; overflow-y: auto; }
+  .dark .ca-results { border-color: #1d2939; }
+  .ca-result { display: block; width: 100%; padding: .55rem .75rem; border: 0; border-bottom: 1px solid #f2f4f7; background: transparent; text-align: left; font: inherit; font-size: .8125rem; color: inherit; cursor: pointer; }
+  .ca-result:last-child { border-bottom: 0; }
+  .ca-result:hover { background: #f9fafb; }
+  .dark .ca-result { border-bottom-color: #1d2939; }
+  .dark .ca-result:hover { background: rgba(255,255,255,.04); }
+  .ca-chosen { margin-top: .5rem; padding: .55rem .75rem; border-radius: .6rem; background: #f9fafb; border: 1px solid #e4e7ec; font-size: .8125rem; }
+  .dark .ca-chosen { background: rgba(255,255,255,.04); border-color: #1d2939; }
+  .ca-out:empty { display: none; }
+  .ca-out { margin-top: .75rem; }
+  .ca-verdict { padding: .7rem .85rem; border-radius: .7rem; font-size: .8125rem; line-height: 1.5; }
+  .ca-verdict--ok { background: #ecfdf3; color: #05603a; border: 1px solid #abefc6; }
+  .dark .ca-verdict--ok { background: rgba(18,183,106,.12); color: #75e0a7; border-color: rgba(18,183,106,.35); }
+  .ca-verdict--no { background: #fef3f2; color: #912018; border: 1px solid #fecdca; }
+  .dark .ca-verdict--no { background: rgba(240,68,56,.14); color: #fda29b; border-color: rgba(240,68,56,.35); }
+  .ca-verdict--wait { background: #f9fafb; color: #475467; border: 1px solid #e4e7ec; }
+  .dark .ca-verdict--wait { background: rgba(255,255,255,.04); color: #98a2b3; border-color: #1d2939; }
+  .ca-verdict ul { margin: .35rem 0 0 1.1rem; padding: 0; list-style: disc; }
+  .ca-verdict a { color: inherit; font-weight: 600; text-decoration: underline; }
+  .ca-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .6rem; margin-top: 1rem; }
+</style>
+
+<div class="ca-overlay" id="ca-overlay" aria-hidden="true">
+  <div class="ca-card" role="dialog" aria-modal="true" aria-labelledby="ca-title">
+    <h2 class="ca-title" id="ca-title">Check a date</h2>
+    <p class="ca-lead">Can a gown be booked for a customer's event date? Nothing is saved. Use it for a Facebook or phone question too.</p>
+
+    <label class="ca-label" for="ca-query">Gown (ID, tag number or name)</label>
+    <input class="ca-field" id="ca-query" type="search" autocomplete="off" placeholder="e.g. WH-003, 12, or Wedding Gown 3">
+    <div class="ca-results" id="ca-results" hidden></div>
+    <div class="ca-chosen" id="ca-chosen" hidden></div>
+
+    <label class="ca-label" for="ca-date" style="margin-top: .9rem;">Event date</label>
+    <div class="ca-row">
+      <input class="ca-field" id="ca-date" type="date" min="{{ today_iso|default:'' }}">
+      <button type="button" class="ca-btn" id="ca-check">Check</button>
+    </div>
+    <div class="ca-out" id="ca-out" aria-live="polite"></div>
+
+    <div class="ca-actions">
+      <button type="button" class="ca-btn ca-btn--ghost" id="ca-close">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var URLS = {
+      gowns: '{% url "arabela_admin:booking_gown_search" %}',
+      check: '{% url "arabela_admin:availability_check" %}',
+      book: '{% url "arabela_admin:new_booking" %}'
+    };
+
+    function esc(text) {
+      return String(text == null ? '' : text).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+    function getJSON(url) {
+      return fetch(url, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (data) {
+          if (!r.ok) { throw new Error(data.error || 'Could not check the calendar just now. Please try again.'); }
+          return data;
+        });
+      });
+    }
+    function check(gownId, eventIso) {
+      return getJSON(URLS.check + '?' + new URLSearchParams({ gown: gownId, event: eventIso }));
+    }
+    function render(data) {
+      if (!data) { return ''; }
+      var html = '<div class="ca-verdict ' + (data.ok ? 'ca-verdict--ok' : 'ca-verdict--no') + '">';
+      html += '<strong>' + (data.ok ? '✓ ' : '✕ ') + '</strong>' + esc(data.headline || data.message);
+      if (!data.ok && data.conflicts && data.conflicts.length) {
+        html += '<ul>' + data.conflicts.map(function (c) {
+          return '<li>' + (c.url ? '<a href="' + esc(c.url) + '" target="_blank" rel="noopener">' + esc(c.text) + '</a>' : esc(c.text)) + '</li>';
+        }).join('') + '</ul>';
+      }
+      if (!data.ok && data.nextFreeText) {
+        html += '<div style="margin-top:.4rem;">Next free date for this gown: <strong>' + esc(data.nextFreeText) + '</strong>.</div>';
+      }
+      if (!data.ok && data.alternatives && data.alternatives.length) {
+        html += '<div style="margin-top:.4rem;">Free on this date instead: ' + data.alternatives.map(function (g) {
+          return '<strong>' + esc(g.gownId) + '</strong> (' + esc(g.size) + ')';
+        }).join(', ') + '.</div>';
+      }
+      if (data.ok) {
+        html += '<div style="margin-top:.4rem;"><a href="' + esc(URLS.book + '?' + new URLSearchParams({ gown: data.gown.id, event: data.event })) +
+          '">Book it in New Booking</a></div>';
+      }
+      return html + '</div>';
+    }
+    function wait() { return '<div class="ca-verdict ca-verdict--wait">Checking the calendar…</div>'; }
+    function fail(message) { return '<div class="ca-verdict ca-verdict--no">' + esc(message) + '</div>'; }
+
+    // The box in a gown's own view window (Gown Catalog): date input + Check button + where the answer goes.
+    function inline(dateInput, gownId, out) {
+      if (!out) { return; }
+      if (!dateInput || !dateInput.value) { out.innerHTML = fail('Choose the event date first.'); return; }
+      out.innerHTML = wait();
+      var asked = dateInput.value;
+      out.dataset.asked = asked + ':' + gownId;
+      check(gownId, asked).then(function (data) {
+        if (out.dataset.asked === asked + ':' + gownId) { out.innerHTML = render(data); }
+      }, function (err) {
+        if (out.dataset.asked === asked + ':' + gownId) { out.innerHTML = fail(err.message); }
+      });
+    }
+    function clear(out) { if (out) { out.innerHTML = ''; out.dataset.asked = ''; } }
+    window.arabelaAvailability = { check: check, render: render, inline: inline, clear: clear };
+
+    // ---- the "Check a date" window ----
+    var overlay = document.getElementById('ca-overlay');
+    if (!overlay) { return; }
+    var query = document.getElementById('ca-query');
+    var results = document.getElementById('ca-results');
+    var chosenEl = document.getElementById('ca-chosen');
+    var dateEl = document.getElementById('ca-date');
+    var out = document.getElementById('ca-out');
+    var chosen = null, timer = null, seq = 0, opener = null;
+    // No past event dates (the shop's clock decides in the end; this only keeps the picker honest).
+    if (!dateEl.min) {
+      var now = new Date();
+      dateEl.min = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    }
+
+    function showChosen() {
+      if (!chosen) { chosenEl.hidden = true; chosenEl.innerHTML = ''; return; }
+      chosenEl.hidden = false;
+      chosenEl.innerHTML = '<strong>' + esc(chosen.name) + '</strong> · ' + esc(chosen.gownId) + ' · ' + esc(chosen.size) +
+        ' · ' + esc(chosen.color) + (chosen.outOfStock ? ' · Out-of-Stock' : '');
+    }
+    function search() {
+      var q = query.value.trim();
+      if (!q) { results.hidden = true; results.innerHTML = ''; return; }
+      var mine = ++seq;
+      getJSON(URLS.gowns + '?' + new URLSearchParams({ q: q })).then(function (data) {
+        if (mine !== seq) { return; }
+        var list = data.results || [];
+        results.hidden = !list.length;
+        results.innerHTML = list.map(function (g, i) {
+          return '<button type="button" class="ca-result" data-index="' + i + '"><strong>' + esc(g.name) + '</strong><br>' +
+            esc(g.gownId + ' · ' + g.size + ' · ' + g.color + ' · ' + g.price + (g.outOfStock ? ' · Out-of-Stock' : '')) + '</button>';
+        }).join('');
+        results._list = list;
+      }).catch(function () { results.hidden = true; });
+    }
+    function open(btn) {
+      opener = btn || null;
+      overlay.classList.add('is-open');
+      overlay.setAttribute('aria-hidden', 'false');
+      query.focus();
+    }
+    function close() {
+      overlay.classList.remove('is-open');
+      overlay.setAttribute('aria-hidden', 'true');
+      if (opener) { opener.focus(); }
+    }
+    function run() {
+      if (!chosen) { out.innerHTML = fail('Find and choose the gown first.'); return; }
+      if (!dateEl.value) { out.innerHTML = fail('Choose the event date first.'); return; }
+      out.innerHTML = wait();
+      var mine = ++seq;
+      check(chosen.id, dateEl.value).then(function (data) {
+        if (mine === seq) { out.innerHTML = render(data); }
+      }, function (err) { if (mine === seq) { out.innerHTML = fail(err.message); } });
+    }
+
+    query.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(search, 300); });
+    results.addEventListener('click', function (e) {
+      var btn = e.target.closest('.ca-result');
+      if (!btn || !results._list) { return; }
+      chosen = results._list[Number(btn.dataset.index)];
+      results.hidden = true; results.innerHTML = ''; query.value = '';
+      showChosen(); out.innerHTML = '';
+      if (dateEl.value) { run(); } else { dateEl.focus(); }
+    });
+    dateEl.addEventListener('change', function () { if (chosen) { run(); } });
+    document.getElementById('ca-check').addEventListener('click', run);
+    document.getElementById('ca-close').addEventListener('click', close);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && overlay.classList.contains('is-open')) { close(); } });
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest && e.target.closest('.ca-open-btn');
+      if (btn) { e.preventDefault(); open(btn); }
+    });
+  })();
+</script>

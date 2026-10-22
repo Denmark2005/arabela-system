@@ -132,16 +132,18 @@ def _cancel_whole(reservation, items, *, staff_name, reason_key, note):
 
     _release_gowns(items)
 
-    gowns = ", ".join(item.gown_name for item in items)
-    CustomerMessage.objects.create(
-        recipient=reservation.customer,
-        category=CustomerMessage.Category.GENERAL,
-        body=(
-            f"Your reservation {reservation.reference_code} ({gowns}) was cancelled by Arabela"
-            + (f". {customer_reason}" if customer_reason else ".")
-            + " Your security deposit is not refunded. If you would like to book again, please contact the shop."
-        ),
-    )
+    # A booking recorded for a walk-in with no website account has nobody to message: staff tell them in person or by phone.
+    if reservation.has_account:
+        gowns = ", ".join(item.gown_name for item in items)
+        CustomerMessage.objects.create(
+            recipient=reservation.customer,
+            category=CustomerMessage.Category.GENERAL,
+            body=(
+                f"Your reservation {reservation.reference_code} ({gowns}) was cancelled by Arabela"
+                + (f". {customer_reason}" if customer_reason else ".")
+                + " Your security deposit is not refunded. If you would like to book again, please contact the shop."
+            ),
+        )
 
 
 def cancel_by_staff(reservation_id, *, staff_name, reason_key, note, typed_code):
@@ -152,7 +154,9 @@ def cancel_by_staff(reservation_id, *, staff_name, reason_key, note, typed_code)
     note = (note or "").strip()[:NOTE_MAX]
 
     with transaction.atomic():
-        reservation = Reservation.objects.select_for_update().select_related("customer").filter(id=reservation_id).first()
+        # of=("self",): lock only the booking row. The customer is an outer join now (a walk-in booking may have no
+        # account), and PostgreSQL refuses FOR UPDATE on the nullable side of an outer join.
+        reservation = Reservation.objects.select_for_update(of=("self",)).select_related("customer").filter(id=reservation_id).first()
         if reservation is None:
             raise CannotCancel("Reservation not found.", 404)
         if reservation.status == Reservation.Status.CANCELLED:
@@ -220,7 +224,7 @@ def cancel_gowns_by_staff(reservation_id, item_ids, *, staff_name, reason_key, n
     reason, note = _reason_or_error(reason_key, note)
 
     with transaction.atomic():
-        reservation = Reservation.objects.select_for_update().select_related("customer").filter(id=reservation_id).first()
+        reservation = Reservation.objects.select_for_update(of=("self",)).select_related("customer").filter(id=reservation_id).first()
         if reservation is None:
             raise CannotCancel("Reservation not found.", 404)
         if reservation.status == Reservation.Status.CANCELLED:
@@ -263,15 +267,16 @@ def cancel_gowns_by_staff(reservation_id, item_ids, *, staff_name, reason_key, n
 
             _release_gowns(chosen)
 
-            CustomerMessage.objects.create(
-                recipient=reservation.customer,
-                category=CustomerMessage.Category.GENERAL,
-                body=(
-                    f"Arabela cancelled {_join_names(item.gown_name for item in chosen)} from your reservation "
-                    f"{reservation.reference_code}. {customer_reason} The rest of your reservation is unchanged. "
-                    "If you have any questions about your payment, please contact the shop."
-                ),
-            )
+            if reservation.has_account:
+                CustomerMessage.objects.create(
+                    recipient=reservation.customer,
+                    category=CustomerMessage.Category.GENERAL,
+                    body=(
+                        f"Arabela cancelled {_join_names(item.gown_name for item in chosen)} from your reservation "
+                        f"{reservation.reference_code}. {customer_reason} The rest of your reservation is unchanged. "
+                        "If you have any questions about your payment, please contact the shop."
+                    ),
+                )
 
             # Every gown left is already back: the booking is finished, so the deposit counts as settled -- the same line
             # (and the same single email) the last gown's Mark Returned writes.

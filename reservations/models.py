@@ -24,9 +24,22 @@ class Reservation(models.Model):
         GCASH = 'GCash', 'GCash'
         CASH = 'Cash', 'Cash'
 
+    class Channel(models.TextChoices):
+        """How the booking reached the shop. Online = the customer booked on the website; the other three were recorded by
+        staff in the admin's New Booking page (arabela_admin/new_booking.py) for a customer who came to the shop, messaged on
+        Facebook, or phoned -- so every booking, however it arrived, holds its gown on the same calendar."""
+        ONLINE = 'Online', 'Online'
+        WALK_IN = 'Walk-in', 'Walk-in'
+        FACEBOOK = 'Facebook', 'Facebook'
+        PHONE = 'Phone', 'Phone call'
+
     reference_code = models.CharField(max_length=20, unique=True, blank=True)
+    # Empty for a booking staff recorded for a customer with no website account (a walk-in, usually): the customer is then
+    # only the name and phone below. Every place that writes to "the customer" (messages, emails, reminders, cancellation
+    # limits) skips such a booking -- staff call the phone number instead.
     customer = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='reservations'
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='reservations',
+        null=True, blank=True,
     )
     customer_name = models.CharField(max_length=120)
     # Contact snapshot captured on the reservation form at submission time (blank for
@@ -51,6 +64,17 @@ class Reservation(models.Model):
     # Set once staff releases the deposit back to the customer (a separate, later step
     # from marking the gown itself returned -- see reservation_return_deposit_view).
     deposit_returned_at = models.DateTimeField(null=True, blank=True)
+    # How the booking came in (see Channel). db_default: an older deployment that doesn't know this column can still create
+    # (online) bookings while the database is already migrated.
+    channel = models.CharField(max_length=10, choices=Channel.choices, default=Channel.ONLINE, db_default=Channel.ONLINE)
+    # The staff member or owner who recorded a booking in the admin (blank for an online booking). SET_NULL: removing a
+    # staff account later must never take a booking with it.
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+    )
+    # The shop's own number for this booking on paper (its notebook or receipt book), when it has one. Optional; never the
+    # same on two bookings (see Meta.constraints), so one paper record can't be reused for a second booking.
+    notebook_number = models.CharField(max_length=30, blank=True, default='', db_default='')
 
     @property
     def gcash_duplicate_codes(self):
@@ -91,9 +115,33 @@ class Reservation(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['notebook_number'], condition=~models.Q(notebook_number=''),
+                name='reservation_notebook_number_unique',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.reference_code} — {self.customer_name}'
+
+    @property
+    def has_account(self):
+        """Whether a website account is behind this booking (messages and emails can reach the customer)."""
+        return self.customer_id is not None
+
+    @property
+    def is_staff_recorded(self):
+        """Recorded by staff in the admin (walk-in, Facebook, phone) rather than booked on the website."""
+        return self.channel != self.Channel.ONLINE
+
+    def receipts_cover_payment(self, receipts=None):
+        """Whether the shop's own receipts (ReceiptRecord) cover both the rental and the deposit: one receipt for both, or
+        one for each. A receipt nobody labelled says nothing either way. `receipts` lets a page pass its prefetched rows."""
+        labels = {r.covers for r in (self.receipt_records.all() if receipts is None else receipts)}
+        if ReceiptRecord.Covers.BOTH in labels:
+            return True
+        return ReceiptRecord.Covers.RENTAL in labels and ReceiptRecord.Covers.DEPOSIT in labels
 
     @property
     def display_customer_name(self):
@@ -514,10 +562,21 @@ class ReceiptRecord(models.Model):
     as something to fix in place, not a reason to enforce a stricter one-per-booking rule.
     """
 
+    class Covers(models.TextChoices):
+        """What a receipt is for. A booking paid at the counter has one receipt for both, or one for each."""
+        RENTAL = 'Rental', 'Rental'
+        DEPOSIT = 'Deposit', 'Deposit'
+        BOTH = 'Rental + deposit', 'Rental + deposit'
+
     reservation = models.ForeignKey(
         Reservation, on_delete=models.CASCADE, related_name='receipt_records'
     )
     photo_url = models.URLField()
+    # Blank for receipts attached before this label existed (and when staff leave it unsaid).
+    covers = models.CharField(max_length=20, choices=Covers.choices, blank=True, default='', db_default='')
+    # SHA-256 of the photo file exactly as it was uploaded: the same file can't be attached to a second booking, so one
+    # receipt photo can't be passed off as the payment for two. Blank for receipts from before this check.
+    file_hash = models.CharField(max_length=64, blank=True, default='', db_default='', db_index=True)
     # SET_NULL, not CASCADE: a staff account being removed later must never take a
     # financial record down with it -- the receipt itself still matters.
     uploaded_by = models.ForeignKey(

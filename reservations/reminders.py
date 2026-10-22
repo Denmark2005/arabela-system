@@ -252,6 +252,9 @@ def find_due_reminders(today=None):
     candidates = list(
         ReservationItem.objects
         .filter(reservation__status__in=_REMINDABLE_STATUSES)
+        # A booking staff recorded for a customer with no website account has nobody to message or email -- the staff bell
+        # lists those for a phone call instead (arabela_admin/notifications.py).
+        .filter(reservation__customer__isnull=False)
         .filter(
             Q(stage=ReservationItem.Stage.PICKUP, rental_date__lte=horizon)
             | Q(stage__in=_OUT_STAGES, return_date__lte=horizon,
@@ -321,6 +324,8 @@ def send_reminder_group(items, kind, today=None):
     """
     today = today or timezone.localdate()
     reservation = items[0].reservation
+    if not reservation.has_account:
+        return      # nobody to message (find_due_reminders already leaves these out; this is the belt to its braces)
     if kind == OVERDUE:
         # Every gown of the booking that is overdue right now, not only the ones whose own three-day wait ran out
         # today: the notice always names them all, and from here on they share one cadence.
@@ -496,6 +501,11 @@ def send_manual_reminder(item, body, sent_by=None):
     body = (body or '').strip()
     if not body:
         raise ValueError("A reminder cannot be empty.")
+    if not item.reservation.has_account:
+        phone = item.reservation.phone or "the number on the booking"
+        raise ValueError(
+            f"This booking has no website account, so a message can't reach the customer. Please call them at {phone}."
+        )
     body = body[:MANUAL_BODY_MAX_CHARS]
 
     detail = body

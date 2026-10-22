@@ -6,6 +6,14 @@ from .recovery_views import (
     recovery_verify_code_view,
     reset_password_view,
 )
+from .new_booking import (
+    availability_check_view,
+    booking_account_search_view,
+    booking_create_view,
+    booking_customer_hint_view,
+    booking_gown_search_view,
+    new_booking_view,
+)
 from .views import (
     rental_schedule_view,
     dashboard_view,
@@ -86,6 +94,14 @@ urlpatterns = [
     path("logout/", admin_logout_view, name="admin_logout"),
     path("", dashboard_view, name="dashboard"),
     path("rental-schedule/", rental_schedule_view, name="rental_schedule"),
+    # New Booking: walk-in / Facebook / phone bookings recorded by staff, and the "Check availability" answers it shares
+    # with Gown Catalog (arabela_admin/new_booking.py).
+    path("new-booking/", new_booking_view, name="new_booking"),
+    path("api/bookings/gowns/", booking_gown_search_view, name="booking_gown_search"),
+    path("api/bookings/check/", availability_check_view, name="availability_check"),
+    path("api/bookings/customer-hint/", booking_customer_hint_view, name="booking_customer_hint"),
+    path("api/bookings/accounts/", booking_account_search_view, name="booking_account_search"),
+    path("api/bookings/create/", booking_create_view, name="booking_create"),
     path("calendar/", rental_schedule_view, name="calendar"),
     path("payment-verification/", payment_verification_view, name="payment_verification"),
     path("rental-history/", rental_history_view, name="rental_history"),

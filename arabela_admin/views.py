@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import os
 import re
 import uuid
@@ -778,6 +779,10 @@ def receipt_upload_view(request):
     error = _validate_receipt_photo(photo_file)
     if error:
         return JsonResponse({"error": error}, status=400)
+    file_hash = _receipt_file_hash(photo_file)
+    error = _receipt_duplicate_error(file_hash, reservation=reservation)
+    if error:
+        return JsonResponse({"error": error}, status=409)
 
     try:
         photo_url = _save_receipt_photo(photo_file)
@@ -789,6 +794,7 @@ def receipt_upload_view(request):
 
     receipt = ReceiptRecord.objects.create(
         reservation=reservation, photo_url=photo_url, uploaded_by=request.user,
+        covers=_receipt_covers(request.POST.get("covers")), file_hash=file_hash,
     )
     return JsonResponse({"success": True, "receipt": _receipt_row(receipt)})
 
@@ -810,6 +816,10 @@ def receipt_replace_view(request, receipt_id):
     error = _validate_receipt_photo(photo_file)
     if error:
         return JsonResponse({"error": error}, status=400)
+    file_hash = _receipt_file_hash(photo_file)
+    error = _receipt_duplicate_error(file_hash, reservation=receipt.reservation)
+    if error:
+        return JsonResponse({"error": error}, status=409)
 
     try:
         photo_url = _save_receipt_photo(photo_file)
@@ -820,7 +830,8 @@ def receipt_replace_view(request, receipt_id):
         )
 
     receipt.photo_url = photo_url
-    receipt.save(update_fields=["photo_url"])
+    receipt.file_hash = file_hash
+    receipt.save(update_fields=["photo_url", "file_hash"])
     return JsonResponse({"success": True, "receipt": _receipt_row(receipt)})
 
 
@@ -943,7 +954,7 @@ def _peso(amount):
 def reservation_records_view(request):
     today = timezone.localdate()
     reservations = reservation_timeline.attach_to_reservations(
-        Reservation.objects.select_related("customer__profile")
+        Reservation.objects.select_related("customer__profile", "recorded_by")
         .prefetch_related(
             Prefetch("items", queryset=ReservationItem.objects.select_related("gown").order_by("rental_date", "id")),
             Prefetch(
@@ -979,7 +990,7 @@ def reservation_records_view(request):
             "reference": r.reference_code,
             "customer": r.display_customer_name,
             "customerId": r.customer_id,
-            "email": r.customer.email,
+            "email": r.customer.email if r.customer_id else "",
             "phone": r.phone,
             "bookedAs": r.booked_as_name,
             "booked": date_format(booked, "M j, Y"),
@@ -1049,9 +1060,26 @@ def reservation_records_view(request):
                 if r.status == Reservation.Status.CANCELLED else None
             ),
             "receipts": [_receipt_row(rec, today) for rec in r.receipt_records.all()],
+            # How the booking came in, and -- for one staff recorded (walk-in, Facebook, phone) -- who recorded it, its
+            # paper number, and whether the shop's own receipts cover the rental and the deposit.
+            "channel": r.channel,
+            "channelLabel": r.get_channel_display(),
+            "staffRecorded": r.is_staff_recorded,
+            "hasAccount": r.has_account,
+            "recordedBy": (
+                _staff_display_name(r.recorded_by) if r.recorded_by_id
+                else "Removed account" if r.is_staff_recorded else ""
+            ),
+            "notebookNumber": r.notebook_number,
+            "awaitingPayment": r.is_staff_recorded and r.status == Reservation.Status.PENDING,
+            "paymentIncomplete": (
+                r.is_staff_recorded and r.status in _SCHEDULED_STATUSES
+                and not r.receipts_cover_payment(list(r.receipt_records.all()))
+            ),
             # Everything the search box should match, lower-cased once here.
             "q": " ".join(filter(None, [
-                r.display_customer_name, r.booked_as_name, r.customer.email, r.phone,
+                r.display_customer_name, r.booked_as_name, r.customer.email if r.customer_id else "", r.phone,
+                r.notebook_number,
                 r.reference_code, *[i.gown_name for i in items],
                 *[i.gown.gown_id for i in items if i.gown_id],
             ])).lower(),
@@ -1126,7 +1154,7 @@ def receipt_reservation_search_view(request):
         results.append({
             "reference": r.reference_code,
             "customer": r.display_customer_name,
-            "email": r.customer.email,
+            "email": r.customer.email if r.customer_id else "",
             "dates": (
                 f"{date_format(start, 'M j')} – {date_format(end, 'M j, Y')}" if start else "No dates"
             ),
@@ -1247,10 +1275,13 @@ def pending_approval_view(request):
     reservations = reservation_timeline.attach_to_reservations(
         Reservation.objects.filter(status=Reservation.Status.PENDING)
         .select_related("customer__profile")
-        .prefetch_related("items__gown")
+        .prefetch_related("items__gown", "receipt_records")
     )
     tag_colors = SiteSettings.load().tag_colors()
     for reservation in reservations:
+        # A booking staff recorded but not paid yet (walk-in, Facebook, phone): no online proof to check -- staff attach the
+        # shop's receipt when the customer pays, then Approve.
+        reservation.receipt_count = len(reservation.receipt_records.all())
         for item in reservation.items.all():
             item.gown_code, item.tag_color, item.tag_hex = _item_gown_tag(item, tag_colors)
     return render(
@@ -1908,6 +1939,38 @@ def _save_receipt_photo(photo_file) -> str:
     return default_storage.url(saved_path)
 
 
+def _receipt_file_hash(photo_file) -> str:
+    """SHA-256 of the receipt photo exactly as it was uploaded (the file is rewound afterwards, ready to be saved)."""
+    digest = hashlib.sha256()
+    for chunk in photo_file.chunks():
+        digest.update(chunk)
+    photo_file.seek(0)
+    return digest.hexdigest()
+
+
+def _receipt_duplicate_error(file_hash, *, reservation=None) -> str:
+    """'' unless this exact photo is already the receipt of ANOTHER booking, else the message for staff: one receipt photo
+    can't be passed off as the payment for two bookings. (The same booking may carry it again -- a redo is allowed.)"""
+    if not file_hash:
+        return ""
+    other = ReceiptRecord.objects.filter(file_hash=file_hash).select_related("reservation__customer__profile")
+    if reservation is not None:
+        other = other.exclude(reservation=reservation)
+    other = other.first()
+    if other is None:
+        return ""
+    return (
+        f"This exact receipt photo is already attached to {other.reservation.reference_code} "
+        f"({other.reservation.display_customer_name}). Attach the photo of this booking's own receipt."
+    )
+
+
+def _receipt_covers(raw) -> str:
+    """The receipt's label from a form ('' = not said)."""
+    raw = (raw or "").strip()
+    return raw if raw in ReceiptRecord.Covers.values else ""
+
+
 def _receipt_row(receipt, today=None):
     """Serialize one ReceiptRecord for the Alpine table -- shape matches exactly what
     the page's existing client-side search/filter code already expects
@@ -1932,6 +1995,7 @@ def _receipt_row(receipt, today=None):
         # filed it. "Removed account" when that staff account was later deleted
         # (uploaded_by is SET_NULL on purpose: the receipt itself must survive).
         "uploadedBy": _staff_display_name(receipt.uploaded_by) if receipt.uploaded_by else "Removed account",
+        "covers": receipt.covers,
         "photoUrl": receipt.photo_url,
         "year": str(local_uploaded.year),
         "isThisWeek": local_uploaded.date() >= week_start,
@@ -2537,15 +2601,16 @@ def reservation_approve_view(request, pk):
         actor=ReservationStatusEvent.Actor.STAFF,
     )
     # The customer is waiting on this answer, so it also rings their bell (the email is sent separately from the line above).
-    # General messages are never emailed, so this does not double up.
-    CustomerMessage.objects.create(
-        recipient=reservation.customer,
-        category=CustomerMessage.Category.GENERAL,
-        body=(
-            f"Good news! Your reservation {reservation.reference_code} ({_gown_names_text(reservation)}) was approved. "
-            "Your payment was verified and your booking is confirmed."
-        ),
-    )
+    # General messages are never emailed, so this does not double up. A walk-in with no website account is told in person.
+    if reservation.has_account:
+        CustomerMessage.objects.create(
+            recipient=reservation.customer,
+            category=CustomerMessage.Category.GENERAL,
+            body=(
+                f"Good news! Your reservation {reservation.reference_code} ({_gown_names_text(reservation)}) was approved. "
+                "Your payment was verified and your booking is confirmed."
+            ),
+        )
 
     # Flip any linked inventory gowns to Reserved so the catalog reflects the booking.
     for item in reservation.items.all():
@@ -2586,15 +2651,16 @@ def reservation_reject_view(request, pk):
             detail=reason or "Please contact the shop for details.",
             actor=ReservationStatusEvent.Actor.STAFF,
         )
-        CustomerMessage.objects.create(
-            recipient=reservation.customer,
-            category=CustomerMessage.Category.GENERAL,
-            body=(
-                f"Your reservation {reservation.reference_code} ({_gown_names_text(reservation)}) was not approved. "
-                + (f"Reason: {reason} " if reason else "")
-                + "Please contact the shop if you have any questions about your payment."
-            ),
-        )
+        if reservation.has_account:
+            CustomerMessage.objects.create(
+                recipient=reservation.customer,
+                category=CustomerMessage.Category.GENERAL,
+                body=(
+                    f"Your reservation {reservation.reference_code} ({_gown_names_text(reservation)}) was not approved. "
+                    + (f"Reason: {reason} " if reason else "")
+                    + "Please contact the shop if you have any questions about your payment."
+                ),
+            )
     return JsonResponse({"success": True, "status": reservation.status})
 
 

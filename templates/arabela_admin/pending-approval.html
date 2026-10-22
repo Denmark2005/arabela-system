@@ -85,7 +85,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits' || page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits' || page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -248,6 +248,15 @@
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
                 class="menu-dropdown mt-2 flex flex-col gap-1 pl-9"
               >
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:new_booking' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'new-booking' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    New Booking
+                  </a>
+                </li>
                 <li>
                   <a
                     href="{% url 'arabela_admin:calendar' %}"
@@ -1014,10 +1023,14 @@
             <!-- Breadcrumb Start -->
             <div x-data="{ pageName: `Pending Approval`}">
               <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+  <div class="flex flex-wrap items-center gap-3">
   <h2
     class="text-xl font-semibold text-gray-800 dark:text-white/90"
     x-text="pageName"
   ></h2>
+  <a href="{% url 'arabela_admin:new_booking' %}" title="Record a walk-in, Facebook or phone booking"
+    class="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-3 py-1.5 text-theme-xs font-medium text-white shadow-theme-xs hover:bg-brand-600">+ New Booking</a>
+  </div>
 
   <nav>
     <ol class="flex items-center gap-1.5">
@@ -1108,6 +1121,10 @@
                               <span class="block font-medium text-gray-800 text-theme-sm dark:text-white/90">{{ r.display_customer_name }}</span>
                               {% if r.booked_as_name %}<span class="text-xs text-gray-400 dark:text-gray-500">Booked as: {{ r.booked_as_name }}</span>{% endif %}
                               <span class="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ r.reference_code }}</span>
+                              {% if r.is_staff_recorded %}
+                              <span class="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-theme-xs font-medium text-brand-500 dark:bg-brand-500/15 dark:text-brand-400" title="Recorded by staff in New Booking">{{ r.get_channel_display }}</span>
+                              {% if r.phone %}<a href="tel:{{ r.phone }}" class="mt-1 text-theme-xs text-brand-500 underline" title="Call the customer">{{ r.phone }}</a>{% endif %}
+                              {% endif %}
                             </div>
                           </div>
                         </td>
@@ -1134,6 +1151,10 @@
                         {% if forloop.first %}
                         <td class="px-5 py-4 sm:px-6" rowspan="{{ item_count }}" style="vertical-align: top;">
                           <p class="inline-flex rounded-full bg-warning-50 px-2 py-0.5 text-theme-xs font-medium text-warning-700 dark:bg-warning-500/15 dark:text-warning-400">{{ r.status }}</p>
+                          {% if r.is_staff_recorded and not r.payment_proof_url %}
+                          <p class="mt-1 text-theme-xs text-gray-500 dark:text-gray-400">Not paid yet</p>
+                          <p class="mt-1 text-theme-xs font-medium text-success-600 dark:text-success-500{% if not r.receipt_count %} ar-hidden{% endif %}" data-receipt-count-for="{{ r.reference_code }}" data-count="{{ r.receipt_count }}">{% if r.receipt_count == 1 %}1 receipt attached{% else %}{{ r.receipt_count }} receipts attached{% endif %}</p>
+                          {% endif %}
                         </td>
                         <td class="px-5 py-4 sm:px-6" rowspan="{{ item_count }}" style="vertical-align: top;">
                           <div class="flex flex-wrap items-center gap-2">
@@ -1141,14 +1162,23 @@
                               class="resv-btn resv-btn-approve inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-theme-xs font-medium shadow-theme-xs transition"
                               data-url="{% url 'arabela_admin:reservation_approve' r.id %}"
                               data-label="approved"
+                              data-ref="{{ r.reference_code }}"
+                              data-walkin="{% if r.is_staff_recorded and not r.payment_proof_url %}1{% else %}0{% endif %}"
+                              data-receipts="{{ r.receipt_count }}"
                               onclick="reviewReservation(this)">Approve</button>
                             <button type="button"
                               class="resv-btn resv-btn-reject inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-theme-xs font-medium shadow-theme-xs transition"
                               data-url="{% url 'arabela_admin:reservation_reject' r.id %}"
                               data-label="rejected"
                               onclick="reviewReservation(this)">Reject</button>
+                            {% if r.is_staff_recorded and not r.payment_proof_url %}
+                            <!-- Recorded at the shop and not paid yet: there is no online proof to view. When the customer pays,
+                                 attach the shop's receipt (partials/attach_receipt.html), then Approve. -->
+                            <button type="button" class="ar-open-btn" data-ref="{{ r.reference_code }}" data-customer="{{ r.display_customer_name }}">Attach receipt</button>
+                            {% else %}
                             <a href="{% url 'arabela_admin:payment_verification' %}?search={{ r.display_customer_name|urlencode }}"
                               class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View Payment</a>
+                            {% endif %}
                             <button type="button"
                               @click="viewingCustomer = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reference: '{{ r.reference_code|escapejs }}', email: '{{ r.customer.email|default:"—"|escapejs }}', phone: '{{ r.phone|default:"—"|escapejs }}', address: '{{ r.address|escapejs }}', city: '{{ r.city|escapejs }}', postal: '{{ r.postal_code|escapejs }}', submitted: '{{ r.created_at|date:"M j, Y"|escapejs }} at {{ r.created_at|date:"g:i A"|escapejs }}' }; openCustomerModal = true"
                               class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View Customer</button>
@@ -1269,7 +1299,11 @@
           })
         : adminConfirm({
             title: 'Approve reservation',
-            message: 'This confirms the reservation and adds it to the Rental Schedule.',
+            // A booking recorded at the shop that was waiting for payment: approving means the customer has now paid.
+            message: btn.dataset.walkin === '1'
+              ? 'Approve only once the customer has paid at the shop. This confirms the booking.'
+                + (btn.dataset.receipts && btn.dataset.receipts !== '0' ? '' : ' No receipt is attached yet: use "Attach receipt" first, or attach it later in Reservation Records.')
+              : 'This confirms the reservation and adds it to the Rental Schedule.',
             confirmText: 'Approve',
           });
 
@@ -1304,6 +1338,8 @@
     }
   </script>
 
+{% include "arabela_admin/partials/attach_receipt.html" %}
+  <script defer src="{% static 'js/picked-file.js' %}?v={{ site_asset_version }}"></script>
 {% include "arabela_admin/partials/dialog.html" %}
 </body>
 </html>

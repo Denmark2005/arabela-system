@@ -68,7 +68,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits' || page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits' || page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -231,6 +231,15 @@
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
                 class="flex flex-col gap-1 mt-2 menu-dropdown pl-9"
               >
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:new_booking' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'new-booking' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    New Booking
+                  </a>
+                </li>
                 <li>
                   <a
                     href="{% url 'arabela_admin:rental_schedule' %}"
@@ -1011,6 +1020,11 @@
           <div class="p-4 mx-auto max-w-(--breakpoint-2xl) md:p-6">
             <div class="grid grid-cols-12 gap-4 md:gap-6">
               <div class="col-span-12 space-y-6">
+                <!-- Quick action: record a booking that didn't come through the website (arabela_admin/new_booking.py). -->
+                <div class="flex flex-wrap items-center justify-end gap-3">
+                  <a href="{% url 'arabela_admin:new_booking' %}" title="Record a walk-in, Facebook or phone booking"
+                    class="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-theme-sm font-medium text-white shadow-theme-xs hover:bg-brand-600">+ New Booking</a>
+                </div>
                 <!-- Metric Group One -->
                 <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 md:gap-6">
   <!-- Metric Item Start -->
