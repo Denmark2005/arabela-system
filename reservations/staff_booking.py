@@ -7,8 +7,10 @@ all treat it exactly like an online one. What is different:
   * the customer may have no website account (Reservation.customer is empty): the name and phone are the customer;
   * it says how it came in (Reservation.channel) and who recorded it (Reservation.recorded_by);
   * staff pick the exact physical gown the customer chose (online, the system picks a free one of the design itself);
-  * payment is taken at the shop: "Paid in full" confirms the booking at once and needs the shop's receipt photo(s);
-    "Not paid yet" leaves it waiting in Pending Approval, holding the gown, until staff approve it.
+  * payment is taken at the shop, and a walk-in always pays something: "Paid in full" (rental + deposit) or "Deposit only". Either
+    one confirms the booking at once and needs the shop's receipt photo. A deposit-only booking is still short of its rental
+    receipt: it is flagged "Payment incomplete" in Reservation Records until staff upload that one there. How the customer paid
+    (cash, GCash...) is the shop's own business and is not recorded.
 """
 import re
 from datetime import timedelta
@@ -24,8 +26,12 @@ from reservations.models import ReceiptRecord, Reservation, ReservationItem, Res
 
 DEPOSIT_PER_GOWN = Decimal("2000")
 MAX_GOWNS = 10
-MAX_RECEIPTS = 2
+MAX_RECEIPTS = 1                # one photo here; a second one (the rental receipt) is added later in Reservation Records
 NOTE_MAX = 200
+
+PAYMENT_FULL = "full"           # the rental and the deposit were paid
+PAYMENT_DEPOSIT = "deposit"     # only the deposit was paid; the rental is still to pay
+PAYMENTS = (PAYMENT_FULL, PAYMENT_DEPOSIT)
 
 RECORDED_LABEL = "Booking recorded at the shop"            # the customer's timeline (if they have an account)
 STAFF_NOTE_LABEL = "Booking recorded by staff"              # staff-only: who, how it came in, payment, note
@@ -181,32 +187,27 @@ def check_line(line, *, now, is_owner):
 
 
 # ---------------------------------------------------------------- payment
-def check_payment(*, paid, payment_method, receipts, lines):
-    """receipts: [(file, covers, file_hash)]. Raises BookingError when the payment part doesn't add up."""
+def receipt_covers_for(payment) -> str:
+    """What the receipt attached while booking is for: decided by the Payment choice, never asked for separately."""
+    return ReceiptRecord.Covers.BOTH if payment == PAYMENT_FULL else ReceiptRecord.Covers.DEPOSIT
+
+
+def check_payment(*, payment, receipts, lines):
+    """receipts: [(file, file_hash)]. Raises BookingError when the payment part doesn't add up."""
+    if payment not in PAYMENTS:
+        raise BookingError("Choose \"Paid in full\" or \"Deposit only\". If this page has been open for a while, refresh it.")
     if len(receipts) > MAX_RECEIPTS:
-        raise BookingError(f"Attach at most {MAX_RECEIPTS} receipt photos.")
-    for _file, covers, _hash in receipts:
-        if covers not in ReceiptRecord.Covers.values:
-            raise BookingError("Choose what each receipt is for: Rental, Deposit, or Rental + deposit.")
-    if any(line["takes_now"] for line in lines) and not paid:
-        raise BookingError("A gown can only leave the shop once it is paid. Choose \"Paid in full\", or untick "
+        raise BookingError("Attach one receipt photo. A second one can be added later in Reservation Records.")
+    if payment != PAYMENT_FULL and any(line["takes_now"] for line in lines):
+        raise BookingError("A gown can only leave the shop once the rental is paid. Choose \"Paid in full\", or untick "
                            "\"Customer takes the gown now\".")
-    if not paid:
-        return
-    if payment_method not in Reservation.PaymentMethod.values:
-        raise BookingError("Choose how the customer paid: Cash or GCash.")
     if not receipts:
-        raise BookingError("\"Paid in full\" needs the photo of the shop's receipt. Attach it, or choose \"Not paid yet\".")
-    labels = {covers for _f, covers, _h in receipts}
-    if not (ReceiptRecord.Covers.BOTH in labels
-            or {ReceiptRecord.Covers.RENTAL, ReceiptRecord.Covers.DEPOSIT} <= labels):
-        raise BookingError("\"Paid in full\" means both the rental and the deposit are paid. The receipts must cover both: "
-                           "one receipt for \"Rental + deposit\", or one for \"Rental\" and one for \"Deposit\".")
+        raise BookingError("Attach the photo of the shop's receipt.")
 
 
 # ---------------------------------------------------------------- saving
 def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, account, address, notebook_number,
-                   lines, paid, payment_method, receipts, note, save_receipt_photo, now=None):
+                   lines, payment, receipts, note, save_receipt_photo, now=None):
     """Save the booking. Everything is checked again inside one transaction with the gowns locked, so neither another
     staff member nor an online customer can take the same gown in between: either the whole booking is saved, or nothing.
     save_receipt_photo(file) -> URL stores one receipt photo (the admin's own helper, so storage works the same way).
@@ -215,7 +216,7 @@ def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, a
     if channel not in STAFF_CHANNELS:
         raise BookingError("Only walk-in bookings can be recorded here. Bookings from the website come in by themselves.")
     note = re.sub(r"\s+", " ", note or "").strip()[:NOTE_MAX]
-    check_payment(paid=paid, payment_method=payment_method, receipts=receipts, lines=lines)
+    check_payment(payment=payment, receipts=receipts, lines=lines)
     if notebook_number:
         taken = notebook_number_owner(notebook_number)
         if taken:
@@ -242,12 +243,11 @@ def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, a
                 customer_name=name,
                 phone=phone,
                 address=(address or "")[:255],
-                status=Reservation.Status.CONFIRMED if paid else Reservation.Status.PENDING,
-                payment_method=payment_method if paid else "",
+                status=Reservation.Status.CONFIRMED,        # something was paid at the shop, so it is confirmed at once
                 rental_subtotal=rental_subtotal,
                 security_deposit=security_deposit,
                 total_amount=rental_subtotal + security_deposit,
-                reviewed_at=timezone.now() if paid else None,
+                reviewed_at=timezone.now(),
                 channel=channel,
                 recorded_by=recorded_by,
                 notebook_number=notebook_number,
@@ -280,14 +280,14 @@ def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, a
                     auto_for_item=item,
                 )
                 # Paid = approved (Approve does the same): the catalog shows the gown as Reserved for this booking.
-                if paid and gown.status == Gown.Status.AVAILABLE:
+                if gown.status == Gown.Status.AVAILABLE:
                     gown.status = Gown.Status.RESERVED
                     gown.save(update_fields=["status", "updated_at"])
 
-            for photo_file, covers, file_hash in receipts:
+            for photo_file, file_hash in receipts:
                 ReceiptRecord.objects.create(
                     reservation=reservation, photo_url=save_receipt_photo(photo_file), uploaded_by=recorded_by,
-                    covers=covers, file_hash=file_hash,
+                    covers=receipt_covers_for(payment), file_hash=file_hash,
                 )
 
             channel_text = reservation.get_channel_display()
@@ -296,18 +296,19 @@ def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, a
                 detail=f"{channel_text} booking recorded by the shop.",
                 actor=ReservationStatusEvent.Actor.STAFF,
             )
-            payment_text = (f"Paid in full ({payment_method})." if paid else "Not paid yet.")
+            full = payment == PAYMENT_FULL
+            payment_text = "Paid in full." if full else "Deposit paid; the rental is still to pay."
             ReservationStatusEvent.record(
                 reservation, STAFF_NOTE_LABEL,
                 detail=f"{staff_name}: {channel_text}. {payment_text}" + (f" Note: {note}" if note else ""),
                 actor=ReservationStatusEvent.Actor.STAFF, staff_only=True,
             )
-            if paid:
-                ReservationStatusEvent.record(
-                    reservation, APPROVED_LABEL,
-                    detail="Paid at the shop. Your booking is confirmed.",
-                    actor=ReservationStatusEvent.Actor.STAFF,
-                )
+            ReservationStatusEvent.record(
+                reservation, APPROVED_LABEL,
+                detail="Paid at the shop. Your booking is confirmed." if full
+                else "Deposit paid at the shop. Your booking is confirmed.",
+                actor=ReservationStatusEvent.Actor.STAFF,
+            )
             for line in lines:
                 if line["takes_now"]:
                     ReservationStatusEvent.record(

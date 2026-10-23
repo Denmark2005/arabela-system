@@ -797,7 +797,7 @@ def receipt_upload_view(request):
 
     receipt = ReceiptRecord.objects.create(
         reservation=reservation, photo_url=photo_url, uploaded_by=request.user,
-        covers=_receipt_covers(request.POST.get("covers")), file_hash=file_hash,
+        covers=_receipt_label_for_upload(reservation, request.POST.get("covers")), file_hash=file_hash,
     )
     return JsonResponse({"success": True, "receipt": _receipt_row(receipt)})
 
@@ -1980,6 +1980,17 @@ def _receipt_covers(raw) -> str:
     return raw if raw in ReceiptRecord.Covers.values else ""
 
 
+def _receipt_label_for_upload(reservation, requested) -> str:
+    """What a receipt uploaded for `reservation` is for. Staff are never asked: an online booking's receipt is the full one, and
+    a walk-in's is whatever its payment is still missing (Reservation.next_receipt_covers). The one exception is a walk-in
+    still waiting in Pending Approval -- a booking recorded before "Not paid yet" went away -- where the Attach receipt window
+    asks whether the customer paid in full or only the deposit, and that answer is kept."""
+    if (reservation.is_staff_recorded and reservation.status == Reservation.Status.PENDING
+            and _receipt_covers(requested) in (ReceiptRecord.Covers.BOTH, ReceiptRecord.Covers.DEPOSIT)):
+        return _receipt_covers(requested)
+    return reservation.next_receipt_covers()
+
+
 def _receipt_row(receipt, today=None):
     """Serialize one ReceiptRecord for the Alpine table -- shape matches exactly what
     the page's existing client-side search/filter code already expects
@@ -2005,6 +2016,8 @@ def _receipt_row(receipt, today=None):
         # (uploaded_by is SET_NULL on purpose: the receipt itself must survive).
         "uploadedBy": _staff_display_name(receipt.uploaded_by) if receipt.uploaded_by else "Removed account",
         "covers": receipt.covers,
+        # The name staff read for it ('Paid in full' is the stored 'Rental + deposit'; an online booking's unlabelled one is that too).
+        "coversName": ReceiptRecord.name_for(receipt.covers, receipt.reservation.is_staff_recorded),
         "photoUrl": receipt.photo_url,
         "year": str(local_uploaded.year),
         "isThisWeek": local_uploaded.date() >= week_start,

@@ -1308,17 +1308,17 @@
     {% for r in quick_verify_reservations %}
     {% with dup=r.gcash_duplicate_codes %}
     <div x-show="headerSearch === '' || '{{ r.display_customer_name|lower|escapejs }} {{ r.reference_code|lower|escapejs }}'.includes(headerSearch.toLowerCase())" x-data="{ status: 'Pending' }" class="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4 text-gray-800 dark:border-gray-800 dark:bg-white/[0.03] dark:text-white/90 sm:p-4">
-      <button type="button" @click="openReceiptModal = true; receiptPreview = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"&mdash;"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:0 }}', date: '{{ r.created_at|date:"M j, Y" }}', status: status, proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', gcashDup: '{{ dup|escapejs }}' }" title="Open GCash receipt preview" class="h-12 w-12 overflow-hidden rounded-full border border-gray-200 bg-gray-100 shadow-sm flex items-center justify-center dark:border-gray-700 dark:bg-gray-800">
+      <button type="button" @click="openReceiptModal = true; receiptPreview = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"&mdash;"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:0 }}', date: '{{ r.created_at|date:"M j, Y" }}', status: status, proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}'), breakdown: JSON.parse('{{ r.payment_breakdown_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', gcashDup: '{{ dup|escapejs }}' }" title="Open GCash receipt preview" class="h-12 w-12 overflow-hidden rounded-full border border-gray-200 bg-gray-100 shadow-sm flex items-center justify-center dark:border-gray-700 dark:bg-gray-800">
         <svg class="h-5 w-5 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>
       </button>
       <div class="min-w-0 flex-1">
         <p class="truncate font-medium text-gray-800 text-theme-sm dark:text-white/90">{{ r.display_customer_name }}</p>
         {% if r.booked_as_name %}<p class="truncate text-xs text-gray-400 dark:text-gray-500">Booked as: {{ r.booked_as_name }}</p>{% endif %}
         <span class="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ r.reference_code }}</span>
-        <p class="mt-1 text-sm font-semibold" style="color:#D4AF37">&#8369;{{ r.total_amount|floatformat:0 }}</p>
+        {% with bd=r.payment_breakdown %}<p class="mt-1 text-sm font-semibold" style="color:#D4AF37">{% if bd %}{{ bd.headline }}{% else %}&#8369;{{ r.total_amount|floatformat:0 }}{% endif %}</p>{% if bd %}<p class="text-xs text-gray-400 dark:text-gray-500">{{ bd.sub }}</p>{% endif %}{% endwith %}
       </div>
       <div class="flex flex-wrap items-center gap-2">
-        <button type="button" @click="openReceiptModal = true; receiptPreview = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"&mdash;"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:0 }}', date: '{{ r.created_at|date:"M j, Y" }}', status: status, proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', gcashDup: '{{ dup|escapejs }}' }" class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View Proof</button>
+        <button type="button" @click="openReceiptModal = true; receiptPreview = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"&mdash;"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:0 }}', date: '{{ r.created_at|date:"M j, Y" }}', status: status, proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}'), breakdown: JSON.parse('{{ r.payment_breakdown_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', gcashDup: '{{ dup|escapejs }}' }" class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View Proof</button>
         <button type="button" x-show="status === 'Pending'"
           data-url="{% url 'arabela_admin:reservation_approve' r.id %}"
           data-action="verify"
@@ -1413,8 +1413,8 @@
           <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="receiptPreview.reference"></p>
         </div>
         <div>
-          <p class="text-xs text-gray-500 dark:text-gray-400">Amount</p>
-          <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="receiptPreview.amount"></p>
+          <p class="text-xs text-gray-500 dark:text-gray-400" x-text="receiptPreview.breakdown ? receiptPreview.breakdown.paidLabel : 'Amount'"></p>
+          <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="receiptPreview.breakdown ? receiptPreview.breakdown.headline : receiptPreview.amount"></p>
         </div>
         <div>
           <p class="text-xs text-gray-500 dark:text-gray-400">Date Submitted</p>
@@ -1429,6 +1429,7 @@
           <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="receiptPreview.gcashRef"></p>
         </div>
       </div>
+      {% include "arabela_admin/partials/payment_breakdown.html" with var="receiptPreview" %}
       <p x-show="receiptPreview.gcashDup" x-cloak style="margin-top: 1rem;" class="rounded-lg bg-error-50 px-4 py-3 text-xs font-medium text-error-700 dark:bg-error-500/15 dark:text-error-500"
          x-text="'This GCash reference number is also on ' + receiptPreview.gcashDup + '. Check the receipt before approving.'"></p>
     </div>

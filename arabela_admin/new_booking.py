@@ -32,7 +32,7 @@ from gowns import availability
 from gowns.models import TAG_COLOR_HEX, Gown, SiteSettings
 from gowns.photos import sized
 from reservations import staff_booking
-from reservations.models import ReceiptRecord, Reservation
+from reservations.models import Reservation
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +86,6 @@ def new_booking_view(request):
         "max_gowns": staff_booking.MAX_GOWNS,
         "max_receipts": staff_booking.MAX_RECEIPTS,
         "note_max": staff_booking.NOTE_MAX,
-        "covers_choices": ReceiptRecord.Covers.values,
     })
 
 
@@ -309,9 +308,7 @@ def booking_create_view(request):
         except json.JSONDecodeError:
             raise staff_booking.BookingError("Something in the gown list is wrong. Please refresh the page and try again.")
         lines = staff_booking.parse_lines(raw_lines, today=now.date(), is_owner=is_owner)
-        paid = post.get("paid") == "1"
-        if post.get("paid") not in ("0", "1"):
-            raise staff_booking.BookingError("Choose \"Paid in full\" or \"Not paid yet\".")
+        payment = (post.get("payment") or "").strip()      # "full" or "deposit": check_payment refuses anything else
 
         receipts, hashes = [], set()
         for index in range(1, staff_booking.MAX_RECEIPTS + 1):
@@ -328,7 +325,7 @@ def booking_create_view(request):
             if duplicate:
                 raise staff_booking.BookingError(duplicate, status=409)
             hashes.add(file_hash)
-            receipts.append((photo, (post.get(f"receipt_{index}_covers") or "").strip(), file_hash))
+            receipts.append((photo, file_hash))
 
         reservation = staff_booking.record_booking(
             recorded_by=request.user,
@@ -341,8 +338,7 @@ def booking_create_view(request):
             address=(post.get("address") or "").strip(),
             notebook_number=notebook_number,
             lines=lines,
-            paid=paid,
-            payment_method=(post.get("payment_method") or "").strip(),
+            payment=payment,
             receipts=receipts,
             note=post.get("note") or "",
             save_receipt_photo=_save_receipt_photo,
@@ -355,12 +351,12 @@ def booking_create_view(request):
         return JsonResponse({"error": "The booking couldn't be saved just now. Nothing was booked. Please try again."},
                             status=500)
 
-    confirmed = reservation.status == Reservation.Status.CONFIRMED
-    target = "arabela_admin:active_reservations" if confirmed else "arabela_admin:pending_approval"
+    # A recorded booking always has something paid, so it is confirmed and on the calendar at once.
     return JsonResponse({
         "success": True,
         "reference_code": reservation.reference_code,
         "status": reservation.status,
-        "url": reverse(target) + "?" + urlencode({"search": reservation.reference_code}),
-        "where": "Active Reservations" if confirmed else "Pending Approval",
+        "url": reverse("arabela_admin:active_reservations") + "?" + urlencode({"search": reservation.reference_code}),
+        "where": "Active Reservations",
+        "depositOnly": payment == staff_booking.PAYMENT_DEPOSIT,
     })

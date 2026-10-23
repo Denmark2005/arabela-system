@@ -1217,7 +1217,7 @@
                 <div class="nb-saved" role="status" aria-live="polite">
                   <p style="margin: 0; font-weight: 600;">Booking saved</p>
                   <p class="nb-saved-ref" x-text="saved.reference_code"></p>
-                  <p style="margin: 0 0 .9rem;" x-text="saved.status === 'Confirmed' ? 'Confirmed and on the calendar. Write this number on the shop\'s paper slip and tell the customer.' : 'Waiting for payment in Pending Approval. The gown is already held for these dates. Write this number on the shop\'s paper slip and tell the customer.'"></p>
+                  <p style="margin: 0 0 .9rem;" x-text="(saved.depositOnly ? 'Confirmed and on the calendar. Only the deposit was paid: when the customer pays the rental, upload that receipt in Reservation Records. ' : 'Confirmed and on the calendar. ') + 'Write this number on the shop\'s paper slip and tell the customer.'"></p>
                   <div class="nb-actions" style="justify-content: flex-start;">
                     <a class="nb-btn nb-btn--primary" :href="saved.url" x-text="'Open in ' + saved.where"></a>
                     <button type="button" class="nb-btn nb-btn--ghost" @click="startOver()">Record another booking</button>
@@ -1411,41 +1411,30 @@
                       <tr><td>Rental</td><td x-text="peso(rentalTotal)"></td></tr>
                       <tr><td x-text="'Security deposit (' + peso(DEPOSIT) + ' per gown)'"></td><td x-text="peso(depositTotal)"></td></tr>
                       <tr class="nb-sum-total"><td>Total</td><td x-text="peso(rentalTotal + depositTotal)"></td></tr>
+                      <tr x-show="payment === 'deposit'" x-cloak><td>Paid now (the deposit)</td><td x-text="peso(depositTotal)"></td></tr>
+                      <tr x-show="payment === 'deposit'" x-cloak><td>Still to pay (the rental)</td><td x-text="peso(rentalTotal)"></td></tr>
                     </tbody>
                   </table>
 
                   <div style="margin-top: 1.1rem;">
                     <span class="nb-label" id="nb-paid-label">Payment <span class="nb-req">*</span></span>
                     <div class="nb-seg" role="radiogroup" aria-labelledby="nb-paid-label">
-                      <label :class="paid === '1' && 'is-on'"><input type="radio" name="nb-paid" value="1" x-model="paid"> Paid in full</label>
-                      <label :class="paid === '0' && 'is-on'"><input type="radio" name="nb-paid" value="0" x-model="paid"> Not paid yet</label>
+                      <label :class="payment === 'full' && 'is-on'"><input type="radio" name="nb-payment" value="full" x-model="payment"> Paid in full</label>
+                      <label :class="payment === 'deposit' && 'is-on'"><input type="radio" name="nb-payment" value="deposit" x-model="payment"> Deposit only</label>
                     </div>
-                    <p class="nb-help" x-show="paid === '1'">The booking is confirmed straight away. Attach the photo of the shop's receipt below.</p>
-                    <p class="nb-help" x-show="paid === '0'">The booking waits in Pending Approval and still holds the gown for these dates. When the customer pays, attach the receipt there and press Approve. For a deposit-only payment, choose this and write it in the note.</p>
-                    <p class="nb-hint" x-show="paid === '0' && anyTakesNow">A gown can only leave the shop once it's paid. Choose "Paid in full", or untick "Customer takes the gown now".</p>
+                    <p class="nb-help" x-show="payment === 'full'">The rental and the deposit were paid. The booking is confirmed straight away. Attach the shop's receipt below.</p>
+                    <p class="nb-help" x-show="payment === 'deposit'">Only the deposit was paid. The booking is confirmed straight away. Attach the deposit receipt below, and upload the rental receipt later in Reservation Records.</p>
+                    <p class="nb-hint" x-show="payment === 'deposit' && anyTakesNow">A gown can only leave the shop once the rental is paid. Choose "Paid in full", or untick "Customer takes the gown now".</p>
                   </div>
 
-                  <div x-show="paid === '1'" x-cloak style="margin-top: 1.1rem;">
-                    <span class="nb-label" id="nb-method-label">Paid by <span class="nb-req">*</span></span>
-                    <div class="nb-seg" role="radiogroup" aria-labelledby="nb-method-label">
-                      <label :class="method === 'Cash' && 'is-on'"><input type="radio" name="nb-method" value="Cash" x-model="method"> Cash</label>
-                      <label :class="method === 'GCash' && 'is-on'"><input type="radio" name="nb-method" value="GCash" x-model="method"> GCash</label>
-                    </div>
-
-                    <span class="nb-label" style="margin-top: 1.1rem;">The shop's receipt <span class="nb-req">*</span></span>
+                  <div x-show="payment !== ''" x-cloak style="margin-top: 1.1rem;">
+                    <span class="nb-label">The shop's receipt <span class="nb-req">*</span></span>
                     <template x-for="(rc, rIndex) in receipts" :key="rc.key">
                       <div class="nb-receipt">
                         <template x-if="rc.preview"><img :src="rc.preview" alt="Receipt photo"></template>
                         <template x-if="rc.preparing"><span class="nb-help"><span class="nb-spinner"></span> Preparing photo…</span></template>
                         <div style="flex: 1 1 12rem; min-width: 0;">
-                          <p class="nb-gmeta" style="margin: 0 0 .35rem; overflow-wrap: anywhere;" x-text="rc.name"></p>
-                          <label class="nb-label" :for="'nb-rc-' + rc.key">This receipt is for</label>
-                          <select class="nb-input" :id="'nb-rc-' + rc.key" x-model="rc.covers">
-                            <option value="">Choose…</option>
-                            <option value="Rental + deposit">Rental + deposit</option>
-                            <option value="Rental">Rental only</option>
-                            <option value="Deposit">Deposit only</option>
-                          </select>
+                          <p class="nb-gmeta" style="margin: 0; overflow-wrap: anywhere;" x-text="rc.name"></p>
                         </div>
                         <button type="button" class="nb-btn--danger-link" @click="removeReceipt(rIndex)">Remove</button>
                       </div>
@@ -1456,12 +1445,12 @@
                       <button type="button" class="nb-btn nb-btn--ghost nb-btn--small" @click="$refs.nbReceiptCamera.click()">Take photo</button>
                       <button type="button" class="nb-btn nb-btn--ghost nb-btn--small" @click="$refs.nbReceiptFile.click()">Choose from gallery</button>
                     </div>
-                    <p class="nb-help">One receipt for the rental and the deposit, or one for each (up to {{ max_receipts }}). The same photo can't be used for two bookings.</p>
+                    <p class="nb-help">One photo. It is saved as the <span x-text="payment === 'full' ? 'Paid in full' : 'Deposit'"></span> receipt. The same photo can't be used for two bookings.</p>
                   </div>
 
                   <div style="margin-top: 1.1rem;">
                     <label class="nb-label" for="nb-note">Note <span class="nb-help" style="display: inline;">(optional, staff only)</span></label>
-                    <textarea class="nb-input" id="nb-note" maxlength="{{ note_max }}" rows="2" x-model="note" placeholder="e.g. Paid ₱2,000 deposit, balance on pick-up"></textarea>
+                    <textarea class="nb-input" id="nb-note" maxlength="{{ note_max }}" rows="2" x-model="note" placeholder="e.g. Customer will pay the rental on pick-up day"></textarea>
                   </div>
                 </section>
 
@@ -1543,7 +1532,7 @@
         account: null, accountQuery: '', accountResults: [], accountSeq: 0,
         hint: [], hintSeq: 0,
         lines: [newLine()],
-        paid: '', method: '', receipts: [], note: '',
+        payment: '', receipts: [], note: '',
         saving: false, error: '', saved: null,
 
         get chosenLines() { return this.lines.filter(function (l) { return l.gown; }); },
@@ -1696,8 +1685,7 @@
           event.target.value = '';
           if (!file) { return; }
           if (this.receipts.length >= this.MAX_RECEIPTS) { return; }
-          this.receipts.push({ key: ++keySeq, file: null, name: file.name, preview: '', preparing: true,
-            covers: this.receipts.length === 0 ? 'Rental + deposit' : '' });
+          this.receipts.push({ key: ++keySeq, file: null, name: file.name, preview: '', preparing: true });
           var entry = this.receipts[this.receipts.length - 1], self = this;
           var prepare = window.arabelaPreparePhotoForUpload || function (f) { return Promise.resolve(f); };
           prepare(file).then(function (ready) {
@@ -1723,13 +1711,11 @@
           if (this.lines.some(function (l) { return !l.gown; })) { out.push('Choose a gown for every line, or remove the empty one.'); }
           if (this.lines.some(function (l) { return l.gown && !l.event; })) { out.push('Choose the event date for every gown.'); }
           if (this.lines.some(function (l) { return l.check && !l.check.ok; })) { out.push('A gown is not available on its date: change the date or the gown.'); }
-          if (this.paid === '') { out.push('Choose "Paid in full" or "Not paid yet".'); }
-          if (this.paid === '0' && this.anyTakesNow) { out.push('A gown can only leave the shop once it is paid.'); }
-          if (this.paid === '1') {
-            if (!this.method) { out.push('Choose how the customer paid: Cash or GCash.'); }
+          if (this.payment === '') { out.push('Choose "Paid in full" or "Deposit only".'); }
+          if (this.payment === 'deposit' && this.anyTakesNow) { out.push('A gown can only leave the shop once the rental is paid.'); }
+          if (this.payment !== '') {
             if (!this.receipts.length) { out.push("Attach the photo of the shop's receipt."); }
             if (this.receipts.some(function (r) { return r.preparing; })) { out.push('A receipt photo is still being prepared, one moment.'); }
-            if (this.receipts.some(function (r) { return !r.covers; })) { out.push('Choose what each receipt is for.'); }
           }
           return out;
         },
@@ -1751,15 +1737,11 @@
               picked_up_on: l.takesNow ? (IS_OWNER ? (l.pickedUpOn || TODAY) : TODAY) : ''
             };
           })));
-          form.append('paid', this.paid);
-          form.append('payment_method', this.paid === '1' ? this.method : '');
+          form.append('payment', this.payment);
           form.append('note', this.note);
-          if (this.paid === '1') {
-            this.receipts.forEach(function (rc, i) {
-              form.append('receipt_' + (i + 1), rc.file, rc.file.name || ('receipt-' + (i + 1) + '.jpg'));
-              form.append('receipt_' + (i + 1) + '_covers', rc.covers);
-            });
-          }
+          this.receipts.forEach(function (rc, i) {
+            form.append('receipt_' + (i + 1), rc.file, rc.file.name || ('receipt-' + (i + 1) + '.jpg'));
+          });
           this.saving = true;
           var self = this;
           fetch(URLS.create, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body: form, credentials: 'same-origin' })

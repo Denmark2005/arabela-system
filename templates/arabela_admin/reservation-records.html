@@ -47,6 +47,8 @@
       .dark .rr-channel--warn { background: rgba(247, 144, 9, .16); color: #fdb022; }
       .rr-pay-warn { margin-top: .5rem; padding: .5rem .75rem; border-radius: .6rem; background: #fffaeb; color: #93370d; font-size: .8125rem; line-height: 1.45; }
       .dark .rr-pay-warn { background: rgba(247, 144, 9, .16); color: #fdb022; }
+      .rr-upload-note { margin-top: 1rem; padding: .6rem .9rem; border-radius: .6rem; background: #f2f4f7; color: #344054; font-size: .875rem; line-height: 1.45; }
+      .dark .rr-upload-note { background: rgba(255, 255, 255, .05); color: #d0d5dd; }
       .rr-row { cursor: pointer; transition: background-color .15s; }
       .rr-row:hover { background: #f9fafb; }
       .dark .rr-row:hover { background: rgba(255,255,255,.03); }
@@ -209,8 +211,6 @@
           uploadPreviewUrl: null,
           uploadDragOver: false,
           uploadBusy: false,
-          // What the receipt being uploaded is for (ReceiptRecord.Covers) -- '' = not said.
-          uploadCovers: '',
           uploadPreparing: false,
           uploadError: '',
           showUploadToast: false,
@@ -639,9 +639,20 @@
             record.paymentIncomplete = !(labels.has('Rental + deposit') || (labels.has('Rental') && labels.has('Deposit')));
           },
 
+          // What a receipt uploaded for this booking will be saved as. Never asked: the server decides with this same rule
+          // (Reservation.next_receipt_covers) -- an online booking's receipt is the full one; a walk-in's is whatever its
+          // payment is still missing (after a deposit-only booking, the rental). Used here only to tell staff.
+          nextReceiptCovers(record) {
+            if (!record || !record.staffRecorded) { return 'Rental + deposit'; }
+            const labels = new Set((record.receipts || []).map(x => x.covers));
+            if (labels.has('Rental + deposit') || (labels.has('Rental') && labels.has('Deposit'))) { return 'Rental + deposit'; }
+            if (labels.has('Deposit')) { return 'Rental'; }
+            if (labels.has('Rental')) { return 'Deposit'; }
+            return 'Rental + deposit';
+          },
+
           startUpload(record) {
             this.uploadFor = record;
-            this.uploadCovers = '';
             this.clearUploadFile();
             this.uploadError = '';
             this.openUpload = true;
@@ -693,7 +704,6 @@
             const form = new FormData();
             form.append('reference_code', target.reference);
             form.append('photo', this.uploadFile);
-            form.append('covers', this.uploadCovers);
             fetch(UPLOAD_URL, { method: 'POST', headers: { 'X-CSRFToken': this.getCsrfToken() }, body: form })
               .then(r => r.json().then(data => ({ ok: r.ok, data })))
               .then(({ ok, data }) => {
@@ -2082,7 +2092,7 @@
               <p x-show="viewing.staffRecorded" class="mt-1 text-theme-xs text-gray-500 dark:text-gray-400"
                  x-text="viewing.channelLabel + ' booking · Recorded by ' + viewing.recordedBy + (viewing.notebookNumber ? ' · Notebook no. ' + viewing.notebookNumber : '') + (viewing.hasAccount ? '' : ' · No website account')"></p>
               <p x-show="viewing.awaitingPayment" class="rr-pay-warn">Not paid yet. The booking is waiting in Pending Approval and still holds its gown(s). Approve it there once the customer pays.</p>
-              <p x-show="viewing.paymentIncomplete" class="rr-pay-warn">Payment incomplete: the shop's receipts here don't cover both the rental and the deposit. Upload the missing receipt below.</p>
+              <p x-show="viewing.paymentIncomplete" class="rr-pay-warn" x-text="nextReceiptCovers(viewing) === 'Rental' ? 'Payment incomplete: only the deposit was paid so far. Upload the rental receipt below.' : 'Payment incomplete: the shop\'s receipts here don\'t cover both the rental and the deposit. Upload the missing receipt below.'"></p>
             </div>
 
             <div class="rr-section" x-show="viewing.cancel">
@@ -2216,7 +2226,7 @@
                   <img class="rr-thumb" :src="receipt.photoUrl" alt="Receipt photo" @click="viewPhoto(receipt, viewing)" />
                   <div class="rr-receipt-body">
                     <p class="text-sm font-medium text-gray-800 dark:text-white/90" x-text="'Uploaded ' + receipt.uploaded"></p>
-                    <p class="text-theme-xs text-gray-500 dark:text-gray-400" x-text="'By ' + receipt.uploadedBy + (receipt.covers ? ' · For: ' + receipt.covers : '')"></p>
+                    <p class="text-theme-xs text-gray-500 dark:text-gray-400" x-text="'By ' + receipt.uploadedBy + (receipt.coversName ? ' · For: ' + receipt.coversName : '')"></p>
                   </div>
                   <button type="button" @click="viewPhoto(receipt, viewing)"
                     class="rr-nowrap inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">
@@ -2362,14 +2372,8 @@
               </template>
             </div>
 
-            <label for="rr-upload-covers" class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400" style="margin-top: 1rem;">This receipt is for</label>
-            <select id="rr-upload-covers" x-model="uploadCovers"
-              class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
-              <option value="">Not specified</option>
-              <option value="Rental + deposit">Rental + deposit</option>
-              <option value="Rental">Rental</option>
-              <option value="Deposit">Deposit</option>
-            </select>
+            <p x-show="uploadFor && uploadFor.staffRecorded && nextReceiptCovers(uploadFor) !== 'Rental + deposit'" x-cloak class="rr-upload-note"
+              x-text="uploadFor ? ('This receipt is for: ' + nextReceiptCovers(uploadFor) + '. It completes the payment.') : ''"></p>
 
             <p x-show="uploadError" x-cloak x-text="uploadError" class="mt-3 rounded-lg bg-error-50 px-4 py-2.5 text-sm text-error-700 dark:bg-error-500/15 dark:text-error-500"></p>
 

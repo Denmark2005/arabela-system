@@ -7,6 +7,11 @@ from django.utils import timezone
 from django.utils.formats import date_format
 
 
+def _peso_text(amount):
+    """₱5,500 (and ₱5,500.50 when there are centavos) -- how the admin's payment screens write an amount."""
+    return f"₱{amount:,.0f}" if amount == int(amount) else f"₱{amount:,.2f}"
+
+
 class Reservation(models.Model):
     """A single customer reservation request. The dates live on the child
     ReservationItem rows (the customer picks a rental period per gown on the
@@ -146,22 +151,90 @@ class Reservation(models.Model):
             return True
         return ReceiptRecord.Covers.RENTAL in labels and ReceiptRecord.Covers.DEPOSIT in labels
 
+    def next_receipt_covers(self, receipts=None):
+        """What the NEXT receipt the shop attaches to this booking is for -- decided here, never asked, so staff can't label it
+        wrongly. An online booking's receipt is always the full one (it lists the rental and the deposit). A walk-in that only
+        paid the deposit is still waiting for its rental receipt; once both are there (or one full receipt), a further one is
+        simply another copy of the full payment. Nothing attached yet: the full receipt."""
+        covers = ReceiptRecord.Covers
+        if not self.is_staff_recorded:
+            return covers.BOTH
+        labels = {r.covers for r in (self.receipt_records.all() if receipts is None else receipts)}
+        if covers.BOTH in labels or {covers.RENTAL, covers.DEPOSIT} <= labels:
+            return covers.BOTH
+        if covers.DEPOSIT in labels:
+            return covers.RENTAL
+        if covers.RENTAL in labels:
+            return covers.DEPOSIT
+        return covers.BOTH
+
     def receipt_proofs(self, deposit_only=False):
         """The shop's own receipt photos (ReceiptRecord) as plain dicts for the admin's proof popups. A booking recorded at the
         counter has no GCash screenshot from the customer, so these photos ARE its proof of payment. `deposit_only` keeps the
-        receipts that cover the security deposit ("Deposit" and "Rental + deposit"); a receipt nobody labelled says nothing
-        either way (see receipts_cover_payment), so it is left out there. Oldest first, the order they were handed over."""
-        covers_deposit = (ReceiptRecord.Covers.DEPOSIT, ReceiptRecord.Covers.BOTH)
+        receipts that cover the security deposit ("Deposit" and the full one); a receipt nobody labelled says nothing
+        either way for a walk-in (see receipts_cover_payment), so it is left out there -- an online booking's unlabelled
+        receipt is the shop's full receipt, like every online one now. Oldest first, the order they were handed over."""
+        staff_recorded = self.is_staff_recorded
         rows = []
         for rec in sorted(self.receipt_records.all(), key=lambda r: (r.uploaded_at, r.id)):
-            if deposit_only and rec.covers not in covers_deposit:
+            name = ReceiptRecord.name_for(rec.covers, staff_recorded)
+            if deposit_only and name not in (ReceiptRecord.Covers.DEPOSIT, ReceiptRecord.PAID_IN_FULL):
                 continue
             rows.append({
                 "url": rec.photo_url,
-                "label": f"{rec.covers} receipt" if rec.covers else "Receipt (not labelled)",
+                "label": f"{name} receipt" if name else "Receipt (not labelled)",
                 "when": date_format(timezone.localtime(rec.uploaded_at), "M j, Y · g:i A"),
             })
         return rows
+
+    @property
+    def payment_breakdown(self):
+        """What was actually paid, and the rest of the booking's price, for the admin's payment screens -- or None when this
+        booking's amounts can't be split (then every screen keeps showing the single total, as it always did).
+
+        The total (e.g. P7,500) is the gown's rental price (P5,500) plus the security deposit (P2,000), but an online
+        customer only pays the deposit on the website, by GCash: that is the amount staff verify against the screenshot, so
+        that is the headline, with the gown's price shown beside it. A walk-in pays at the shop: the shop's receipts say whether
+        that was everything or only the deposit (see next_receipt_covers). Nothing here is saved; it is worked out from the
+        booking's own amounts, so it can never disagree with them."""
+        deposit, rental, total = self.security_deposit, self.rental_subtotal, self.total_amount
+        if not (deposit > 0 and rental > 0 and rental + deposit == total):
+            return None
+        if self.is_staff_recorded:
+            covers = ReceiptRecord.Covers
+            labels = {r.covers for r in self.receipt_records.all()}
+            if covers.BOTH in labels or {covers.RENTAL, covers.DEPOSIT} <= labels:
+                paid, paid_label, deposit_note, rental_note = total, "Paid at the shop", "paid at the shop", "paid at the shop"
+                sub = f"Gown {_peso_text(rental)} + Deposit {_peso_text(deposit)}"
+            elif covers.DEPOSIT in labels:
+                paid, paid_label, deposit_note, rental_note = deposit, "Deposit paid at the shop", "paid at the shop", "still to pay"
+                sub = f"Gown {_peso_text(rental)} still to pay · Total {_peso_text(total)}"
+            else:
+                return None
+        else:
+            by = " by GCash" if self.payment_method == self.PaymentMethod.GCASH else ""
+            paid, paid_label, deposit_note = deposit, f"Paid online{by}", f"paid online{by}"
+            if self.status == self.Status.REJECTED:
+                # The shop did not accept that payment: it was only sent, not paid.
+                paid_label, deposit_note = f"Sent online{by} (rejected)", f"sent online{by}, rejected"
+            # A receipt the shop attached to an online booking is its full one (rental + deposit): the gown was paid at the shop.
+            rental_note = "paid at the shop" if self.receipt_records.all() else "to pay at the shop"
+            sub = f"Gown {_peso_text(rental)} · Total {_peso_text(total)}"
+        return {
+            "paidLabel": paid_label,
+            "headline": _peso_text(paid),
+            "sub": sub,
+            "lines": [
+                {"label": "Security deposit", "note": deposit_note, "amount": _peso_text(deposit)},
+                {"label": "Gown rental", "note": rental_note, "amount": _peso_text(rental)},
+            ],
+            "total": _peso_text(total),
+        }
+
+    @property
+    def payment_breakdown_json(self):
+        """payment_breakdown as JSON text for a page's script ('null' when there is none); escape it with escapejs."""
+        return json.dumps(self.payment_breakdown)
 
     @property
     def receipts_json(self):
@@ -597,6 +670,21 @@ class ReceiptRecord(models.Model):
         RENTAL = 'Rental', 'Rental'
         DEPOSIT = 'Deposit', 'Deposit'
         BOTH = 'Rental + deposit', 'Rental + deposit'
+
+    # What staff READ for the full receipt. The stored word stays 'Rental + deposit' (older receipts keep working and nothing in
+    # the database changes); only the name shown on the screens is this one.
+    PAID_IN_FULL = 'Paid in full'
+
+    @classmethod
+    def name_for(cls, covers, staff_recorded=True):
+        """The name of a receipt's label as staff read it: 'Paid in full' for the stored 'Rental + deposit'. A receipt nobody
+        labelled is the shop's full receipt when the booking came in online (it always is now) and says nothing ('') for a
+        walk-in."""
+        if covers == cls.Covers.BOTH:
+            return cls.PAID_IN_FULL
+        if covers:
+            return covers
+        return '' if staff_recorded else cls.PAID_IN_FULL
 
     reservation = models.ForeignKey(
         Reservation, on_delete=models.CASCADE, related_name='receipt_records'
