@@ -12,7 +12,12 @@
     <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
   <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet"></head>
   <body
-    x-data="{ page: 'active', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, openCustomerModal: false, viewingCustomer: {}, search: '', openTimeline: null }"
+    x-data="{ page: 'active', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, openCustomerModal: false, viewingCustomer: {}, search: '', openTimeline: null, openBookings: [], autoOpen: [],
+      isBookingOpen(id) { return this.openBookings.includes(id) || this.autoOpen.includes(id); },
+      toggleBooking(id) {
+        if (this.isBookingOpen(id)) { this.openBookings = this.openBookings.filter(x => x !== id); this.autoOpen = this.autoOpen.filter(x => x !== id); }
+        else { this.openBookings = this.openBookings.concat([id]); }
+      } }"
     x-init="
          darkMode = JSON.parse(localStorage.getItem('darkMode'));
          $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)));
@@ -24,12 +29,51 @@
            value ? params.set('search', value) : params.delete('search');
            const query = params.toString();
            history.replaceState(null, '', window.location.pathname + (query ? '?' + query : ''));
-         });"
+         });
+         arSetupBookings($data, $watch);"
     :class="{'dark bg-gray-900': darkMode === true}"
   >
     {% include "arabela_admin/partials/timeline_styles.html" %}
     {% include "arabela_admin/partials/dialog.html" %}
     {% include "arabela_admin/partials/cancel_booking.html" %}
+    <style>
+      /* Active Reservations: the closed list. One line per booking; the booking's own rows are inside .ar-panel. */
+      .ar-head, .ar-line { display: grid; grid-template-columns: minmax(12rem, 2.2fr) minmax(9rem, 1.5fr) minmax(8.5rem, 1.1fr) 8rem 8rem 2.25rem; align-items: center; column-gap: .75rem; }
+      .ar-head { position: sticky; top: 0; z-index: 10; padding: .75rem 1.25rem; background: #fff; border-bottom: 1px solid #f2f4f7; font-size: .75rem; font-weight: 500; color: #667085; }
+      .dark .ar-head { background: #101828; border-color: #1d2939; color: #98a2b3; }
+      .ar-booking { border-bottom: 1px solid #f2f4f7; }
+      .dark .ar-booking { border-color: #1d2939; }
+      .ar-line { padding: .8rem 1.25rem; cursor: pointer; }
+      .ar-line:hover { background: rgba(152,162,179,.08); }
+      .ar-line.is-open { background: rgba(70,95,255,.05); }
+      .ar-who { display: flex; align-items: center; gap: .75rem; min-width: 0; }
+      .ar-name { font-weight: 500; font-size: .875rem; color: #1d2939; overflow-wrap: anywhere; }
+      .dark .ar-name { color: rgba(255,255,255,.9); }
+      .ar-ref { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; font-size: .75rem; }
+      .ar-ref b { font-weight: 500; padding: .1rem .5rem; border-radius: 999px; background: #f2f4f7; color: #475467; }
+      .dark .ar-ref b { background: #1d2939; color: #98a2b3; }
+      .ar-chip { padding: .1rem .5rem; border-radius: 999px; background: rgba(70,95,255,.1); color: #465fff; font-size: .7rem; font-weight: 500; }
+      .ar-date { font-size: .875rem; color: #667085; }
+      .dark .ar-date { color: #98a2b3; }
+      .ar-phone { font-size: .8125rem; color: #465fff; text-decoration: underline; }
+      .ar-none { color: #98a2b3; }
+      .ar-chev { justify-self: end; display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border: 0; border-radius: .5rem; background: none; color: #667085; cursor: pointer; }
+      .ar-chev:hover { background: rgba(152,162,179,.18); }
+      .ar-chev:focus-visible { outline: 2px solid #465fff; outline-offset: 1px; }
+      .ar-chev svg { width: 1rem; height: 1rem; transition: transform .15s; }
+      .ar-chev[aria-expanded="true"] svg { transform: rotate(180deg); }
+      .ar-panel { border-top: 1px dashed #e4e7ec; background: rgba(152,162,179,.04); }
+      .dark .ar-panel { border-color: #1d2939; }
+      .ar-strip { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .6rem 1.25rem 0; font-size: .75rem; color: #98a2b3; }
+      .ar-empty { padding: 2.5rem 1.25rem; text-align: center; }
+      @media (max-width: 760px) {
+        .ar-head { display: none; }
+        .ar-line { grid-template-columns: minmax(0, 1fr) 2.25rem; row-gap: .35rem; }
+        .ar-line > .ar-who, .ar-line > .ar-ref, .ar-line > .ar-phone-cell, .ar-line > .ar-date { grid-column: 1; }
+        .ar-line > .ar-chev { grid-column: 2; grid-row: 1; }
+        .ar-line > .ar-date::before { content: attr(data-label) ": "; color: #98a2b3; }
+      }
+    </style>
     <!-- One shared floating popover, reused for both the pickup/return date "Edit"
          form and the "Mark Returned" condition choice -- position: fixed so it
          overlays the table instead of growing a row's height (which used to push
@@ -1086,7 +1130,7 @@
               <input
                 type="text"
                 x-model="search"
-                placeholder="Search by customer, reference or gown ID..."
+                placeholder="Search by customer, reference, cellphone or gown ID..."
                 class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
               />
             </div>
@@ -1100,53 +1144,63 @@
               <div class="border-t border-gray-100 dark:border-gray-800">
                 <div class="max-w-full overflow-x-auto">
                   <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;">
-                  <table class="min-w-full">
-                    <thead class="sticky top-0 z-10 bg-white dark:bg-gray-900">
-                      <tr class="border-b border-gray-100 dark:border-gray-800">
-                        <th class="px-5 py-3 sm:px-6 text-left">
-                          <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Customer</p>
-                        </th>
-                        <th class="px-5 py-3 sm:px-6 text-left">
-                          <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Gown Name</p>
-                        </th>
-                        <th class="px-5 py-3 sm:px-6 text-left">
-                          <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Rental Date</p>
-                        </th>
-                        <th class="px-5 py-3 sm:px-6 text-left">
-                          <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Return Date</p>
-                        </th>
-                        <th class="px-5 py-3 sm:px-6 text-left">
-                          <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Amount</p>
-                        </th>
-                        <th class="px-5 py-3 sm:px-6 text-left">
-                          <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Status</p>
-                        </th>
-                        <th class="px-5 py-3 sm:px-6 text-left">
-                          <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Action</p>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-                      {% for r in reservations %}
-                      {% with item_count=r.items.all|length %}
-                      {% for item in r.items.all %}
-                      <tr x-show="search === '' || '{{ r.display_customer_name|lower|escapejs }} {{ r.reference_code|lower|escapejs }}{% for gi in r.items.all %} {{ gi.gown_code|lower|escapejs }}{% endfor %}'.includes(search.toLowerCase())">
-                        {% if forloop.first %}
-                        <td class="px-5 py-4 sm:px-6" rowspan="{{ item_count }}" style="vertical-align: top;">
-                          <div class="flex items-center gap-3">
-                            <div class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-gray-400 dark:bg-gray-800">
-                              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>
-                            </div>
-                            <div class="flex flex-col">
-                              <span class="block font-medium text-gray-800 text-theme-sm dark:text-white/90">{{ r.display_customer_name }}</span>
-                              {% if r.booked_as_name %}<span class="text-xs text-gray-400 dark:text-gray-500">Booked as: {{ r.booked_as_name }}</span>{% endif %}
-                              <span class="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ r.reference_code }}</span>
-                              {% if r.is_staff_recorded %}<span class="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-theme-xs font-medium text-brand-500 dark:bg-brand-500/15 dark:text-brand-400" title="Recorded by staff in New Booking">{{ r.get_channel_display }}</span>{% endif %}
-                              {% if r.phone %}<a href="tel:{{ r.phone }}" class="mt-1 text-theme-xs text-brand-500 underline" title="Call the customer">{{ r.phone }}</a>{% endif %}
-                            </div>
-                          </div>
-                        </td>
-                        {% endif %}
+                  <div class="ar-head">
+                    <span>Customer</span>
+                    <span>Booking no.</span>
+                    <span>Cellphone</span>
+                    <span>Rental Date</span>
+                    <span>Return Date</span>
+                    <span></span>
+                  </div>
+                  {% for r in reservations %}
+                  {% with item_count=r.items.all|length %}
+                  <!-- One booking: a closed line (name, booking number, cellphone, first pick-up, last return) and, hidden until it is
+                       opened, that booking's own rows. Everything inside the panel is the old table's cells, unchanged. -->
+                  <div class="ar-booking" data-booking-id="{{ r.id }}" data-search="{{ r.display_customer_name|lower }} {{ r.reference_code|lower }}{% for gi in r.items.all %} {{ gi.gown_code|lower }}{% endfor %} {{ r.phone|cut:' ' }}" x-show="search === '' || '{{ r.display_customer_name|lower|escapejs }} {{ r.reference_code|lower|escapejs }}{% for gi in r.items.all %} {{ gi.gown_code|lower|escapejs }}{% endfor %} {{ r.phone|cut:" "|escapejs }}'.includes(search.toLowerCase())">
+                    <div class="ar-line" :class="isBookingOpen({{ r.id }}) ? 'is-open' : ''" @click="toggleBooking({{ r.id }})">
+                      <div class="ar-who">
+                        <div class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-gray-400 dark:bg-gray-800" style="flex: none;">
+                          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>
+                        </div>
+                        <span class="ar-name">{{ r.display_customer_name }}</span>
+                      </div>
+                      <div class="ar-ref">
+                        <b>{{ r.reference_code }}</b>
+                        {% if r.gown_count > 1 %}<span class="ar-chip">{{ r.gown_count }} gowns</span>{% endif %}
+                      </div>
+                      <div class="ar-phone-cell">
+                        {% if r.phone %}<a href="tel:{{ r.phone }}" class="ar-phone" title="Call the customer" @click.stop>{{ r.phone }}</a>{% else %}<span class="ar-none">&mdash;</span>{% endif %}
+                      </div>
+                      <div class="ar-date" data-label="Rental">{{ r.span_start|date:"M j, Y" }}</div>
+                      <div class="ar-date" data-label="Return">{{ r.span_end|date:"M j, Y" }}</div>
+                      <button type="button" class="ar-chev" @click.stop="toggleBooking({{ r.id }})" aria-expanded="false"
+                        :aria-expanded="isBookingOpen({{ r.id }}) ? 'true' : 'false'" aria-controls="ar-panel-{{ r.id }}"
+                        aria-label="Show or hide the details of {{ r.display_customer_name }}, {{ r.reference_code }}">
+                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7.5l5 5 5-5" /></svg>
+                      </button>
+                    </div>
+                    <div class="ar-panel" id="ar-panel-{{ r.id }}" x-show="isBookingOpen({{ r.id }})" x-cloak>
+                      {% if r.booked_as_name or r.is_staff_recorded %}
+                      <div class="ar-strip">
+                        {% if r.booked_as_name %}<span>Booked as: {{ r.booked_as_name }}</span>{% endif %}
+                        {% if r.is_staff_recorded %}<span class="inline-flex w-fit items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-theme-xs font-medium text-brand-500 dark:bg-brand-500/15 dark:text-brand-400" title="Recorded by staff in New Booking">{{ r.get_channel_display }}</span>{% endif %}
+                      </div>
+                      {% endif %}
+                      <div class="max-w-full overflow-x-auto">
+                      <table class="min-w-full">
+                        <thead>
+                          <tr class="border-b border-gray-100 dark:border-gray-800">
+                            <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Gown Name</p></th>
+                            <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Rental Date</p></th>
+                            <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Return Date</p></th>
+                            <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Amount</p></th>
+                            <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Status</p></th>
+                            <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Action</p></th>
+                          </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                          {% for item in r.items.all %}
+                          <tr>
                         <td class="px-5 py-4 sm:px-6">
                           <div class="flex items-center gap-2">
                             <p class="text-gray-500 text-theme-sm dark:text-gray-400"{% if item.stage == "Cancelled" %} style="text-decoration: line-through; opacity: .65;"{% endif %}>{{ item.gown_name }}</p>
@@ -1312,23 +1366,24 @@
                           </div>
                         </td>
                         {% endif %}
-                      </tr>
-                      {% endfor %}
+                          </tr>
+                          {% endfor %}
                       <tr x-show="openTimeline === {{ r.id }} && (search === '' || '{{ r.display_customer_name|lower|escapejs }} {{ r.reference_code|lower|escapejs }}'.includes(search.toLowerCase()))" x-cloak>
-                        <td class="px-5 py-4 sm:px-6" colspan="7">
+                        <td class="px-5 py-4 sm:px-6" colspan="6">
                           {% include "arabela_admin/partials/timeline_rows.html" with timeline=r.timeline %}
                         </td>
                       </tr>
-                      {% endwith %}
-                      {% empty %}
-                      <tr>
-                        <td class="px-5 py-10 sm:px-6 text-center" colspan="7">
-                          <p class="text-gray-500 text-theme-sm dark:text-gray-400">No active reservations yet. Approved bookings will appear here.</p>
-                        </td>
-                      </tr>
-                      {% endfor %}
-                    </tbody>
-                  </table>
+                        </tbody>
+                      </table>
+                      </div>
+                    </div>
+                  </div>
+                  {% endwith %}
+                  {% empty %}
+                  <div class="ar-empty">
+                    <p class="text-gray-500 text-theme-sm dark:text-gray-400">No active reservations yet. Approved bookings will appear here.</p>
+                  </div>
+                  {% endfor %}
                   </div>
                 </div>
               </div>
@@ -1413,6 +1468,35 @@
     // Staff-initiated reminder. The message arrives pre-written by the server (the same
     // rules the automatic sweep uses) but stays editable, because the reason a staffer
     // reaches for this button is usually something the schedule cannot know.
+    // ---- The closed list: which bookings are open -----------------------------------------------------------------------
+    // The page shows one short line per booking; clicking it opens that booking's own rows (the buttons are the same ones as ever,
+    // only hidden until it is opened). A booking opened by hand is remembered for this tab, so the reload after Mark Picked Up /
+    // Mark Returned puts it back the way it was. A search (or a link with ?search=) that leaves exactly ONE booking opens that
+    // booking by itself, and closes it again when the search no longer does.
+    function arSetupBookings(state, watch) {
+      var KEY = 'arabelaActiveOpen';
+      function onPage(id) { return !!document.querySelector('.ar-booking[data-booking-id="' + id + '"]'); }
+      try {
+        var saved = JSON.parse(sessionStorage.getItem(KEY) || '[]');
+        if (Array.isArray(saved)) { state.openBookings = saved.filter(function (id) { return Number.isInteger(id) && onPage(id); }); }
+      } catch (err) { /* storage blocked (a private window): the page simply starts closed */ }
+      watch('openBookings', function (ids) {
+        try { sessionStorage.setItem(KEY, JSON.stringify(ids)); } catch (err) { /* not remembered, nothing else is affected */ }
+      });
+      function openTheOnlyMatch() {
+        // The same words the page's filter (x-show) matches against, kept on each booking as data-search, so this never has to wait
+        // for the filter to finish hiding rows: a search that matches exactly one booking opens it.
+        var q = String(state.search || '').toLowerCase();
+        if (q === '') { state.autoOpen = []; return; }
+        var hits = Array.prototype.filter.call(document.querySelectorAll('.ar-booking[data-booking-id]'), function (el) {
+          return (el.getAttribute('data-search') || '').indexOf(q) !== -1;
+        });
+        state.autoOpen = hits.length === 1 ? [Number(hits[0].getAttribute('data-booking-id'))] : [];
+      }
+      watch('search', openTheOnlyMatch);
+      openTheOnlyMatch();
+    }
+
     function sendReminder(btn) {
       var url = btn.dataset.url;
       var gown = btn.dataset.gown || 'this gown';

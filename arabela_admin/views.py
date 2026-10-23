@@ -1222,6 +1222,12 @@ def active_reservations_view(request):
         # the shop already cancelled is no longer part of the booking, so it is left out of every question below.
         booking_items = list(reservation.items.all())
         live_items = [i for i in booking_items if i.stage != ReservationItem.Stage.CANCELLED]
+        # What the closed line of this booking shows: the first pick-up and the last return of the gowns still in it (a gown the
+        # shop cancelled is no longer part of the booking), and how many gowns that is. Display only -- no rule reads these.
+        dated = live_items or booking_items
+        reservation.span_start = min((i.rental_date for i in dated), default=None)
+        reservation.span_end = max((i.return_date for i in dated), default=None)
+        reservation.gown_count = len(live_items)
         # Every gown still part of the booking is back: shown as Completed (a booking's own status stays "Confirmed"),
         # and not counted in the dashboard's Active Rentals tile.
         reservation.is_completed = bool(live_items) and all(i.stage == ReservationItem.Stage.RETURNED for i in live_items)
