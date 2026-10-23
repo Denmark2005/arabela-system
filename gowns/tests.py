@@ -1725,10 +1725,13 @@ class CheckoutGcashWindowTests(TestCase):
         self.assertIn("Send the money to the GCash number above.", html)
         self.assertIn("QR code coming soon", html)
 
-    def test_the_reference_box_is_on_the_page_and_sent_with_the_form(self):
+    def test_the_reference_box_is_gone_from_the_page_and_the_form(self):
+        """The customer is no longer asked for it (the server still accepts one, so older bookings and any other caller work)."""
         html = self.client.get(reverse("gowns:reservation")).content.decode()
-        self.assertIn('id="gcash_reference"', html)
-        self.assertIn("formData.append('gcash_reference'", html)
+        self.assertNotIn('id="gcash_reference"', html)
+        self.assertNotIn("gcash_reference", html)
+        self.assertNotIn("GCash reference number (optional)", html)
+        self.assertNotIn("You can find it on your GCash receipt", html)
 
 
 class LiveNavBadgeTests(TestCase):

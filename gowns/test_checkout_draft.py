@@ -24,8 +24,8 @@ class CheckoutRemembersTypingTests(SimpleTestCase):
 
     def test_every_field_a_customer_types_is_remembered(self):
         self.assertIn(
-            "var DRAFT_FIELD_IDS = ['first_name', 'last_name', 'address', 'city', 'postal', 'phone', 'gcash_reference'];", self.source)
-        for field_id in ("first_name", "last_name", "address", "city", "postal", "phone", "gcash_reference"):
+            "var DRAFT_FIELD_IDS = ['first_name', 'last_name', 'address', 'city', 'postal', 'phone'];", self.source)
+        for field_id in ("first_name", "last_name", "address", "city", "postal", "phone"):
             self.assertIn(f'id="{field_id}"', self.source)                        # and each of them really is a field on the page
 
     def test_it_is_kept_per_account_and_only_in_this_tab(self):

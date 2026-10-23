@@ -62,6 +62,7 @@ urlpatterns = [
     path("selection/", views.selection, name="selection"),
     path("reservation/", views.reservation, name="reservation"),
     path("reservation/submit/", views.reservation_submit, name="reservation_submit"),
+    path("gcash-qr/", views.gcash_qr, name="gcash_qr"),
     path("reservation/hold/start/", views.reservation_hold_start, name="reservation_hold_start"),
     path("reservation/hold/release/", views.reservation_hold_release, name="reservation_hold_release"),
     path("cart/fetch/", views.cart_fetch_view, name="cart_fetch"),

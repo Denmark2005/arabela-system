@@ -961,6 +961,14 @@ def _recently_submitted(request, fingerprint):
 
 
 @login_required(login_url='accounts:login')
+def gcash_qr(request):
+    """The shop's GCash QR on a page of its own: the checkout's "View QR" window opens it in a new tab so the whole picture can be
+    seen as large as the screen allows and scanned from another phone. Read-only; the QR, account name and number all come from the
+    shop settings (the context processor), the same as in that window. Same access as the checkout: signed-in customers."""
+    return render(request, 'gcash_qr.html')
+
+
+@login_required(login_url='accounts:login')
 @require_http_methods(["POST"])
 def reservation_submit(request):
     """Persist a customer's reservation request (status=Pending) so it flows into

@@ -1,0 +1,149 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>ARABELA | GCash QR</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Lobster+Two:ital,wght@1,700&display=swap" rel="stylesheet" />
+  {# The shop's GCash QR on a page of its own, opened in a new tab from the checkout's "View QR" window, so the whole picture can be #}
+  {# seen as large as the screen allows and scanned from another phone. Nothing here changes a reservation. #}
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: #fff; color: #615e57; font-family: 'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+    .qr-top { display: flex; align-items: center; justify-content: space-between; height: 4.25rem; padding: 0 1.25rem; border-bottom: 1px solid rgba(0, 0, 0, .06); }
+    .qr-mark { font-family: 'Lobster Two', cursive; font-weight: 700; font-style: italic; font-size: 1.9rem; line-height: 1; color: #222; text-decoration: none; }
+    .qr-main { width: 100%; max-width: 40rem; margin: 0 auto; padding: 1.25rem 1.25rem 2.5rem; text-align: center; }
+    .qr-title { margin: 0; font-size: 1.15rem; font-weight: 600; color: #1b1c1c; }
+    .qr-lead { margin: .35rem 0 1.1rem; font-size: .85rem; line-height: 1.5; }
+    /* The picture is shown whole (never cropped, a QR has to scan) and as BIG as the page allows: its own size up to the page width
+       (a small upload is stretched to at least 20 rem). It is not squeezed to fit the screen height -- the page just scrolls, which is
+       what makes the QR inside it large enough to scan from another phone. */
+    .qr-frame { display: inline-block; max-width: 100%; padding: .6rem; border: 1px solid rgba(0, 0, 0, .1); border-radius: .6rem; background: #fff; }
+    .qr-img { display: block; width: auto; max-width: 100%; min-width: min(100%, 20rem); height: auto; object-fit: contain; }
+    .qr-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: .6rem; margin-top: 1rem; }
+    .qr-btn { display: inline-flex; align-items: center; gap: .4rem; padding: .6rem 1.1rem; border: 1px solid rgba(0, 0, 0, .18); border-radius: .4rem; background: #fff; color: #1b1c1c; font: inherit; font-size: .8rem; font-weight: 600; cursor: pointer; }
+    .qr-btn:hover { border-color: #222; }
+    .qr-btn--dark { background: #000; border-color: #000; color: #fff; }
+    .qr-btn--dark:hover { background: #222; border-color: #222; }
+    .qr-btn:focus-visible { outline: 2px solid #1b1c1c; outline-offset: 2px; }
+    .qr-btn svg { width: 1rem; height: 1rem; }
+    .qr-box { margin: 1.25rem auto 0; max-width: 26rem; padding: .85rem 1rem; border: 1px solid rgba(0, 0, 0, .1); border-radius: .5rem; font-size: .8rem; text-align: left; }
+    .qr-row { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+    .qr-row + .qr-row { margin-top: .5rem; }
+    .qr-row b { font-weight: 500; color: #1b1c1c; text-align: right; }
+    .qr-copy { margin-left: .5rem; padding: .1rem .5rem; border: 1px solid rgba(0, 0, 0, .18); border-radius: .35rem; background: #fff; font: inherit; font-size: .7rem; font-weight: 600; color: #1b1c1c; cursor: pointer; }
+    .qr-soon { margin: 1rem auto 0; max-width: 26rem; padding: 1.4rem 1rem; border: 1px dashed rgba(0, 0, 0, .25); border-radius: .5rem; }
+    .qr-soon b { display: block; color: #1b1c1c; font-weight: 500; }
+    .qr-note, .qr-help { margin: 1.1rem 0 0; font-size: .75rem; line-height: 1.5; }
+    .qr-help a { color: #1b1c1c; font-weight: 600; text-underline-offset: 2px; }
+    @media (max-width: 640px) {         /* a phone: every pixel of width goes to the picture */
+      .qr-main { padding-left: .5rem; padding-right: .5rem; }
+      .qr-frame { padding: .25rem; }
+    }
+  </style>
+</head>
+<body>
+  <header class="qr-top">
+    <a class="qr-mark" href="{% url 'gowns:homepage' %}">Arabela</a>
+  </header>
+
+  <main class="qr-main">
+    <h1 class="qr-title">GCash QR code</h1>
+    {% if site_gcash_qr_url %}
+    <p class="qr-lead">Scan this QR with another phone, or save it and upload it in GCash. Send exactly the amount shown on your reservation page.</p>
+    <div class="qr-frame">
+      <img id="gcash-qr-full" class="qr-img" alt="Arabela GCash QR code" src="{{ site_gcash_qr_url }}">
+    </div>
+    <div class="qr-actions">
+      <button type="button" id="gcash-save-qr" class="qr-btn qr-btn--dark">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v10m0 0l-4-4m4 4l4-4M4 16h12" /></svg>
+        Save QR image
+      </button>
+      <button type="button" id="qr-close" class="qr-btn">Close</button>
+    </div>
+    {% else %}
+    <div class="qr-soon">
+      <b>QR code coming soon</b>
+      <span>Please message us{% if site_phone %} or call {{ site_phone }}{% endif %} and we will help you pay.</span>
+    </div>
+    <div class="qr-actions"><button type="button" id="qr-close" class="qr-btn">Close</button></div>
+    {% endif %}
+
+    {% if site_gcash_name or site_gcash_number %}
+    <div class="qr-box">
+      {% if site_gcash_name %}
+      <div class="qr-row"><span>Account name</span><b>{{ site_gcash_name }}</b></div>
+      {% endif %}
+      {% if site_gcash_number %}
+      <div class="qr-row">
+        <span>GCash number</span>
+        <span><b id="gcash-number-text">{{ site_gcash_number }}</b><button type="button" id="gcash-copy-number" class="qr-copy">Copy</button></span>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <p class="qr-note" id="qr-note">When you are done, close this tab to go back to your reservation.</p>
+    <p class="qr-help">Need help?{% if site_facebook_url %} Message us on <a href="{{ site_facebook_url }}" target="_blank" rel="noopener">Facebook</a>{% endif %}{% if site_phone %}{% if site_facebook_url %} or call{% else %} Call{% endif %} <a href="tel:{{ site_phone_tel }}">{{ site_phone }}</a>{% endif %}.</p>
+  </main>
+
+  <script>
+    (function () {
+      var closeBtn = document.getElementById('qr-close');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', function () {
+          // A tab opened from a link can close itself; if the browser says no, the note below already says how to go back.
+          window.close();
+        });
+      }
+
+      var copyBtn = document.getElementById('gcash-copy-number');
+      if (copyBtn) {
+        copyBtn.addEventListener('click', function () {
+          var numberEl = document.getElementById('gcash-number-text');
+          var text = numberEl ? numberEl.textContent.trim() : '';
+          if (!text) return;
+          function done() {
+            copyBtn.textContent = 'Copied';
+            setTimeout(function () { copyBtn.textContent = 'Copy'; }, 1800);
+          }
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done, function () {});
+          } else {
+            var tmp = document.createElement('textarea');
+            tmp.value = text;
+            document.body.appendChild(tmp);
+            tmp.select();
+            try { document.execCommand('copy'); done(); } catch (err) {}
+            document.body.removeChild(tmp);
+          }
+        });
+      }
+
+      var saveBtn = document.getElementById('gcash-save-qr');
+      var qrImg = document.getElementById('gcash-qr-full');
+      if (saveBtn && qrImg) {
+        saveBtn.addEventListener('click', function () {
+          // Download as a file; if the browser won't allow that for an image hosted elsewhere, open it in its own tab so it can be
+          // saved from there (the same way the checkout's QR window does it).
+          fetch(qrImg.src, { mode: 'cors' })
+            .then(function (res) { if (!res.ok) throw new Error('bad response'); return res.blob(); })
+            .then(function (blob) {
+              var url = URL.createObjectURL(blob);
+              var a = document.createElement('a');
+              a.href = url;
+              a.download = 'Arabela-GCash-QR.png';
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+            })
+            .catch(function () { window.open(qrImg.src, '_blank', 'noopener'); });
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

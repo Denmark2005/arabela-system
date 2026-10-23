@@ -236,13 +236,6 @@
             <input class="hidden" id="proof_of_payment" name="proof_of_payment" type="file" accept="image/jpeg,image/png,image/webp">
           </label>
 
-          <!-- Optional: the number printed on the GCash receipt. Helps the shop find your payment
-               faster. Digits and spaces only; the server cleans it up and checks the length. -->
-          <div class="res-field relative">
-            <input class="res-input peer" id="gcash_reference" placeholder=" " type="text" inputmode="numeric" maxlength="24" autocomplete="off">
-            <label class="res-label" for="gcash_reference">GCash reference number (optional)</label>
-          </div>
-          <p class="-mt-1 text-[0.75rem] text-secondary">You can find it on your GCash receipt, for example 1234 567 890123.</p>
         </div>
       </div>
     </section>
@@ -331,7 +324,7 @@
      Edit Profile). #gcash-deposit-amount is filled by reservation-flow.js with the deposit for the bag. -->
 <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-primary/30 backdrop-blur-sm transition-all duration-300 hidden" id="gcash-modal" role="dialog" aria-modal="true" aria-labelledby="gcash-modal-title">
   <div class="absolute inset-0" onclick="document.getElementById('gcash-modal').classList.add('hidden')"></div>
-  <div class="relative bg-white rounded-[12px] p-6 sm:p-8 w-full max-w-md editorial-shadow max-h-[92vh] overflow-y-auto">
+  <div class="relative bg-white rounded-[12px] p-6 sm:p-8 w-full max-w-lg editorial-shadow max-h-[92vh] overflow-y-auto">
     <button type="button" class="absolute top-4 right-4 text-secondary hover:text-on-surface transition-colors" aria-label="Close" onclick="document.getElementById('gcash-modal').classList.add('hidden')">
       <span class="material-symbols-outlined text-xl">close</span>
     </button>
@@ -347,13 +340,22 @@
 
     {% if site_gcash_qr_url %}
     <div class="mt-5 flex flex-col items-center gap-3">
-      <div class="w-56 h-56 rounded-[8px] border border-black/10 p-3 bg-white">
-        <img id="gcash-qr-img" alt="Arabela GCash QR code" class="w-full h-full object-contain" src="{{ site_gcash_qr_url }}">
+      <!-- The whole picture at the width the window allows (it used to be squeezed into a small square, which made the QR inside it
+           tiny). Tapping it opens the full-QR page in a new tab, so this page and what was typed here are left as they are. -->
+      <a href="{% url 'gowns:gcash_qr' %}" target="_blank" rel="noopener" id="gcash-qr-open" title="Open the full QR on its own page" class="block w-full max-w-[22rem] rounded-[8px] border border-black/10 p-2 bg-white">
+        <img id="gcash-qr-img" alt="Arabela GCash QR code" class="block w-full h-auto object-contain" style="max-height: 70vh;" src="{{ site_gcash_qr_url }}">
+      </a>
+      <p class="text-center text-[0.75rem] text-secondary">Scan this with another phone, or save it and upload it in GCash.</p>
+      <div class="flex flex-wrap items-center justify-center gap-2">
+        <button type="button" id="gcash-save-qr" class="inline-flex items-center gap-1.5 rounded-[6px] border border-black/15 bg-white px-3 py-1.5 text-[0.75rem] font-semibold text-on-surface hover:border-primary/60 transition-colors">
+          <span class="material-symbols-outlined" style="font-size: 1rem;">download</span>
+          Save QR image
+        </button>
+        <a href="{% url 'gowns:gcash_qr' %}" target="_blank" rel="noopener" id="gcash-qr-full-link" class="inline-flex items-center gap-1.5 rounded-[6px] border border-black/15 bg-white px-3 py-1.5 text-[0.75rem] font-semibold text-on-surface hover:border-primary/60 transition-colors">
+          <span class="material-symbols-outlined" style="font-size: 1rem;">open_in_new</span>
+          View full QR
+        </a>
       </div>
-      <button type="button" id="gcash-save-qr" class="inline-flex items-center gap-1.5 rounded-[6px] border border-black/15 bg-white px-3 py-1.5 text-[0.75rem] font-semibold text-on-surface hover:border-primary/60 transition-colors">
-        <span class="material-symbols-outlined" style="font-size: 1rem;">download</span>
-        Save QR image
-      </button>
     </div>
     {% else %}
     <div class="mt-5 rounded-[8px] border border-dashed border-black/20 px-4 py-6 text-center">
@@ -421,7 +423,7 @@
         // "Desktop site" switch re-runs the Google sign-in -- and a reload used to leave the form empty. (The receipt photo can't
         // be kept: a browser never lets a page re-fill a file.)
         var DRAFT_KEY = 'arabela_checkout_draft_' + USER_STORAGE_KEY;
-        var DRAFT_FIELD_IDS = ['first_name', 'last_name', 'address', 'city', 'postal', 'phone', 'gcash_reference'];
+        var DRAFT_FIELD_IDS = ['first_name', 'last_name', 'address', 'city', 'postal', 'phone'];
         var PROFILE_ADDRESS_STORAGE_KEY = 'arabela_profile_addresses_v1_' + USER_STORAGE_KEY;
         var PROFILE_ADDRESS_IMPORTED_FLAG = 'arabela_profile_addresses_imported_' + USER_STORAGE_KEY;
         var PROFILE_FIRST_NAME = "{{ profile_first_name|default:''|escapejs }}";
@@ -553,8 +555,7 @@
                 address: clean(preferred.addressLine),
                 city: clean(preferred.city),
                 postal: clean(preferred.postalCode),
-                phone: clean(preferred.phone),
-                gcash_reference: ''
+                phone: clean(preferred.phone)
             };
         }
 
@@ -903,8 +904,6 @@
                     formData.append('city', document.getElementById('city').value.trim());
                     formData.append('postal_code', document.getElementById('postal').value.trim());
                     formData.append('phone', document.getElementById('phone').value.trim());
-                    var gcashRefEl = document.getElementById('gcash_reference');
-                    formData.append('gcash_reference', gcashRefEl ? gcashRefEl.value.trim() : '');
 
                     // Wait for the in-memory copy (a click can land while a large photo is still being
                     // shrunk) and send only that -- never the phone's original file.
@@ -998,14 +997,6 @@
                                 setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
                             })
                             .catch(function () { window.open(qrImg.src, '_blank', 'noopener'); });
-                    });
-                }
-
-                var refInput = document.getElementById('gcash_reference');
-                if (refInput) {
-                    refInput.addEventListener('input', function () {
-                        var cleaned = refInput.value.replace(/[^0-9 ]/g, '');
-                        if (cleaned !== refInput.value) refInput.value = cleaned;
                     });
                 }
             })();
