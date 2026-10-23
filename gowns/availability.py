@@ -203,15 +203,25 @@ def _conflict(row_start, row_end, row):
     return {"kind": "block", "start": row_start, "end": row_end, "label": label, "reference": ""}
 
 
-def check_unit(gown, event: date, *, picked_up_on=None, now=None, backdate_days=0):
+def check_unit(gown, event: date, *, picked_up_on=None, now=None, backdate_days=0, rows=None):
     """Can this exact gown be booked for this event date? -> dict
         ok, reason, event, pickup, return_date, rest_until, conflicts (list of _conflict dicts).
 
     picked_up_on: the customer takes the gown at the counter -- the pick-up is that fixed day (today; the owner may enter an
     earlier day to record a walk-in after the fact). Otherwise the pick-up is planned exactly like checkout: the earliest free
     day up to 2 days before the event, never a day the shop is closed for pick-ups.
-    backdate_days: how far back a date may be (0 for staff, OWNER_BACKDATE_DAYS for the owner)."""
+    backdate_days: how far back a date may be (0 for staff, OWNER_BACKDATE_DAYS for the owner).
+    rows: (bookings, blocks) exactly as unit_busy returns them, already read for a wider range -- calendar_days hands the same
+    rows to every day of a month so the month costs one database read instead of two per day. The rules are the same code either
+    way; None (what every other caller passes) reads what this one date needs."""
     now = now or now_local()
+
+    def busy(start, end):
+        if rows is None:
+            return unit_busy(gown.id, start, end)
+        held, blocked = rows
+        return ([r for r in held if r[0] <= end and r[1] >= start], [r for r in blocked if r[0] <= end and r[1] >= start])
+
     today = now.date()
     return_day = event + timedelta(days=RETURN_DAYS)
     rest_until = return_day + timedelta(days=COOLDOWN_DAYS)
@@ -232,7 +242,7 @@ def check_unit(gown, event: date, *, picked_up_on=None, now=None, backdate_days=
         if picked_up_on > event:
             result["reason"] = PICKUP_AFTER_EVENT
             return result
-        bookings, blocks = unit_busy(gown.id, picked_up_on, rest_until)
+        bookings, blocks = busy(picked_up_on, rest_until)
         in_the_way = [r for r in bookings + blocks if r[0] <= return_day and r[1] >= picked_up_on]
         if in_the_way:
             result["reason"] = "booked"
@@ -255,7 +265,7 @@ def check_unit(gown, event: date, *, picked_up_on=None, now=None, backdate_days=
         return result
     earliest = earliest_pickup_day(now)
     first = max(event - timedelta(days=EARLY_PICKUP_DAYS), earliest)
-    bookings, blocks = unit_busy(gown.id, first, rest_until)
+    bookings, blocks = busy(first, rest_until)
     pickup, reason = plan_unit(
         event, [(s, e) for s, e, _ in bookings], [(s, e) for s, e, _ in blocks], earliest,
     )
@@ -270,6 +280,25 @@ def check_unit(gown, event: date, *, picked_up_on=None, now=None, backdate_days=
         return result
     result.update(ok=True, pickup=pickup)
     return result
+
+
+def calendar_days(gown, first: date, last: date, *, picked_up_on=None, now=None, backdate_days=0):
+    """check_unit's answer for every event date from `first` to `last` -> {date: result}, for the New Booking calendar.
+
+    Each day is judged by check_unit itself (so the calendar can never disagree with the answer given after a date is chosen), fed
+    from one read of everything that holds the gown over the whole stretch those answers can look at."""
+    now = now or now_local()
+    rows = ([], [])
+    if gown.status != Gown.Status.OUT_OF_STOCK:
+        low = first - timedelta(days=EARLY_PICKUP_DAYS)
+        if picked_up_on is not None:
+            low = min(low, picked_up_on)
+        rows = unit_busy(gown.id, low, last + timedelta(days=RETURN_DAYS + COOLDOWN_DAYS))
+    days, day = {}, first
+    while day <= last:
+        days[day] = check_unit(gown, day, picked_up_on=picked_up_on, now=now, backdate_days=backdate_days, rows=rows)
+        day += timedelta(days=1)
+    return days
 
 
 def next_free_event(gown, after: date, now=None, horizon_days=HORIZON_DAYS):

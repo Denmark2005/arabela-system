@@ -7,6 +7,7 @@ from .recovery_views import (
     reset_password_view,
 )
 from .new_booking import (
+    availability_calendar_view,
     availability_check_view,
     booking_account_search_view,
     booking_create_view,
@@ -99,6 +100,7 @@ urlpatterns = [
     path("new-booking/", new_booking_view, name="new_booking"),
     path("api/bookings/gowns/", booking_gown_search_view, name="booking_gown_search"),
     path("api/bookings/check/", availability_check_view, name="availability_check"),
+    path("api/bookings/calendar/", availability_calendar_view, name="availability_calendar"),
     path("api/bookings/customer-hint/", booking_customer_hint_view, name="booking_customer_hint"),
     path("api/bookings/accounts/", booking_account_search_view, name="booking_account_search"),
     path("api/bookings/create/", booking_create_view, name="booking_create"),

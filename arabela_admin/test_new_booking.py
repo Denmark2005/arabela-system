@@ -17,6 +17,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import CustomerEmailLog, CustomerMessage, UserProfile
+from arabela_admin.new_booking import _calendar_why
 from arabela_admin.notifications import build_items
 from gowns import availability
 from gowns.models import COOLDOWN_DAYS, Gown, GownUnavailability
@@ -654,3 +655,161 @@ class ReceiptPhotosInProofPopupsTests(Base):
         add(4)
         for name in pages:
             self.assertLessEqual(queries(name), few[name] + 1, name)
+
+
+class EventDateCalendarTests(Base):
+    """The month calendar under New Booking's Event date box: every day is judged by check_unit itself."""
+
+    def url(self, gown, month, **extra):
+        query = {"gown": gown.id, "month": month}
+        query.update(extra)
+        return reverse("arabela_admin:availability_calendar") + "?" + "&".join(f"{k}={v}" for k, v in query.items())
+
+    def busy_gown(self, number):
+        """A gown with every kind of thing that can be in the way, spread over the next three months."""
+        gown = make_gown(number)
+        self.online_booking(gown, self.today + timedelta(days=5), self.today + timedelta(days=9))                     # confirmed
+        self.online_booking(gown, self.today + timedelta(days=20), self.today + timedelta(days=24),
+                            status=Reservation.Status.PENDING)                                                         # awaiting approval
+        GownUnavailability.objects.create(gown=gown, start_date=self.today + timedelta(days=30),
+                                          end_date=self.today + timedelta(days=32), reason=GownUnavailability.Reason.REPAIR)
+        GownUnavailability.objects.create(gown=gown, start_date=self.today + timedelta(days=50),
+                                          end_date=self.today + timedelta(days=54), reason=GownUnavailability.Reason.COOLDOWN)
+        self.online_booking(gown, self.today + timedelta(days=70), self.today + timedelta(days=74))                   # rest days run into it
+        return gown
+
+    def months(self):
+        first = self.today.replace(day=1)
+        out = []
+        for _ in range(4):
+            out.append(first.strftime("%Y-%m"))
+            first = (first.replace(day=28) + timedelta(days=4)).replace(day=1)
+        return out
+
+    def assert_same_as_check(self, gown, *, now, takes_now=False, picked_up_on=None, owner=False):
+        extra = {}
+        if takes_now:
+            extra["takes_now"] = 1
+            if picked_up_on:
+                extra["picked_up_on"] = picked_up_on.isoformat()
+        backdate = availability.OWNER_BACKDATE_DAYS if owner else 0
+        seen, reasons = 0, set()
+        for month in self.months():
+            with patch("gowns.availability.now_local", return_value=now):
+                response = self.client.get(self.url(gown, month, **extra))
+            self.assertEqual(response.status_code, 200, (month, response.content))
+            payload = response.json()
+            self.assertEqual(payload["today"], now.date().isoformat())
+            for iso, day in payload["days"].items():
+                expected = availability.check_unit(gown, datetime.strptime(iso, "%Y-%m-%d").date(), now=now, backdate_days=backdate,
+                                                   picked_up_on=picked_up_on if takes_now else None)
+                self.assertEqual(day["ok"], expected["ok"], (iso, day, expected["reason"]))
+                if expected["ok"]:
+                    self.assertEqual((day["pickup"], day["returnDate"], day["restUntil"]),
+                                     (expected["pickup"].isoformat(), expected["return_date"].isoformat(), expected["rest_until"].isoformat()), iso)
+                else:
+                    self.assertEqual((day["reason"], day["why"]), (expected["reason"], _calendar_why(expected)), iso)
+                reasons.add("free" if expected["ok"] else expected["reason"])
+                seen += 1
+        self.assertGreaterEqual(seen, 28 * 4)
+        return reasons
+
+    def test_every_day_is_the_same_answer_as_the_check_after_a_date_is_chosen(self):
+        gown = self.busy_gown(300)
+        morning = timezone.localtime().replace(hour=10, minute=0, second=0, microsecond=0)
+        reasons = self.assert_same_as_check(gown, now=morning)
+        self.assertTrue({"free", "booked", "rest", "past"} <= reasons, reasons)      # the month really has every kind of day in it
+
+    def test_the_same_when_the_customer_takes_the_gown_now(self):
+        gown = self.busy_gown(301)
+        morning = timezone.localtime().replace(hour=10, minute=0, second=0, microsecond=0)
+        reasons = self.assert_same_as_check(gown, now=morning, takes_now=True, picked_up_on=self.today)
+        self.assertTrue({"booked", "rest", "past"} <= reasons, reasons)        # leaving today, a booking days away blocks everything after it
+        clean = make_gown(310)
+        self.assertIn("free", self.assert_same_as_check(clean, now=morning, takes_now=True, picked_up_on=self.today))
+
+    def test_the_same_after_five_pm_and_taking_it_now_then(self):
+        gown = self.busy_gown(302)
+        evening = timezone.localtime().replace(hour=18, minute=0, second=0, microsecond=0)
+        self.assert_same_as_check(gown, now=evening)
+        self.assert_same_as_check(gown, now=evening, takes_now=True, picked_up_on=self.today)
+        with patch("gowns.availability.now_local", return_value=evening):
+            days = self.client.get(self.url(gown, self.today.strftime("%Y-%m"))).json()["days"]
+        self.assertEqual(days[self.today.isoformat()]["reason"], availability.CLOSED)
+        self.assertIn("5:00 PM", days[self.today.isoformat()]["why"])
+
+    def test_the_owner_may_look_back_and_record_an_earlier_pick_up(self):
+        gown = self.busy_gown(303)
+        self.client.force_login(self.owner)
+        morning = timezone.localtime().replace(hour=10, minute=0, second=0, microsecond=0)
+        self.assert_same_as_check(gown, now=morning, takes_now=True, picked_up_on=self.today - timedelta(days=3), owner=True)
+
+    def test_a_staff_member_cannot_ask_for_an_earlier_pick_up_day(self):
+        gown = self.busy_gown(304)
+        earlier = (self.today - timedelta(days=3)).isoformat()
+        month = self.today.strftime("%Y-%m")
+        staff_view = self.client.get(self.url(gown, month, takes_now=1, picked_up_on=earlier)).json()["days"]
+        today_view = self.client.get(self.url(gown, month, takes_now=1)).json()["days"]
+        self.assertEqual(staff_view, today_view)
+
+    def test_what_is_in_the_way_is_named(self):
+        gown = make_gown(305)
+        reservation, _ = self.online_booking(gown, self.today + timedelta(days=5), self.today + timedelta(days=9))
+        day = self.today + timedelta(days=6)
+        days = self.client.get(self.url(gown, day.strftime("%Y-%m"))).json()["days"]
+        why = days[day.isoformat()]["why"]
+        self.assertIn(reservation.reference_code, why)
+        self.assertIn("Online Customer", why)
+
+    def test_an_out_of_stock_gown_has_no_free_day(self):
+        gown = make_gown(306, status=Gown.Status.OUT_OF_STOCK)
+        days = self.client.get(self.url(gown, (self.today + timedelta(days=40)).strftime("%Y-%m"))).json()["days"]
+        self.assertTrue(days and all(not d["ok"] and d["reason"] == availability.OUT_OF_STOCK and "Out-of-Stock" in d["why"] for d in days.values()))
+
+    def test_a_booking_made_in_new_booking_shows_on_the_calendar_straight_away(self):
+        gown = make_gown(307)
+        month = self.event.strftime("%Y-%m")
+        self.assertTrue(self.client.get(self.url(gown, month)).json()["days"][self.event.isoformat()]["ok"])
+        saved = self.post_booking([self.line(gown)], receipts=(("Rental + deposit", b"cal1"),))
+        self.assertEqual(saved.status_code, 200, saved.content)
+        day = self.client.get(self.url(gown, month)).json()["days"][self.event.isoformat()]
+        self.assertFalse(day["ok"])
+        self.assertIn(saved.json()["reference_code"], day["why"])
+
+    def test_who_may_ask_and_what_is_refused(self):
+        gown = make_gown(308)
+        month = self.today.strftime("%Y-%m")
+        self.assertEqual(self.client.get(self.url(gown, month)).status_code, 200)
+        self.assertEqual(self.client.get(reverse("arabela_admin:availability_calendar") + f"?gown=999999&month={month}").status_code, 404)
+        last_month = (self.today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
+        for bad in ("", "abc", "2026-13", "2026-00", "2020-01", "2100-01", last_month):
+            response = self.client.get(self.url(gown, bad))
+            self.assertEqual(response.status_code, 400, bad)
+        self.client.force_login(self.customer)
+        self.assertEqual(self.client.get(self.url(gown, month)).status_code, 401)
+        self.client.logout()
+        self.assertEqual(self.client.get(self.url(gown, month)).status_code, 401)
+        self.client.force_login(self.owner)           # the owner may page back as far as the month 30 days ago
+        back = (self.today - timedelta(days=availability.OWNER_BACKDATE_DAYS)).strftime("%Y-%m")
+        self.assertEqual(self.client.get(self.url(gown, back)).status_code, 200)
+
+    def test_nothing_is_written_and_the_cost_does_not_grow_with_the_bookings(self):
+        gown = make_gown(309)
+        month = self.event.strftime("%Y-%m")
+        with CaptureQueriesContext(connection) as few:
+            self.assertEqual(self.client.get(self.url(gown, month)).status_code, 200)
+        for offset in range(3, 40, 3):
+            self.online_booking(gown, self.today + timedelta(days=offset), self.today + timedelta(days=offset + 1))
+        counts = (Reservation.objects.count(), ReservationItem.objects.count(), GownUnavailability.objects.count())
+        with CaptureQueriesContext(connection) as many:
+            self.assertEqual(self.client.get(self.url(gown, month)).status_code, 200)
+        self.assertLessEqual(len(many.captured_queries), len(few.captured_queries) + 2)
+        self.assertEqual(counts, (Reservation.objects.count(), ReservationItem.objects.count(), GownUnavailability.objects.count()))
+
+    def test_the_page_has_the_calendar_and_no_longer_a_typed_date_or_a_check_button(self):
+        html = self.client.get(reverse("arabela_admin:new_booking")).content.decode()
+        self.assertIn("availability-calendar.js", html)
+        self.assertIn(reverse("arabela_admin:availability_calendar"), html)
+        self.assertIn('type="text" readonly inputmode="none"', html)
+        self.assertNotIn(">Check availability<", html)
+        self.assertNotIn('type="date" :min="minEvent(line)"', html)

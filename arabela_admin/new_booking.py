@@ -7,6 +7,8 @@ turning the form into a call to staff_booking.record_booking.
 """
 import json
 import logging
+import re
+from datetime import date, timedelta
 
 from django.contrib.auth import get_user_model
 from django.db.models import Q
@@ -173,6 +175,79 @@ def availability_check_view(request):
     result = availability.check_unit(gown, event, picked_up_on=picked_up_on, now=now, backdate_days=backdate)
     result["picked_up_on"], result["backdate_days"] = picked_up_on, backdate
     return JsonResponse(_check_payload(gown, result, now=now, tag_colors=SiteSettings.load().tag_colors()))
+
+
+CALENDAR_MONTHS_AHEAD = 36       # how far forward the event-date calendar can be paged
+
+
+def _short_day(day):
+    return f"{day:%b} {day.day}"
+
+
+def _calendar_why(result):
+    """One short line for a day that can't be booked -- what staff read when they point at it."""
+    reason = result["reason"]
+    if reason == availability.OUT_OF_STOCK:
+        return "This gown is Out-of-Stock."
+    if reason == availability.PAST:
+        return "Already passed"
+    if reason == availability.CLOSED:
+        return (f"Today's pick-up time ended at {availability.PICKUP_CLOSES.strftime('%I:%M %p').lstrip('0')}. "
+                "If the customer is here, tick \"Customer takes the gown now\".")
+    if reason == availability.PICKUP_IN_FUTURE:
+        return "The gown leaves today, so the pick-up day can't be later than today."
+    if reason == availability.PICKUP_AFTER_EVENT:
+        return "The pick-up day can't be after the event date."
+    parts = []
+    for c in result["conflicts"][:2]:
+        if c["kind"] == "booking":
+            parts.append(f"{c['label']} has this gown {_short_day(c['start'])} – {_short_day(c['end'])}")
+        else:
+            parts.append(f"{c['label']} ({_short_day(c['start'])} – {_short_day(c['end'])})")
+    if len(result["conflicts"]) > 2:
+        parts.append(f"and {len(result['conflicts']) - 2} more")
+    names = "; ".join(parts)
+    if reason == "rest":
+        return "Its rest days would run into the next booking" + (f": {names}" if names else ".")
+    return names or "Already taken"
+
+
+def availability_calendar_view(request):
+    """GET ?gown=<id>&month=YYYY-MM[&takes_now=1[&picked_up_on=YYYY-MM-DD]] -> every event date of that month for that exact gown,
+    judged by the same rules as the check made after a date is chosen. Read-only: nothing is saved. Feeds New Booking's calendar."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    try:
+        gown = Gown.objects.get(id=int(request.GET.get("gown") or 0))
+    except (Gown.DoesNotExist, TypeError, ValueError):
+        return JsonResponse({"error": "That gown wasn't found. Search for it again."}, status=404)
+    month = re.fullmatch(r"(\d{4})-(\d{2})", request.GET.get("month") or "")
+    try:
+        first = date(int(month.group(1)), int(month.group(2)), 1) if month else None
+    except ValueError:
+        first = None
+    now = availability.now_local()
+    today = now.date()
+    backdate = _backdate_days(request)
+    horizon = today + timedelta(days=31 * CALENDAR_MONTHS_AHEAD)
+    if first is None or first > horizon or first < (today - timedelta(days=backdate)).replace(day=1):
+        return JsonResponse({"error": "That month can't be shown."}, status=400)
+    last = (first.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+    picked_up_on = None
+    if request.GET.get("takes_now") in ("1", "true", "on"):
+        picked_up_on = staff_booking._date(request.GET.get("picked_up_on")) or today
+        if picked_up_on != today and not _is_owner(request):
+            picked_up_on = today        # the same rule as the check made after a date is chosen
+    results = availability.calendar_days(gown, first, last, picked_up_on=picked_up_on, now=now, backdate_days=backdate)
+    days = {}
+    for day, result in results.items():
+        if result["ok"]:
+            days[day.isoformat()] = {"ok": True, "pickup": result["pickup"].isoformat(),
+                                     "returnDate": result["return_date"].isoformat(), "restUntil": result["rest_until"].isoformat()}
+        else:
+            days[day.isoformat()] = {"ok": False, "reason": result["reason"], "why": _calendar_why(result)}
+    return JsonResponse({"month": first.strftime("%Y-%m"), "today": today.isoformat(), "days": days,
+                         "gown": f"{gown.name} ({gown.gown_id})"})
 
 
 def booking_customer_hint_view(request):

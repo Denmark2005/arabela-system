@@ -248,7 +248,7 @@
               </div>
             </div>
             <div>
-              <input class="edit-input h-11 w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none" id="phone-input" type="tel" placeholder="Phone (+63)" />
+              <input class="edit-input h-11 w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none" id="phone-input" type="tel" inputmode="numeric" placeholder="Phone (+63)" data-phone-digits />
               <p class="hidden field-error-text mt-1" id="phone-error"></p>
             </div>
             <label class="flex items-center gap-3 pt-1 text-base text-secondary">
@@ -916,5 +916,7 @@
     </script>
   {% include "partials/reservation_hold_banner.html" %}
 {% include "partials/dialog.html" %}
+{% load static %}
+<script src="{% static 'js/phone-digits.js' %}?v={{ site_asset_version }}"></script>
 </body>
 </html>

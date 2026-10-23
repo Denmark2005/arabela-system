@@ -178,7 +178,7 @@
           <label class="res-label" for="postal">Postal Code</label>
         </div>
         <div class="res-field relative md:col-span-2">
-          <input class="res-input peer" id="phone" placeholder=" " type="tel" inputmode="numeric" autocomplete="tel">
+          <input class="res-input peer" id="phone" placeholder=" " type="tel" inputmode="numeric" autocomplete="tel" data-phone-digits>
           <label class="res-label" for="phone">Cellphone No.</label>
         </div>
       </div>
@@ -409,6 +409,7 @@
 {# The sizes each gown comes in: this page hides the search overlay, whose catalog says it elsewhere (reservation-flow.js arabelaSizesOf). #}
 {{ gown_sizes|json_script:"gown-sizes-data" }}
 <script src="{% static 'js/checkout-fields.js' %}?v={{ site_asset_version }}"></script>
+<script src="{% static 'js/phone-digits.js' %}?v={{ site_asset_version }}"></script>
 <script>
     (function () {
         var RESERVATION_FIELD_IDS = ['first_name', 'last_name', 'address', 'city', 'postal', 'phone'];

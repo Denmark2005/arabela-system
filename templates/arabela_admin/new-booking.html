@@ -31,6 +31,8 @@
     .nb-req { color: #d92d20; }
     .nb-help { margin: .3rem 0 0; font-size: .75rem; color: #667085; line-height: 1.4; }
     .dark .nb-help { color: #98a2b3; }
+    .nb-datebtn { cursor: pointer; }
+    .nb-datebtn:disabled { cursor: not-allowed; opacity: .7; }
     .nb-input { display: block; width: 100%; box-sizing: border-box; height: 2.75rem; padding: .55rem .8rem; border: 1px solid #d0d5dd; border-radius: .6rem; background: #fff; color: #1d2939; font: inherit; font-size: .875rem; }
     textarea.nb-input { height: auto; min-height: 4.5rem; resize: vertical; }
     .dark .nb-input { background: #0c111d; border-color: #344054; color: #f2f4f7; color-scheme: dark; }
@@ -1175,7 +1177,7 @@
                     </div>
                     <div>
                       <label class="nb-label" for="nb-phone">Mobile number <span class="nb-req">*</span></label>
-                      <input class="nb-input" id="nb-phone" type="tel" inputmode="tel" maxlength="20" autocomplete="off" x-model="phone" @input.debounce.500ms="loadHint()" placeholder="0917 123 4567">
+                      <input class="nb-input" id="nb-phone" type="tel" inputmode="numeric" maxlength="20" autocomplete="off" data-phone-digits x-model="phone" @input.debounce.500ms="loadHint()" placeholder="09171234567">
                     </div>
                   </div>
 
@@ -1280,25 +1282,27 @@
                       <div class="nb-grid nb-grid--2" style="margin-top: 1rem;">
                         <div>
                           <label class="nb-label" :for="'nb-ev-' + line.key">Event date <span class="nb-req">*</span></label>
-                          <input class="nb-input" :id="'nb-ev-' + line.key" type="date" :min="minEvent(line)" x-model="line.event" @change="queueCheck(line, 0)">
+                          <input class="nb-input nb-datebtn" :id="'nb-ev-' + line.key" type="text" readonly inputmode="none" autocomplete="off"
+                                 :placeholder="line.gown ? 'Choose the event date' : 'Choose the gown first'" :value="eventLabel(line)" :disabled="!line.gown"
+                                 aria-haspopup="dialog" :aria-expanded="line.calOpen ? 'true' : 'false'"
+                                 @click="toggleCal(line, $event.target)" @keydown.enter.prevent="toggleCal(line, $event.target)"
+                                 @keydown.space.prevent="toggleCal(line, $event.target)" @keydown.down.prevent="openCal(line, $event.target)">
                           <p class="nb-help">The day the customer wears it. Pick-up is planned up to 2 days before, and the return is 2 days after.</p>
+                          <div :id="'nb-cal-' + line.key" hidden></div>
                         </div>
                         <div>
-                          <label class="nb-check" style="margin-top: 1.6rem;"><input type="checkbox" x-model="line.takesNow" @change="queueCheck(line, 0)"> Customer takes the gown now</label>
+                          <label class="nb-check" style="margin-top: 1.6rem;"><input type="checkbox" x-model="line.takesNow" @change="closeCal(line); queueCheck(line, 0)"> Customer takes the gown now</label>
                           <p class="nb-help">Tick this when the customer pays and leaves with the gown today. It's marked picked up right away.</p>
                           {% if is_owner %}
                           <div x-show="line.takesNow" x-cloak style="margin-top: .6rem;">
                             <label class="nb-label" :for="'nb-pu-' + line.key">Picked up on</label>
-                            <input class="nb-input" :id="'nb-pu-' + line.key" type="date" :min="ownerMin" :max="TODAY" x-model="line.pickedUpOn" @change="queueCheck(line, 0)">
+                            <input class="nb-input" :id="'nb-pu-' + line.key" type="date" :min="ownerMin" :max="TODAY" x-model="line.pickedUpOn" @change="closeCal(line); queueCheck(line, 0)">
                             <p class="nb-help">Owner only: an earlier day records a walk-in that wasn't entered on the day.</p>
                           </div>
                           {% endif %}
                         </div>
                       </div>
 
-                      <div class="nb-actions" style="justify-content: flex-start; margin-top: .75rem;">
-                        <button type="button" class="nb-btn nb-btn--ghost nb-btn--small" :disabled="!line.gown || !line.event || line.checking" @click="runCheck(line)">Check availability</button>
-                      </div>
                       <template x-if="line.checking">
                         <div class="nb-verdict nb-verdict--wait" aria-live="polite"><span class="nb-spinner"></span> Checking the calendar…</div>
                       </template>
@@ -1426,6 +1430,7 @@
       var URLS = {
         gowns: '{% url "arabela_admin:booking_gown_search" %}',
         check: '{% url "arabela_admin:availability_check" %}',
+        calendar: '{% url "arabela_admin:availability_calendar" %}',
         hint: '{% url "arabela_admin:booking_customer_hint" %}',
         accounts: '{% url "arabela_admin:booking_account_search" %}',
         create: '{% url "arabela_admin:booking_create" %}'
@@ -1448,7 +1453,7 @@
       function newLine() {
         return {
           key: ++keySeq, query: '', results: [], searching: false, searched: false, searchSeq: 0,
-          gown: null, event: '', takesNow: false, pickedUpOn: TODAY,
+          gown: null, event: '', takesNow: false, pickedUpOn: TODAY, calOpen: false,
           check: null, checking: false, checkError: '', checkSeq: 0, timer: null
         };
       }
@@ -1545,17 +1550,58 @@
           });
         },
         pickGown: function (line, gown) {
+          this.closeCal(line);
           line.gown = gown; line.results = []; line.query = ''; line.searched = false;
           this.queueCheck(line, 0);
         },
         changeGown: function (line) {
+          this.closeCal(line);
           line.gown = null; line.check = null; line.checkError = '';
           var key = line.key;
           this.$nextTick(function () { var el = document.getElementById('nb-gq-' + key); if (el) { el.focus(); } });
         },
         addLine: function () { if (this.lines.length < this.MAX_GOWNS) { this.lines.push(newLine()); } },
-        removeLine: function (index) { this.lines.splice(index, 1); },
+        removeLine: function (index) { this.closeCal(this.lines[index]); this.lines.splice(index, 1); },
         useDate: function (line, iso) { line.event = iso; this.runCheck(line); },
+
+        // ---- the event-date calendar (static/js/availability-calendar.js): one month of THIS gown, read from the server ----
+        eventLabel: function (line) {
+          var cal = window.arabelaAvailabilityCalendar;
+          return line.event && cal ? cal.longDay(line.event) : (line.event || '');
+        },
+        calRoot: function (line) { return document.getElementById('nb-cal-' + line.key); },
+        toggleCal: function (line, anchor) {
+          var cal = window.arabelaAvailabilityCalendar;
+          if (cal && cal.isOpen(this.calRoot(line))) { this.closeCal(line); } else { this.openCal(line, anchor); }
+        },
+        openCal: function (line, anchor) {
+          var cal = window.arabelaAvailabilityCalendar, root = this.calRoot(line), self = this;
+          if (!cal || !root || !line.gown) { return; }
+          cal.open(root, {
+            anchor: anchor,
+            today: TODAY,
+            min: this.minEvent(line),
+            selected: line.event || '',
+            title: line.gown.name + ' (' + line.gown.gownId + ')',
+            load: function (month) { return self.loadCalendarMonth(line, month); },
+            onPick: function (iso) { line.event = iso; self.queueCheck(line, 0); },
+            onClose: function () { line.calOpen = false; }
+          });
+          line.calOpen = true;
+        },
+        closeCal: function (line) {
+          var cal = window.arabelaAvailabilityCalendar, root = line && this.calRoot(line);
+          if (cal && root && cal.isOpen(root)) { cal.close(root, false); }
+          if (line) { line.calOpen = false; }
+        },
+        loadCalendarMonth: function (line, month) {
+          var params = { gown: line.gown.id, month: month };
+          if (line.takesNow) {
+            params.takes_now = '1';
+            params.picked_up_on = IS_OWNER ? (line.pickedUpOn || TODAY) : TODAY;
+          }
+          return getJSON(URLS.calendar + '?' + new URLSearchParams(params));
+        },
 
         // ---- availability ----
         queueCheck: function (line, delay) {
@@ -1681,6 +1727,8 @@
     }
   </script>
   <script defer src="{% static 'js/picked-file.js' %}?v={{ site_asset_version }}"></script>
+  <script defer src="{% static 'js/phone-digits.js' %}?v={{ site_asset_version }}"></script>
+  <script defer src="{% static 'js/availability-calendar.js' %}?v={{ site_asset_version }}"></script>
   <script defer src="{% static 'arabela_admin/bundle.js' %}?v={{ admin_asset_version }}"></script>
   <script defer src="{% static 'arabela_admin/global-search.js' %}"></script>
 
