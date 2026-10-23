@@ -1352,7 +1352,7 @@
 
 <div x-show="openReceiptModal" x-cloak class="fixed inset-0 flex items-center justify-center p-5 overflow-y-auto z-99999">
   <div class="modal-close-btn fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]"></div>
-  <div @click.outside="openReceiptModal = false" class="no-scrollbar relative w-full overflow-y-auto rounded-3xl bg-white p-4 dark:bg-gray-900 lg:p-8" :style="(receiptPreview.proofUrl || (receiptPreview.receipts || []).length) ? 'max-width: min(1100px, 92vw);' : 'max-width: 700px;'">
+  <div @click.outside="openReceiptModal = false" x-effect="if (openReceiptModal) { $nextTick(function () { $el.scrollTop = 0; }); }" class="no-scrollbar relative w-full overflow-y-auto rounded-3xl bg-white p-4 dark:bg-gray-900 lg:p-8" :style="(receiptPreview.proofUrl || (receiptPreview.receipts || []).length) ? 'max-width: min(1100px, 92vw); max-height: calc(100vh - 2.5rem); max-height: calc(100dvh - 2.5rem);' : 'max-width: 700px; max-height: calc(100vh - 2.5rem); max-height: calc(100dvh - 2.5rem);'">
     <button
       type="button"
       @click="openReceiptModal = false"

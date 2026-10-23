@@ -636,6 +636,22 @@ class ReceiptPhotosInProofPopupsTests(Base):
         self.assertIn("No proof uploaded", html)
         self.assertNotIn("Shop receipt attached", html)
 
+    def test_every_receipt_window_fits_the_screen_scrolls_inside_and_opens_at_the_top(self):
+        """Several tall receipt photos made the centred window taller than the screen, so its top (the first photo) could not be
+        scrolled to. The limit is inside the :style string (Alpine replaces the whole style attribute with it), for both widths."""
+        self.paid_booking(180, (("Rental", b"w1"), ("Deposit", b"w2")))
+        for name, flag, var in (("payment_verification", "openReceiptModal", "viewingPayment"),
+                                ("security_deposits", "openReceiptModal", "viewingPayment"),
+                                ("rental_history", "openProofModal", "viewingRental"),
+                                ("dashboard", "openReceiptModal", "receiptPreview")):
+            with self.subTest(page=name):
+                html = self.client.get(reverse(f"arabela_admin:{name}")).content.decode()
+                self.assertEqual(html.count("max-width: 700px; max-height: calc(100vh - 2.5rem); max-height: calc(100dvh - 2.5rem);"), 1)
+                self.assertEqual(html.count("max-width: min(1100px, 92vw); max-height: calc(100vh - 2.5rem); max-height: calc(100dvh - 2.5rem);"), 1)
+                self.assertIn(f'<div @click.outside="{flag} = false" x-effect="if ({flag}) {{ $nextTick(function () {{ $el.scrollTop = 0; }}); }}"', html)
+                self.assertNotIn('style="max-height: calc(100vh - 2.5rem)', html)           # a static style="" would be wiped by :style
+                self.assertIn(f"{var}.proofUrl || ({var}.receipts || []).length", html)         # the width rule itself is as before
+
     def test_the_pages_do_not_ask_the_database_once_per_booking(self):
         numbers = iter(range(200, 400))
 

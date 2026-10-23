@@ -1248,7 +1248,7 @@
 
             <div x-show="openProofModal" x-cloak class="fixed inset-0 flex items-center justify-center p-5 overflow-y-auto z-99999">
               <div class="modal-close-btn fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]"></div>
-              <div @click.outside="openProofModal = false" :style="(viewingRental.proofUrl || (viewingRental.receipts || []).length) ? 'max-width: min(1100px, 92vw);' : 'max-width: 700px;'" class="no-scrollbar relative w-full overflow-y-auto rounded-3xl bg-white p-4 dark:bg-gray-900 lg:p-8">
+              <div @click.outside="openProofModal = false" x-effect="if (openProofModal) { $nextTick(function () { $el.scrollTop = 0; }); }" :style="(viewingRental.proofUrl || (viewingRental.receipts || []).length) ? 'max-width: min(1100px, 92vw); max-height: calc(100vh - 2.5rem); max-height: calc(100dvh - 2.5rem);' : 'max-width: 700px; max-height: calc(100vh - 2.5rem); max-height: calc(100dvh - 2.5rem);'" class="no-scrollbar relative w-full overflow-y-auto rounded-3xl bg-white p-4 dark:bg-gray-900 lg:p-8">
                 <button
                   type="button"
                   @click="openProofModal = false"
