@@ -176,7 +176,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits' || page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -614,6 +614,84 @@
           <!-- Menu Item Staff Management -->
           {% endif %}
 
+          <!-- Menu Item Payments & Deposits -->
+          <li>
+            <a
+              href="#"
+              @click.prevent="selected = (selected === 'PaymentsDeposits' ? '' : 'PaymentsDeposits')"
+              class="menu-item group"
+              :class=" (selected === 'PaymentsDeposits') ? 'menu-item-active' : 'menu-item-inactive'"
+            >
+              <svg
+                :class="(selected === 'PaymentsDeposits') ? 'menu-item-icon-active'  :'menu-item-icon-inactive'"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path fill-rule="evenodd" clip-rule="evenodd" d="M5 5a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3V8a3 3 0 0 0-3-3H5Zm-1 5h16v2H4v-2Zm2 5.5a.75.75 0 0 1 .75-.75h3.5a.75.75 0 0 1 0 1.5h-3.5A.75.75 0 0 1 6 15.5Z" fill=""/>
+              </svg>
+
+              <span
+                class="menu-item-text"
+                :class="sidebarToggle ? 'lg:hidden' : ''"
+              >
+                Payments & Deposits
+              </span>
+
+              <svg
+                class="menu-item-arrow"
+                :class="[(selected === 'PaymentsDeposits') ? 'menu-item-arrow-active' : 'menu-item-arrow-inactive', sidebarToggle ? 'lg:hidden' : '' ]"
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M4.79175 7.39584L10.0001 12.6042L15.2084 7.39585"
+                  stroke=""
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </a>
+
+            <!-- Dropdown Menu Start -->
+            <div
+              class="transform overflow-hidden translate"
+              :class="(selected === 'PaymentsDeposits') ? 'block' :'hidden'"
+            >
+              <ul
+                :class="sidebarToggle ? 'lg:hidden' : 'flex'"
+                class="menu-dropdown mt-2 flex flex-col gap-1 pl-9"
+              >
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:payment_verification' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'payment-verification' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Payment Verification
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:security_deposits' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'security-deposits' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Security Deposits
+                  </a>
+                </li>
+              </ul>
+            </div>
+            <!-- Dropdown Menu End -->
+          </li>
+          <!-- Menu Item Payments & Deposits -->
+
           <!-- Menu Item Financial Report -->
           <li>
             <a
@@ -668,24 +746,6 @@
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
                 class="menu-dropdown mt-2 flex flex-col gap-1 pl-9"
               >
-                <li>
-                  <a
-                    href="{% url 'arabela_admin:payment_verification' %}"
-                    class="menu-dropdown-item group"
-                    :class="page === 'payment-verification' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Payment Verification
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="{% url 'arabela_admin:security_deposits' %}"
-                    class="menu-dropdown-item group"
-                    :class="page === 'security-deposits' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Security Deposits
-                  </a>
-                </li>
                 <li>
                   <a
                     href="{% url 'arabela_admin:reservation_records' %}"
