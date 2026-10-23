@@ -139,7 +139,7 @@ class DropdownContentTests(ActiveDropdownBase):
         self.assertNotIn(f'data-item-id="{o3.id}">Mark', html)                           # already back
         self.assertEqual(html.count('class="resv-remind-btn'), 2)                        # the account holder's two gowns still to come back
         self.assertEqual(html.count('onclick="sendReminder(this)"'), 2)
-        self.assertEqual(html.count(">Call</a>"), 2)                                     # the walk-in has no account: Call instead of Remind
+        self.assertNotIn(">Call</a>", html)                                              # no Call button anywhere: the walk-in has no Remind either, staff dial the number on the line
         self.assertEqual(html.count(">Cancel gown</button>"), 3)                         # the walk-in's two waiting gowns + the account holder's one
         # per booking
         self.assertEqual(html.count(">View Customer</button>"), 2)

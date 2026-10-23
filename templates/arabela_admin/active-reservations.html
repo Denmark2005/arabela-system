@@ -1291,12 +1291,8 @@
                               data-customer="{{ r.display_customer_name }}"
                               data-suggested="{{ item.suggested_reminder }}"
                               onclick="sendReminder(this)">Remind</button>
-                            {% elif r.phone %}
-                            <!-- No website account (a walk-in, Facebook or phone booking): a message can't reach them, so staff call. -->
-                            <a href="tel:{{ r.phone }}"
-                              class="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
-                              title="No website account: call the customer">Call</a>
                             {% endif %}
+                            <!-- No website account (a walk-in): no Remind button, a message can't reach them. Staff call the number on the booking's line. -->
 
                             {% if item.stage == "Pick-up" %}
                             <!-- One click records today as the pick-up. The server only allows it on or
