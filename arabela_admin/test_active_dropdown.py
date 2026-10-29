@@ -28,7 +28,8 @@ class ActiveDropdownBase(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff = User.objects.create_user("ad_staff", password="x", is_staff=True, first_name="Maria", last_name="Cruz")
-        UserProfile.objects.update_or_create(user=cls.staff, defaults={"role": UserProfile.Role.STAFF})
+        # a Manager sees every button on the page (Cancel booking / Cancel gown are not shown to a Staff account)
+        UserProfile.objects.update_or_create(user=cls.staff, defaults={"role": UserProfile.Role.MANAGER})
         cls.customer = User.objects.create_user("ad_customer", email="ad.customer@gmail.com", password="x")
         UserProfile.objects.update_or_create(user=cls.customer, defaults={"display_name": "Account Holder"})
 

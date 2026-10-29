@@ -264,6 +264,7 @@ class GownDeleteTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff = User.objects.create_user(username="delete_test_staff", password="x", is_staff=True)
+        UserProfile.objects.update_or_create(user=cls.staff, defaults={"role": UserProfile.Role.MANAGER})
         cls.customer = User.objects.create_user(username="delete_test_customer", password="x")
 
     def setUp(self):
@@ -839,6 +840,7 @@ class CustomerFlagTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff = User.objects.create_user(username="flag_test_staff", password="x", is_staff=True)
+        UserProfile.objects.update_or_create(user=cls.staff, defaults={"role": UserProfile.Role.MANAGER})
         cls.customer = User.objects.create_user(username="flag_test_customer", password="x")
 
     def setUp(self):
@@ -1251,6 +1253,7 @@ class GownBulkActionTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff = User.objects.create_user(username="bulk_test_staff", password="x", is_staff=True)
+        UserProfile.objects.update_or_create(user=cls.staff, defaults={"role": UserProfile.Role.MANAGER})
         cls.customer = User.objects.create_user(username="bulk_test_customer", password="x")
 
     def setUp(self):
@@ -3353,6 +3356,7 @@ class GownRemovalLogTests(TestCase):
             username="removal_staff", password="x", is_staff=True,
             first_name="Maria", last_name="Cruz",
         )
+        UserProfile.objects.update_or_create(user=cls.staff, defaults={"role": UserProfile.Role.MANAGER})
         cls.customer = User.objects.create_user(username="removal_customer", password="x")
 
     def setUp(self):
@@ -4995,6 +4999,7 @@ class ReceiptDeleteTests(TestCase):
         cls.staff = User.objects.create_user(
             username="receipt_del_staff", password="x", is_staff=True, first_name="Rita", last_name="Reyes",
         )
+        UserProfile.objects.update_or_create(user=cls.staff, defaults={"role": UserProfile.Role.MANAGER})
         cls.customer = User.objects.create_user(username="receipt_del_customer", password="x")
 
     def setUp(self):
@@ -5077,6 +5082,7 @@ class CustomerUnlockTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff = User.objects.create_user(username="unlock_test_staff", password="x", is_staff=True)
+        UserProfile.objects.update_or_create(user=cls.staff, defaults={"role": UserProfile.Role.MANAGER})
         cls.customer = User.objects.create_user(username="unlock_test_customer", password="x")
         cls.other = User.objects.create_user(username="unlock_test_other", password="x")
 

@@ -3,6 +3,7 @@ import os
 from django.conf import settings
 
 from accounts.models import UserProfile
+from accounts.roles import can_manage
 from arabela_admin import notifications
 
 
@@ -69,6 +70,7 @@ def admin_user(request):
         "admin_avatar_position_x": 50,
         "admin_avatar_position_y": 50,
         "admin_is_owner": False,
+        "admin_can_manage": False,
         "admin_role": "",
     }
 
@@ -98,6 +100,9 @@ def admin_user(request):
         "admin_avatar_position_x": pos_x,
         "admin_avatar_position_y": pos_y,
         "admin_is_owner": is_owner,
+        # Manager or owner: shows the Delete / Cancel booking / Flag / Delete receipt buttons that a Staff account does not get.
+        # The SAME rule the server enforces (accounts.roles.can_manage), so a button is never shown that the server would refuse.
+        "admin_can_manage": can_manage(user, profile),
         "admin_role": role,
     }
 

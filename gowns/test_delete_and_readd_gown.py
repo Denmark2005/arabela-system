@@ -13,6 +13,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from accounts.models import UserProfile
 from gowns.models import Gown, GownRemoval
 from reservations.models import Reservation, ReservationItem
 
@@ -26,6 +27,7 @@ class DeleteAndReaddTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff = User.objects.create_user("readd_staff", password="x", is_staff=True)
+        UserProfile.objects.update_or_create(user=cls.staff, defaults={"role": UserProfile.Role.MANAGER})
         cls.customer = User.objects.create_user("readd_customer", password="x")
 
     def setUp(self):

@@ -2295,7 +2295,8 @@
               </button>
             </div>
 
-            <!-- Delete: two clicks (Delete Receipt, then Yes, delete) so it can't happen by accident. -->
+            {% if admin_can_manage %}
+            <!-- Delete: two clicks (Delete Receipt, then Yes, delete) so it can't happen by accident. Manager or owner only. -->
             <div class="mt-5 border-t border-gray-100 pt-4 dark:border-gray-800">
               <template x-if="!confirmingReceiptDelete">
                 <button type="button" @click="confirmingReceiptDelete = true" style="color: #F04438;"
@@ -2317,6 +2318,7 @@
                 </div>
               </template>
             </div>
+            {% endif %}
           </div>
         </template>
       </div>

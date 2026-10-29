@@ -4,8 +4,10 @@ from django.db import models
 
 class UserProfile(models.Model):
     class Role(models.TextChoices):
-        # Admin-panel access tier. Owner = full access (the shop owner / superuser);
-        # Manager & Staff are the restricted tier -- everything except Staff Management.
+        # Admin-panel access tier. Owner = full access (the shop owner / superuser).
+        # Manager = the daily work plus the sensitive actions (delete gowns, cancel a confirmed booking,
+        # flag customers, delete receipt photos); Staff = the daily work only. Neither can open Staff
+        # Management, Categories or the shop settings. The rule lives in accounts/roles.py (can_manage).
         # Irrelevant for ordinary customers (they never reach the admin panel), who keep
         # the default STAFF value harmlessly since they have no is_staff flag.
         OWNER = 'Owner', 'Owner'

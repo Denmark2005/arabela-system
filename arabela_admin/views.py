@@ -33,6 +33,7 @@ import json
 
 from accounts import login_throttle, owner_recovery
 from accounts.models import CustomerMessage, UserProfile
+from accounts.roles import MANAGER_ONLY_MESSAGE, can_manage, staff_display_name
 from accounts.services import CANCELLATION_FLAG_THRESHOLD
 from gowns import availability
 from gowns.models import (
@@ -94,6 +95,30 @@ def _is_owner(request):
     return bool(profile and profile.role == UserProfile.Role.OWNER)
 
 
+def _can_manage(request):
+    """Manager or owner: the tiers allowed the sensitive actions (delete gowns, cancel a confirmed booking, flag customers and
+    remove a cancellation lock, delete receipt photos). A Staff account is not. The rule lives in accounts.roles, which the
+    templates' hidden buttons use too, so the two can never disagree."""
+    return can_manage(request.user)
+
+
+def _manager_error(request):
+    """None when this request may do a Manager-only action; else the JSON refusal to return -- 401 when nobody admin is signed in,
+    403 "Only a Manager or the owner can do that." for a Staff account (the buttons are hidden for them, so this is only
+    reached by a forced request)."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    if not _can_manage(request):
+        return JsonResponse({"error": MANAGER_ONLY_MESSAGE}, status=403)
+    return None
+
+
+def _receipts_prefetch(path="receipt_records"):
+    """Prefetch a booking's shop receipts together with the staff member who attached each one, in one query: the proof windows
+    show "by <name>" for every receipt (Reservation.receipt_proofs), and this keeps that from costing a query per receipt."""
+    return Prefetch(path, queryset=ReceiptRecord.objects.select_related("uploaded_by"))
+
+
 def _require_owner(view_func):
     """Owner-only gate. Page (GET) views redirect a non-owner staffer to the dashboard;
     API (POST) views return 403 JSON so the front-end can surface a clean error. The
@@ -128,7 +153,7 @@ def dashboard_view(request):
     quick_verify_reservations = (
         Reservation.objects.filter(status=Reservation.Status.PENDING)
         .select_related("customer__profile")
-        .prefetch_related("receipt_records")
+        .prefetch_related(_receipts_prefetch())
         .order_by("-created_at")[:5]
     )
 
@@ -621,7 +646,7 @@ def payment_verification_view(request):
     reservations = (
         Reservation.objects.all()
         .select_related("customer__profile")
-        .prefetch_related("receipt_records")
+        .prefetch_related(_receipts_prefetch())
         .order_by("-created_at")
     )
     now = timezone.now()
@@ -677,7 +702,7 @@ def rental_history_view(request):
         )
         .exclude(stage=ReservationItem.Stage.CANCELLED)
         .select_related("reservation__customer__profile")
-        .prefetch_related("reservation__receipt_records")
+        .prefetch_related(_receipts_prefetch("reservation__receipt_records"))
         .order_by("-rental_date", "-id")
     )
 
@@ -723,7 +748,7 @@ def security_deposits_view(request):
     reservations = list(
         Reservation.objects.filter(status__in=_SCHEDULED_STATUSES)
         .select_related("customer__profile")
-        .prefetch_related("items", "receipt_records")
+        .prefetch_related("items", _receipts_prefetch())
     )
     for r in reservations:
         r.all_items_returned = all(
@@ -843,9 +868,10 @@ def receipt_delete_view(request, receipt_id):
     """Delete a manual receipt photo -- the wrong booking, a duplicate, a bad scan nobody wants.
     Removes the record and its stored file, and leaves a STAFF-ONLY line on the booking's timeline
     saying who deleted it and when, so a financial record never vanishes without a trace. The
-    booking itself is untouched."""
-    if not _is_admin_staff(request):
-        return JsonResponse({"error": "Unauthorized"}, status=401)
+    booking itself is untouched. Manager or owner only: a deleted receipt photo can't be brought back."""
+    refused = _manager_error(request)
+    if refused:
+        return refused
     try:
         receipt = ReceiptRecord.objects.select_related("reservation").get(id=receipt_id)
     except ReceiptRecord.DoesNotExist:
@@ -1678,8 +1704,10 @@ def _remove_gown(gown, reason, note, user):
 
 @require_http_methods(["POST"])
 def gown_delete_view(request, gown_id):
-    if not _is_admin_staff(request):
-        return JsonResponse({"error": "Unauthorized"}, status=401)
+    # Manager or owner only (see accounts.roles): deleting a gown retires its number for good.
+    refused = _manager_error(request)
+    if refused:
+        return refused
     try:
         gown = Gown.objects.get(id=gown_id)
     except Gown.DoesNotExist:
@@ -1740,6 +1768,9 @@ def gown_bulk_action_view(request):
     action = data.get("action")
     if action not in ("status", "delete", "checked"):
         return JsonResponse({"error": "Unknown bulk action."}, status=400)
+    # Changing a status or marking gowns as checked stays everyday work; only deleting needs a Manager or the owner.
+    if action == "delete" and not _can_manage(request):
+        return JsonResponse({"error": MANAGER_ONLY_MESSAGE}, status=403)
 
     raw_ids = data.get("ids")
     if not isinstance(raw_ids, list) or not raw_ids:
@@ -2691,9 +2722,11 @@ def reservation_cancel_view(request, pk):
     """Cancel an approved booking that nobody has picked up (a no-show, or the customer phoned to cancel).
 
     The deposit is not refunded; the booking stays on record as Cancelled. Everything it does -- and every refusal -- is in
-    reservations.cancellation.cancel_by_staff, so this is only the web wrapper."""
-    if not _is_admin_staff(request):
-        return JsonResponse({"error": "Unauthorized"}, status=401)
+    reservations.cancellation.cancel_by_staff, so this is only the web wrapper. Manager or owner only: cancelling decides whether the
+    customer keeps the security deposit."""
+    refused = _manager_error(request)
+    if refused:
+        return refused
     try:
         data = json.loads(request.body or "{}")
     except json.JSONDecodeError:
@@ -2719,9 +2752,10 @@ def reservation_cancel_gowns_view(request, pk):
 
     Sends the exact gowns ("items": [ids]) the staff member saw in the confirm window, so a gown that changed in the meantime is
     refused instead of being cancelled by surprise. Everything it does -- and every refusal -- is in
-    reservations.cancellation.cancel_gowns_by_staff, so this is only the web wrapper."""
-    if not _is_admin_staff(request):
-        return JsonResponse({"error": "Unauthorized"}, status=401)
+    reservations.cancellation.cancel_gowns_by_staff, so this is only the web wrapper. Manager or owner only, like cancelling a booking."""
+    refused = _manager_error(request)
+    if refused:
+        return refused
     try:
         data = json.loads(request.body or "{}")
     except json.JSONDecodeError:
@@ -3233,8 +3267,10 @@ def clients_view(request):
 
 @require_http_methods(["POST"])
 def customer_flag_view(request, user_id):
-    if not _is_admin_staff(request):
-        return JsonResponse({"error": "Unauthorized"}, status=401)
+    # Flagging and unflagging: Manager or owner only (see accounts.roles).
+    refused = _manager_error(request)
+    if refused:
+        return refused
     try:
         customer = User.objects.get(id=user_id, is_staff=False, is_superuser=False)
     except User.DoesNotExist:
@@ -3272,9 +3308,10 @@ def customer_unlock_view(request, user_id):
 
     For a lock that came from a site problem rather than real cancelling. Only the lock goes: the
     attempt count stays, and since each lock step fires once, the next one is still the 2-hour lock at 10
-    attempts. Same permission as flagging -- any admin staff -- and only ever this one account's row."""
-    if not _is_admin_staff(request):
-        return JsonResponse({"error": "Unauthorized"}, status=401)
+    attempts. Same permission as flagging -- a Manager or the owner -- and only ever this one account's row."""
+    refused = _manager_error(request)
+    if refused:
+        return refused
     try:
         customer = User.objects.get(id=user_id, is_staff=False, is_superuser=False)
     except User.DoesNotExist:
@@ -3444,7 +3481,7 @@ def _staff_display_name(user):
     does NOT consult UserProfile.display_name -- that field is a customer-facing
     concept (see UserProfile.customer_display_name); staff are named from the real
     name entered when the account was created."""
-    return f"{user.first_name} {user.last_name}".strip() or user.get_username()
+    return staff_display_name(user)
 
 
 def _staff_row(user):

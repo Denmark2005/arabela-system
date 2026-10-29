@@ -1309,7 +1309,7 @@
                                  built to avoid. -->
                             <button type="button" class="resv-mark-returned-btn inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200" data-item-id="{{ item.id }}">Mark Returned</button>
                             {% endif %}
-                            {% if item.can_cancel_gown %}
+                            {% if item.can_cancel_gown and admin_can_manage %}
                             <!-- Cancels just this gown (nobody picked it up); the rest of the booking carries on.
                                  Opens the small confirm window in partials/cancel_booking.html. -->
                             <button type="button" class="cb-open-btn cb-open-btn--small{% if item.cancel_urgent %} cb-open-btn--urgent{% endif %}"
@@ -1392,7 +1392,7 @@
                               class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
                               <span x-text="openTimeline === {{ r.id }} ? 'Hide Timeline' : 'Timeline'">Timeline</span>
                             </button>
-                            {% if r.can_cancel %}
+                            {% if r.can_cancel and admin_can_manage %}
                             <!-- Only while nothing in the booking has been picked up. Opens the confirm window
                                  (partials/cancel_booking.html); nothing happens until the booking code is typed. -->
                             <button type="button" class="cb-open-btn{% if r.cancel_urgent %} cb-open-btn--urgent{% endif %}"
@@ -1405,7 +1405,7 @@
                               data-deposit="&#8369;{{ r.security_deposit|floatformat:'2g' }}"
                               data-reason="{{ r.cancel_default_reason }}">Cancel booking</button>
                             {% endif %}
-                            {% if r.show_cancel_unpicked %}
+                            {% if r.show_cancel_unpicked and admin_can_manage %}
                             <!-- A booking where some gowns went out or came back, so it can't be cancelled whole: one button
                                  cancels every gown nobody picked up. The exact gowns are sent, so one that changed since this
                                  page loaded is refused instead of cancelled by surprise. -->

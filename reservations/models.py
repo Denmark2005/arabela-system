@@ -6,6 +6,8 @@ from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 from django.utils.formats import date_format
 
+from accounts.roles import staff_display_name
+
 
 def _peso_text(amount):
     """₱5,500 (and ₱5,500.50 when there are centavos) -- how the admin's payment screens write an amount."""
@@ -173,7 +175,9 @@ class Reservation(models.Model):
         counter has no GCash screenshot from the customer, so these photos ARE its proof of payment. `deposit_only` keeps the
         receipts that cover the security deposit ("Deposit" and the full one); a receipt nobody labelled says nothing
         either way for a walk-in (see receipts_cover_payment), so it is left out there -- an online booking's unlabelled
-        receipt is the shop's full receipt, like every online one now. Oldest first, the order they were handed over."""
+        receipt is the shop's full receipt, like every online one now. Oldest first, the order they were handed over.
+        "by" is the staff member who attached it ("Removed account" once that account is gone), as Reservation Records shows it;
+        the pages that call this load receipt_records with select_related("uploaded_by") so it costs no extra query per receipt."""
         staff_recorded = self.is_staff_recorded
         rows = []
         for rec in sorted(self.receipt_records.all(), key=lambda r: (r.uploaded_at, r.id)):
@@ -184,6 +188,7 @@ class Reservation(models.Model):
                 "url": rec.photo_url,
                 "label": f"{name} receipt" if name else "Receipt (not labelled)",
                 "when": date_format(timezone.localtime(rec.uploaded_at), "M j, Y · g:i A"),
+                "by": staff_display_name(rec.uploaded_by) if rec.uploaded_by_id else "Removed account",
             })
         return rows
 

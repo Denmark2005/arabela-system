@@ -20,9 +20,11 @@ Arabela is a reservation and inventory system for a gown/suit rental shop. It re
 | Role | How it's set | Access |
 |---|---|---|
 | **Customer** | Any signed-in Google account with no admin flags | Browse, search, reserve gowns, manage their own reservations/cancellations, upload payment proof, read their own message inbox, edit their display name |
-| **Staff** | `UserProfile.role = Staff`, `is_staff = True` | Full admin panel **except** Staff Management and the owner's own account-settings/password page |
-| **Manager** | `UserProfile.role = Manager`, `is_staff = True` | Same access as Staff — the code defines Manager as a separate role, but no permission check anywhere actually treats Manager differently from Staff. In practice these two roles are identical today. |
-| **Owner** | `is_superuser = True`, or `UserProfile.role = Owner` | Everything Staff/Manager can do, **plus** Staff Management (create/edit/deactivate/delete staff accounts) and the owner-only change-password page |
+| **Staff** | `UserProfile.role = Staff`, `is_staff = True` | The daily work in the admin panel: add/edit gowns, New Booking (walk-ins), approve/reject new bookings, pick-ups and returns, receipts, reminders. **Not** the Manager-only actions below, Staff Management, Categories, tag colors, shop settings or the owner's account-settings page |
+| **Manager** | `UserProfile.role = Manager`, `is_staff = True` | Everything Staff can do, **plus** the Manager-only actions: delete gowns (one or in bulk), cancel a confirmed booking or some of its gowns, flag/unflag a customer and remove a cancellation lock, delete a receipt photo. **Not** Staff Management, Categories, tag colors or shop settings |
+| **Owner** | `is_superuser = True`, or `UserProfile.role = Owner` | Everything Manager can do, **plus** Staff Management (create/edit/deactivate/delete staff accounts), Categories, tag colors, the shop settings and the owner-only change-password page |
+
+The owner picks the role when creating or editing an account (Staff Management) and the access follows automatically — there are no per-person switches. The Manager-only actions are enforced on the server (`accounts/roles.py` `can_manage()`, used by `arabela_admin.views._manager_error`, which answers 403 "Only a Manager or the owner can do that."), and the same rule hides the buttons from Staff (`admin_can_manage` in the admin context processor). What each person did stays on record: the Removal Log names who removed a gown, each receipt names who uploaded it (also shown in the proof windows), and a deleted receipt leaves a staff-only history line.
 
 Notes:
 - A signed-in admin/staff account with no `UserProfile` row at all is treated as **Owner by default** in a couple of places (the header and notifications context processors), which is a looser default than the explicit `_is_owner()` permission check used to actually gate actions — see Section 9.

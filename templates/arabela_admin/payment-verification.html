@@ -1434,7 +1434,7 @@
                   <!-- The shop's own receipt photos (a booking recorded at the counter has no customer GCash screenshot). -->
                   <template x-for="(rc, rcIndex) in (viewingPayment.receipts || [])" :key="rcIndex">
                     <div>
-                      <p class="mb-3 text-sm font-medium text-gray-800 dark:text-white/90"><span x-text="rc.label"></span> <span class="text-xs font-normal text-gray-500 dark:text-gray-400" x-text="'· attached ' + rc.when"></span></p>
+                      <p class="mb-3 text-sm font-medium text-gray-800 dark:text-white/90"><span x-text="rc.label"></span> <span class="text-xs font-normal text-gray-500 dark:text-gray-400" x-text="'· attached ' + rc.when + (rc.by ? ' · by ' + rc.by : '')"></span></p>
                       <div class="mb-3 flex w-full justify-center">
                         <div class="admin-photo-frame overflow-hidden rounded-2xl bg-gray-100 dark:bg-gray-800">
                           <img :src="rc.url" :alt="rc.label" style="display: block; max-height: 75vh; max-width: 100%; width: auto; height: auto;" />

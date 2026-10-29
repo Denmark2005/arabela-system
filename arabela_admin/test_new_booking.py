@@ -540,6 +540,7 @@ class EverywhereElseTests(Base):
 
     def test_cancelling_a_no_show_with_no_account(self):
         reservation, gown = self.walk_in()
+        self.client.force_login(self.owner)           # cancelling a confirmed booking is for a Manager or the owner
         response = self.client.post(reverse("arabela_admin:reservation_cancel", args=[reservation.id]), data=json.dumps(
             {"reason": "no_show", "note": "", "confirm": reservation.reference_code}), content_type="application/json")
         self.assertEqual(response.status_code, 200, response.content)

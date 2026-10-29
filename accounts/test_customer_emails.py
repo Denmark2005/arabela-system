@@ -371,6 +371,7 @@ class CustomerEmailHookTests(TestCase):
         UserProfile.objects.create(user=cls.customer, display_name="Rainer Pepito")
         cls.other = User.objects.create_user("email_other_customer", email="other@gmail.com")
         cls.staff = User.objects.create_user("email_staff", email="staff@gmail.com", is_staff=True)
+        UserProfile.objects.update_or_create(user=cls.staff, defaults={"role": UserProfile.Role.MANAGER})
 
     def setUp(self):
         self.client.force_login(self.staff)
