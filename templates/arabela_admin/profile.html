@@ -10,7 +10,9 @@
     <meta http-equiv="X-UA-Compatible" content="ie=edge" />
     <title>Profile | Arabela System Admin Panel</title>
     <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
-  <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet"></head>
+  <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet">
+  {% include "arabela_admin/partials/photo_viewer_styles.html" %}
+</head>
   <body
     x-data="{
       page: 'profile',
@@ -40,6 +42,7 @@
       avatarError: '',
       isPositionModal: false,
       isViewModal: false,
+      avatarViewFailed: false,
       positionMode: 'upload',
       pendingFile: null,
       pendingPreviewUrl: '',
@@ -1395,7 +1398,7 @@
                             <img
                               :src="avatarUrl"
                               :style="'object-position: ' + avatarPositionX + '% ' + avatarPositionY + '%'"
-                              @click="isViewModal = true"
+                              @click="avatarViewFailed = false; isViewModal = true"
                               alt="Profile photo"
                               title="View photo"
                               class="admin-avatar-clickable h-full w-full object-cover"
@@ -2289,17 +2292,19 @@
   </div>
 </div>
 
-<!-- View photo modal: a larger look at how the current avatar actually renders. -->
+<!-- View photo modal: the WHOLE uploaded photo, never cropped. The round picture on this page and in the top bar is only a crop of it
+     (centred with "Adjust position"), so this shows the real file at its own shape, plus a link that opens it at full resolution. -->
 <div
   x-show="isViewModal"
   x-cloak
+  @keydown.escape.window="isViewModal = false"
   class="fixed inset-0 flex items-center justify-center p-5 overflow-y-auto z-99999"
 >
   <div class="modal-close-btn fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]"></div>
   <div
     @click.outside="isViewModal = false"
     class="no-scrollbar relative flex w-full flex-col items-center overflow-y-auto rounded-3xl bg-white p-6 dark:bg-gray-900 lg:p-11"
-    style="max-width: 380px;"
+    style="max-width: 560px;"
   >
     <button
       @click="isViewModal = false"
@@ -2315,27 +2320,35 @@
       </svg>
     </button>
 
-    <div class="mb-6 w-full text-center">
+    <div class="mb-2 w-full text-center">
       <h4 class="text-2xl font-semibold text-gray-800 dark:text-white/90">Your photo</h4>
     </div>
+    <p class="mb-5 text-center text-theme-xs text-gray-500 dark:text-gray-400">The round picture on your profile is a crop of this photo.</p>
 
-    <div class="flex items-center justify-center" style="width: 220px; height: 220px;">
-      <div class="relative overflow-hidden rounded-full border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800" style="width: 220px; height: 220px;">
-        <template x-if="avatarUrl">
-          <img
-            :src="avatarUrl"
-            :style="'object-position: ' + avatarPositionX + '% ' + avatarPositionY + '%'"
-            alt="Profile photo"
-            class="h-full w-full object-cover"
-          />
-        </template>
-      </div>
+    <div class="mb-3 flex w-full justify-center">
+      <!-- The frame shrinks to the photo itself (partials/photo_viewer_styles.html), so no grey panels sit beside it. -->
+      <template x-if="avatarUrl && !avatarViewFailed">
+        <div class="admin-photo-frame overflow-hidden rounded-2xl bg-gray-100 dark:bg-gray-800">
+          <img :src="avatarUrl" @error="avatarViewFailed = true" alt="Your profile photo" style="display: block; max-height: 60vh; max-width: 100%; width: auto; height: auto;" />
+        </div>
+      </template>
+      <p x-show="avatarViewFailed" x-cloak class="rounded-lg bg-error-50 px-4 py-2.5 text-sm text-error-700 dark:bg-error-500/15 dark:text-error-500">This photo could not be loaded.</p>
     </div>
+    <a
+      x-show="avatarUrl && !avatarViewFailed"
+      :href="avatarUrl"
+      target="_blank"
+      rel="noopener"
+      class="mb-4 inline-flex items-center gap-1.5 text-theme-xs font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400"
+    >
+      <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
+      View Full Image
+    </a>
 
     <button
       type="button"
       @click="isViewModal = false; openReposition();"
-      class="admin-avatar-remove mt-6 text-theme-xs text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+      class="admin-avatar-remove text-theme-xs text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
     >
       Adjust position
     </button>
