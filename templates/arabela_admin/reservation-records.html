@@ -1986,7 +1986,7 @@
               <div x-show="filtering" x-cloak class="flex items-center justify-center" style="height: 240px;">
                 <div class="h-10 w-10 animate-spin rounded-full border-4 border-solid border-gray-300 border-t-transparent dark:border-gray-600"></div>
               </div>
-              <div x-show="!filtering" class="custom-scrollbar rr-scroll-x" style="max-height: 760px; overflow-y: auto;">
+              <div x-show="!filtering" class="custom-scrollbar rr-scroll-x" style="max-height: 760px; overflow-y: auto;" data-arpg="tbody" data-arpg-noun="reservations">
                 <table class="min-w-full">
                   <thead class="sticky top-0 z-10 bg-white dark:bg-gray-900">
                     <tr class="border-t border-gray-100 dark:border-gray-800">
@@ -2418,6 +2418,7 @@
   <script defer src="{% static 'arabela_admin/bundle.js' %}?v={{ admin_asset_version }}"></script>
   <script defer src="{% static 'js/picked-file.js' %}?v={{ site_asset_version }}"></script>
   <script defer src="{% static 'arabela_admin/global-search.js' %}"></script>
+  <script defer src="{% static 'arabela_admin/pager.js' %}"></script>
 
 </body>
 </html>

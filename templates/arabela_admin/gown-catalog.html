@@ -477,7 +477,7 @@
         })
         .catch(() => { this.removeBusy = false; this.removeError = 'Network error. Please try again.'; });
       },
-      selectedGownIds: [], sortKey: '', sortDir: 1, gownsMin: [], bulkBusy: false,
+      selectedGownIds: [], pageTick: 0, sortKey: '', sortDir: 1, gownsMin: [], bulkBusy: false,
       // What staff type is split into words and EVERY word has to appear in the gown's
       // search text (ID, name, category, real color, size, tag color, tag number) -- so
       // 'white 012' or 'blue #4' narrow down instead of finding nothing, while a single
@@ -499,17 +499,37 @@
       matchingGownCount() {
         return this.visibleGownIds().length;
       },
-      allVisibleSelected() {
+      // The list shows 15 gowns at a time (static/arabela_admin/pager.js). The header box ticks the gowns on the page being shown, so
+      // select-all never ticks gowns nobody can see; ticks on other pages are kept. pageTick changes whenever the pager changes page
+      // or the filtered list, so the header box redraws. If the pager is not running this is every matching gown, exactly as before.
+      pageGownIds() {
+        void this.pageTick;
+        const tbody = this.$refs.gownTableBody;
+        const rows = (window.arabelaPager && tbody) ? window.arabelaPager.shownUnits(tbody) : null;
+        if (!rows) { return this.visibleGownIds(); }
+        return rows.map(tr => { const box = tr.querySelector('.admin-bulk-check'); return box ? Number(box.value) : NaN; }).filter(id => Number.isFinite(id));
+      },
+      // Offered once the whole page is ticked and more gowns match than fit on it (the Select all N matching button).
+      canSelectAllMatching() {
         const vis = this.visibleGownIds();
+        return vis.length > this.pageGownIds().length && this.allVisibleSelected() && !vis.every(id => this.selectedGownIds.includes(id));
+      },
+      selectAllMatching() {
+        const merged = new Set(this.selectedGownIds);
+        this.visibleGownIds().forEach(id => merged.add(id));
+        this.selectedGownIds = Array.from(merged);
+      },
+      allVisibleSelected() {
+        const vis = this.pageGownIds();
         return vis.length > 0 && vis.every(id => this.selectedGownIds.includes(id));
       },
       someVisibleSelected() {
-        const vis = this.visibleGownIds();
+        const vis = this.pageGownIds();
         const picked = vis.filter(id => this.selectedGownIds.includes(id)).length;
         return picked > 0 && picked < vis.length;
       },
       toggleSelectAllVisible(checked) {
-        const vis = this.visibleGownIds();
+        const vis = this.pageGownIds();
         if (checked) {
           const merged = new Set(this.selectedGownIds);
           vis.forEach(id => merged.add(id));
@@ -780,6 +800,7 @@
          if (presetStatus) { status = presetStatus; }
          const presetSearch = params.get('search');
          if (presetSearch) { search = presetSearch; }"
+    @arabela-pager.window="pageTick++"
     :class="{'dark bg-gray-900': darkMode === true}"
   >
     <!-- ===== Preloader Start ===== -->
@@ -2266,7 +2287,7 @@
               <div x-show="filtering" x-cloak class="flex items-center justify-center" style="height: 300px;">
                 <div class="h-10 w-10 animate-spin rounded-full border-4 border-solid border-gray-300 border-t-transparent dark:border-gray-600"></div>
               </div>
-              <div x-show="!filtering" class="custom-scrollbar overflow-y-auto" style="max-height: 760px;">
+              <div x-show="!filtering" class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg="tbody" data-arpg-noun="gowns">
                 <table class="min-w-full">
                   <thead class="sticky top-0 z-10 bg-white dark:bg-gray-900">
                     <tr>
@@ -3115,6 +3136,7 @@
   <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
     <span x-text="selectedGownIds.length"></span> selected
   </span>
+  <button type="button" x-show="canSelectAllMatching()" x-cloak @click="selectAllMatching()" style="color:#465fff;" class="rounded-lg px-3 py-2 text-xs font-medium hover:underline">Select all <span x-text="matchingGownCount()"></span> matching</button>
   <button type="button" @click="bulkStatus('Available')" :disabled="bulkBusy" :style="bulkBusy ? 'opacity:0.6; cursor:not-allowed;' : ''" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">Mark Available</button>
   <button type="button" @click="bulkStatus('Out-of-Stock')" :disabled="bulkBusy" :style="bulkBusy ? 'opacity:0.6; cursor:not-allowed;' : ''" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">Mark Out-of-Stock</button>
   <button type="button" @click="markChecked(selectedGownIds)" :disabled="bulkBusy" :style="bulkBusy ? 'opacity:0.6; cursor:not-allowed;' : ''" title="Confirm you can see these gowns in the shop right now" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">Mark Checked</button>
@@ -3137,6 +3159,7 @@
   <script defer src="{% static 'arabela_admin/bundle.js' %}?v={{ admin_asset_version }}"></script>
   <script defer src="{% static 'js/picked-file.js' %}?v={{ site_asset_version }}"></script>
   <script defer src="{% static 'arabela_admin/global-search.js' %}"></script>
+  <script defer src="{% static 'arabela_admin/pager.js' %}"></script>
 
 {% include "arabela_admin/partials/availability_check.html" %}
 {% include "arabela_admin/partials/dialog.html" %}

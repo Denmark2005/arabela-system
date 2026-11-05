@@ -1185,7 +1185,7 @@
                   <div class="h-10 w-10 animate-spin rounded-full border-4 border-solid border-gray-300 border-t-transparent dark:border-gray-600"></div>
                 </div>
                 <div x-show="!filtering" class="max-w-full overflow-x-auto">
-                  <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;">
+                  <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg="tbody" data-arpg-noun="customers">
                   <table class="min-w-full">
                     <thead class="sticky top-0 z-10 bg-white dark:bg-gray-900">
                       <tr class="border-b border-gray-100 dark:border-gray-800">
@@ -1450,6 +1450,7 @@
 
   <script defer src="{% static 'arabela_admin/bundle.js' %}?v={{ admin_asset_version }}"></script>
   <script defer src="{% static 'arabela_admin/global-search.js' %}"></script>
+  <script defer src="{% static 'arabela_admin/pager.js' %}"></script>
   <script>
     function getCsrfToken() {
       var match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
