@@ -1017,10 +1017,27 @@
                 proofInput.addEventListener('change', function () {
                     var z = document.getElementById('proof-payment-dropzone');
                     if (z) z.classList.remove('reservation-proof-invalid');
+                    var earlierError = z && z.parentElement ? z.parentElement.querySelector('.reservation-error-text') : null;
+                    if (earlierError) earlierError.remove();
                     if (proofInput.files && proofInput.files[0]) {
+                        // A PDF, a video or anything else that is not a JPG / PNG / WEBP picture is turned away right now, with what
+                        // to do instead (the server checks what the file really is as well; static/js/picked-file.js).
+                        var proofProblem = window.arabelaProofPhotoProblem ? window.arabelaProofPhotoProblem(proofInput.files[0]) : '';
+                        if (proofProblem) {
+                            proofInput.value = '';
+                            clearProofPreview();
+                            proofUploadFilePromise = Promise.resolve(null);
+                            setProofError(proofProblem);
+                            return;
+                        }
                         // Copied into memory right now; the copy is what is previewed and sent, so the
                         // phone's own file can't make Confirm Rental fail later (static/js/picked-file.js).
-                        var prepared = window.arabelaPreparePhotoForUpload(proofInput.files[0]);
+                        var prepared = window.arabelaPreparePhotoForUpload(proofInput.files[0]).then(function (readyFile) {
+                            // After a big camera photo has been shrunk: still over 5 MB means it can't be sent.
+                            var tooBig = window.arabelaProofPhotoProblem ? window.arabelaProofPhotoProblem(readyFile, true) : '';
+                            if (tooBig) throw new Error(tooBig);
+                            return readyFile;
+                        });
                         proofUploadFilePromise = prepared;
                         prepared.then(function (file) {
                             if (proofUploadFilePromise === prepared) showProofPreview(file);

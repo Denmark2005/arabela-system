@@ -25,7 +25,7 @@ from gowns.models import Gown
 from gowns.test_add_barongs import SAVE
 
 CATEGORY = Gown.Category.SUIT
-_JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xff\xd9"
+from gowns.sample_images import TINY_JPEG as _JPEG      # a real picture: the proof upload now opens what it is given
 
 
 def make_photos(folder):

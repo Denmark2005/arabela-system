@@ -26,6 +26,7 @@ from reservations.models import ReceiptRecord, Reservation, ReservationItem, Res
 
 User = get_user_model()
 EMAILS_ON = dict(CUSTOMER_EMAILS_ENABLED=True, CUSTOMER_EMAILS_BACKGROUND=False)
+from gowns.sample_images import TINY_JPEG      # a REAL picture, for the one test that goes through the customer's checkout
 _JPEG_HEAD = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00"
 
 
@@ -453,7 +454,7 @@ class EverywhereElseTests(Base):
             response = self.client.post(reverse("gowns:reservation_submit"), data={
                 "items": json.dumps(items), "first_name": "Online", "last_name": "Customer", "phone": "09170000000",
                 "address": "x", "city": "x", "postal_code": "1000", "payment_method": "GCash",
-                "proof_of_payment": jpeg("proof.jpg", b"proof")})
+                "proof_of_payment": SimpleUploadedFile("proof.jpg", TINY_JPEG, content_type="image/jpeg")})
         self.assertEqual(response.status_code, 400)
         self.assertIn("no longer available", response.json()["error"])
 

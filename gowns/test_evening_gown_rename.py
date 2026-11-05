@@ -26,7 +26,7 @@ User = get_user_model()
 gowns_migration = importlib.import_module("gowns.migrations.0024_rename_ball_gown_to_evening_gown")
 reservations_migration = importlib.import_module("reservations.migrations.0023_rename_ball_gown_items")
 
-_TINY_JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xff\xd9"
+from gowns.sample_images import TINY_JPEG as _TINY_JPEG      # a real picture: the proof upload now opens what it is given
 
 
 def make_gown(gown_id, name, category, slug, color="Blue", code="BU"):

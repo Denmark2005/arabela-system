@@ -737,12 +737,22 @@
       function uploadPaymentProof(url, input) {
         if (!input.files || !input.files[0]) return;
         var pickedFile = input.files[0];
+        // A PDF, a video or anything else that is not a JPG / PNG / WEBP picture is turned away right now (static/js/picked-file.js).
+        var pickedProblem = window.arabelaProofPhotoProblem ? window.arabelaProofPhotoProblem(pickedFile) : '';
+        if (pickedProblem) {
+          input.value = '';
+          arabelaAlert({ title: 'Choose a photo', message: pickedProblem, danger: true });
+          return;
+        }
         input.disabled = true;
         // Copied into memory (and shrunk if it is a large camera photo) before sending: sending the
         // phone's own file is what made uploads fail with "Failed to fetch" on Android phones
         // (static/js/picked-file.js).
         window.arabelaPreparePhotoForUpload(pickedFile)
           .then(function (fileToUpload) {
+            // After a big camera photo has been shrunk: still over 5 MB means it can't be sent.
+            var tooBig = window.arabelaProofPhotoProblem ? window.arabelaProofPhotoProblem(fileToUpload, true) : '';
+            if (tooBig) throw new Error(tooBig);
             var formData = new FormData();
             formData.append('proof_of_payment', fileToUpload);
             // No 'Content-Type' header: the browser must set it so the multipart

@@ -17,7 +17,7 @@ from gowns.views import _UNIT_ASSIGNED, _UNIT_UNAVAILABLE, _blocked_dates_for_ca
 from reservations.models import ReservationItem
 
 User = get_user_model()
-_TINY_JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xff\xd9"
+from gowns.sample_images import TINY_JPEG as _TINY_JPEG      # a real picture: the proof upload now opens what it is given
 
 
 class CooldownTests(TestCase):

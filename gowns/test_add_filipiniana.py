@@ -26,7 +26,7 @@ from gowns.models import Gown
 from gowns.test_add_barongs import SAVE
 
 CATEGORY = Gown.Category.FILIPINIANA
-_JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xff\xd9"
+from gowns.sample_images import TINY_JPEG as _JPEG      # a real picture: the proof upload now opens what it is given
 
 # The owner's list, typed in separately from the command: (colour, price, size) for items 1-30.
 LIST = [("Beige", 1500, "Large"), ("Beige", 3000, "XL"), ("Black and Beige", 3000, "XL"), ("Black", 1500, "Large"), ("Beige", 1500, "Large"),

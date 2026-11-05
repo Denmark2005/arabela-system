@@ -119,6 +119,26 @@
         return window.arabelaReadPickedFile(file).then(shrinkIfLarge);
     };
 
+    // Proof of payment must be a JPG, PNG or WEBP picture of at most 5 MB. The server checks what the file REALLY is; this tells the
+    // customer straight away (on picking it) instead of after Confirm Rental, and on a phone where the file chooser shows every kind of
+    // file. Returns '' when the file is fine, else the message to show. Call it with the picked file first (name and type only: a big
+    // camera photo is shrunk before it is sent, so its size must not count yet), then again with the prepared copy and `sizeOnly`.
+    var PROOF_MAX_BYTES = 5 * 1024 * 1024;
+    var PROOF_TYPES = { 'image/jpeg': true, 'image/png': true, 'image/webp': true };
+    window.arabelaProofPhotoProblem = function (file, sizeOnly) {
+        if (!file) return '';
+        if (!sizeOnly) {
+            var type = (file.type || '').toLowerCase();
+            if ((type && !PROOF_TYPES[type]) || !/\.(jpe?g|png|webp)$/i.test(file.name || '')) {
+                return 'Please choose a photo or screenshot of your receipt (JPG, PNG or WEBP). If your receipt is a PDF, take a screenshot of it and upload that.';
+            }
+            if (file.size === 0) return 'That file is empty. Please choose your receipt photo or screenshot.';
+            return '';
+        }
+        if (file.size > PROOF_MAX_BYTES) return 'That picture is over 5 MB. Please choose a smaller photo or a screenshot.';
+        return '';
+    };
+
     // What went wrong with a fetch, in customer words. `kind` lets a page add its own context:
     //   'photo'   -- the picked photo could not be read
     //   'network' -- the request never got an answer (no connection, or the browser cancelled it)

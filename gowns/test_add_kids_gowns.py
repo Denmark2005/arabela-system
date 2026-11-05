@@ -26,7 +26,7 @@ from gowns.models import Gown
 from gowns.test_add_barongs import SAVE
 
 CATEGORY = Gown.Category.KIDS_GOWN
-_JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xff\xd9"
+from gowns.sample_images import TINY_JPEG as _JPEG      # a real picture: the proof upload now opens what it is given
 
 # The owner's list, item by item: colour and price exactly as written.
 LIST = [("Red", 2500), ("Rose Gold", 2500), ("White", 1800), ("Lavender", 2800), ("Pink", 2800), ("Red", 2800), ("Rose", 2200), ("Pink", 2500),

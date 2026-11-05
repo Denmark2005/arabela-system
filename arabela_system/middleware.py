@@ -10,8 +10,9 @@ from django.core.exceptions import ValidationError
 from django.db import close_old_connections
 from django.db.models import Q
 from django.db.utils import OperationalError
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.utils.cache import patch_vary_headers
+from django.urls import Resolver404, resolve
 from django.utils.http import http_date
 
 logger = logging.getLogger(__name__)
@@ -184,3 +185,36 @@ class SplitSessionMiddleware(SessionMiddleware):
                         samesite=settings.SESSION_COOKIE_SAMESITE,
                     )
         return response
+
+
+# --- Upload size guard ---------------------------------------------------------------------------------------------------
+# A proof-of-payment picture may be at most 5 MB, but that was checked only AFTER the whole request had been received and stored,
+# so a huge upload was still taken in full first. This answers it straight away, from the size the browser announces, before the
+# body is read at all. Only the two customer endpoints that take a proof are watched; every other request passes untouched.
+PROOF_UPLOAD_VIEWS = ("gowns:reservation_submit", "gowns:reservation_upload_proof")
+PROOF_REQUEST_LIMIT_BYTES = 8 * 1024 * 1024     # the 5 MB picture plus the rest of the checkout form, with room to spare
+
+
+class ProofUploadSizeGuardMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    @staticmethod
+    def _announced_size(request):
+        try:
+            return int(request.META.get("CONTENT_LENGTH") or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    @staticmethod
+    def _is_proof_upload(path):
+        try:
+            return resolve(path).view_name in PROOF_UPLOAD_VIEWS
+        except Resolver404:
+            return False
+
+    def __call__(self, request):
+        if (request.method == "POST" and self._announced_size(request) > PROOF_REQUEST_LIMIT_BYTES
+                and self._is_proof_upload(request.path_info)):
+            return JsonResponse({"success": False, "error": "Proof of payment must be 5MB or smaller."}, status=413)
+        return self.get_response(request)

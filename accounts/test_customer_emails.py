@@ -41,7 +41,7 @@ ON = dict(
     CUSTOMER_EMAILS_ENABLED=True, CUSTOMER_EMAILS_BACKGROUND=False,
     SITE_BASE_URL=BASE, DEFAULT_FROM_EMAIL="Arabela <shop@gmail.com>",
 )
-_TINY_JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xff\xd9"
+from gowns.sample_images import TINY_JPEG as _TINY_JPEG      # a real picture: the proof upload now opens what it is given
 
 
 def _built(kind, **changes):

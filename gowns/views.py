@@ -1,7 +1,6 @@
 import hashlib
 import json
 import re
-import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -39,7 +38,7 @@ from gowns.context_processors import (
 from gowns.models import (
     COOLDOWN_DAYS, EXTRA_SMALL_CATEGORY, SIZE_CODES, Gown, GownUnavailability, group_gowns_by_name, pick_representative_gown, size_codes_of,
 )
-from gowns import availability
+from gowns import availability, proof_image
 from gowns.photos import GRID_WIDTH, PAGE_WIDTH, sized
 from gowns.size_guides import size_guide_for
 from reservations import reminders, timeline
@@ -886,33 +885,43 @@ def reservation(request):
 # upload-later endpoint so both accept exactly the same files.
 PROOF_ALLOWED_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.webp')
 PROOF_ALLOWED_CONTENT_TYPES = ('image/jpeg', 'image/png', 'image/webp')
-PROOF_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
+PROOF_MAX_BYTES = proof_image.MAX_BYTES  # 5 MB
 
 
 def _validate_proof_file(proof_file) -> str:
-    """Return an empty string when the upload is acceptable, else the message to
-    show the customer. Checks the extension AND the browser-reported type, so a
-    renamed executable fails even though its extension looks fine."""
+    """The quick first look: return an empty string when the upload may go on to the real check, else the message to show the
+    customer. Looks at the file's name, the type the browser claims and its size -- all of which the sender controls, so this only
+    turns away the obvious (a PDF, a video, a Word file, something too big). What the file REALLY is gets decided by
+    _prepare_proof_upload below."""
     if not proof_file:
         return "Please upload your proof of payment."
     name = (getattr(proof_file, "name", "") or "").lower()
     if not name.endswith(PROOF_ALLOWED_EXTENSIONS):
-        return "Proof of payment must be a JPG, PNG, or WEBP image."
+        return proof_image.NOT_AN_IMAGE
     content_type = (getattr(proof_file, "content_type", "") or "").lower()
     if content_type and content_type not in PROOF_ALLOWED_CONTENT_TYPES:
-        return "Proof of payment must be a JPG, PNG, or WEBP image."
+        return proof_image.NOT_AN_IMAGE
     if proof_file.size > PROOF_MAX_BYTES:
-        return "Proof of payment must be 5MB or smaller."
+        return proof_image.TOO_BIG
     return ""
 
 
+def _prepare_proof_upload(proof_file):
+    """(clean_file, "") when the upload is a real JPEG / PNG / WEBP picture, else (None, message for the customer).
+
+    The clean file is a rebuilt copy of the picture under a random name (gowns/proof_image.py): what is stored is never the uploaded
+    bytes themselves, so a PDF, a web page or a program renamed to .jpg can't be kept."""
+    error = _validate_proof_file(proof_file)
+    if error:
+        return None, error
+    return proof_image.clean_proof_image(proof_file)
+
+
 def _save_proof_file(proof_file) -> str:
-    """Store the upload under a collision-proof name and return its public URL.
+    """Store the CLEAN copy of the proof (its name is already a random one) and return its public URL.
     Uses the storage backend's own .url() rather than MEDIA_URL + path so this
     keeps working whether files land on local disk or on Cloudinary."""
-    saved_path = default_storage.save(
-        f"payment_proofs/{uuid.uuid4().hex}_{proof_file.name}", proof_file
-    )
+    saved_path = default_storage.save(f"payment_proofs/{proof_file.name}", proof_file)
     return default_storage.url(saved_path)
 
 
@@ -1063,7 +1072,7 @@ def reservation_submit(request):
     # anything that bypasses the page's JS -- those rows are indistinguishable
     # from paid ones in the admin's Payment Verification table.
     proof_file = request.FILES.get("proof_of_payment")
-    error = _validate_proof_file(proof_file)
+    clean_proof, error = _prepare_proof_upload(proof_file)
     if error:
         return JsonResponse({"success": False, "error": error}, status=400)
 
@@ -1218,7 +1227,7 @@ def reservation_submit(request):
         total_amount = rental_subtotal + security_deposit
 
         try:
-            payment_proof_url = _save_proof_file(proof_file)
+            payment_proof_url = _save_proof_file(clean_proof)
         except Exception:
             return JsonResponse(
                 {"success": False, "error": "The payment proof couldn't be uploaded just now. Please try again."},
@@ -1437,12 +1446,12 @@ def reservation_upload_proof(request, item_id):
         )
 
     proof_file = request.FILES.get("proof_of_payment")
-    error = _validate_proof_file(proof_file)
+    clean_proof, error = _prepare_proof_upload(proof_file)
     if error:
         return JsonResponse({"success": False, "error": error}, status=400)
 
     try:
-        reservation.payment_proof_url = _save_proof_file(proof_file)
+        reservation.payment_proof_url = _save_proof_file(clean_proof)
     except Exception:
         return JsonResponse(
             {"success": False, "error": "The payment proof couldn't be uploaded just now. Please try again."},

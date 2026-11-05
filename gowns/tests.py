@@ -29,9 +29,9 @@ from reservations.models import Reservation, ReservationItem, ReservationStatusE
 
 User = get_user_model()
 
-# A 1x1 pixel JPEG -- just needs to pass _validate_proof_file's extension/type/size
-# checks, its actual image content is never inspected.
-_TINY_JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xff\xd9"
+# A real (tiny) JPEG: the proof upload opens what it is given and rebuilds the picture (gowns/proof_image.py),
+# so fake bytes with a JPEG header are refused exactly like a renamed PDF.
+from gowns.sample_images import TINY_JPEG as _TINY_JPEG      # a real picture: the proof upload now opens what it is given
 
 
 def _make_proof():
