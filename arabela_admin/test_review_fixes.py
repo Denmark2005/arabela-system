@@ -1,6 +1,6 @@
 """Five follow-ups from the full-system test of 2026-10-21:
   1. a customer cancelling their own booking frees the 5 rest days after it (as rejecting and the shop's Cancel already did);
-  2. the dashboard's Active Rentals tile counts only bookings still in progress, and Active Reservations labels finished ones;
+  2. the dashboard's Active Rentals tile counts only bookings still in progress, and Active Reservations leaves finished ones off;
   3. approving or rejecting a booking rings the customer's bell;
   4. the owner can't save a Facebook address that isn't a normal web link;
   5. Staff Management no longer carries the leftover customer pop-up that threw JavaScript errors."""
@@ -67,13 +67,16 @@ class ActiveRentalsTile(Base):
         ReservationItem.objects.filter(pk__in=[items[1].pk, items[2].pk]).update(stage=ReservationItem.Stage.RETURNED)
         self.assertEqual(self.tile(), 0)                                                              # last one back = done
 
-    def test_active_reservations_labels_a_finished_booking_completed_not_confirmed(self):
+    def test_active_reservations_leaves_a_finished_booking_off_and_calls_a_gown_that_is_out_active(self):
         reservation, _ = self.booking(days_late=20, number_from=20, stage=ReservationItem.Stage.RETURNED)
         live, _ = self.booking(days_late=3, number_from=21, stage=ReservationItem.Stage.RESERVED)
+        waiting, _ = self.booking(days_late=-3, number_from=22)
         html = self.client.get(reverse("arabela_admin:active_reservations")).content.decode()
-        self.assertIn(">Completed</p>", html)
-        self.assertEqual(html.count(">Completed</p>"), 1)
-        self.assertIn(">Confirmed</p>", html)                                                         # the live one keeps its badge
+        self.assertNotIn(reservation.reference_code, html)                                            # finished: not a running rental
+        self.assertNotIn(">Completed</p>", html)
+        self.assertIn(live.reference_code, html)
+        self.assertIn(">Active</p>", html)                                                            # the gown is out
+        self.assertIn(">Confirmed</p>", html)                                                         # still waiting for pick-up
 
 
 class ApproveAndRejectRingTheBell(Base):

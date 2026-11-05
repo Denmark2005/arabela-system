@@ -80,7 +80,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -268,6 +268,15 @@
                     :class="page === 'active' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
                     Active Reservations
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:rental_history' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'rental-history' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Rental History
                   </a>
                 </li>
                 <li>
@@ -1179,6 +1188,7 @@
                       <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Gown</p></th>
                       <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Rental Date</p></th>
                       <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Return Date</p></th>
+                      <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Days late</p></th>
                       <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Amount</p></th>
                       <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Status</p></th>
                       <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Actions</p></th>
@@ -1202,12 +1212,24 @@
                 <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ item.gown_name }}</p></td>
                 <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ item.rental_date|date:"M j, Y" }}</p></td>
                 <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ item.return_date|date:"M j, Y" }}</p></td>
+                <td class="px-5 py-4 sm:px-6">
+                  <!-- How late the gown was (or is, so far): counted from the return date the customer booked, like Active Reservations. -->
+                  {% if item.late_days is None %}
+                  <p class="text-gray-400 text-theme-sm dark:text-gray-500">&mdash;</p>
+                  {% elif item.late_days == 0 %}
+                  <p class="inline-flex rounded-full bg-success-50 px-2 py-0.5 text-theme-xs font-medium text-success-700 dark:bg-success-500/15 dark:text-success-500" style="white-space: nowrap;">On time</p>
+                  {% else %}
+                  <p class="inline-flex rounded-full bg-error-50 px-2 py-0.5 text-theme-xs font-medium text-error-700 dark:bg-error-500/15 dark:text-error-500" style="white-space: nowrap;">{{ item.late_days }} day{{ item.late_days|pluralize }} late{% if item.history_status == 'Overdue' %} so far{% endif %}</p>
+                  {% endif %}
+                  {% if item.returned_on %}<p class="mt-1 text-theme-xs text-gray-400 dark:text-gray-500">Returned {{ item.returned_on|date:"M j, Y" }}</p>{% endif %}
+                </td>
                 <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">&#8369; {{ item.rental_price|floatformat:0 }}</p></td>
                 <td class="px-5 py-4 sm:px-6">
                   <p class="inline-flex rounded-full px-2 py-0.5 text-theme-xs font-medium
                     {% if item.history_status == 'Completed' %}bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500
                     {% elif item.history_status == 'Overdue' %}bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500
-                    {% else %}bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400{% endif %}">{{ item.history_status }}</p>
+                    {% elif item.history_status == 'Not picked up' %}bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400
+                    {% else %}bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400{% endif %}" style="white-space: nowrap;">{{ item.history_status }}</p>
                 </td>
                 <td class="px-5 py-4 sm:px-6">
                   <button type="button"
@@ -1223,14 +1245,14 @@
                 </td>
               </tr>
               <tr x-show="openTimeline === {{ item.id }} && ((monthFilter === 'All' || monthFilter === '{{ item.rental_date|date:"M" }}') && (yearFilter === '' || yearFilter === '{{ item.rental_date|date:"Y" }}') && (search === '' || '{{ r.display_customer_name|lower|escapejs }} {{ item.gown_name|lower|escapejs }}'.includes(search.toLowerCase())))" x-cloak>
-                <td class="px-5 py-4 sm:px-6" colspan="7">
+                <td class="px-5 py-4 sm:px-6" colspan="8">
                   {% include "arabela_admin/partials/timeline_rows.html" with timeline=item.timeline %}
                 </td>
               </tr>
               {% endwith %}
               {% empty %}
               <tr>
-                <td colspan="7" class="px-5 py-6 text-center text-sm text-gray-500 dark:text-gray-400">No rentals recorded yet. Approved bookings appear here once a gown goes out.</td>
+                <td colspan="8" class="px-5 py-6 text-center text-sm text-gray-500 dark:text-gray-400">No rentals recorded yet. Approved bookings appear here once a gown goes out.</td>
               </tr>
               {% endfor %}
               <!-- Shown when rows exist but the current month/year/search hides them all.
@@ -1238,7 +1260,7 @@
                    can never disagree with what is on screen. -->
               {% if rental_items %}
               <tr x-show="totalRentals() === 0" x-cloak>
-                <td colspan="7" class="px-5 py-6 text-center text-sm text-gray-500 dark:text-gray-400">No rental records found for this period.</td>
+                <td colspan="8" class="px-5 py-6 text-center text-sm text-gray-500 dark:text-gray-400">No rental records found for this period.</td>
               </tr>
               {% endif %}
                   </tbody>

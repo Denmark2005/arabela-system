@@ -412,6 +412,31 @@ def _item_remarks(item, today=None):
     return remarks
 
 
+_OUT_STAGES = (ReservationItem.Stage.RESERVED, ReservationItem.Stage.RETURN, ReservationItem.Stage.OVERDUE)
+
+
+def _is_late_and_out(item, today=None):
+    """The gown is with the customer and its return date has passed."""
+    today = today or timezone.localdate()
+    return item.stage in _OUT_STAGES and today > item.return_date
+
+
+def _days_late(item, today=None):
+    """How late this gown is (still out, past its return date) or was (already back), in days. Counted from the return date the customer
+    ORIGINALLY booked -- the same measuring stick as the remarks above -- so Active Reservations, Rental History and the Rental Schedule
+    always give the same number. 0 means it came back on time. None means there is nothing to say: not picked up yet, cancelled, out but not
+    due yet, or an old record with no return day."""
+    today = today or timezone.localdate()
+    scheduled_return = item.original_return_date or item.return_date
+    if item.stage == ReservationItem.Stage.RETURNED:
+        if not item.returned_on:
+            return None
+        return max(0, (item.returned_on - scheduled_return).days)
+    if _is_late_and_out(item, today):
+        return max(1, (today - scheduled_return).days)       # past the current return date, so at least one day late
+    return None
+
+
 def _holding_items(gown_ids):
     """Bookings that really hold these physical gowns -- the same rule checkout's
     _find_available_unit and the customer calendar use: every booking except one
@@ -711,12 +736,17 @@ def rental_history_view(request):
     # rather than re-expressed as template conditionals in every place they appear
     # (badge, modal payload, search haystack).
     for item in items:
+        # Overdue = the gown is OUT and late (the same rule as Active Reservations). A gown nobody ever picked up is not "overdue": once its
+        # dates have passed it is "Not picked up".
         if item.stage == ReservationItem.Stage.RETURNED:
             item.history_status = "Completed"
-        elif item.return_date < today:
+        elif _is_late_and_out(item, today):
             item.history_status = "Overdue"
+        elif item.stage == ReservationItem.Stage.PICKUP and item.return_date < today:
+            item.history_status = "Not picked up"
         else:
             item.history_status = "Ongoing"
+        item.late_days = _days_late(item, today)       # None = nothing to say, 0 = on time, N = N days late (so far, if it is still out)
 
     reservation_timeline.attach_to_items(items)
 
@@ -1257,6 +1287,17 @@ def active_reservations_view(request):
         # Every gown still part of the booking is back: shown as Completed (a booking's own status stays "Confirmed"),
         # and not counted in the dashboard's Active Rentals tile.
         reservation.is_completed = bool(live_items) and all(i.stage == ReservationItem.Stage.RETURNED for i in live_items)
+        # Where this booking stands, for the badge and the filter buttons: Overdue (a gown is late) beats Active (a gown has gone out and
+        # the rental has started) beats Confirmed (waiting for the first pick-up). Completed bookings are left off the page below.
+        reservation.overdue_days = max(
+            (_days_late(i, today) or 0 for i in live_items if i.effective_stage == ReservationItem.Stage.OVERDUE), default=0
+        )
+        if reservation.has_overdue_item:
+            reservation.state = "overdue"
+        elif any(i.stage != ReservationItem.Stage.PICKUP for i in live_items):
+            reservation.state = "active"
+        else:
+            reservation.state = "confirmed"
         reservation.can_cancel = reservation_cancellation.can_cancel(reservation, booking_items)
         if reservation.can_cancel:
             event = min(i.effective_event_date for i in live_items)
@@ -1293,11 +1334,19 @@ def active_reservations_view(request):
                 "no_show" if any(i.rental_date < today for i in waiting) else "customer_asked"
             )
 
+    # This page is for rentals that are still running. A booking whose every gown is back is finished: it lives on in Reservation Records and
+    # Rental History, so it leaves this list. Late ones go first (the most days late on top); the rest keep their order (the sort is stable).
+    running = [r for r in reservations if not r.is_completed]
+    running.sort(key=lambda r: (0, -r.overdue_days) if r.state == "overdue" else (1, 0))
+    state_counts = {"all": len(running)}
+    for key in ("confirmed", "active", "overdue"):
+        state_counts[key] = sum(1 for r in running if r.state == key)
+
     return render(
         request,
         "arabela_admin/active-reservations.html",
         {
-            "page": "active", "reservations": reservations, "item_holds": item_holds,
+            "page": "active", "reservations": running, "state_counts": state_counts, "item_holds": item_holds,
             # The shop's own "today" (Asia/Manila), so the calendars grey out past days by
             # the same clock the server enforces -- not the browser's.
             "today_iso": today.isoformat(),
@@ -3006,12 +3055,15 @@ def reservation_item_mark_picked_up_view(request, item_id):
 @require_http_methods(["POST"])
 @transaction.atomic
 def reservation_item_change_pickup_view(request, item_id):
-    """The customer wants the gown EARLIER: move the booking's pick-up date back. Only
-    earlier (a later pick-up is just a late pick-up, counted as late), never before today,
-    and never onto days another booking, a block, or another booking's cooldown holds the
-    same physical gown. The booking's own pick-up moves, so everything that reads it -- the
-    Rental Schedule (painted in the Pick-up colour), availability, the early count against
-    original_rental_date -- follows by itself."""
+    """The customer wants a different pick-up day. It may go EARLIER, and -- after it was moved earlier -- BACK up to the day the customer
+    originally booked (original_rental_date), but never past that day (a customer who comes later than they booked is just marked late),
+    never before today, never after the return date, and never onto days another booking, a block, or another booking's cooldown holds
+    the same physical gown.
+
+    Why moving back can never double-book the gown: a pick-up moved later only SHRINKS the days this booking holds (they were all its own),
+    so it can't touch anyone else's; the days it gives up become free for other customers at once. A move earlier takes new days, so the
+    same overlap check as ever has to pass. The booking's own pick-up moves, so everything that reads it -- the Rental Schedule (painted in
+    the Pick-up colour), availability, the early count against original_rental_date -- follows by itself."""
     item, error = _load_open_item(request, item_id)
     if error:
         return error
@@ -3026,15 +3078,20 @@ def reservation_item_change_pickup_view(request, item_id):
         return JsonResponse({"error": "Invalid date"}, status=400)
 
     today = timezone.localdate()
-    if new_date >= item.rental_date:
+    booked_day = item.original_rental_date or item.rental_date            # the day the customer originally booked
+    if new_date == item.rental_date:
+        return JsonResponse({"error": f"The pick-up is already on {new_date:%b %d, %Y}. Choose a different day."}, status=400)
+    if new_date > booked_day:
         return JsonResponse({
             "error": (
-                f"The new pick-up date must be earlier than the current one "
-                f"({item.rental_date:%b %d, %Y}). A customer who comes later is just marked late."
+                f"The pick-up can't be later than the day the customer originally booked ({booked_day:%b %d, %Y}). "
+                f"A customer who comes later is just marked late."
             ),
         }, status=400)
     if new_date < today:
         return JsonResponse({"error": "The new pick-up date can't be a day that has already passed."}, status=400)
+    if new_date > item.return_date:
+        return JsonResponse({"error": "The pick-up can't be after the return date."}, status=400)
 
     if item.gown_id:
         list(Gown.objects.select_for_update().filter(id=item.gown_id))
@@ -3048,11 +3105,12 @@ def reservation_item_change_pickup_view(request, item_id):
     item.rental_date = new_date
     item.save(update_fields=["rental_date", "original_rental_date", "updated_at"])
     days_early = ((item.original_rental_date or old_date) - new_date).days
+    how = "the day it was originally booked" if days_early == 0 else f"{_plural_days(days_early)} earlier than originally booked"
     ReservationStatusEvent.record(
         item.reservation, f"{item.gown_name} pick-up date changed", item=item,
         detail=(
-            f"Pick-up moved from {old_date:%b %d} to {new_date:%b %d, %Y} at the customer's request "
-            f"({_plural_days(days_early)} earlier than originally booked)."
+            f"Pick-up moved {'back ' if new_date > old_date else ''}from {old_date:%b %d} to {new_date:%b %d, %Y} at the customer's "
+            f"request ({how})."
         ),
         actor=ReservationStatusEvent.Actor.STAFF,
     )

@@ -103,6 +103,7 @@ class SidebarModulesTests(TestCase):
                 self.assertIn("else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' }", rule)
                 self.assertIn("else if (page === 'reservation-records') { selected = 'FinancialReport' }", rule)
                 self.assertNotIn("page === 'payment-verification' || page === 'security-deposits' || page === 'reservation-records'", rule)
+                self.assertIn("page === 'active' || page === 'rental-history' || page === 'pending'", rule)         # Rental History opens Bookings & Schedule
 
     def test_every_page_has_the_same_sidebar_structure_for_the_owner(self):
         self.check_structure(self.sidebars(self.owner), owner=True)
@@ -115,7 +116,9 @@ class SidebarModulesTests(TestCase):
         for name in ("Dashboard", "Bookings & Schedule", "Inventory Management", "Customer Management", "Staff Management", "Profile"):
             self.assertIn(name, modules)
         self.assertEqual(hrefs(modules["Bookings & Schedule"]).count(reverse("arabela_admin:new_booking")), 1)
-        self.assertEqual(len(hrefs(modules["Bookings & Schedule"])), 4)
+        self.assertEqual(hrefs(modules["Bookings & Schedule"]), [
+            reverse("arabela_admin:new_booking"), reverse("arabela_admin:rental_schedule"), reverse("arabela_admin:active_reservations"),
+            reverse("arabela_admin:rental_history"), reverse("arabela_admin:pending_approval")])     # Rental History sits right below Active Reservations
 
     def test_the_two_pages_name_the_new_module_in_their_year_toast(self):
         found = self.sidebars(self.owner)

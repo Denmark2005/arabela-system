@@ -12,11 +12,15 @@
     <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
   <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet"></head>
   <body
-    x-data="{ page: 'active', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, openCustomerModal: false, viewingCustomer: {}, search: '', openTimeline: null, openBookings: [], autoOpen: [],
+    x-data="{ page: 'active', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, openCustomerModal: false, viewingCustomer: {}, search: '', stateFilter: 'all', openTimeline: null, openBookings: [], autoOpen: [],
       isBookingOpen(id) { return this.openBookings.includes(id) || this.autoOpen.includes(id); },
       toggleBooking(id) {
         if (this.isBookingOpen(id)) { this.openBookings = this.openBookings.filter(x => x !== id); this.autoOpen = this.autoOpen.filter(x => x !== id); }
         else { this.openBookings = this.openBookings.concat([id]); }
+      },
+      matchCount() {
+        const q = String(this.search || '').toLowerCase(); const f = this.stateFilter;
+        return Array.from(document.querySelectorAll('.ar-booking[data-booking-id]')).filter(el => (f === 'all' || el.getAttribute('data-state') === f) && (q === '' || (el.getAttribute('data-search') || '').indexOf(q) !== -1)).length;
       } }"
     x-init="
          darkMode = JSON.parse(localStorage.getItem('darkMode'));
@@ -24,9 +28,17 @@
          const presetSearchParams = new URLSearchParams(window.location.search);
          const presetSearch = presetSearchParams.get('search');
          if (presetSearch) { search = presetSearch; }
+         const presetState = presetSearchParams.get('state');
+         if (['confirmed', 'active', 'overdue'].includes(presetState)) { stateFilter = presetState; }
          $watch('search', value => {
            const params = new URLSearchParams(window.location.search);
            value ? params.set('search', value) : params.delete('search');
+           const query = params.toString();
+           history.replaceState(null, '', window.location.pathname + (query ? '?' + query : ''));
+         });
+         $watch('stateFilter', value => {
+           const params = new URLSearchParams(window.location.search);
+           value !== 'all' ? params.set('state', value) : params.delete('state');
            const query = params.toString();
            history.replaceState(null, '', window.location.pathname + (query ? '?' + query : ''));
          });
@@ -53,6 +65,23 @@
       .ar-ref b { font-weight: 500; padding: .1rem .5rem; border-radius: 999px; background: #f2f4f7; color: #475467; }
       .dark .ar-ref b { background: #1d2939; color: #98a2b3; }
       .ar-chip { padding: .1rem .5rem; border-radius: 999px; background: rgba(70,95,255,.1); color: #465fff; font-size: .7rem; font-weight: 500; }
+      .ar-chip--late { background: #fef3f2; color: #b42318; }
+      .dark .ar-chip--late { background: rgba(240,68,56,.15); color: #fda29b; }
+      .ar-booking.is-overdue > .ar-line { box-shadow: inset 3px 0 0 #f04438; }
+      /* The colour key is also the filter: one click shows only that kind of booking. */
+      .ar-filters { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+      .ar-filter { display: inline-flex; align-items: center; gap: .5rem; padding: .35rem .8rem; border: 1px solid #d0d5dd; border-radius: 999px; background: transparent; color: #475467; font-size: .875rem; font-weight: 500; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
+      .ar-filter:hover { background: rgba(152,162,179,.12); }
+      .ar-filter:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+      .ar-filter.is-on { background: #465fff; border-color: #465fff; color: #fff; }
+      .ar-filter .ar-dot { display: inline-block; width: 12px; height: 12px; border-radius: 9999px; box-shadow: 0 0 0 2px rgba(0,0,0,.06); }
+      .ar-filter .ar-n { min-width: 1.25rem; padding: 0 .4rem; border-radius: 999px; background: rgba(152,162,179,.22); font-size: .75rem; font-weight: 600; text-align: center; }
+      .ar-filter.is-on .ar-n { background: rgba(255,255,255,.26); }
+      .ar-filter--hot:not(.is-on) { border-color: #fda29b; color: #b42318; }
+      .ar-filter--hot:not(.is-on) .ar-n { background: #fee4e2; color: #b42318; }
+      .dark .ar-filter { border-color: #344054; color: #d0d5dd; }
+      .dark .ar-filter--hot:not(.is-on) { border-color: rgba(240,68,56,.5); color: #fda29b; }
+      .dark .ar-filter--hot:not(.is-on) .ar-n { background: rgba(240,68,56,.18); color: #fda29b; }
       .ar-date { font-size: .875rem; color: #667085; }
       .dark .ar-date { color: #98a2b3; }
       .ar-phone { font-size: .8125rem; color: #465fff; text-decoration: underline; }
@@ -128,7 +157,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -316,6 +345,15 @@
                     :class="page === 'active' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
                     Active Reservations
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:rental_history' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'rental-history' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Rental History
                   </a>
                 </li>
                 <li>
@@ -1171,19 +1209,13 @@
 </div>
             <!-- Breadcrumb End -->
 
-            <div class="status-legend mb-3 flex flex-wrap items-center gap-4 text-sm font-medium text-gray-600 dark:text-gray-300">
-              <span class="status-legend-item inline-flex items-center gap-2">
-                <span style="display:inline-block;width:12px;height:12px;border-radius:9999px;background:#BBF7D0;box-shadow:0 0 0 2px rgba(0,0,0,0.06)"></span>
-                Confirmed
-              </span>
-              <span class="status-legend-item inline-flex items-center gap-2">
-                <span style="display:inline-block;width:12px;height:12px;border-radius:9999px;background:#BFDBFE;box-shadow:0 0 0 2px rgba(0,0,0,0.06)"></span>
-                Active
-              </span>
-              <span class="status-legend-item inline-flex items-center gap-2">
-                <span style="display:inline-block;width:12px;height:12px;border-radius:9999px;background:#FCA5A5;box-shadow:0 0 0 2px rgba(0,0,0,0.06)"></span>
-                Overdue
-              </span>
+            <!-- The colour key is also the filter: one click shows only that kind of booking (the page's own search still applies). The numbers are
+                 how many of each there are right now; a finished rental is not listed here at all (see Rental History). -->
+            <div class="ar-filters mb-3" role="group" aria-label="Show bookings by status">
+              <button type="button" class="ar-filter" :class="stateFilter === 'all' ? 'is-on' : ''" :aria-pressed="stateFilter === 'all' ? 'true' : 'false'" @click="stateFilter = 'all'">All <span class="ar-n">{{ state_counts.all }}</span></button>
+              <button type="button" class="ar-filter" :class="stateFilter === 'confirmed' ? 'is-on' : ''" :aria-pressed="stateFilter === 'confirmed' ? 'true' : 'false'" @click="stateFilter = 'confirmed'" title="Waiting for the first pick-up"><span class="ar-dot" style="background:#BBF7D0"></span>Confirmed <span class="ar-n">{{ state_counts.confirmed }}</span></button>
+              <button type="button" class="ar-filter" :class="stateFilter === 'active' ? 'is-on' : ''" :aria-pressed="stateFilter === 'active' ? 'true' : 'false'" @click="stateFilter = 'active'" title="A gown is out with the customer"><span class="ar-dot" style="background:#BFDBFE"></span>Active <span class="ar-n">{{ state_counts.active }}</span></button>
+              <button type="button" class="ar-filter{% if state_counts.overdue %} ar-filter--hot{% endif %}" :class="stateFilter === 'overdue' ? 'is-on' : ''" :aria-pressed="stateFilter === 'overdue' ? 'true' : 'false'" @click="stateFilter = 'overdue'" title="A gown is past its return date"><span class="ar-dot" style="background:#FCA5A5"></span>Overdue <span class="ar-n">{{ state_counts.overdue }}</span></button>
             </div>
 
             <div class="mb-5 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03] sm:p-5">
@@ -1216,7 +1248,7 @@
                   {% with item_count=r.items.all|length %}
                   <!-- One booking: a closed line (name, booking number, cellphone, first pick-up, last return) and, hidden until it is
                        opened, that booking's own rows. Everything inside the panel is the old table's cells, unchanged. -->
-                  <div class="ar-booking" data-booking-id="{{ r.id }}" data-search="{{ r.display_customer_name|lower }} {{ r.reference_code|lower }}{% for gi in r.items.all %} {{ gi.gown_code|lower }}{% endfor %} {{ r.phone|cut:' ' }}" x-show="search === '' || '{{ r.display_customer_name|lower|escapejs }} {{ r.reference_code|lower|escapejs }}{% for gi in r.items.all %} {{ gi.gown_code|lower|escapejs }}{% endfor %} {{ r.phone|cut:" "|escapejs }}'.includes(search.toLowerCase())">
+                  <div class="ar-booking{% if r.state == 'overdue' %} is-overdue{% endif %}" data-booking-id="{{ r.id }}" data-search="{{ r.display_customer_name|lower }} {{ r.reference_code|lower }}{% for gi in r.items.all %} {{ gi.gown_code|lower }}{% endfor %} {{ r.phone|cut:' ' }}" x-show="(stateFilter === 'all' || stateFilter === '{{ r.state }}') && (search === '' || '{{ r.display_customer_name|lower|escapejs }} {{ r.reference_code|lower|escapejs }}{% for gi in r.items.all %} {{ gi.gown_code|lower|escapejs }}{% endfor %} {{ r.phone|cut:" "|escapejs }}'.includes(search.toLowerCase()))" data-state="{{ r.state }}">
                     <div class="ar-line" :class="isBookingOpen({{ r.id }}) ? 'is-open' : ''" @click="toggleBooking({{ r.id }})">
                       <div class="ar-who">
                         <div class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-gray-400 dark:bg-gray-800" style="flex: none;">
@@ -1227,6 +1259,7 @@
                       <div class="ar-ref">
                         <b>{{ r.reference_code }}</b>
                         {% if r.gown_count > 1 %}<span class="ar-chip">{{ r.gown_count }} gowns</span>{% endif %}
+                        {% if r.state == 'overdue' %}<span class="ar-chip ar-chip--late" title="At least one gown in this booking is past its return date">{{ r.overdue_days }} day{{ r.overdue_days|pluralize }} late</span>{% endif %}
                       </div>
                       <div class="ar-phone-cell">
                         {% if r.phone %}<a href="tel:{{ r.phone }}" class="ar-phone" title="Call the customer" @click.stop>{{ r.phone }}</a>{% else %}<span class="ar-none">&mdash;</span>{% endif %}
@@ -1301,7 +1334,7 @@
                             <button type="button"
                               class="resv-mark-pickedup-btn inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
                               data-item-id="{{ item.id }}">Mark Picked Up</button>
-                            {% elif item.stage == "Reserved" or item.stage == "Overdue" %}
+                            {% elif item.stage == "Reserved" or item.stage == "Return" or item.stage == "Overdue" %}
                             <!-- Condition choices open in a floating popover (see #row-popover near
                                  the end of <body>), not inline here: revealing them in the row itself
                                  would grow this row's height and visibly push every row below it down
@@ -1365,19 +1398,15 @@
                         <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">&#8369; {{ item.rental_price|floatformat:0 }}</p></td>
                         {% if forloop.first %}
                         <td class="px-5 py-4 sm:px-6" rowspan="{{ item_count }}" style="vertical-align: top;">
-                          {% if r.has_overdue_item %}
-                          <!-- Overrides the raw reservation status: a stage change made on the
-                               Rental Schedule calendar (item.stage -> Overdue) has to be visible
-                               here too, not just on the calendar itself. -->
-                          <p class="inline-flex rounded-full bg-error-50 px-2 py-0.5 text-theme-xs font-medium text-error-700 dark:bg-error-500/15 dark:text-error-500" title="At least one item in this booking is overdue">Overdue</p>
-                          {% elif r.is_completed %}
-                          <p class="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400" title="Every gown in this booking has been returned">Completed</p>
-                          {% elif r.status == 'Confirmed' %}
-                          <p class="inline-flex rounded-full bg-success-50 px-2 py-0.5 text-theme-xs font-medium text-success-700 dark:bg-success-500/15 dark:text-success-500">Confirmed</p>
-                          {% elif r.status == 'Active' %}
-                          <p class="inline-flex rounded-full bg-brand-50 px-2 py-0.5 text-theme-xs font-medium text-brand-500 dark:bg-brand-500/15 dark:text-brand-400">Active</p>
+                          {% if r.state == 'overdue' %}
+                          <!-- The booking's own status stays "Confirmed" all the way through (nothing ever writes Active/Overdue onto it), so what
+                               staff read here is worked out from the gowns: Overdue = a gown is past its return date, Active = a gown has gone
+                               out, Confirmed = still waiting for the first pick-up. -->
+                          <p class="inline-flex rounded-full bg-error-50 px-2 py-0.5 text-theme-xs font-medium text-error-700 dark:bg-error-500/15 dark:text-error-500" title="At least one gown in this booking is past its return date">Overdue</p>
+                          {% elif r.state == 'active' %}
+                          <p class="inline-flex rounded-full bg-brand-50 px-2 py-0.5 text-theme-xs font-medium text-brand-500 dark:bg-brand-500/15 dark:text-brand-400" title="A gown from this booking is out with the customer">Active</p>
                           {% else %}
-                          <p class="inline-flex rounded-full bg-error-50 px-2 py-0.5 text-theme-xs font-medium text-error-700 dark:bg-error-500/15 dark:text-error-500">{{ r.status }}</p>
+                          <p class="inline-flex rounded-full bg-success-50 px-2 py-0.5 text-theme-xs font-medium text-success-700 dark:bg-success-500/15 dark:text-success-500" title="Waiting for the first pick-up">Confirmed</p>
                           {% endif %}
                         </td>
                         <td class="px-5 py-4 sm:px-6" rowspan="{{ item_count }}" style="vertical-align: top;">
@@ -1440,6 +1469,12 @@
                     <p class="text-gray-500 text-theme-sm dark:text-gray-400">No active reservations yet. Approved bookings will appear here.</p>
                   </div>
                   {% endfor %}
+                  {% if reservations %}
+                  <div class="ar-empty" x-show="matchCount() === 0" x-cloak>
+                    <p class="text-gray-500 text-theme-sm dark:text-gray-400" x-text="search !== '' ? 'No running rentals match your search.' : (stateFilter === 'overdue' ? 'No overdue reservations right now.' : (stateFilter === 'active' ? 'No gown is out with a customer right now.' : 'No booking is waiting for its first pick-up.'))"></p>
+                    <p class="mt-1 text-gray-400 text-theme-xs dark:text-gray-500" x-show="search !== ''">Finished rentals are not listed here. Look for them in <a href="{% url 'arabela_admin:rental_history' %}" class="font-medium text-brand-500 hover:text-brand-600">Rental History</a>.</p>
+                  </div>
+                  {% endif %}
                   </div>
                 </div>
               </div>
@@ -1545,11 +1580,12 @@
         var q = String(state.search || '').toLowerCase();
         if (q === '') { state.autoOpen = []; return; }
         var hits = Array.prototype.filter.call(document.querySelectorAll('.ar-booking[data-booking-id]'), function (el) {
-          return (el.getAttribute('data-search') || '').indexOf(q) !== -1;
+          return (state.stateFilter === 'all' || el.getAttribute('data-state') === state.stateFilter) && (el.getAttribute('data-search') || '').indexOf(q) !== -1;
         });
         state.autoOpen = hits.length === 1 ? [Number(hits[0].getAttribute('data-booking-id'))] : [];
       }
       watch('search', openTheOnlyMatch);
+      watch('stateFilter', openTheOnlyMatch);
       openTheOnlyMatch();
     }
 
@@ -1607,7 +1643,8 @@
     //   Mark Picked Up   -- one click, records today; the server only allows it on or after the
     //                       booking's current pick-up date.
     //   Mark Returned    -- Returned / Returned - needs repair.
-    //   Change pick-up date   -- the customer wants the gown EARLIER (calendar, earlier days only).
+    //   Change pick-up date   -- the customer wants the gown EARLIER, or (after an earlier move) changed their mind and
+    //                            wants it back: any free day from today up to the day originally booked.
     //   Change return date    -- the customer needs it LONGER (calendar, later days only).
     // Every action reloads the page afterwards, so the remarks, colours and buttons are always
     // exactly what the server now says -- there is no second, hand-maintained copy of them here.
@@ -1686,7 +1723,9 @@
     }
 
     // ---- The change calendar ------------------------------------------------------------------
-    // kind 'pickup': days from TODAY up to (not including) the current pick-up date.
+    // kind 'pickup': any day from TODAY up to the day the customer ORIGINALLY booked (never later than that), except the current pick-up
+    //   day. Earlier than now takes new days (so the overlap test below matters); later than now, back toward the booked day, only gives
+    //   days up -- they were this booking's own, so it can never overlap anyone else (the server decides it all the same).
     // kind 'return': days after the current return date.
     // A day is only clickable if the gown is free for the WHOLE stretch the booking would then
     // cover -- the same overlap test the server runs (_schedule_conflict) -- so a click can't
@@ -1703,7 +1742,9 @@
       var windowEnd;
       if (state.kind === 'pickup') {
         if (iso < TODAY) return { ok: false, why: 'Already passed' };
-        if (iso >= state.current) return { ok: false, why: '' };
+        if (iso === state.current) return { ok: false, why: '' };
+        if (iso > state.original) return { ok: false, why: 'Later than the day the customer booked (' + fmtShort(state.original) + '). A later pick-up is just a late pick-up.' };
+        if (iso > state.returnDate) return { ok: false, why: 'After the return date' };
         windowStart = iso; windowEnd = state.returnDate;
       } else {
         if (iso <= state.current) return { ok: false, why: '' };
@@ -1721,7 +1762,11 @@
 
     function rangeOf(state) {
       if (!state.chosen) return null;
-      return state.kind === 'pickup' ? [state.chosen, shiftIso(state.current, -1)] : [shiftIso(state.current, 1), state.chosen];
+      if (state.kind === 'pickup') {
+        // earlier: the days the booking now ALSO holds; later: the days it GIVES UP (free for other customers)
+        return state.chosen < state.current ? [state.chosen, shiftIso(state.current, -1)] : [state.current, shiftIso(state.chosen, -1)];
+      }
+      return [shiftIso(state.current, 1), state.chosen];
     }
 
     function renderCalendar() {
@@ -1739,7 +1784,9 @@
       var sub = document.createElement('p');
       sub.className = 'mb-2 text-theme-xs text-gray-500 dark:text-gray-400';
       sub.textContent = (st.kind === 'pickup'
-        ? 'Customer wants it earlier. Currently ' + fmtLong(st.current) + (st.original !== st.current ? ' (originally ' + fmtShort(st.original) + ')' : '') + '.'
+        ? (st.original !== st.current
+            ? 'Currently ' + fmtLong(st.current) + ' (originally ' + fmtShort(st.original) + '). Pick an earlier day, or go back up to ' + fmtShort(st.original) + ' if the customer changed their mind.'
+            : 'Customer wants it earlier. Currently ' + fmtLong(st.current) + '.')
         : 'Customer needs it longer. Currently ' + fmtLong(st.current) + (st.original !== st.current ? ' (originally ' + fmtShort(st.original) + ')' : '') + '.');
       root.appendChild(sub);
 
@@ -1772,8 +1819,9 @@
         cell.textContent = String(day);
         var style = 'height:28px;border-radius:6px;font-size:12px;';
         var inRange = range && iso >= range[0] && iso <= range[1];
+        var givesUp = st.kind === 'pickup' && st.chosen && st.chosen > st.current;
         if (iso === st.chosen) style += colors.strong;
-        else if (inRange) style += colors.soft;
+        else if (inRange) style += givesUp ? 'background:rgba(152,162,179,.30);' : colors.soft;
         else if (iso === st.current) style += 'border:1px solid #98A2B3;';
         if (info.ok) {
           cell.className = 'resv-cal-day text-gray-800 dark:text-white/90';
@@ -1800,16 +1848,19 @@
 
       if (st.chosen) {
         var n = st.kind === 'pickup' ? diffDays(st.original, st.chosen) : diffDays(st.chosen, st.original);
+        var movingBack = st.kind === 'pickup' && st.chosen > st.current;
         var box = document.createElement('div');
         box.className = 'mt-2 rounded-md px-2 py-1.5';
         box.style.cssText = colors.soft;
         var line1 = document.createElement('p');
         line1.className = 'text-theme-xs font-semibold';
         line1.textContent = (st.kind === 'pickup' ? 'Pick-up moves to ' : 'Return moves to ') + fmtLong(st.chosen)
-          + ' · ' + plural(n) + (st.kind === 'pickup' ? ' early' : ' late');
+          + (st.kind === 'pickup' && n === 0 ? ' · the day it was originally booked' : ' · ' + plural(n) + (st.kind === 'pickup' ? ' early' : ' late'));
         var line2 = document.createElement('p');
         line2.className = 'mt-0.5 text-theme-xs';
-        line2.textContent = "This only changes the customer's booked dates. The gown is still in the shop.";
+        line2.textContent = movingBack
+          ? 'The days from ' + fmtShort(st.current) + ' to ' + fmtShort(shiftIso(st.chosen, -1)) + ' are free again for other customers.'
+          : "This only changes the customer's booked dates. The gown is still in the shop.";
         box.appendChild(line1); box.appendChild(line2);
         root.appendChild(box);
 
@@ -1832,7 +1883,7 @@
     function openChangeCalendar(btn) {
       var itemId = btn.dataset.itemId;
       var kind = btn.dataset.kind;
-      var start = kind === 'pickup' ? (btn.dataset.current > TODAY ? shiftIso(btn.dataset.current, -1) : TODAY) : shiftIso(btn.dataset.current, 1);
+      var start = kind === 'pickup' ? (btn.dataset.current > TODAY ? btn.dataset.current : TODAY) : shiftIso(btn.dataset.current, 1);
       if (kind === 'pickup' && start < TODAY) start = TODAY;
       calState = {
         kind: kind, itemId: itemId, current: btn.dataset.current, original: btn.dataset.original,
