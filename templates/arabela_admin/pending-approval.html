@@ -19,7 +19,16 @@
   </style>
 </head>
   <body
-    x-data="{ page: 'pending', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, openCustomerModal: false, viewingCustomer: {}, search: '', openTimeline: null }"
+    x-data="{ page: 'pending', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, openCustomerModal: false, viewingCustomer: {}, openReceiptModal: false, viewingPayment: {}, search: '', openTimeline: null, openBookings: [], autoOpen: [],
+      isBookingOpen(id) { return this.openBookings.includes(id) || this.autoOpen.includes(id); },
+      toggleBooking(id) {
+        if (this.isBookingOpen(id)) { this.openBookings = this.openBookings.filter(x => x !== id); this.autoOpen = this.autoOpen.filter(x => x !== id); }
+        else { this.openBookings = this.openBookings.concat([id]); }
+      },
+      matchCount() {
+        const q = String(this.search || '').toLowerCase();
+        return Array.from(document.querySelectorAll('.ar-booking[data-booking-id]')).filter(el => q === '' || (el.getAttribute('data-search') || '').indexOf(q) !== -1).length;
+      } }"
     x-init="
          darkMode = JSON.parse(localStorage.getItem('darkMode'));
          $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)));
@@ -37,10 +46,65 @@
            value ? params.set('search', value) : params.delete('search');
            const query = params.toString();
            history.replaceState(null, '', window.location.pathname + (query ? '?' + query : ''));
-         });"
+         });
+         paSetupBookings($data, $watch);"
     :class="{'dark bg-gray-900': darkMode === true}"
   >
     {% include "arabela_admin/partials/timeline_styles.html" %}
+    {% include "arabela_admin/partials/ar_list_styles.html" %}
+    <style>
+      /* Pending Approval: the same look as Active Reservations (partials/ar_list_styles.html). Its own container class is `pa-card`, not `ar-card`:
+         partials/attach_receipt.html (also on this page) already uses `ar-card` for its window. */
+      .pa-card { margin-bottom: 1.25rem; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; }
+      .dark .pa-card { background: rgba(255,255,255,.03); border-color: #1d2939; }
+      /* name + booking number | gown | dates | total | actions | arrow. Every column has a fixed or minimum width, never "auto": an auto column is sized
+         per row, and the column titles would stop lining up with the rows. The actions column is wide enough for Approve, Reject, "Attach receipt" and
+         two icons (a booking that has not paid yet has that longer button). */
+      .ar-head.pa-grid, .ar-line.pa-grid { grid-template-columns: minmax(9rem, 1.5fr) minmax(9rem, 1.6fr) minmax(9.75rem, 1fr) 6rem 20rem 2.25rem; }
+      .pa-cust, .pa-gowns, .pa-total { min-width: 0; }
+      .pa-dot { background: #f79009; }
+      .pa-sub { margin: .3rem 0 0 1.4rem; }
+      .pa-sub b { white-space: nowrap; }
+      .pa-wait { color: #667085; font-size: .75rem; }
+      .dark .pa-wait { color: #98a2b3; }
+      .pa-g1 { font-size: .875rem; font-weight: 500; color: #1d2939; overflow-wrap: anywhere; }
+      .dark .pa-g1 { color: rgba(255,255,255,.9); }
+      .pa-g2 { display: flex; align-items: center; gap: .35rem; margin-top: .2rem; font-size: .75rem; color: #98a2b3; min-width: 0; }
+      .pa-g2.pa-names { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .pa-g2 > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .pa-g2.pa-names > span:last-child { overflow: visible; }
+      .pa-dates { font-size: .875rem; color: #667085; white-space: nowrap; }
+      .dark .pa-dates { color: #98a2b3; }
+      .pa-amt { font-size: .875rem; font-weight: 600; color: #344054; font-variant-numeric: tabular-nums; }
+      .dark .pa-amt { color: #d0d5dd; }
+      .pa-note { margin-top: .2rem; font-size: .72rem; color: #667085; overflow-wrap: anywhere; }
+      .dark .pa-note { color: #98a2b3; }
+      .pa-note--ok { color: #039855; }
+      .pa-note--bad { color: #d92d20; font-weight: 500; }
+      .dark .pa-note--ok { color: #32d583; }
+      .dark .pa-note--bad { color: #fda29b; }
+      .pa-acts { display: flex; flex-wrap: nowrap; align-items: center; gap: .4rem; justify-self: start; }
+      .ar-gl.pa-gl { grid-template-columns: minmax(0, 1fr) auto auto; }
+      /* A small laptop: the actions drop to a second row under the booking, so nothing is squeezed (the column titles go: they no longer line up). */
+      @media (max-width: 1360px) {
+        .ar-head.pa-grid { display: none; }
+        .ar-line.pa-grid { grid-template-columns: minmax(10rem, 1.6fr) minmax(10rem, 1.7fr) minmax(9.75rem, 1fr) 6rem 2.25rem; grid-template-areas: "cust gowns dates total chev" "acts acts acts acts acts"; row-gap: .6rem; }
+        .ar-line.pa-grid > .pa-cust { grid-area: cust; }
+        .ar-line.pa-grid > .pa-gowns { grid-area: gowns; }
+        .ar-line.pa-grid > .pa-dates { grid-area: dates; }
+        .ar-line.pa-grid > .pa-total { grid-area: total; }
+        .ar-line.pa-grid > .ar-chev { grid-area: chev; }
+        .ar-line.pa-grid > .pa-acts { grid-area: acts; justify-self: start; flex-wrap: wrap; }
+      }
+      /* A phone: one column, in the order staff read it. */
+      @media (max-width: 760px) {
+        .ar-line.pa-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.25rem; grid-template-areas: "cust cust chev" "gowns gowns gowns" "dates total total" "acts acts acts"; }
+        .ar-gl.pa-gl { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name name" "dates price"; row-gap: .3rem; }
+        .ar-gl.pa-gl > .ar-gname { grid-area: name; }
+        .ar-gl.pa-gl > .ar-gdates { grid-area: dates; }
+        .ar-gl.pa-gl > .ar-gprice { grid-area: price; }
+      }
+    </style>
     <!-- ===== Preloader Start ===== -->
     <script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('admin-dark-boot');}catch(e){}</script>
     <div
@@ -1137,149 +1201,166 @@
 </div>
             <!-- Breadcrumb End -->
 
-            <div class="status-legend mb-3 flex flex-wrap items-center gap-4 text-sm font-medium text-gray-600 dark:text-gray-300">
-              <span class="status-legend-item inline-flex items-center gap-2">
-                <span style="display:inline-block;width:12px;height:12px;border-radius:9999px;background:#FDE68A;box-shadow:0 0 0 2px rgba(0,0,0,0.06)"></span>
-                Awaiting confirmation
-              </span>
-            </div>
-            <div
-              class="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]"
-            >
-              <div class="px-5 py-4 sm:px-6 sm:py-5">
-                <h3 class="text-base font-medium text-gray-800 dark:text-white/90">Reservations Awaiting Confirmation</h3>
+            <!-- ONE box, the same look as Active Reservations: the search, then one short line per booking. A booking with several gowns shows
+                 "3 gowns" and opens to one short line per gown. Approve / Reject stay as words; the small actions are icon buttons with a tooltip.
+                 The booking that has waited longest is first (the view orders them); the shared pager shows 15 at a time. -->
+            <div class="pa-card">
+              <div class="ar-toolbar">
+                <div class="ar-search">
+                  <svg class="ar-search-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                  <input type="text" class="ar-search-input" x-model="search" placeholder="Search by customer, reference, cellphone or gown ID..." aria-label="Search pending bookings">
+                </div>
               </div>
-              <div class="border-t border-gray-100 dark:border-gray-800">
-                <div class="max-w-full overflow-x-auto">
-                  <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg="tbody" data-arpg-noun="bookings">
-                  <table class="min-w-full">
-                    <thead class="sticky top-0 z-10 bg-white dark:bg-gray-900">
-                      <tr class="border-b border-gray-100 dark:border-gray-800">
-                        <th class="px-5 py-3 sm:px-6 text-left">
-                          <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Customer</p>
-                        </th>
-                        <th class="px-5 py-3 sm:px-6 text-left">
-                          <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Gown Name</p>
-                        </th>
-                        <th class="px-5 py-3 sm:px-6 text-left">
-                          <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Requested Rental Date</p>
-                        </th>
-                        <th class="px-5 py-3 sm:px-6 text-left">
-                          <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Amount</p>
-                        </th>
-                        <th class="px-5 py-3 sm:px-6 text-left">
-                          <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Status</p>
-                        </th>
-                        <th class="px-5 py-3 sm:px-6 text-left">
-                          <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Actions</p>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-                      {% for r in reservations %}
-                      {% with item_count=r.items.all|length %}
+              <div class="ar-count" id="ar-count" aria-live="polite"></div>
+
+              <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg=".ar-booking" data-arpg-noun="bookings" data-arpg-top="off" data-arpg-count="#ar-count">
+                <div class="ar-head pa-grid">
+                  <span>Customer</span>
+                  <span>Gown</span>
+                  <span>Rental dates</span>
+                  <span>Total</span>
+                  <span>Actions</span>
+                  <span></span>
+                </div>
+                {% for r in reservations %}
+                <!-- One booking: a closed line (name, booking number and how long it has waited, the gown, the dates, the total, the actions) and,
+                     hidden until it is opened, who booked it and one short line per gown. -->
+                <div class="ar-booking" data-booking-id="{{ r.id }}" data-search="{{ r.display_customer_name|lower }} {{ r.reference_code|lower }}{% for gi in r.items.all %} {{ gi.gown_code|lower }}{% endfor %} {{ r.phone|cut:' ' }}" x-show="search === '' || ($el.getAttribute('data-search') || '').indexOf(search.toLowerCase()) !== -1">
+                  <!-- A click on the line opens the booking, except a click on one of its action buttons (.pa-acts). The buttons do NOT stop the click: partials/attach_receipt.html
+                       listens for "Attach receipt" on the whole page, and a stopped click would never reach it. -->
+                  <div class="ar-line pa-grid" :class="isBookingOpen({{ r.id }}) ? 'is-open' : ''" @click="if (!$event.target.closest('.pa-acts')) { toggleBooking({{ r.id }}) }">
+                    <div class="pa-cust">
+                      <div class="ar-who">
+                        <span class="ar-dot pa-dot" role="img" aria-label="Waiting for approval" title="Waiting for approval"></span>
+                        <span class="ar-name">{{ r.display_customer_name }}</span>
+                      </div>
+                      <div class="ar-ref pa-sub">
+                        <b>{{ r.reference_code }}</b>
+                        <span class="pa-wait">{{ r.waiting_text }}</span>
+                      </div>
+                    </div>
+                    <div class="pa-gowns">
+                      {% if r.gown_count > 1 %}
+                      <div class="pa-g1"><span class="ar-count-pill" title="{{ r.gown_count }} gowns in this booking"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0"/></svg>{{ r.gown_count }} gowns</span></div>
+                      <div class="pa-g2 pa-names">{% for item in r.items.all %}{{ item.gown_name }}{% if not forloop.last %} &middot; {% endif %}{% endfor %}</div>
+                      {% else %}
                       {% for item in r.items.all %}
-                      <tr class="bg-gray-50 dark:bg-white/5" x-show="search === '' || '{{ r.display_customer_name|lower|escapejs }} {{ r.reference_code|lower|escapejs }}{% for gi in r.items.all %} {{ gi.gown_code|lower|escapejs }}{% endfor %}'.includes(search.toLowerCase())" :class="search !== '' && '{{ r.reference_code|lower|escapejs }}' === search.toLowerCase() ? 'bg-brand-50 dark:bg-brand-500/15' : ''">
-                        {% if forloop.first %}
-                        <td class="px-5 py-4 sm:px-6" rowspan="{{ item_count }}" style="vertical-align: top;">
-                          <div class="flex items-center gap-3">
-                            <div class="flex flex-col">
-                              <span class="block font-medium text-gray-800 text-theme-sm dark:text-white/90">{{ r.display_customer_name }}</span>
-                              {% if r.booked_as_name %}<span class="text-xs text-gray-400 dark:text-gray-500">Booked as: {{ r.booked_as_name }}</span>{% endif %}
-                              <span class="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400" style="white-space: nowrap;">{{ r.reference_code }}</span>
-                              {% if r.is_staff_recorded %}
-                              <span class="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-theme-xs font-medium text-brand-500 dark:bg-brand-500/15 dark:text-brand-400" title="Recorded by staff in New Booking">{{ r.get_channel_display }}</span>
-                              {% if r.phone %}<a href="tel:{{ r.phone }}" class="mt-1 text-theme-xs text-brand-500 underline" title="Call the customer">{{ r.phone }}</a>{% endif %}
-                              {% endif %}
-                            </div>
-                          </div>
-                        </td>
-                        {% endif %}
-                        <td class="px-5 py-4 sm:px-6">
-                          <div class="flex items-center gap-2">
-                            <p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ item.gown_name }}</p>
-                            {% if item_count > 1 %}
-                            <span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ forloop.counter }} of {{ item_count }}</span>
+                      <div class="pa-g1">{{ item.gown_name }}</div>
+                      {% if item.gown_code %}
+                      <div class="pa-g2" title="Match this to the tag on the dress">
+                        <span class="admin-tag-dot" style="background-color: {{ item.tag_hex }};"></span>
+                        <span>{{ item.tag_color }} tag &middot; <span class="admin-tag-number font-medium text-gray-600 dark:text-gray-300">{{ item.gown_code }}</span></span>
+                      </div>
+                      {% endif %}
+                      {% endfor %}
+                      {% endif %}
+                    </div>
+                    <div class="pa-dates">{% if r.span_start %}{{ r.span_start|date:"M j" }}{% if r.span_start.year != r.span_end.year %}, {{ r.span_start.year }}{% endif %} &rarr; {{ r.span_end|date:"M j, Y" }}{% else %}&mdash;{% endif %}</div>
+                    <div class="pa-total">
+                      <div class="pa-amt" title="Total: the gown rental plus the security deposit">&#8369;{{ r.total_amount|floatformat:'-2g' }}</div>
+                      {% if r.is_staff_recorded and not r.payment_proof_url %}
+                      <div class="pa-note">Not paid yet</div>
+                      <div class="pa-note pa-note--ok{% if not r.receipt_count %} ar-hidden{% endif %}" data-receipt-count-for="{{ r.reference_code }}" data-count="{{ r.receipt_count }}">{% if r.receipt_count == 1 %}1 receipt attached{% else %}{{ r.receipt_count }} receipts attached{% endif %}</div>
+                      {% elif not r.payment_proof_url %}
+                      {% if r.receipt_count %}<div class="pa-note">Shop receipt attached</div>{% else %}<div class="pa-note pa-note--bad">No proof uploaded</div>{% endif %}
+                      {% endif %}
+                      {% if r.gcash_dups %}<div class="pa-note pa-note--bad" title="The same GCash reference number is also on {{ r.gcash_dups }}">Same GCash no. as {{ r.gcash_dups }}</div>{% endif %}
+                    </div>
+                    <div class="pa-acts">
+                      <button type="button"
+                        class="resv-btn resv-btn-approve inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-theme-xs font-medium shadow-theme-xs transition"
+                        data-url="{% url 'arabela_admin:reservation_approve' r.id %}"
+                        data-label="approved"
+                        data-ref="{{ r.reference_code }}"
+                        data-walkin="{% if r.is_staff_recorded and not r.payment_proof_url %}1{% else %}0{% endif %}"
+                        data-receipts="{{ r.receipt_count }}"
+                        onclick="reviewReservation(this)">Approve</button>
+                      <button type="button"
+                        class="resv-btn resv-btn-reject inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-theme-xs font-medium shadow-theme-xs transition"
+                        data-url="{% url 'arabela_admin:reservation_reject' r.id %}"
+                        data-label="rejected"
+                        onclick="reviewReservation(this)">Reject</button>
+                      {% if r.is_staff_recorded and not r.payment_proof_url %}
+                      <!-- Recorded at the shop and not paid yet: there is no online proof to view. When the customer pays,
+                           attach the shop's receipt (partials/attach_receipt.html), then Approve. -->
+                      <button type="button" class="ar-open-btn" data-ref="{{ r.reference_code }}" data-customer="{{ r.display_customer_name }}">Attach receipt</button>
+                      {% else %}
+                      <!-- Opens the payment proof right here (partials/payment_proof_window.html), with Approve / Reject inside it too. -->
+                      <button type="button"
+                        @click="viewingPayment = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"—"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:'-2g' }}', date: '{{ r.created_at|date:"M j, Y" }}', status: '{{ r.status|escapejs }}', proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}'), breakdown: JSON.parse('{{ r.payment_breakdown_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', gcashDup: '{{ r.gcash_dups|escapejs }}', approveUrl: '{% url 'arabela_admin:reservation_approve' r.id %}', rejectUrl: '{% url 'arabela_admin:reservation_reject' r.id %}', walkin: false, receiptCount: {{ r.receipt_count }} }; openReceiptModal = true"
+                        class="ar-ib" title="View payment" aria-label="View payment of {{ r.display_customer_name }}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                      </button>
+                      {% endif %}
+                      <button type="button"
+                        @click="viewingCustomer = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reference: '{{ r.reference_code|escapejs }}', email: '{{ r.customer.email|default:"—"|escapejs }}', phone: '{{ r.phone|default:"—"|escapejs }}', address: '{{ r.address|escapejs }}', city: '{{ r.city|escapejs }}', postal: '{{ r.postal_code|escapejs }}', submitted: '{{ r.created_at|date:"M j, Y"|escapejs }} at {{ r.created_at|date:"g:i A"|escapejs }}' }; openCustomerModal = true"
+                        class="ar-ib" title="View customer" aria-label="View customer {{ r.display_customer_name }}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                      </button>
+                      <button type="button" class="ar-ib" :class="openTimeline === {{ r.id }} ? 'is-on' : ''" :aria-pressed="openTimeline === {{ r.id }} ? 'true' : 'false'"
+                        @click="openTimeline = (openTimeline === {{ r.id }} ? null : {{ r.id }})"
+                        :title="openTimeline === {{ r.id }} ? 'Hide timeline' : 'Show timeline'" title="Show timeline" aria-label="Timeline of {{ r.reference_code }}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                      </button>
+                    </div>
+                    <button type="button" class="ar-chev" @click.stop="toggleBooking({{ r.id }})" aria-expanded="false"
+                      :aria-expanded="isBookingOpen({{ r.id }}) ? 'true' : 'false'" aria-controls="ar-panel-{{ r.id }}"
+                      aria-label="Show or hide the details of {{ r.display_customer_name }}, {{ r.reference_code }}">
+                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7.5l5 5 5-5" /></svg>
+                    </button>
+                  </div>
+                  <div class="ar-panel" id="ar-panel-{{ r.id }}" x-show="isBookingOpen({{ r.id }})" x-cloak>
+                    {% if r.booked_as_name or r.is_staff_recorded or r.phone %}
+                    <div class="ar-strip">
+                      {% if r.booked_as_name %}<span>Booked as: {{ r.booked_as_name }}</span>{% endif %}
+                      {% if r.is_staff_recorded %}<span class="inline-flex w-fit items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-theme-xs font-medium text-brand-500 dark:bg-brand-500/15 dark:text-brand-400" title="Recorded by staff in New Booking">{{ r.get_channel_display }}</span>{% endif %}
+                      {% if r.phone %}<a href="tel:{{ r.phone }}" class="ar-phone" title="Call the customer">{{ r.phone }}</a>{% endif %}
+                    </div>
+                    {% endif %}
+                    <!-- One short line per gown: its name, tag, dates and price. -->
+                    <div class="ar-gowns">
+                      {% for item in r.items.all %}
+                      <div class="ar-gown">
+                        <div class="ar-gl pa-gl">
+                          <div class="ar-gname">
+                            <span class="ar-gtitle">{{ item.gown_name }}</span>
+                            {% if r.gown_count > 1 %}<span class="ar-of">{{ forloop.counter }} of {{ r.gown_count }}</span>{% endif %}
+                            {% if item.gown_code %}
+                            <span class="ar-tag" title="Match this to the tag on the dress">
+                              <span class="admin-tag-dot" style="background-color: {{ item.tag_hex }};"></span>
+                              <span>{{ item.tag_color }} tag &middot; <span class="admin-tag-number font-medium text-gray-600 dark:text-gray-300">{{ item.gown_code }}</span></span>
+                            </span>
                             {% endif %}
                           </div>
-                          {% if item.gown_code %}
-                          <p class="mt-1 flex items-center gap-1.5 text-theme-xs text-gray-400 dark:text-gray-500" title="Match this to the tag on the dress">
-                            <span class="admin-tag-dot" style="background-color: {{ item.tag_hex }};"></span>
-                            <span>{{ item.tag_color }} tag &middot; <span class="admin-tag-number font-medium text-gray-600 dark:text-gray-300">{{ item.gown_code }}</span></span>
-                          </p>
-                          {% endif %}
-                        </td>
-                        <td class="px-5 py-4 sm:px-6">
-                          <p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ item.rental_date|date:"M j, Y" }}</p>
-                          <p class="mt-0.5 text-gray-400 text-theme-xs dark:text-gray-500">Return {{ item.return_date|date:"M j, Y" }}</p>
-                        </td>
-                        <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">&#8369;{{ item.rental_price|floatformat:'-2g' }}</p></td>
-                        {% if forloop.first %}
-                        <td class="px-5 py-4 sm:px-6" rowspan="{{ item_count }}" style="vertical-align: top;">
-                          <p class="inline-flex rounded-full bg-warning-50 px-2 py-0.5 text-theme-xs font-medium text-warning-700 dark:bg-warning-500/15 dark:text-warning-400">{{ r.status }}</p>
-                          {% if r.is_staff_recorded and not r.payment_proof_url %}
-                          <p class="mt-1 text-theme-xs text-gray-500 dark:text-gray-400">Not paid yet</p>
-                          <p class="mt-1 text-theme-xs font-medium text-success-600 dark:text-success-500{% if not r.receipt_count %} ar-hidden{% endif %}" data-receipt-count-for="{{ r.reference_code }}" data-count="{{ r.receipt_count }}">{% if r.receipt_count == 1 %}1 receipt attached{% else %}{{ r.receipt_count }} receipts attached{% endif %}</p>
-                          {% endif %}
-                        </td>
-                        <td class="px-5 py-4 sm:px-6" rowspan="{{ item_count }}" style="vertical-align: top;">
-                          <div class="flex flex-wrap items-center gap-2">
-                            <button type="button"
-                              class="resv-btn resv-btn-approve inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-theme-xs font-medium shadow-theme-xs transition"
-                              data-url="{% url 'arabela_admin:reservation_approve' r.id %}"
-                              data-label="approved"
-                              data-ref="{{ r.reference_code }}"
-                              data-walkin="{% if r.is_staff_recorded and not r.payment_proof_url %}1{% else %}0{% endif %}"
-                              data-receipts="{{ r.receipt_count }}"
-                              onclick="reviewReservation(this)">Approve</button>
-                            <button type="button"
-                              class="resv-btn resv-btn-reject inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-theme-xs font-medium shadow-theme-xs transition"
-                              data-url="{% url 'arabela_admin:reservation_reject' r.id %}"
-                              data-label="rejected"
-                              onclick="reviewReservation(this)">Reject</button>
-                            {% if r.is_staff_recorded and not r.payment_proof_url %}
-                            <!-- Recorded at the shop and not paid yet: there is no online proof to view. When the customer pays,
-                                 attach the shop's receipt (partials/attach_receipt.html), then Approve. -->
-                            <button type="button" class="ar-open-btn" data-ref="{{ r.reference_code }}" data-customer="{{ r.display_customer_name }}">Attach receipt</button>
-                            {% else %}
-                            <a href="{% url 'arabela_admin:payment_verification' %}?search={{ r.display_customer_name|urlencode }}"
-                              class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View Payment</a>
-                            {% endif %}
-                            <button type="button"
-                              @click="viewingCustomer = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reference: '{{ r.reference_code|escapejs }}', email: '{{ r.customer.email|default:"—"|escapejs }}', phone: '{{ r.phone|default:"—"|escapejs }}', address: '{{ r.address|escapejs }}', city: '{{ r.city|escapejs }}', postal: '{{ r.postal_code|escapejs }}', submitted: '{{ r.created_at|date:"M j, Y"|escapejs }} at {{ r.created_at|date:"g:i A"|escapejs }}' }; openCustomerModal = true"
-                              class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View Customer</button>
-                            <button type="button"
-                              @click="openTimeline = (openTimeline === {{ r.id }} ? null : {{ r.id }})"
-                              class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
-                              <span x-text="openTimeline === {{ r.id }} ? 'Hide Timeline' : 'Timeline'">Timeline</span>
-                            </button>
-                          </div>
-                        </td>
-                        {% endif %}
-                      </tr>
+                          <div class="ar-gdates"><span>{{ item.rental_date|date:"M j" }}{% if item.rental_date.year != item.return_date.year %}, {{ item.rental_date.year }}{% endif %} &rarr; {{ item.return_date|date:"M j, Y" }}</span></div>
+                          <div class="ar-gprice">&#8369;{{ item.rental_price|floatformat:'-2g' }}</div>
+                        </div>
+                      </div>
                       {% endfor %}
-                      <tr x-show="openTimeline === {{ r.id }} && (search === '' || '{{ r.display_customer_name|lower|escapejs }} {{ r.reference_code|lower|escapejs }}'.includes(search.toLowerCase()))" x-cloak>
-                        <td class="px-5 py-4 sm:px-6" colspan="6">
-                          {% include "arabela_admin/partials/timeline_rows.html" with timeline=r.timeline %}
-                        </td>
-                      </tr>
-                      {% endwith %}
-                      {% empty %}
-                      <tr>
-                        <td class="px-5 py-10 sm:px-6 text-center" colspan="6">
-                          <p class="text-gray-500 text-theme-sm dark:text-gray-400">No reservations are waiting for approval right now.</p>
-                        </td>
-                      </tr>
-                      {% endfor %}
-                    </tbody>
-                  </table>
+                    </div>
+                  </div>
+                  <div class="ar-tl" x-show="openTimeline === {{ r.id }}" x-cloak>
+                    {% include "arabela_admin/partials/timeline_rows.html" with timeline=r.timeline %}
                   </div>
                 </div>
+                {% empty %}
+                <div class="ar-empty">
+                  <p class="text-gray-500 text-theme-sm dark:text-gray-400">No reservations are waiting for approval right now.</p>
+                </div>
+                {% endfor %}
+                {% if reservations %}
+                <div class="ar-empty" x-show="matchCount() === 0" x-cloak>
+                  <p class="text-gray-500 text-theme-sm dark:text-gray-400">No pending booking matches your search.</p>
+                </div>
+                {% endif %}
               </div>
             </div>
 
+            <!-- The booking's payment proof, opened here instead of sending staff to Payment Verification and back. Approve / Reject are in it too. -->
+            {% include "arabela_admin/partials/payment_proof_window.html" with var="viewingPayment" flag="openReceiptModal" with_actions=1 %}
+
             <div x-show="openCustomerModal" x-cloak class="fixed inset-0 flex items-center justify-center p-5 overflow-y-auto z-99999">
-              <div class="modal-close-btn fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]"></div>
+              <div class="modal-close-btn admin-backdrop fixed inset-0 h-full w-full"></div>
               <div @click.outside="openCustomerModal = false" class="no-scrollbar relative w-full overflow-y-auto rounded-3xl bg-white p-4 dark:bg-gray-900 lg:p-8" style="max-width: 500px;">
                 <button
                   type="button"
@@ -1326,9 +1407,6 @@
                     </div>
                   </div>
                 </div>
-                <div class="mt-6 flex justify-end px-2">
-                  <button type="button" @click="openCustomerModal = false" class="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">Close</button>
-                </div>
               </div>
             </div>
 
@@ -1348,10 +1426,24 @@
       return match ? decodeURIComponent(match[1]) : '';
     }
 
+    // A search that matches exactly one booking opens it (the same words the list's own filter matches, kept on each booking as data-search).
+    function paSetupBookings(state, watch) {
+      function openTheOnlyMatch() {
+        var q = String(state.search || '').toLowerCase();
+        if (q === '') { state.autoOpen = []; return; }
+        var hits = Array.prototype.filter.call(document.querySelectorAll('.ar-booking[data-booking-id]'), function (el) {
+          return (el.getAttribute('data-search') || '').indexOf(q) !== -1;
+        });
+        state.autoOpen = hits.length === 1 ? [Number(hits[0].getAttribute('data-booking-id'))] : [];
+      }
+      watch('search', openTheOnlyMatch);
+      openTheOnlyMatch();
+    }
+
     function reviewReservation(btn) {
       var url = btn.dataset.url;
       var label = btn.dataset.label;
-      var row = btn.closest('tr');
+      var row = btn.closest('tr, .ar-booking, [data-resv-scope]');
       var buttons = row ? row.querySelectorAll('.resv-btn') : [btn];
       // Rejecting asks for an optional reason; approving just confirms.
       // Dismissing either dialog aborts (prompt resolves null, confirm false),

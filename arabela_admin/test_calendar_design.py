@@ -163,8 +163,8 @@ class NotificationsBackdropTests(TestCase):
         partial = Path(settings.BASE_DIR) / "templates" / "arabela_admin" / "partials" / "notifications.html"
         text = partial.read_text(encoding="utf8")
         self.assertNotIn("backdrop-blur", text)
-        self.assertIn(".notif-backdrop { background: rgba(16, 24, 40, 0.5); }", text)
-        self.assertIn(".dark .notif-backdrop { background: rgba(0, 0, 0, 0.6); }", text)
+        self.assertIn(".admin-backdrop { background: rgba(16, 24, 40, 0.5); }", text)
+        self.assertIn(".dark .admin-backdrop { background: rgba(0, 0, 0, 0.6); }", text)
 
     def test_every_admin_page_draws_the_window_on_the_plain_backdrop_and_still_closes_it(self):
         self.client.force_login(self.owner)
@@ -172,8 +172,9 @@ class NotificationsBackdropTests(TestCase):
             with self.subTest(page=name):
                 html = self.client.get(reverse("arabela_admin:" + name)).content.decode()
                 start = html.index("<!-- All Notifications Modal -->")
-                window = html[start:start + 1500]
-                self.assertIn('class="modal-close-btn notif-backdrop fixed inset-0 h-full w-full"', window)
+                window = html[start:html.index("<!-- All Notifications Modal End -->")]
+                self.assertIn('class="modal-close-btn admin-backdrop fixed inset-0 h-full w-full"', window)
                 self.assertNotIn("backdrop-blur", window)
                 self.assertIn("@click.outside=\"isAllNotificationsModal = false\"", window)      # clicking outside still closes it
-                self.assertIn('@click="isAllNotificationsModal = false"', window)                # its own X and Close still work
+                self.assertIn('@click="isAllNotificationsModal = false"', window)                # the X still closes it
+                self.assertNotRegex(window, r">\s*Close\s*<")                                      # ...and it is the only way: no second "Close" button

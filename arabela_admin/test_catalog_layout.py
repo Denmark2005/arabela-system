@@ -184,6 +184,7 @@ class LaptopFitTests(SimpleTestCase):
         self.assertEqual(html.count('<div class="cl-table custom-scrollbar overflow-y-auto"'), 1)
 
     def test_the_booking_number_chip_never_breaks_across_two_lines(self):
-        for name in ("pending-approval.html", "dashboard.html"):
-            with self.subTest(page=name):
-                self.assertRegex(self.text(name), r'text-gray-400" style="white-space: nowrap;">\{\{ r\.reference_code \}\}</span>')
+        self.assertRegex(self.text("dashboard.html"), r'text-gray-400" style="white-space: nowrap;">\{\{ r\.reference_code \}\}</span>')
+        pending = self.text("pending-approval.html")                       # the Active Reservations look: the chip is the <b> in the booking-number line
+        self.assertIn("<b>{{ r.reference_code }}</b>", pending)
+        self.assertIn(".pa-sub b { white-space: nowrap; }", pending)

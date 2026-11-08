@@ -49,162 +49,11 @@
     {% include "arabela_admin/partials/dialog.html" %}
     {% include "arabela_admin/partials/cancel_booking.html" %}
     <style>
-      /* Active Reservations: ONE box (search + the colour key, which is also the filter + the list). The list is one short line per booking; the
-         booking's own gowns are inside .ar-panel. Small coloured circles carry the status: every circle has its words on hover, in the "?" key,
-         and written out when a gown's line is opened. */
+      /* The list's own box (the rest of this page's list styles are shared with Pending Approval: partials/ar_list_styles.html). */
       .ar-card { margin-bottom: 1.25rem; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; }
       .dark .ar-card { background: rgba(255,255,255,.03); border-color: #1d2939; }
-      .ar-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; padding: .85rem 1.25rem; }
-      .ar-search { position: relative; flex: 1 1 18rem; min-width: 0; }
-      .ar-search-ic { position: absolute; left: .8rem; top: 50%; width: 1rem; height: 1rem; transform: translateY(-50%); color: #98a2b3; pointer-events: none; }
-      .ar-search-input { display: block; width: 100%; height: 2.5rem; box-sizing: border-box; padding: .4rem .8rem .4rem 2.3rem; border: 1px solid #d0d5dd; border-radius: .6rem; background: transparent; color: #1d2939; font: inherit; font-size: .875rem; }
-      .ar-search-input::placeholder { color: #98a2b3; }
-      .ar-search-input:focus { outline: 2px solid #465fff; outline-offset: 1px; border-color: #465fff; }
-      .dark .ar-search-input { background: #0c111d; border-color: #344054; color: #f2f4f7; }
-      .ar-count { min-height: 1.4rem; padding: 0 1.25rem .6rem; font-size: .8125rem; color: #667085; }
-      .dark .ar-count { color: #98a2b3; }
-
-      .ar-head, .ar-line { display: grid; grid-template-columns: minmax(12rem, 2.2fr) minmax(9rem, 1.5fr) minmax(8.5rem, 1.1fr) 8rem 8rem 2.25rem; align-items: center; column-gap: .75rem; }
-      .ar-head { position: sticky; top: 0; z-index: 10; padding: .75rem 1.25rem; background: #fff; border-top: 1px solid #f2f4f7; border-bottom: 1px solid #f2f4f7; font-size: .75rem; font-weight: 500; color: #667085; }
-      .dark .ar-head { background: #101828; border-color: #1d2939; color: #98a2b3; }
-      .ar-booking { border-bottom: 1px solid #f2f4f7; }
-      .dark .ar-booking { border-color: #1d2939; }
-      .ar-line { padding: .8rem 1.25rem; cursor: pointer; }
-      .ar-line:hover { background: rgba(152,162,179,.08); }
-      .ar-line.is-open { background: rgba(70,95,255,.05); }
-      .ar-who { display: flex; align-items: center; gap: .65rem; min-width: 0; }
-      .ar-name { font-weight: 500; font-size: .875rem; color: #1d2939; overflow-wrap: anywhere; }
-      .dark .ar-name { color: rgba(255,255,255,.9); }
-      .ar-ref { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; font-size: .75rem; }
-      .ar-ref b { font-weight: 500; padding: .1rem .5rem; border-radius: 999px; background: #f2f4f7; color: #475467; }
-      .dark .ar-ref b { background: #1d2939; color: #98a2b3; }
-      .ar-booking.is-overdue > .ar-line { box-shadow: inset 3px 0 0 #d92d20; }
-
-      /* The colour key is also the filter: one click shows only that kind of booking. */
-      .ar-filters { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
-      .ar-filter { display: inline-flex; align-items: center; gap: .5rem; padding: .35rem .8rem; border: 1px solid #d0d5dd; border-radius: 999px; background: transparent; color: #475467; font-size: .875rem; font-weight: 500; cursor: pointer; transition: background-color .15s, border-color .15s, color .15s; }
-      .ar-filter:hover { background: rgba(152,162,179,.12); }
-      .ar-filter:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
-      .ar-filter.is-on { background: #465fff; border-color: #465fff; color: #fff; }
-      .ar-filter .ar-n { min-width: 1.25rem; padding: 0 .4rem; border-radius: 999px; background: rgba(152,162,179,.22); font-size: .75rem; font-weight: 600; text-align: center; }
-      .ar-filter.is-on .ar-n { background: rgba(255,255,255,.26); }
-      .ar-filter--hot:not(.is-on) { border-color: #fda29b; color: #b42318; }
-      .ar-filter--hot:not(.is-on) .ar-n { background: #fee4e2; color: #b42318; }
-      .dark .ar-filter { border-color: #344054; color: #d0d5dd; }
-      .dark .ar-filter--hot:not(.is-on) { border-color: rgba(240,68,56,.5); color: #fda29b; }
-      .dark .ar-filter--hot:not(.is-on) .ar-n { background: rgba(240,68,56,.18); color: #fda29b; }
-
-      /* The status circles. Same three colours everywhere on this page: green = waiting for pick-up, blue = out with the customer, red = late. */
-      .ar-dot { display: inline-block; flex: none; width: .75rem; height: .75rem; border-radius: 999px; box-shadow: 0 0 0 2px rgba(0,0,0,.06); }
-      .ar-dot--confirmed { background: #039855; }
-      .ar-dot--active { background: #1570ef; }
-      .ar-dot--overdue { background: #d92d20; }
-      .ar-dot--done { background: #667085; }
-      .ar-num { display: inline-flex; flex: none; align-items: center; justify-content: center; min-width: 1.5rem; height: 1.5rem; box-sizing: border-box; padding: 0 .4rem; border-radius: 999px; color: #fff; font-size: .75rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
-      .ar-num svg { width: .8rem; height: .8rem; display: block; }
-      .ar-num--confirmed { background: #039855; }
-      .ar-num--active { background: #1570ef; }
-      .ar-num--overdue { background: #d92d20; }
-      .ar-num--returned, .ar-num--cancelled { background: #667085; }
-      .ar-count-pill { display: inline-flex; align-items: center; gap: .25rem; padding: .1rem .5rem; border-radius: 999px; background: #f2f4f7; color: #475467; font-size: .72rem; font-weight: 600; }
-      .ar-count-pill svg { width: .75rem; height: .75rem; }
-      .dark .ar-count-pill { background: #1d2939; color: #98a2b3; }
-
-      .ar-date { font-size: .875rem; color: #667085; }
-      .dark .ar-date { color: #98a2b3; }
-      .ar-phone { font-size: .8125rem; color: #465fff; text-decoration: underline; }
-      .ar-none { color: #98a2b3; }
-      .ar-chev { justify-self: end; display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border: 0; border-radius: .5rem; background: none; color: #667085; cursor: pointer; }
-      .ar-chev:hover { background: rgba(152,162,179,.18); }
-      .ar-chev:focus-visible { outline: 2px solid #465fff; outline-offset: 1px; }
-      .ar-chev svg { width: 1rem; height: 1rem; transition: transform .15s; }
-      .ar-chev[aria-expanded="true"] svg { transform: rotate(180deg); }
-
-      /* Icon buttons: every small action is an icon with a tooltip and a screen-reader label. */
-      .ar-ib { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 2rem; height: 2rem; padding: 0; border: 1px solid #d0d5dd; border-radius: .55rem; background: #fff; color: #475467; text-decoration: none; cursor: pointer; transition: background-color .15s, color .15s, border-color .15s; }
-      .ar-ib svg { width: 1rem; height: 1rem; display: block; }
-      .ar-ib:hover:not(:disabled) { background: #f2f4f7; color: #1d2939; }
-      .ar-ib.is-on { background: #eef4ff; border-color: #9bb0ff; color: #3538cd; }
-      .ar-ib:disabled { opacity: .55; cursor: not-allowed; }
-      .ar-ib:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
-      .dark .ar-ib { background: transparent; border-color: #344054; color: #98a2b3; }
-      .dark .ar-ib:hover:not(:disabled) { background: rgba(255,255,255,.06); color: #f2f4f7; }
-      .dark .ar-ib.is-on { background: rgba(70,95,255,.18); border-color: #6172f3; color: #c7d2fe; }
-      .ar-spin { display: inline-block; width: .9rem; height: .9rem; border: 2px solid currentColor; border-top-color: transparent; border-radius: 999px; animation: ar-spin .8s linear infinite; }
-      @keyframes ar-spin { to { transform: rotate(360deg); } }
-      @media (prefers-reduced-motion: reduce) { .ar-spin { animation-duration: 2.4s; } }
-
-      /* The "?" key: what the circles mean. */
-      .ar-tip { position: relative; display: inline-block; }
-      .ar-tip > summary { list-style: none; display: inline-flex; align-items: center; justify-content: center; width: 1.5rem; height: 1.5rem; border: 1px solid #98a2b3; border-radius: 999px; color: #667085; font-size: .75rem; font-weight: 700; line-height: 1; cursor: pointer; user-select: none; }
-      .ar-tip > summary::-webkit-details-marker { display: none; }
-      .ar-tip > summary::marker { content: ''; }
-      .ar-tip > summary:hover, .ar-tip[open] > summary { background: #465fff; border-color: #465fff; color: #fff; }
-      .ar-tip > summary:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
-      .ar-tip-pop { position: absolute; z-index: 40; right: 0; top: calc(100% + .45rem); width: 21rem; max-width: calc(100vw - 3rem); padding: .85rem 1rem; border-radius: .75rem; background: #101828; color: #f2f4f7; font-size: .8125rem; font-weight: 400; line-height: 1.45; text-align: left; box-shadow: 0 12px 24px -8px rgba(16,24,40,.35); }
-      .dark .ar-tip-pop { background: #1d2939; border: 1px solid #344054; }
-      .ar-leg-title { margin: 0; font-weight: 700; }
-      .ar-leg { list-style: none; margin: .55rem 0 0; padding: 0; display: grid; gap: .55rem; }
-      .ar-leg li { display: flex; align-items: center; gap: .65rem; }
-      .ar-leg .ar-num, .ar-leg .ar-dot, .ar-leg .ar-count-pill { flex: none; }
-      .ar-leg-note { margin: .65rem 0 0; font-size: .75rem; color: #98a2b3; }
-
-      /* An opened booking: its icon buttons, then one short line per gown. */
-      .ar-panel { border-top: 1px dashed #e4e7ec; background: rgba(152,162,179,.04); }
-      .dark .ar-panel { border-color: #1d2939; }
-      .ar-strip { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .6rem 1.25rem 0; font-size: .75rem; color: #98a2b3; }
-      .ar-acts { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .7rem 1.25rem; }
-      .ar-gowns { border-top: 1px solid #f2f4f7; }
-      .dark .ar-gowns { border-color: #1d2939; }
-      .ar-gown { border-bottom: 1px solid #f2f4f7; }
-      .ar-gown:last-child { border-bottom: 0; }
-      .dark .ar-gown { border-color: #1d2939; }
-      .ar-gl { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto; align-items: center; column-gap: .85rem; padding: .6rem 1.25rem; }
-      .ar-gname { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .6rem; }
-      .ar-gtitle { font-size: .875rem; font-weight: 500; color: #1d2939; overflow-wrap: anywhere; }
-      .dark .ar-gtitle { color: rgba(255,255,255,.9); }
-      .ar-of { padding: .05rem .45rem; border-radius: 999px; background: #f2f4f7; color: #667085; font-size: .7rem; font-weight: 500; }
-      .dark .ar-of { background: #1d2939; color: #98a2b3; }
-      .ar-tag { display: inline-flex; align-items: center; gap: .35rem; font-size: .75rem; color: #98a2b3; }
-      .ar-gdates { display: inline-flex; align-items: center; gap: .4rem; font-size: .8125rem; color: #475467; white-space: nowrap; }
-      .dark .ar-gdates { color: #98a2b3; }
-      .ar-chg { display: inline-flex; color: #b54708; }
-      .dark .ar-chg { color: #fdb022; }
-      .ar-chg svg { width: .9rem; height: .9rem; }
-      .ar-gprice { min-width: 4.5rem; font-size: .875rem; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; color: #344054; }
-      .dark .ar-gprice { color: #d0d5dd; }
-      .ar-gmore { padding: 0 1.25rem .8rem 3.35rem; }
-      .ar-facts { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .5rem; margin-bottom: .55rem; }
-      .ar-gbtns { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
-      .ar-empty { padding: 2.5rem 1.25rem; text-align: center; }
-      .ar-tl { padding: 0 1.25rem 1rem; }
-
-      @media (max-width: 760px) {
-        .ar-head { display: none; }
-        .ar-toolbar { padding: .75rem 1rem; }
-        .ar-count { padding: 0 1rem .5rem; }
-        .ar-line { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.25rem; grid-template-areas: "who who chev" "ref phone phone" "rental return return"; row-gap: .45rem; }
-        .ar-line > .ar-who { grid-area: who; }
-        .ar-line > .ar-ref { grid-area: ref; }
-        .ar-line > .ar-phone-cell { grid-area: phone; }
-        .ar-line > .ar-date[data-label="Rental"] { grid-area: rental; }
-        .ar-line > .ar-date[data-label="Return"] { grid-area: return; }
-        .ar-line > .ar-chev { grid-area: chev; }
-        .ar-line > .ar-date::before { content: attr(data-label) ": "; color: #98a2b3; }
-        .ar-filters { position: relative; }
-        .ar-tip { position: static; }
-        .ar-tip-pop { left: 0; right: 0; width: auto; max-width: none; }
-        .ar-acts { padding: .7rem 1rem; }
-        .ar-gl { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "num name more" ". dates price"; row-gap: .3rem; padding: .6rem 1rem; }
-        .ar-gl > .ar-num { grid-area: num; }
-        .ar-gl > .ar-gname { grid-area: name; }
-        .ar-gl > .ar-more { grid-area: more; }
-        .ar-gl > .ar-gdates { grid-area: dates; }
-        .ar-gl > .ar-gprice { grid-area: price; text-align: left; justify-self: end; }
-        .ar-gmore { padding: 0 1rem .8rem 1rem; }
-        .ar-tl { padding: 0 1rem 1rem; }
-      }
     </style>
+    {% include "arabela_admin/partials/ar_list_styles.html" %}
     <!-- One shared floating popover, reused for both the pickup/return date "Edit"
          form and the "Mark Returned" condition choice -- position: fixed so it
          overlays the table instead of growing a row's height (which used to push
@@ -1559,7 +1408,7 @@
             </div>
 
             <div x-show="openCustomerModal" x-cloak class="fixed inset-0 flex items-center justify-center p-5 overflow-y-auto z-99999">
-              <div class="modal-close-btn fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]"></div>
+              <div class="modal-close-btn admin-backdrop fixed inset-0 h-full w-full"></div>
               <div @click.outside="openCustomerModal = false" class="no-scrollbar relative w-full overflow-y-auto rounded-3xl bg-white p-4 dark:bg-gray-900 lg:p-8" style="max-width: 500px;">
                 <button
                   type="button"
@@ -1605,9 +1454,6 @@
                       <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewingCustomer.submitted"></p>
                     </div>
                   </div>
-                </div>
-                <div class="mt-6 flex justify-end px-2">
-                  <button type="button" @click="openCustomerModal = false" class="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">Close</button>
                 </div>
               </div>
             </div>

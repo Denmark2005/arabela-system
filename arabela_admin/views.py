@@ -796,6 +796,22 @@ def rental_history_view(request):
     )
 
 
+def _deposit_gown_state(item):
+    """Where one gown of a booking is, for the opened booking on Security Deposits: (kind, words). Display only -- the deposit itself
+    follows the gowns by Reservation.deposit_returned_on, which this does not touch."""
+    stage = item.stage
+    if stage == ReservationItem.Stage.CANCELLED:
+        return "cancelled", ""
+    if stage == ReservationItem.Stage.RETURNED:
+        when = item.returned_on or timezone.localtime(item.updated_at).date()
+        return "returned", f"Returned {when:%b} {when.day}"
+    if stage == ReservationItem.Stage.PICKUP:
+        return "waiting", "Waiting for pick-up"
+    if stage == ReservationItem.Stage.OVERDUE:
+        return "late", "Out with the customer, late"
+    return "out", "Out with the customer"
+
+
 @_require_admin_staff
 def security_deposits_view(request):
     reservations = list(
@@ -803,11 +819,7 @@ def security_deposits_view(request):
         .select_related("customer__profile")
         .prefetch_related("items", _receipts_prefetch())
     )
-    for r in reservations:
-        r.all_items_returned = all(
-            i.stage == ReservationItem.Stage.RETURNED
-            for i in r.items.all() if i.stage != ReservationItem.Stage.CANCELLED
-        )
+    duplicates = _same_gcash_number_elsewhere(reservations)
 
     # The deposit follows the gowns (see Reservation.deposit_returned_on): Returned the
     # moment every gown is back, with nothing for staff to press. Counts only -- no peso
@@ -815,6 +827,18 @@ def security_deposits_view(request):
     today = timezone.localdate()
     for r in reservations:
         r.returned_on = r.deposit_returned_on
+        r.gcash_dups = duplicates.get(r.id, "")
+        # What the closed line says about the gowns (a gown the shop cancelled never went out, so it is not counted) and, while the
+        # deposit is still held, how many are back -- the answer to "why is it still held?". The opened booking lists every gown.
+        items = list(r.items.all())
+        live = [i for i in items if i.stage != ReservationItem.Stage.CANCELLED]
+        r.live_items = live
+        r.gown_count = len(live)
+        r.cancelled_count = len(items) - len(live)
+        r.returned_gowns = sum(1 for i in live if i.stage == ReservationItem.Stage.RETURNED)
+        r.item_total = len(items)
+        for item in items:
+            item.state_kind, item.state_text = _deposit_gown_state(item)
     held_count = sum(1 for r in reservations if r.returned_on is None)
     returned_this_month = sum(
         1 for r in reservations
@@ -827,7 +851,9 @@ def security_deposits_view(request):
         {
             "page": "security-deposits",
             "reservations": reservations,
+            "all_count": len(reservations),
             "held_count": held_count,
+            "returned_count": len(reservations) - held_count,
             "returned_this_month": returned_this_month,
         },
     )
@@ -1378,20 +1404,61 @@ def active_reservations_view(request):
     )
 
 
+def _waiting_text(created_at, today):
+    """How long a booking has been waiting for an answer: 'Requested today', 'Waiting 1 day', 'Waiting 5 days' (the shop's own calendar day)."""
+    days = max(0, (today - timezone.localtime(created_at).date()).days)
+    if days == 0:
+        return "Requested today"
+    return f"Waiting {days} day{'s' if days != 1 else ''}"
+
+
+def _same_gcash_number_elsewhere(reservations):
+    """{reservation id: 'RSV-..., RSV-...'} for every booking here whose GCash reference number is also on ANOTHER booking (the same
+    answer as Reservation.gcash_duplicate_codes, worked out for the whole list in ONE query instead of one query per booking)."""
+    numbers = {r.gcash_reference for r in reservations if r.gcash_reference}
+    if not numbers:
+        return {}
+    holders = {}
+    rows = (
+        Reservation.objects.filter(gcash_reference__in=numbers)
+        .order_by("created_at").values_list("pk", "gcash_reference", "reference_code")
+    )
+    for pk, number, code in rows:
+        holders.setdefault(number, []).append((pk, code))
+    return {
+        r.id: ", ".join(code for pk, code in holders.get(r.gcash_reference, []) if pk != r.id)
+        for r in reservations if r.gcash_reference
+    }
+
+
 @_require_admin_staff
 def pending_approval_view(request):
     reservations = reservation_timeline.attach_to_reservations(
         Reservation.objects.filter(status=Reservation.Status.PENDING)
         .select_related("customer__profile")
-        .prefetch_related("items__gown", "receipt_records")
+        # The receipts come with the staff member who attached each one: the "View payment" window on this page shows them, and this
+        # keeps that from costing a query per booking.
+        .prefetch_related("items__gown", _receipts_prefetch())
+        # The booking that has waited longest comes first, so nothing sits forgotten at the bottom of a long list.
+        .order_by("created_at", "id")
     )
     tag_colors = SiteSettings.load().tag_colors()
+    today = timezone.localdate()
+    duplicates = _same_gcash_number_elsewhere(reservations)
     for reservation in reservations:
         # A booking staff recorded but not paid yet (walk-in, Facebook, phone): no online proof to check -- staff attach the
         # shop's receipt when the customer pays, then Approve.
         reservation.receipt_count = len(reservation.receipt_records.all())
-        for item in reservation.items.all():
+        items = list(reservation.items.all())
+        for item in items:
             item.gown_code, item.tag_color, item.tag_hex = _item_gown_tag(item, tag_colors)
+        # What the closed line of this booking shows (display only -- nothing reads these): how many gowns, the first pick-up and the
+        # last return, how long it has waited, and whether the same GCash number is on another booking.
+        reservation.gown_count = len(items)
+        reservation.span_start = min((i.rental_date for i in items), default=None)
+        reservation.span_end = max((i.return_date for i in items), default=None)
+        reservation.waiting_text = _waiting_text(reservation.created_at, today)
+        reservation.gcash_dups = duplicates.get(reservation.id, "")
     return render(
         request,
         "arabela_admin/pending-approval.html",

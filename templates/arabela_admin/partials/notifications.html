@@ -44,9 +44,10 @@ pop-up). Everything the script needs is in the data-notif-* attributes on the ro
     background-attachment: local, local, scroll, scroll;
   }
   .anf-modal-scroll { max-height: min(56vh, 520px); overflow-y: auto; padding-bottom: 0.5rem; }
-  /* The dim behind the "All Notifications" window: a plain tint, NO blur, so the page stays readable behind it (same as the Rental Schedule pop-ups). */
-  .notif-backdrop { background: rgba(16, 24, 40, 0.5); }
-  .dark .notif-backdrop { background: rgba(0, 0, 0, 0.6); }
+  /* The dim behind EVERY admin pop-up (this window, and the View / Edit / Receipt / Customer windows on the other pages -- this header partial is on
+     all of them, which is why the class lives here): a plain tint, NO blur, so the page stays readable behind it (same as the Rental Schedule pop-ups). */
+  .admin-backdrop { background: rgba(16, 24, 40, 0.5); }
+  .dark .admin-backdrop { background: rgba(0, 0, 0, 0.6); }
   /* ---- rows ---- */
   .anf-row { padding: 10px 12px; }
   .anf-text { display: block; font-size: 13.5px; line-height: 19px; margin-bottom: 4px; }
@@ -209,7 +210,7 @@ pop-up). Everything the script needs is in the data-notif-* attributes on the ro
 
   <!-- All Notifications Modal -->
   <div x-show="isAllNotificationsModal" x-cloak class="fixed inset-0 flex items-center justify-center p-5 overflow-y-auto z-99999">
-    <div class="modal-close-btn notif-backdrop fixed inset-0 h-full w-full"></div>
+    <div class="modal-close-btn admin-backdrop fixed inset-0 h-full w-full"></div>
     <div
       @click.outside="isAllNotificationsModal = false"
       class="no-scrollbar relative w-full max-w-[700px] overflow-y-auto rounded-3xl bg-white p-4 dark:bg-gray-900"
@@ -232,9 +233,6 @@ pop-up). Everything the script needs is in the data-notif-* attributes on the ro
 
       <div data-notif-region="modal">{% include "arabela_admin/partials/notif_modal_body.html" %}</div>
 
-      <div class="mt-6 flex justify-end border-t border-gray-100 px-2 dark:border-gray-800" style="padding-top:1.25rem;">
-        <button type="button" @click="isAllNotificationsModal = false" class="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">Close</button>
-      </div>
     </div>
   </div>
   <!-- All Notifications Modal End -->

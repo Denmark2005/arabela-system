@@ -1896,7 +1896,7 @@
 
                 <!-- View Full Image: the QR big, plus a link that opens it in its own tab. -->
                 <div x-show="showFull" x-cloak class="fixed inset-0 flex items-center justify-center p-5 overflow-y-auto z-99999">
-                  <div class="modal-close-btn fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]" @click="showFull = false"></div>
+                  <div class="modal-close-btn admin-backdrop fixed inset-0 h-full w-full" @click="showFull = false"></div>
                   <div class="relative rounded-3xl bg-white p-6 dark:bg-gray-900" style="width: min(560px, 92vw);">
                     <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem;">
                       <h4 class="text-lg font-semibold text-gray-800 dark:text-white/90">GCash QR</h4>
@@ -1933,7 +1933,7 @@
   class="fixed inset-0 flex items-center justify-center p-5 overflow-y-auto z-99999"
 >
   <div
-    class="modal-close-btn fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]"
+    class="modal-close-btn admin-backdrop fixed inset-0 h-full w-full"
   ></div>
   <div
     @click.outside="isProfileInfoModal = false"
@@ -2077,13 +2077,6 @@
       </div>
       <div class="flex items-center gap-3 px-2 mt-6 lg:justify-end">
         <button
-          @click="isProfileInfoModal = false"
-          type="button"
-          class="flex w-full justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] sm:w-auto"
-        >
-          Close
-        </button>
-        <button
           type="button"
           @click="saveProfileInfo()"
           class="flex w-full justify-center rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs hover:bg-black sm:w-auto dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
@@ -2101,7 +2094,7 @@
   class="fixed inset-0 flex items-center justify-center p-5 overflow-y-auto z-99999"
 >
   <div
-    class="modal-close-btn fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]"
+    class="modal-close-btn admin-backdrop fixed inset-0 h-full w-full"
   ></div>
   <div
     @click.outside="isProfileAddressModal = false"
@@ -2195,13 +2188,6 @@
       </div>
       <div class="flex items-center gap-3 mt-6 lg:justify-end">
         <button
-          @click="isProfileAddressModal = false"
-          type="button"
-          class="flex w-full justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] sm:w-auto"
-        >
-          Close
-        </button>
-        <button
           type="button"
           @click="saveProfileAddress()"
           class="flex w-full justify-center rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs hover:bg-black sm:w-auto dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
@@ -2222,7 +2208,7 @@
   x-cloak
   class="fixed inset-0 flex items-center justify-center p-5 overflow-y-auto z-99999"
 >
-  <div class="modal-close-btn fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]"></div>
+  <div class="modal-close-btn admin-backdrop fixed inset-0 h-full w-full"></div>
   <div
     @click.outside="closePositionModal()"
     class="no-scrollbar relative flex w-full flex-col overflow-y-auto rounded-3xl bg-white p-6 dark:bg-gray-900 lg:p-11"
@@ -2313,7 +2299,7 @@
   @keydown.escape.window="isViewModal = false"
   class="fixed inset-0 flex items-center justify-center p-5 overflow-y-auto z-99999"
 >
-  <div class="modal-close-btn fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]"></div>
+  <div class="modal-close-btn admin-backdrop fixed inset-0 h-full w-full"></div>
   <div
     @click.outside="isViewModal = false"
     class="no-scrollbar relative flex w-full flex-col items-center overflow-y-auto rounded-3xl bg-white p-6 dark:bg-gray-900 lg:p-11"

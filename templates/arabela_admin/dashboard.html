@@ -1357,7 +1357,7 @@
 <!-- ====== Quick Verify End -->
 
 <div x-show="openReceiptModal" x-cloak class="fixed inset-0 flex items-center justify-center p-5 overflow-y-auto z-99999">
-  <div class="modal-close-btn fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]"></div>
+  <div class="modal-close-btn admin-backdrop fixed inset-0 h-full w-full"></div>
   <div @click.outside="openReceiptModal = false" x-effect="if (openReceiptModal) { $nextTick(function () { $el.scrollTop = 0; }); }" class="no-scrollbar relative w-full overflow-y-auto rounded-3xl bg-white p-4 dark:bg-gray-900 lg:p-8" :style="(receiptPreview.proofUrl || (receiptPreview.receipts || []).length) ? 'max-width: min(1100px, 92vw); max-height: calc(100vh - 2.5rem); max-height: calc(100dvh - 2.5rem);' : 'max-width: 700px; max-height: calc(100vh - 2.5rem); max-height: calc(100dvh - 2.5rem);'">
     <button
       type="button"
@@ -1438,9 +1438,6 @@
       {% include "arabela_admin/partials/payment_breakdown.html" with var="receiptPreview" %}
       <p x-show="receiptPreview.gcashDup" x-cloak style="margin-top: 1rem;" class="rounded-lg bg-error-50 px-4 py-3 text-xs font-medium text-error-700 dark:bg-error-500/15 dark:text-error-500"
          x-text="'This GCash reference number is also on ' + receiptPreview.gcashDup + '. Check the receipt before approving.'"></p>
-    </div>
-    <div class="mt-6 flex justify-end px-2">
-      <button type="button" @click="openReceiptModal = false" class="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">Close</button>
     </div>
   </div>
 </div>

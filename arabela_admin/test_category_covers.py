@@ -202,9 +202,10 @@ class CategoriesPageTests(OwnerCase):
         html = self.page().content.decode()
         self.assertEqual(html.count('id="cvr-view"'), 1)
         self.assertIn('class="cvr-view" role="dialog" aria-modal="true" aria-labelledby="cvr-view-title" hidden>', html)
-        for part in ("View Full Image", "data-view-kind", "data-view-size", "cvr-view-x", "Close</button>"):
+        for part in ("View Full Image", "data-view-kind", "data-view-size", "cvr-view-x", 'aria-label="Close"'):
             with self.subTest(part=part):
                 self.assertIn(part, html)
+        self.assertNotIn(">Close</button>", html)                                   # the X (and the backdrop) close it: no second, wording button
         main = html.split("<main>")[1].split("</main>")[0]
         for word in ('id="cvr-view"', "View Full Image", "could not be loaded", "data-view-close"):
             with self.subTest(word=word):

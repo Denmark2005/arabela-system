@@ -261,14 +261,19 @@ class RoleBase(Base):
         self.assertIn("View Reservation History", pages["clients"])
         self.assertIn("Change pick-up date", pages["active"])
 
-    def test_the_catalog_keeps_its_layout_when_the_remove_button_is_hidden(self):
-        """The single-gown window has Remove on the left and Close on the right (justify-between): a hidden Remove leaves an empty span,
-        so Close stays on the right instead of jumping to the left."""
+    def test_the_single_gown_window_has_no_empty_footer_when_the_remove_button_is_hidden(self):
+        """The single-gown window closes with its X only. Its footer now holds just Remove (Manager / owner): a Staff account must not be left
+        with an empty bordered strip where the footer used to be."""
+        footer = '<div class="mt-6 flex items-center border-t border-gray-100 px-2 pt-6 dark:border-gray-800">'
         self.client.force_login(self.plain_staff)
         html = self.client.get(reverse("arabela_admin:gown_catalog")).content.decode()
-        marker = '<div class="mt-6 flex items-center justify-between border-t border-gray-100 px-2 pt-6 dark:border-gray-800">'
-        at = html.index(marker)
-        self.assertIn("<span></span>", html[at:at + 600])
+        self.assertNotIn(footer, html)
+        self.assertNotIn("Remove Gown&hellip;", html)
+        self.client.force_login(self.manager)
+        html = self.client.get(reverse("arabela_admin:gown_catalog")).content.decode()
+        at = html.index(footer)
+        self.assertIn("Remove Gown&hellip;", html[at:at + 1200])
+        self.assertNotIn(">Close</button>", html[at:at + 1200])
 
     def test_the_template_flag_is_the_same_rule_the_server_uses(self):
         for who, account in {**self.refused_accounts, **self.allowed_accounts}.items():

@@ -803,9 +803,9 @@ class SecurityDepositTests(TestCase):
         html = self.client.get(reverse("arabela_admin:security_deposits")).content.decode()
         for gone in ("Return Deposit", "Total Held Value", "Awaiting gown return", "returnDeposit", "return-deposit"):
             self.assertNotIn(gone, html)
-        self.assertIn("Deposits Held", html)
-        self.assertIn("Returned This Month", html)
-        self.assertIn("View Payment", html)
+        self.assertIn('aria-label="Show deposits by status"', html)                  # the Held / Returned counts are the filter buttons (the two number tiles are gone)
+        self.assertIn("returned this month", html)
+        self.assertIn('title="View payment"', html)
 
     def test_the_page_counts_held_and_returned_this_month(self):
         self._reservation("Returned", name="A")
@@ -815,10 +815,15 @@ class SecurityDepositTests(TestCase):
         self.assertEqual(response.context["held_count"], 1)
         self.assertEqual(response.context["returned_this_month"], 2)
         self.assertNotIn("total_held_value", response.context)
+        self.assertEqual((response.context["all_count"], response.context["returned_count"]), (3, 2))
         html = response.content.decode()
-        self.assertEqual(html.count(">Returned</p>"), 2)
-        self.assertEqual(html.count(">Held</p>"), 1)
-        self.assertIn(f"Returned on {date.today():%b} {date.today().day}, {date.today().year}", html)
+        self.assertEqual(html.count('data-status="Returned"'), 2)
+        self.assertEqual(html.count('data-status="Held"'), 1)
+        returned = html[html.index('data-status="Returned"'):]
+        returned = returned[:returned.index('class="ar-ib sd-eye"')]
+        self.assertIn("<span>Returned</span>", returned)                                # ONE status: Returned, with the day it came back under it
+        self.assertIn(f"{date.today():%b} {date.today().day}, {date.today().year}", returned)
+        self.assertNotIn("Completed", html)                                              # the second "Completed / Active" status said the same thing twice
 
     def test_reservation_records_reports_the_automatic_status(self):
         reservation, _ = self._reservation("Returned", name="Records Back")

@@ -1341,7 +1341,7 @@
   class="fixed inset-0 flex items-center justify-center p-5 overflow-y-auto z-99999"
 >
   <div
-    class="modal-close-btn fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]"
+    class="modal-close-btn admin-backdrop fixed inset-0 h-full w-full"
   ></div>
   <div
     @click.outside="isViewStaffModal = false"
@@ -1417,13 +1417,6 @@
       >
         Delete
       </button>
-      <button
-        @click="isViewStaffModal = false"
-        type="button"
-        class="flex w-full justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] sm:w-auto"
-      >
-        Close
-      </button>
     </div>
   </div>
 </div>
@@ -1435,7 +1428,7 @@
   class="fixed inset-0 flex items-center justify-center p-5 overflow-y-auto z-99999"
 >
   <div
-    class="modal-close-btn fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]"
+    class="modal-close-btn admin-backdrop fixed inset-0 h-full w-full"
   ></div>
   <div
     @click.outside="isAddAccountModal = false"
@@ -1516,7 +1509,7 @@
   x-cloak
   class="fixed inset-0 flex items-center justify-center p-5 overflow-y-auto z-99999"
 >
-  <div class="modal-close-btn fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]"></div>
+  <div class="modal-close-btn admin-backdrop fixed inset-0 h-full w-full"></div>
   <div
     @click.outside="isEditStaffModal = false"
     class="no-scrollbar relative w-full max-w-[700px] overflow-y-auto rounded-3xl bg-white p-4 dark:bg-gray-900 lg:p-11"
