@@ -12,29 +12,39 @@
     <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
   <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet">
   <style>
-    /* Bolder, clearly-distinguishable booking colours (yellow/green/blue/red) with
-       readable text -- the precompiled palette used pale -50 backgrounds with the
-       same grey text for every state, which was hard to tell apart at a glance. */
-    .event-fc-color.fc-bg-warning { background-color: #F59E0B; border-color: #F59E0B; }
-    .event-fc-color.fc-bg-warning .fc-event-title { color: #78350F; font-weight: 600; }
-    .event-fc-color.fc-bg-success { background-color: #16A34A; border-color: #16A34A; }
-    .event-fc-color.fc-bg-success .fc-event-title { color: #FFFFFF; font-weight: 600; }
-    .event-fc-color.fc-bg-primary { background-color: #2563EB; border-color: #2563EB; }
-    .event-fc-color.fc-bg-primary .fc-event-title { color: #FFFFFF; font-weight: 600; }
-    .event-fc-color.fc-bg-danger { background-color: #DC2626; border-color: #DC2626; }
-    .event-fc-color.fc-bg-danger .fc-event-title { color: #FFFFFF; font-weight: 600; }
-    /* Maintenance blocks (cleaning/repair) aren't customer bookings, so they read as a
-       neutral slate rather than competing with the four booking colours. */
-    .event-fc-color.fc-bg-blocked { background-color: rgba(100, 116, 139, 0.16); border-color: rgba(100, 116, 139, 0.32); box-shadow: inset 3px 0 0 #64748B; }
-    .event-fc-color.fc-bg-blocked .fc-event-title { color: #475467; font-weight: 500; }
-    .dark .event-fc-color.fc-bg-blocked { background-color: rgba(148, 163, 184, 0.14); border-color: rgba(148, 163, 184, 0.3); }
-    .dark .event-fc-color.fc-bg-blocked .fc-event-title { color: #CBD5E1; }
-    .event-fc-color.fc-bg-blocked .fc-daygrid-event-dot { background-color: #64748B; }
+    /* Every status bar shares ONE look: a solid stripe on the left edge, the rest a soft see-through tint of the same colour,
+       and the name in a readable shade of that colour (the grey Cooldown bar was the first to look like this). Each status only
+       sets its own numbers -- --ev (the colour), --ev-stripe, --ev-text, --ev-a (how strong the tint is) -- and the shared rules
+       below do the painting. Overdue is a little stronger and bolder: it is the one staff must notice first. */
+    .event-fc-color.fc-bg-warning { --ev: 245, 158, 11; --ev-stripe: #F59E0B; --ev-text: #92400E; --ev-a: 0.16; }
+    .event-fc-color.fc-bg-success { --ev: 22, 163, 74; --ev-stripe: #16A34A; --ev-text: #166534; --ev-a: 0.16; }
+    .event-fc-color.fc-bg-primary { --ev: 37, 99, 235; --ev-stripe: #2563EB; --ev-text: #1D4ED8; --ev-a: 0.16; }
+    .event-fc-color.fc-bg-danger { --ev: 220, 38, 38; --ev-stripe: #DC2626; --ev-text: #912018; --ev-a: 0.22; }
+    /* Maintenance blocks (cleaning/repair) aren't customer bookings, so they read as a neutral slate rather than
+       competing with the four booking colours. */
+    .event-fc-color.fc-bg-blocked { --ev: 100, 116, 139; --ev-stripe: #64748B; --ev-text: #475467; --ev-a: 0.16; }
+    .dark .event-fc-color.fc-bg-warning { --ev-text: #FCD34D; --ev-a: 0.22; }
+    .dark .event-fc-color.fc-bg-success { --ev-text: #86EFAC; --ev-a: 0.22; }
+    .dark .event-fc-color.fc-bg-primary { --ev-text: #93C5FD; --ev-a: 0.22; }
+    .dark .event-fc-color.fc-bg-danger { --ev-text: #FCA5A5; --ev-a: 0.3; }
+    .dark .event-fc-color.fc-bg-blocked { --ev: 148, 163, 184; --ev-text: #CBD5E1; --ev-a: 0.14; }
+    .event-fc-color.fc-bg-warning,
+    .event-fc-color.fc-bg-success,
+    .event-fc-color.fc-bg-primary,
+    .event-fc-color.fc-bg-danger,
+    .event-fc-color.fc-bg-blocked { background-color: rgba(var(--ev), var(--ev-a)); border-color: rgba(var(--ev), 0.34); }
+    .event-fc-color.fc-bg-warning .fc-event-title,
+    .event-fc-color.fc-bg-success .fc-event-title,
+    .event-fc-color.fc-bg-primary .fc-event-title,
+    .event-fc-color.fc-bg-danger .fc-event-title,
+    .event-fc-color.fc-bg-blocked .fc-event-title { color: var(--ev-text); font-weight: 600; }
+    .event-fc-color.fc-bg-danger .fc-event-title { font-weight: 700; }
+    .event-fc-color.fc-bg-blocked .fc-event-title { font-weight: 500; }
+    /* The stripe sits on the REAL start of a bar, so a bar that runs over several weeks does not repeat it on every week row. */
+    .event-fc-color.fc-event-start { box-shadow: inset 3px 0 0 var(--ev-stripe); }
+    .event-fc-color.fc-event-start:focus { box-shadow: inset 3px 0 0 var(--ev-stripe), 0 2px 5px rgba(16, 24, 40, 0.2); }
+    .event-fc-color .fc-daygrid-event-dot { background-color: var(--ev-stripe); }
     .event-fc-color.fc-bg-blocked { cursor: default; }
-    .event-fc-color.fc-bg-warning .fc-daygrid-event-dot { background-color: #F59E0B; }
-    .event-fc-color.fc-bg-success .fc-daygrid-event-dot { background-color: #16A34A; }
-    .event-fc-color.fc-bg-primary .fc-daygrid-event-dot { background-color: #2563EB; }
-    .event-fc-color.fc-bg-danger .fc-daygrid-event-dot { background-color: #DC2626; }
 
     /* The dim behind Booking Details and the "+N more" list: a plain tint, NO blur, so the calendar stays readable behind them. */
     .calendar-backdrop { background: rgba(16, 24, 40, 0.5); }
@@ -112,18 +122,19 @@
       text-align: left;
       text-decoration: none;
     }
-    #dayEventsModal .event-fc-color.fc-bg-warning.day-event-row { color: #78350F; }
-    #dayEventsModal .event-fc-color.fc-bg-blocked.day-event-row { color: #475467; }
-    .dark #dayEventsModal .event-fc-color.fc-bg-blocked.day-event-row { color: #CBD5E1; }
+    /* The rows wear the same stripe + tint as the bars on the calendar (colours come from the same --ev numbers above). */
+    #dayEventsModal .event-fc-color.day-event-row { color: var(--ev-text); box-shadow: inset 3px 0 0 var(--ev-stripe); }
+    #dayEventsModal .event-fc-color.fc-bg-danger.day-event-row { font-weight: 700; }
+    #dayEventsModal .event-fc-color.fc-bg-blocked.day-event-row { font-weight: 500; }
     /* A booking row (Pick-up/Reserved/Return/Overdue) opens the same Booking Details
        modal as clicking that event directly on the calendar -- see openBookingDetailsFor
        below. A maintenance row (Cooldown/Cleaning) stays an unclickable div, exactly
        like those events are when clicked directly on the calendar. */
     #dayEventsModal button.day-event-row {
       cursor: pointer;
-      transition: filter 0.15s ease;
+      transition: background-color 0.15s ease;
     }
-    #dayEventsModal button.day-event-row:hover { filter: brightness(0.92); }
+    #dayEventsModal button.day-event-row:hover { background-color: rgba(var(--ev), 0.3); }
     #dayEventsModal button.day-event-row:focus-visible { outline: 2px solid #465FFF; outline-offset: 2px; }
     #dayEventsModal div.day-event-row { cursor: default; }
 

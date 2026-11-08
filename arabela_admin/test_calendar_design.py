@@ -1,5 +1,6 @@
-"""The Rental Schedule (calendar) design: a plain dim backdrop behind the pop-ups (no blur), ONE way to close Booking Details (the X), and a
-week / day view that is not crowded.
+"""The Rental Schedule (calendar) design: a plain dim backdrop behind the pop-ups (no blur), ONE way to close Booking Details (the X), a
+week / day view that is not crowded, status bars that share one look (solid stripe on the left, the rest a see-through tint), and the
+"All Notifications" window (shared header partial) with the same plain dim backdrop.
 
 Only the look changed. What the calendar shows and the rules behind it (which bookings, which dates, view-only) keep their own tests in
 tests.py, test_cancel_gowns.py and test_new_booking.py. What is checked here: the page markup and the calendar options keep the promises the
@@ -48,7 +49,7 @@ class CalendarPageTests(TestCase):
         self.assertNotIn("backdrop-blur", TEMPLATE.read_text(encoding="utf8"))   # the 32px blur behind both pop-ups is gone from the page
         for modal_id in ("bookingDetailModal", "dayEventsModal"):
             start = html.index(f'id="{modal_id}"')
-            self.assertNotIn("backdrop-blur", html[start:start + 600])            # (the shared notifications pop-up keeps its own look)
+            self.assertNotIn("backdrop-blur", html[start:start + 600])
         self.assertEqual(html.count("calendar-backdrop fixed inset-0"), 2)        # Booking Details + the day list both use the plain dim backdrop
         self.assertIn(".calendar-backdrop { background: rgba(16, 24, 40, 0.5); }", html)
 
@@ -103,3 +104,76 @@ class CalendarOptionsTests(SimpleTestCase):
 
     def test_the_bundle_module_is_still_one_line(self):
         self.assertEqual(calendar_module().count("\n"), 0)                        # still ONE eval("...") line, as webpack wrote it
+
+
+class StatusBarStyleTests(SimpleTestCase):
+    """Pick-up / Reserved / Return / Overdue / Cooldown all share the look the grey Cooldown bar had: a solid stripe on the left edge and a
+    soft see-through tint for the rest. Colours only: the classes the script puts on the bars (fc-bg-*) and the legend are untouched."""
+
+    STATUSES = ("warning", "success", "primary", "danger", "blocked")
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.css = TEMPLATE.read_text(encoding="utf8")
+
+    def test_every_status_sets_its_own_colour_numbers(self):
+        for status in self.STATUSES:
+            with self.subTest(status=status):
+                rule = re.search(r"\.event-fc-color\.fc-bg-%s \{([^}]*)\}" % status, self.css)
+                self.assertIsNotNone(rule)
+                for token in ("--ev:", "--ev-stripe:", "--ev-text:", "--ev-a:"):
+                    self.assertIn(token, rule.group(1))
+                self.assertRegex(self.css, r"\.dark \.event-fc-color\.fc-bg-%s \{[^}]*--ev-text:" % status)       # a readable name colour in dark mode too
+
+    def test_the_bars_are_a_see_through_tint_with_a_stripe_not_a_solid_fill(self):
+        self.assertIn("background-color: rgba(var(--ev), var(--ev-a))", self.css)
+        self.assertIn(".event-fc-color.fc-event-start { box-shadow: inset 3px 0 0 var(--ev-stripe); }", self.css)
+        for solid in ("background-color: #F59E0B; border-color: #F59E0B", "background-color: #16A34A; border-color: #16A34A",
+                      "background-color: #2563EB; border-color: #2563EB", "background-color: #DC2626; border-color: #DC2626"):
+            self.assertNotIn(solid, self.css)                                     # the old solid fills are gone
+        self.assertNotRegex(self.css, r"fc-event-title \{ color: #FFFFFF")         # no white-on-solid names left
+
+    def test_the_day_list_rows_wear_the_same_stripe_and_colours(self):
+        self.assertIn("#dayEventsModal .event-fc-color.day-event-row { color: var(--ev-text); box-shadow: inset 3px 0 0 var(--ev-stripe); }", self.css)
+        self.assertIn("#dayEventsModal button.day-event-row:hover { background-color: rgba(var(--ev), 0.3); }", self.css)
+
+    def test_overdue_stays_the_loudest(self):
+        overdue = re.search(r"\.event-fc-color\.fc-bg-danger \{([^}]*)\}", self.css).group(1)
+        calm = re.search(r"\.event-fc-color\.fc-bg-primary \{([^}]*)\}", self.css).group(1)
+        tint = lambda rule: float(re.search(r"--ev-a: ([0-9.]+)", rule).group(1))
+        self.assertGreater(tint(overdue), tint(calm))
+        self.assertIn(".event-fc-color.fc-bg-danger .fc-event-title { font-weight: 700; }", self.css)
+
+    def test_the_legend_dots_stay_solid(self):
+        html = TEMPLATE.read_text(encoding="utf8")
+        legend = html[html.index('class="status-legend'):html.index("Blocked days are gowns held back")]
+        for solid in ("background:#F59E0B", "background:#16A34A", "background:#2563EB", "background:#DC2626", "background:#64748B"):
+            self.assertIn(solid, legend)
+
+
+class NotificationsBackdropTests(TestCase):
+    """The "All Notifications" window lives in a header partial shared by every admin page; it sits on the plain dim backdrop too."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = User.objects.create_superuser("notif_owner", "notif_owner@example.com", "Pass-12345!")
+
+    def test_the_partial_has_no_blur(self):
+        partial = Path(settings.BASE_DIR) / "templates" / "arabela_admin" / "partials" / "notifications.html"
+        text = partial.read_text(encoding="utf8")
+        self.assertNotIn("backdrop-blur", text)
+        self.assertIn(".notif-backdrop { background: rgba(16, 24, 40, 0.5); }", text)
+        self.assertIn(".dark .notif-backdrop { background: rgba(0, 0, 0, 0.6); }", text)
+
+    def test_every_admin_page_draws_the_window_on_the_plain_backdrop_and_still_closes_it(self):
+        self.client.force_login(self.owner)
+        for name in ("calendar", "dashboard", "active_reservations", "gown_catalog"):
+            with self.subTest(page=name):
+                html = self.client.get(reverse("arabela_admin:" + name)).content.decode()
+                start = html.index("<!-- All Notifications Modal -->")
+                window = html[start:start + 1500]
+                self.assertIn('class="modal-close-btn notif-backdrop fixed inset-0 h-full w-full"', window)
+                self.assertNotIn("backdrop-blur", window)
+                self.assertIn("@click.outside=\"isAllNotificationsModal = false\"", window)      # clicking outside still closes it
+                self.assertIn('@click="isAllNotificationsModal = false"', window)                # its own X and Close still work
