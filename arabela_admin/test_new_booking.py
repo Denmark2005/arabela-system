@@ -1069,7 +1069,7 @@ class PaymentBreakdownTests(Base):
         dashboard = self.client.get(reverse("arabela_admin:dashboard")).content.decode()
         self.assertIn('style="color:#D4AF37">₱2,000</p>', dashboard)
         self.assertIn("Gown ₱5,500 · Total ₱7,500", dashboard)
-        self.assertEqual(dashboard.count("breakdown: JSON.parse("), 2)
+        self.assertEqual(dashboard.count("breakdown: JSON.parse("), 1)                 # the Quick Verify row's View button opens the window with it (the icon thumbnail that also did is gone)
         self.assertIn('class="pbd" x-show="receiptPreview.breakdown"', dashboard)
         self.assertIn("receiptPreview.breakdown ? receiptPreview.breakdown.headline : receiptPreview.amount", dashboard)
         self.online(513, status=Reservation.Status.CONFIRMED)

@@ -87,7 +87,9 @@ class ClosedLineTests(ActiveDropdownBase):
         ])
         response, html = self.page()
         line = self.line_of(html, reservation)
-        self.assertIn("3 gowns", line)                                       # the cancelled one is not a gown of the booking any more
+        raw = re.search(r'<div class="ar-booking" data-booking-id="%d".*?<div class="ar-panel"' % reservation.id, html, re.S).group(0)
+        self.assertIn('title="3 gowns in this booking"', raw)                # the cancelled one is not a gown of the booking any more (the pill says just "3")
+        self.assertRegex(raw, r'class="ar-count-pill"[^>]*>\s*<svg.*?</svg>3</span>')
         self.assertIn(self.day(-9), line)
         self.assertIn(self.day(10), line)
         self.assertNotIn(self.day(14), line)
@@ -132,33 +134,44 @@ class DropdownContentTests(ActiveDropdownBase):
         # per gown
         self.assertIn(f'data-kind="pickup" data-item-id="{w1.id}"', html)
         self.assertIn(f'data-kind="return" data-item-id="{w1.id}"', html)
-        self.assertIn(f'data-item-id="{w1.id}">Mark Picked Up', html)
-        self.assertIn(f'data-item-id="{o1.id}">Mark Picked Up', html)
-        self.assertIn(f'data-item-id="{o2.id}">Mark Returned', html)
-        self.assertIn(f'data-item-id="{o2.id}">Undo', html)
+        def button(kind, item):
+            return re.search(r'<button[^>]*class="resv-%s-btn[^"]*"[^>]*data-item-id="%d"' % (kind, item.id), html, re.S)
+        self.assertIsNotNone(button("mark-pickedup", w1))
+        self.assertIsNotNone(button("mark-pickedup", o1))
+        self.assertIsNotNone(button("mark-returned", o2))
+        self.assertIsNotNone(button("undo-pickup", o2))
+        self.assertIsNone(button("mark-pickedup", o2))                                   # a gown that is out cannot be "picked up" again
         self.assertNotIn(f'data-kind="pickup" data-item-id="{o2.id}"', html)             # already out
-        self.assertNotIn(f'data-item-id="{o3.id}">Mark', html)                           # already back
+        for kind in ("mark-pickedup", "mark-returned", "undo-pickup"):
+            self.assertIsNone(button(kind, o3))                                          # already back
+        self.assertIn('title="Mark picked up"', html)                                    # the words are the tooltip (and the screen-reader label)
+        self.assertIn('title="Mark returned"', html)
         self.assertEqual(html.count('class="resv-remind-btn'), 2)                        # the account holder's two gowns still to come back
         self.assertEqual(html.count('onclick="sendReminder(this)"'), 2)
         self.assertNotIn(">Call</a>", html)                                              # no Call button anywhere: the walk-in has no Remind either, staff dial the number on the line
         self.assertEqual(html.count(">Cancel gown</button>"), 3)                         # the walk-in's two waiting gowns + the account holder's one
         # per booking
-        self.assertEqual(html.count(">View Customer</button>"), 2)
-        self.assertEqual(html.count(">Timeline</span>"), 2)
+        self.assertEqual(html.count('title="View customer"'), 2)                           # three icon buttons per booking: View, View customer, Timeline
+        self.assertEqual(html.count('aria-label="Timeline"'), 2)
         self.assertEqual(html.count(f'data-url="{reverse("arabela_admin:reservation_cancel", args=[walkin.id])}"'), 1)    # the walk-in can be cancelled whole
         self.assertEqual(html.count(f'data-url="{reverse("arabela_admin:reservation_cancel", args=[online.id])}"'), 0)    # the other has a gown out
         self.assertIn(reverse("arabela_admin:reservation_cancel_gowns", args=[walkin.id]), html)
         self.assertEqual(html.count("payment-verification/?search="), 2)                  # View
 
-    def test_the_cells_inside_a_panel_are_the_old_columns(self):
-        reservation, _ = self.book("Columns Check", "09170000001", [(3, 7, P, {})])
+    def test_a_gown_line_shows_the_circle_the_name_the_dates_and_the_price(self):
+        reservation, [item] = self.book("Columns Check", "09170000001", [(3, 7, P, {})])
         _, html = self.page()
         panel = html[html.index('id="ar-panel-%d"' % reservation.id):]
-        panel = panel[:panel.index("</table>")]
-        for column in ("Gown Name", "Rental Date", "Return Date", "Amount", "Status", "Action"):
-            self.assertIn(f">{column}</p>", panel)
-        self.assertIn("&#8369;3,000", panel)                                       # every admin price carries its thousands comma
-        self.assertIn(">Confirmed</p>", panel)
+        line = panel[panel.index('<div class="ar-gl">'):panel.index('id="ar-more-%d"' % item.id)]
+        pickup, back = self.today + timedelta(days=3), self.today + timedelta(days=7)
+        self.assertIn(item.gown_name, line)
+        self.assertIn("&#8369;3,000", line)                                          # every admin price carries its thousands comma
+        self.assertIn(f"{pickup:%b} {pickup.day}", line)
+        self.assertIn(f"{back:%b} {back.day}, {back.year}", line)
+        self.assertRegex(line, r'class="ar-num ar-num--confirmed" role="img" title="Pick-up in 3 days"[^>]*>3</span>')     # green, 3 days to pick-up
+        self.assertEqual(line.count("<button"), 1)                                   # the line itself has no buttons but the dots
+        card = html[html.index('class="ar-card"'):html.index('x-show="openCustomerModal"')]
+        self.assertNotIn("<table", card)                                             # the wide table is gone
 
     def test_the_status_remarks_and_the_moved_dates_are_still_shown(self):
         self.book("Moved Pickup", "09170000002", [
@@ -178,7 +191,8 @@ class DropdownContentTests(ActiveDropdownBase):
         self.book("Timeline Two", "09170000005", [(3, 7, P, {})])
         _, html = self.page()
         self.assertEqual(html.count('<div class="arb-tl-panel">'), 2)
-        self.assertEqual(html.count('colspan="6"'), 2)
+        self.assertEqual(html.count('<div class="ar-tl"'), 2)
+        self.assertNotIn('colspan="6"', html)                                        # it used to be a table row that spanned six columns
         self.assertNotIn('colspan="7"', html)
 
 

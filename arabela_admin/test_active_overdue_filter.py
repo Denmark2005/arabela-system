@@ -73,18 +73,19 @@ class RunningRentals(Base):
         self.assertEqual(states[self.out.reference_code], "active")
         self.assertEqual(states[self.waiting.reference_code], "confirmed")
         html = response.content.decode()
-        self.assertEqual(html.count(">Overdue</p>"), 3)
-        self.assertEqual(html.count(">Active</p>"), 1)
-        self.assertEqual(html.count(">Confirmed</p>"), 1)                 # a gown that is out no longer says "Confirmed"
+        self.assertEqual(html.count('role="img" aria-label="Overdue"'), 3)       # the status is a coloured circle before the name (hover = its words)
+        self.assertEqual(html.count('role="img" aria-label="Active"'), 1)
+        self.assertEqual(html.count('role="img" aria-label="Confirmed"'), 1)     # a gown that is out no longer says "Confirmed"
+        self.assertEqual(html.count('class="ar-dot ar-dot--overdue" role="img"'), 3)
         self.assertIn('data-state="overdue"', html)
         self.assertIn("ar-booking is-overdue", html)
 
     def test_a_late_booking_says_how_many_days_late(self):
         html = self.page().content.decode()
-        self.assertIn(">6 days late</span>", html)
-        self.assertIn(">4 days late</span>", html)
-        self.assertIn(">1 day late</span>", html)                         # singular
-        self.assertEqual(html.count("ar-chip ar-chip--late"), 3)
+        self.assertIn('class="ar-num ar-num--overdue" title="6 days late" aria-label="6 days late">6</span>', html)       # a red circle with just the number
+        self.assertIn('class="ar-num ar-num--overdue" title="4 days late" aria-label="4 days late">4</span>', html)
+        self.assertIn('class="ar-num ar-num--overdue" title="1 day late" aria-label="1 day late">1</span>', html)        # singular
+        self.assertEqual(html.count('class="ar-num ar-num--overdue" title="'), 3)                 # one per late booking
 
     def test_the_colour_key_is_the_filter_with_counts(self):
         html = self.page().content.decode()

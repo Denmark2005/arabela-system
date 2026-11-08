@@ -437,6 +437,29 @@ def _days_late(item, today=None):
     return None
 
 
+def _gown_circle(item, today=None):
+    """The small coloured circle on one gown's line in Active Reservations: {"kind", "number", "title"}.
+
+    kind uses the SAME three colours as the booking's own status circle -- confirmed (green: waiting for pick-up), active (blue: out with the
+    customer), overdue (red: late) -- plus returned / cancelled (grey). number is the days the circle carries: days until pick-up (green), days
+    until it is due back (blue), days late (red; a pick-up that was never collected counts days late too). title is the full sentence the old text
+    chips said (the very remarks the Rental Schedule shows), so nothing is lost: it is on hover now, and written out when the line is opened."""
+    today = today or timezone.localdate()
+    stage = getattr(item, "effective_stage", None) or _effective_stage(item, today)
+    remarks = getattr(item, "remarks", None) or _item_remarks(item, today)
+    title = " · ".join(r["text"] for r in remarks)
+    if stage == ReservationItem.Stage.CANCELLED:
+        return {"kind": "cancelled", "number": "", "title": title}
+    if stage == ReservationItem.Stage.RETURNED:
+        return {"kind": "returned", "number": "", "title": title}
+    if stage == ReservationItem.Stage.PICKUP:
+        days = (item.rental_date - today).days
+        return {"kind": "confirmed", "number": days, "title": title} if days >= 0 else {"kind": "overdue", "number": -days, "title": title}
+    if stage == ReservationItem.Stage.OVERDUE:
+        return {"kind": "overdue", "number": _days_late(item, today) or 0, "title": title}
+    return {"kind": "active", "number": max(0, (item.return_date - today).days), "title": title}
+
+
 def _holding_items(gown_ids):
     """Bookings that really hold these physical gowns -- the same rule checkout's
     _find_available_unit and the customer calendar use: every booking except one
@@ -1255,6 +1278,7 @@ def active_reservations_view(request):
             item.scheduled_return = item.original_return_date or item.return_date
             item.effective_stage = _effective_stage(item, today)
             item.remarks = _item_remarks(item, today)
+            item.circle = _gown_circle(item, today)
             # Everything else holding this same physical gown, so the Change pick-up /
             # return calendars can grey out the days that are taken and say why. The
             # server still decides (_schedule_conflict); this is only the early guide.

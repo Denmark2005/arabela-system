@@ -49,32 +49,43 @@
     {% include "arabela_admin/partials/dialog.html" %}
     {% include "arabela_admin/partials/cancel_booking.html" %}
     <style>
-      /* Active Reservations: the closed list. One line per booking; the booking's own rows are inside .ar-panel. */
+      /* Active Reservations: ONE box (search + the colour key, which is also the filter + the list). The list is one short line per booking; the
+         booking's own gowns are inside .ar-panel. Small coloured circles carry the status: every circle has its words on hover, in the "?" key,
+         and written out when a gown's line is opened. */
+      .ar-card { margin-bottom: 1.25rem; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; }
+      .dark .ar-card { background: rgba(255,255,255,.03); border-color: #1d2939; }
+      .ar-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; padding: .85rem 1.25rem; }
+      .ar-search { position: relative; flex: 1 1 18rem; min-width: 0; }
+      .ar-search-ic { position: absolute; left: .8rem; top: 50%; width: 1rem; height: 1rem; transform: translateY(-50%); color: #98a2b3; pointer-events: none; }
+      .ar-search-input { display: block; width: 100%; height: 2.5rem; box-sizing: border-box; padding: .4rem .8rem .4rem 2.3rem; border: 1px solid #d0d5dd; border-radius: .6rem; background: transparent; color: #1d2939; font: inherit; font-size: .875rem; }
+      .ar-search-input::placeholder { color: #98a2b3; }
+      .ar-search-input:focus { outline: 2px solid #465fff; outline-offset: 1px; border-color: #465fff; }
+      .dark .ar-search-input { background: #0c111d; border-color: #344054; color: #f2f4f7; }
+      .ar-count { min-height: 1.4rem; padding: 0 1.25rem .6rem; font-size: .8125rem; color: #667085; }
+      .dark .ar-count { color: #98a2b3; }
+
       .ar-head, .ar-line { display: grid; grid-template-columns: minmax(12rem, 2.2fr) minmax(9rem, 1.5fr) minmax(8.5rem, 1.1fr) 8rem 8rem 2.25rem; align-items: center; column-gap: .75rem; }
-      .ar-head { position: sticky; top: 0; z-index: 10; padding: .75rem 1.25rem; background: #fff; border-bottom: 1px solid #f2f4f7; font-size: .75rem; font-weight: 500; color: #667085; }
+      .ar-head { position: sticky; top: 0; z-index: 10; padding: .75rem 1.25rem; background: #fff; border-top: 1px solid #f2f4f7; border-bottom: 1px solid #f2f4f7; font-size: .75rem; font-weight: 500; color: #667085; }
       .dark .ar-head { background: #101828; border-color: #1d2939; color: #98a2b3; }
       .ar-booking { border-bottom: 1px solid #f2f4f7; }
       .dark .ar-booking { border-color: #1d2939; }
       .ar-line { padding: .8rem 1.25rem; cursor: pointer; }
       .ar-line:hover { background: rgba(152,162,179,.08); }
       .ar-line.is-open { background: rgba(70,95,255,.05); }
-      .ar-who { display: flex; align-items: center; gap: .75rem; min-width: 0; }
+      .ar-who { display: flex; align-items: center; gap: .65rem; min-width: 0; }
       .ar-name { font-weight: 500; font-size: .875rem; color: #1d2939; overflow-wrap: anywhere; }
       .dark .ar-name { color: rgba(255,255,255,.9); }
       .ar-ref { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; font-size: .75rem; }
       .ar-ref b { font-weight: 500; padding: .1rem .5rem; border-radius: 999px; background: #f2f4f7; color: #475467; }
       .dark .ar-ref b { background: #1d2939; color: #98a2b3; }
-      .ar-chip { padding: .1rem .5rem; border-radius: 999px; background: rgba(70,95,255,.1); color: #465fff; font-size: .7rem; font-weight: 500; }
-      .ar-chip--late { background: #fef3f2; color: #b42318; }
-      .dark .ar-chip--late { background: rgba(240,68,56,.15); color: #fda29b; }
-      .ar-booking.is-overdue > .ar-line { box-shadow: inset 3px 0 0 #f04438; }
+      .ar-booking.is-overdue > .ar-line { box-shadow: inset 3px 0 0 #d92d20; }
+
       /* The colour key is also the filter: one click shows only that kind of booking. */
       .ar-filters { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
-      .ar-filter { display: inline-flex; align-items: center; gap: .5rem; padding: .35rem .8rem; border: 1px solid #d0d5dd; border-radius: 999px; background: transparent; color: #475467; font-size: .875rem; font-weight: 500; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
+      .ar-filter { display: inline-flex; align-items: center; gap: .5rem; padding: .35rem .8rem; border: 1px solid #d0d5dd; border-radius: 999px; background: transparent; color: #475467; font-size: .875rem; font-weight: 500; cursor: pointer; transition: background-color .15s, border-color .15s, color .15s; }
       .ar-filter:hover { background: rgba(152,162,179,.12); }
       .ar-filter:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
       .ar-filter.is-on { background: #465fff; border-color: #465fff; color: #fff; }
-      .ar-filter .ar-dot { display: inline-block; width: 12px; height: 12px; border-radius: 9999px; box-shadow: 0 0 0 2px rgba(0,0,0,.06); }
       .ar-filter .ar-n { min-width: 1.25rem; padding: 0 .4rem; border-radius: 999px; background: rgba(152,162,179,.22); font-size: .75rem; font-weight: 600; text-align: center; }
       .ar-filter.is-on .ar-n { background: rgba(255,255,255,.26); }
       .ar-filter--hot:not(.is-on) { border-color: #fda29b; color: #b42318; }
@@ -82,6 +93,23 @@
       .dark .ar-filter { border-color: #344054; color: #d0d5dd; }
       .dark .ar-filter--hot:not(.is-on) { border-color: rgba(240,68,56,.5); color: #fda29b; }
       .dark .ar-filter--hot:not(.is-on) .ar-n { background: rgba(240,68,56,.18); color: #fda29b; }
+
+      /* The status circles. Same three colours everywhere on this page: green = waiting for pick-up, blue = out with the customer, red = late. */
+      .ar-dot { display: inline-block; flex: none; width: .75rem; height: .75rem; border-radius: 999px; box-shadow: 0 0 0 2px rgba(0,0,0,.06); }
+      .ar-dot--confirmed { background: #039855; }
+      .ar-dot--active { background: #1570ef; }
+      .ar-dot--overdue { background: #d92d20; }
+      .ar-dot--done { background: #667085; }
+      .ar-num { display: inline-flex; flex: none; align-items: center; justify-content: center; min-width: 1.5rem; height: 1.5rem; box-sizing: border-box; padding: 0 .4rem; border-radius: 999px; color: #fff; font-size: .75rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+      .ar-num svg { width: .8rem; height: .8rem; display: block; }
+      .ar-num--confirmed { background: #039855; }
+      .ar-num--active { background: #1570ef; }
+      .ar-num--overdue { background: #d92d20; }
+      .ar-num--returned, .ar-num--cancelled { background: #667085; }
+      .ar-count-pill { display: inline-flex; align-items: center; gap: .25rem; padding: .1rem .5rem; border-radius: 999px; background: #f2f4f7; color: #475467; font-size: .72rem; font-weight: 600; }
+      .ar-count-pill svg { width: .75rem; height: .75rem; }
+      .dark .ar-count-pill { background: #1d2939; color: #98a2b3; }
+
       .ar-date { font-size: .875rem; color: #667085; }
       .dark .ar-date { color: #98a2b3; }
       .ar-phone { font-size: .8125rem; color: #465fff; text-decoration: underline; }
@@ -91,16 +119,90 @@
       .ar-chev:focus-visible { outline: 2px solid #465fff; outline-offset: 1px; }
       .ar-chev svg { width: 1rem; height: 1rem; transition: transform .15s; }
       .ar-chev[aria-expanded="true"] svg { transform: rotate(180deg); }
+
+      /* Icon buttons: every small action is an icon with a tooltip and a screen-reader label. */
+      .ar-ib { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 2rem; height: 2rem; padding: 0; border: 1px solid #d0d5dd; border-radius: .55rem; background: #fff; color: #475467; text-decoration: none; cursor: pointer; transition: background-color .15s, color .15s, border-color .15s; }
+      .ar-ib svg { width: 1rem; height: 1rem; display: block; }
+      .ar-ib:hover:not(:disabled) { background: #f2f4f7; color: #1d2939; }
+      .ar-ib.is-on { background: #eef4ff; border-color: #9bb0ff; color: #3538cd; }
+      .ar-ib:disabled { opacity: .55; cursor: not-allowed; }
+      .ar-ib:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+      .dark .ar-ib { background: transparent; border-color: #344054; color: #98a2b3; }
+      .dark .ar-ib:hover:not(:disabled) { background: rgba(255,255,255,.06); color: #f2f4f7; }
+      .dark .ar-ib.is-on { background: rgba(70,95,255,.18); border-color: #6172f3; color: #c7d2fe; }
+      .ar-spin { display: inline-block; width: .9rem; height: .9rem; border: 2px solid currentColor; border-top-color: transparent; border-radius: 999px; animation: ar-spin .8s linear infinite; }
+      @keyframes ar-spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { .ar-spin { animation-duration: 2.4s; } }
+
+      /* The "?" key: what the circles mean. */
+      .ar-tip { position: relative; display: inline-block; }
+      .ar-tip > summary { list-style: none; display: inline-flex; align-items: center; justify-content: center; width: 1.5rem; height: 1.5rem; border: 1px solid #98a2b3; border-radius: 999px; color: #667085; font-size: .75rem; font-weight: 700; line-height: 1; cursor: pointer; user-select: none; }
+      .ar-tip > summary::-webkit-details-marker { display: none; }
+      .ar-tip > summary::marker { content: ''; }
+      .ar-tip > summary:hover, .ar-tip[open] > summary { background: #465fff; border-color: #465fff; color: #fff; }
+      .ar-tip > summary:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+      .ar-tip-pop { position: absolute; z-index: 40; right: 0; top: calc(100% + .45rem); width: 21rem; max-width: calc(100vw - 3rem); padding: .85rem 1rem; border-radius: .75rem; background: #101828; color: #f2f4f7; font-size: .8125rem; font-weight: 400; line-height: 1.45; text-align: left; box-shadow: 0 12px 24px -8px rgba(16,24,40,.35); }
+      .dark .ar-tip-pop { background: #1d2939; border: 1px solid #344054; }
+      .ar-leg-title { margin: 0; font-weight: 700; }
+      .ar-leg { list-style: none; margin: .55rem 0 0; padding: 0; display: grid; gap: .55rem; }
+      .ar-leg li { display: flex; align-items: center; gap: .65rem; }
+      .ar-leg .ar-num, .ar-leg .ar-dot, .ar-leg .ar-count-pill { flex: none; }
+      .ar-leg-note { margin: .65rem 0 0; font-size: .75rem; color: #98a2b3; }
+
+      /* An opened booking: its icon buttons, then one short line per gown. */
       .ar-panel { border-top: 1px dashed #e4e7ec; background: rgba(152,162,179,.04); }
       .dark .ar-panel { border-color: #1d2939; }
       .ar-strip { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .6rem 1.25rem 0; font-size: .75rem; color: #98a2b3; }
+      .ar-acts { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .7rem 1.25rem; }
+      .ar-gowns { border-top: 1px solid #f2f4f7; }
+      .dark .ar-gowns { border-color: #1d2939; }
+      .ar-gown { border-bottom: 1px solid #f2f4f7; }
+      .ar-gown:last-child { border-bottom: 0; }
+      .dark .ar-gown { border-color: #1d2939; }
+      .ar-gl { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto; align-items: center; column-gap: .85rem; padding: .6rem 1.25rem; }
+      .ar-gname { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .6rem; }
+      .ar-gtitle { font-size: .875rem; font-weight: 500; color: #1d2939; overflow-wrap: anywhere; }
+      .dark .ar-gtitle { color: rgba(255,255,255,.9); }
+      .ar-of { padding: .05rem .45rem; border-radius: 999px; background: #f2f4f7; color: #667085; font-size: .7rem; font-weight: 500; }
+      .dark .ar-of { background: #1d2939; color: #98a2b3; }
+      .ar-tag { display: inline-flex; align-items: center; gap: .35rem; font-size: .75rem; color: #98a2b3; }
+      .ar-gdates { display: inline-flex; align-items: center; gap: .4rem; font-size: .8125rem; color: #475467; white-space: nowrap; }
+      .dark .ar-gdates { color: #98a2b3; }
+      .ar-chg { display: inline-flex; color: #b54708; }
+      .dark .ar-chg { color: #fdb022; }
+      .ar-chg svg { width: .9rem; height: .9rem; }
+      .ar-gprice { min-width: 4.5rem; font-size: .875rem; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; color: #344054; }
+      .dark .ar-gprice { color: #d0d5dd; }
+      .ar-gmore { padding: 0 1.25rem .8rem 3.35rem; }
+      .ar-facts { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .5rem; margin-bottom: .55rem; }
+      .ar-gbtns { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
       .ar-empty { padding: 2.5rem 1.25rem; text-align: center; }
+      .ar-tl { padding: 0 1.25rem 1rem; }
+
       @media (max-width: 760px) {
         .ar-head { display: none; }
-        .ar-line { grid-template-columns: minmax(0, 1fr) 2.25rem; row-gap: .35rem; }
-        .ar-line > .ar-who, .ar-line > .ar-ref, .ar-line > .ar-phone-cell, .ar-line > .ar-date { grid-column: 1; }
-        .ar-line > .ar-chev { grid-column: 2; grid-row: 1; }
+        .ar-toolbar { padding: .75rem 1rem; }
+        .ar-count { padding: 0 1rem .5rem; }
+        .ar-line { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.25rem; grid-template-areas: "who who chev" "ref phone phone" "rental return return"; row-gap: .45rem; }
+        .ar-line > .ar-who { grid-area: who; }
+        .ar-line > .ar-ref { grid-area: ref; }
+        .ar-line > .ar-phone-cell { grid-area: phone; }
+        .ar-line > .ar-date[data-label="Rental"] { grid-area: rental; }
+        .ar-line > .ar-date[data-label="Return"] { grid-area: return; }
+        .ar-line > .ar-chev { grid-area: chev; }
         .ar-line > .ar-date::before { content: attr(data-label) ": "; color: #98a2b3; }
+        .ar-filters { position: relative; }
+        .ar-tip { position: static; }
+        .ar-tip-pop { left: 0; right: 0; width: auto; max-width: none; }
+        .ar-acts { padding: .7rem 1rem; }
+        .ar-gl { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "num name more" ". dates price"; row-gap: .3rem; padding: .6rem 1rem; }
+        .ar-gl > .ar-num { grid-area: num; }
+        .ar-gl > .ar-gname { grid-area: name; }
+        .ar-gl > .ar-more { grid-area: more; }
+        .ar-gl > .ar-gdates { grid-area: dates; }
+        .ar-gl > .ar-gprice { grid-area: price; text-align: left; justify-self: end; }
+        .ar-gmore { padding: 0 1rem .8rem 1rem; }
+        .ar-tl { padding: 0 1rem 1rem; }
       }
     </style>
     <!-- One shared floating popover, reused for both the pickup/return date "Edit"
@@ -1209,57 +1311,62 @@
 </div>
             <!-- Breadcrumb End -->
 
-            <!-- The colour key is also the filter: one click shows only that kind of booking (the page's own search still applies). The numbers are
-                 how many of each there are right now; a finished rental is not listed here at all (see Rental History). -->
-            <div class="ar-filters mb-3" role="group" aria-label="Show bookings by status">
-              <button type="button" class="ar-filter" :class="stateFilter === 'all' ? 'is-on' : ''" :aria-pressed="stateFilter === 'all' ? 'true' : 'false'" @click="stateFilter = 'all'">All <span class="ar-n">{{ state_counts.all }}</span></button>
-              <button type="button" class="ar-filter" :class="stateFilter === 'confirmed' ? 'is-on' : ''" :aria-pressed="stateFilter === 'confirmed' ? 'true' : 'false'" @click="stateFilter = 'confirmed'" title="Waiting for the first pick-up"><span class="ar-dot" style="background:#BBF7D0"></span>Confirmed <span class="ar-n">{{ state_counts.confirmed }}</span></button>
-              <button type="button" class="ar-filter" :class="stateFilter === 'active' ? 'is-on' : ''" :aria-pressed="stateFilter === 'active' ? 'true' : 'false'" @click="stateFilter = 'active'" title="A gown is out with the customer"><span class="ar-dot" style="background:#BFDBFE"></span>Active <span class="ar-n">{{ state_counts.active }}</span></button>
-              <button type="button" class="ar-filter{% if state_counts.overdue %} ar-filter--hot{% endif %}" :class="stateFilter === 'overdue' ? 'is-on' : ''" :aria-pressed="stateFilter === 'overdue' ? 'true' : 'false'" @click="stateFilter = 'overdue'" title="A gown is past its return date"><span class="ar-dot" style="background:#FCA5A5"></span>Overdue <span class="ar-n">{{ state_counts.overdue }}</span></button>
-            </div>
-
-            <div class="mb-5 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03] sm:p-5">
-              <input
-                type="text"
-                x-model="search"
-                placeholder="Search by customer, reference, cellphone or gown ID..."
-                class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-              />
-            </div>
-
-            <div
-              class="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]"
-            >
-              <div class="px-5 py-4 sm:px-6 sm:py-5">
-                <h3 class="text-base font-medium text-gray-800 dark:text-white/90">Confirmed &amp; Active Rentals</h3>
+            <!-- ONE box: the search, the colour key (which is also the filter: one click shows only that kind of booking, the page's own search still
+                 applies) and the list. The numbers are how many of each there are right now; a finished rental is not listed here at all (see Rental
+                 History). The "?" explains every circle. -->
+            <div class="ar-card">
+              <div class="ar-toolbar">
+                <div class="ar-search">
+                  <svg class="ar-search-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                  <input type="text" class="ar-search-input" x-model="search" placeholder="Search by customer, reference, cellphone or gown ID..." aria-label="Search active reservations">
+                </div>
+                <div class="ar-filters" role="group" aria-label="Show bookings by status">
+                  <button type="button" class="ar-filter" :class="stateFilter === 'all' ? 'is-on' : ''" :aria-pressed="stateFilter === 'all' ? 'true' : 'false'" @click="stateFilter = 'all'">All <span class="ar-n">{{ state_counts.all }}</span></button>
+                  <button type="button" class="ar-filter" :class="stateFilter === 'confirmed' ? 'is-on' : ''" :aria-pressed="stateFilter === 'confirmed' ? 'true' : 'false'" @click="stateFilter = 'confirmed'" title="Waiting for the first pick-up"><span class="ar-dot ar-dot--confirmed"></span>Confirmed <span class="ar-n">{{ state_counts.confirmed }}</span></button>
+                  <button type="button" class="ar-filter" :class="stateFilter === 'active' ? 'is-on' : ''" :aria-pressed="stateFilter === 'active' ? 'true' : 'false'" @click="stateFilter = 'active'" title="A gown is out with the customer"><span class="ar-dot ar-dot--active"></span>Active <span class="ar-n">{{ state_counts.active }}</span></button>
+                  <button type="button" class="ar-filter{% if state_counts.overdue %} ar-filter--hot{% endif %}" :class="stateFilter === 'overdue' ? 'is-on' : ''" :aria-pressed="stateFilter === 'overdue' ? 'true' : 'false'" @click="stateFilter = 'overdue'" title="A gown is past its return date"><span class="ar-dot ar-dot--overdue"></span>Overdue <span class="ar-n">{{ state_counts.overdue }}</span></button>
+                  <details class="ar-tip" @click.outside="$el.removeAttribute('open')" @keydown.escape.stop="$el.removeAttribute('open')">
+                    <summary aria-label="What the circles mean" title="What the circles mean">?</summary>
+                    <div class="ar-tip-pop">
+                      <p class="ar-leg-title">What the circles mean</p>
+                      <ul class="ar-leg">
+                        <li><span class="ar-num ar-num--confirmed">3</span><span>Green: waiting for pick-up. The number is the days until pick-up.</span></li>
+                        <li><span class="ar-num ar-num--active">2</span><span>Blue: out with the customer. The number is the days until it is due back.</span></li>
+                        <li><span class="ar-num ar-num--overdue">14</span><span>Red: late. The number is the days late.</span></li>
+                        <li><span class="ar-num ar-num--returned"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg></span><span>Grey: already returned, or cancelled.</span></li>
+                        <li><span class="ar-count-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0"/></svg>4</span><span>How many gowns are in the booking.</span></li>
+                      </ul>
+                      <p class="ar-leg-note">The small circle before a customer's name is the booking's status: green Confirmed, blue Active, red Overdue. Hover any circle for its full sentence.</p>
+                    </div>
+                  </details>
+                </div>
               </div>
-              <div class="border-t border-gray-100 dark:border-gray-800">
-                <div class="max-w-full overflow-x-auto">
-                  <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg=".ar-booking" data-arpg-noun="bookings">
-                  <div class="ar-head">
-                    <span>Customer</span>
-                    <span>Booking no.</span>
-                    <span>Cellphone</span>
-                    <span>Rental Date</span>
-                    <span>Return Date</span>
-                    <span></span>
-                  </div>
-                  {% for r in reservations %}
-                  {% with item_count=r.items.all|length %}
-                  <!-- One booking: a closed line (name, booking number, cellphone, first pick-up, last return) and, hidden until it is
-                       opened, that booking's own rows. Everything inside the panel is the old table's cells, unchanged. -->
+              <div class="ar-count" id="ar-count" aria-live="polite"></div>
+
+              <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg=".ar-booking" data-arpg-noun="bookings" data-arpg-top="off" data-arpg-count="#ar-count">
+                <div class="ar-head">
+                  <span>Customer</span>
+                  <span>Booking no.</span>
+                  <span>Cellphone</span>
+                  <span>Rental Date</span>
+                  <span>Return Date</span>
+                  <span></span>
+                </div>
+                {% for r in reservations %}
+                {% with item_count=r.items.all|length %}
+                <!-- One booking: a closed line (status circle, name, booking number, cellphone, first pick-up, last return) and, hidden until it is
+                     opened, that booking's icon buttons and one short line per gown. -->
                   <div class="ar-booking{% if r.state == 'overdue' %} is-overdue{% endif %}" data-booking-id="{{ r.id }}" data-search="{{ r.display_customer_name|lower }} {{ r.reference_code|lower }}{% for gi in r.items.all %} {{ gi.gown_code|lower }}{% endfor %} {{ r.phone|cut:' ' }}" x-show="(stateFilter === 'all' || stateFilter === '{{ r.state }}') && (search === '' || '{{ r.display_customer_name|lower|escapejs }} {{ r.reference_code|lower|escapejs }}{% for gi in r.items.all %} {{ gi.gown_code|lower|escapejs }}{% endfor %} {{ r.phone|cut:" "|escapejs }}'.includes(search.toLowerCase()))" data-state="{{ r.state }}">
                     <div class="ar-line" :class="isBookingOpen({{ r.id }}) ? 'is-open' : ''" @click="toggleBooking({{ r.id }})">
                       <div class="ar-who">
-                        <div class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-gray-400 dark:bg-gray-800" style="flex: none;">
-                          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>
-                        </div>
+                        <span class="ar-dot ar-dot--{{ r.state }}" role="img" aria-label="{{ r.state|title }}"
+                          title="{% if r.state == 'overdue' %}Overdue: at least one gown in this booking is past its return date{% elif r.state == 'active' %}Active: a gown from this booking is out with the customer{% else %}Confirmed: waiting for the first pick-up{% endif %}"></span>
                         <span class="ar-name">{{ r.display_customer_name }}</span>
                       </div>
                       <div class="ar-ref">
                         <b>{{ r.reference_code }}</b>
-                        {% if r.gown_count > 1 %}<span class="ar-chip">{{ r.gown_count }} gowns</span>{% endif %}
-                        {% if r.state == 'overdue' %}<span class="ar-chip ar-chip--late" title="At least one gown in this booking is past its return date">{{ r.overdue_days }} day{{ r.overdue_days|pluralize }} late</span>{% endif %}
+                        {% if r.gown_count > 1 %}<span class="ar-count-pill" title="{{ r.gown_count }} gowns in this booking" aria-label="{{ r.gown_count }} gowns in this booking"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0"/></svg>{{ r.gown_count }}</span>{% endif %}
+                        {% if r.state == 'overdue' %}<span class="ar-num ar-num--overdue" title="{{ r.overdue_days }} day{{ r.overdue_days|pluralize }} late" aria-label="{{ r.overdue_days }} day{{ r.overdue_days|pluralize }} late">{{ r.overdue_days }}</span>{% endif %}
                       </div>
                       <div class="ar-phone-cell">
                         {% if r.phone %}<a href="tel:{{ r.phone }}" class="ar-phone" title="Call the customer" @click.stop>{{ r.phone }}</a>{% else %}<span class="ar-none">&mdash;</span>{% endif %}
@@ -1279,148 +1386,23 @@
                         {% if r.is_staff_recorded %}<span class="inline-flex w-fit items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-theme-xs font-medium text-brand-500 dark:bg-brand-500/15 dark:text-brand-400" title="Recorded by staff in New Booking">{{ r.get_channel_display }}</span>{% endif %}
                       </div>
                       {% endif %}
-                      <div class="max-w-full overflow-x-auto">
-                      <table class="min-w-full">
-                        <thead>
-                          <tr class="border-b border-gray-100 dark:border-gray-800">
-                            <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Gown Name</p></th>
-                            <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Rental Date</p></th>
-                            <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Return Date</p></th>
-                            <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Amount</p></th>
-                            <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Status</p></th>
-                            <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Action</p></th>
-                          </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-                          {% for item in r.items.all %}
-                          <tr>
-                        <td class="px-5 py-4 sm:px-6">
-                          <div class="flex items-center gap-2">
-                            <p class="text-gray-500 text-theme-sm dark:text-gray-400"{% if item.stage == "Cancelled" %} style="text-decoration: line-through; opacity: .65;"{% endif %}>{{ item.gown_name }}</p>
-                            {% if item_count > 1 %}
-                            <span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ forloop.counter }} of {{ item_count }}</span>
-                            {% endif %}
-                          </div>
-                          {% if item.gown_code %}
-                          <p class="mt-1 flex items-center gap-1.5 text-theme-xs text-gray-400 dark:text-gray-500" title="Match this to the tag on the dress">
-                            <span class="admin-tag-dot" style="background-color: {{ item.tag_hex }};"></span>
-                            <span>{{ item.tag_color }} tag &middot; <span class="admin-tag-number font-medium text-gray-600 dark:text-gray-300">{{ item.gown_code }}</span></span>
-                          </p>
-                          {% endif %}
-                          <!-- Status remarks: the same words and colours the (read-only) Rental Schedule
-                               shows -- orange pick-up, green out, blue return, red late. -->
-                          <div class="mt-1.5 flex flex-wrap items-center gap-1.5" data-item-remarks="{{ item.id }}">
-                            {% for remark in item.remarks %}
-                            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-theme-xs font-medium {% if remark.tone == 'warning' %}bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400{% elif remark.tone == 'success' %}bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500{% elif remark.tone == 'primary' %}bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400{% elif remark.tone == 'danger' %}bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500{% else %}bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400{% endif %}">{{ remark.text }}</span>
-                            {% endfor %}
-                          </div>
-                          {% if item.stage != "Returned" and item.stage != "Cancelled" %}
-                          <div class="mt-1.5 flex flex-wrap items-center gap-2" data-item-actions="{{ item.id }}">
-                            {% if r.has_account %}
-                            <button type="button"
-                              class="resv-remind-btn inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
-                              data-url="{% url 'arabela_admin:reservation_item_send_reminder' item.id %}"
-                              data-gown="{{ item.gown_name }}"
-                              data-customer="{{ r.display_customer_name }}"
-                              data-suggested="{{ item.suggested_reminder }}"
-                              onclick="sendReminder(this)">Remind</button>
-                            {% endif %}
-                            <!-- No website account (a walk-in): no Remind button, a message can't reach them. Staff call the number on the booking's line. -->
 
-                            {% if item.stage == "Pick-up" %}
-                            <!-- One click records today as the pick-up. The server only allows it on or
-                                 after the booking's CURRENT pick-up date (the customer's changed one if
-                                 they moved it) and says so if it's too early. -->
-                            <button type="button"
-                              class="resv-mark-pickedup-btn inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
-                              data-item-id="{{ item.id }}">Mark Picked Up</button>
-                            {% elif item.stage == "Reserved" or item.stage == "Return" or item.stage == "Overdue" %}
-                            <!-- Condition choices open in a floating popover (see #row-popover near
-                                 the end of <body>), not inline here: revealing them in the row itself
-                                 would grow this row's height and visibly push every row below it down
-                                 the page on every click -- exactly the "unnecessary movement" this was
-                                 built to avoid. -->
-                            <button type="button" class="resv-mark-returned-btn inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200" data-item-id="{{ item.id }}">Mark Returned</button>
-                            {% endif %}
-                            {% if item.can_cancel_gown and admin_can_manage %}
-                            <!-- Cancels just this gown (nobody picked it up); the rest of the booking carries on.
-                                 Opens the small confirm window in partials/cancel_booking.html. -->
-                            <button type="button" class="cb-open-btn cb-open-btn--small{% if item.cancel_urgent %} cb-open-btn--urgent{% endif %}"
-                              title="{% if item.cancel_urgent %}The event date has passed and this gown was never picked up{% else %}Cancel just this gown{% endif %}"
-                              data-mode="gown" data-ids="{{ item.id }}"
-                              data-url="{% url 'arabela_admin:reservation_cancel_gowns' r.id %}"
-                              data-ref="{{ r.reference_code }}"
-                              data-customer="{{ r.display_customer_name }}"
-                              data-gowns="{{ item.gown_name }}"
-                              data-event="{{ item.cancel_event_text }}"
-                              data-reason="{{ item.cancel_default_reason }}">Cancel gown</button>
-                            {% endif %}
-                          </div>
-                          {% endif %}
-                        </td>
-                        <td class="px-5 py-4 sm:px-6">
-                          <!-- Read-only: the booking's CURRENT pick-up date (what the Rental Schedule
-                               shows) with what the customer originally booked beside it. The only way
-                               to move it is the Change pick-up date calendar below. -->
-                          <p class="text-gray-500 text-theme-sm dark:text-gray-400">
-                            {{ item.rental_date|date:"M j, Y" }}
-                            {% if item.rental_date != item.scheduled_pickup %}<span class="text-theme-xs text-gray-400 dark:text-gray-400">(originally {{ item.scheduled_pickup|date:"M j" }})</span>{% endif %}
-                          </p>
-                          {% if item.picked_up_on %}
-                          <p class="mt-1 text-theme-xs text-gray-400 dark:text-gray-400">Picked up {{ item.picked_up_on|date:"M j" }}
-                            {% if item.stage != "Returned" %}<button type="button" class="resv-undo-pickup-btn text-theme-xs text-error-500 underline" style="margin-left: 0.25rem;" data-item-id="{{ item.id }}">Undo</button>{% endif %}
-                          </p>
-                          {% elif item.stage == "Pick-up" %}
-                          <button type="button" class="resv-change-date-btn mt-1.5 inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
-                            data-kind="pickup" data-item-id="{{ item.id }}"
-                            data-current="{{ item.rental_date|date:'Y-m-d' }}"
-                            data-original="{{ item.scheduled_pickup|date:'Y-m-d' }}"
-                            data-rental="{{ item.rental_date|date:'Y-m-d' }}"
-                            data-return="{{ item.return_date|date:'Y-m-d' }}">Change pick-up date</button>
-                          {% endif %}
-                        </td>
-                        <td class="px-5 py-4 sm:px-6">
-                          <p class="text-gray-500 text-theme-sm dark:text-gray-400">
-                            {{ item.return_date|date:"M j, Y" }}
-                            {% if item.return_date != item.scheduled_return %}<span class="text-theme-xs text-gray-400 dark:text-gray-400">(originally {{ item.scheduled_return|date:"M j" }})</span>{% endif %}
-                          </p>
-                          {% if item.returned_on %}
-                          <p class="mt-1 text-theme-xs text-gray-400 dark:text-gray-400">Returned {{ item.returned_on|date:"M j" }}</p>
-                          {% elif item.stage != "Returned" and item.stage != "Cancelled" %}
-                          <button type="button" class="resv-change-date-btn mt-1.5 inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
-                            data-kind="return" data-item-id="{{ item.id }}"
-                            data-current="{{ item.return_date|date:'Y-m-d' }}"
-                            data-original="{{ item.scheduled_return|date:'Y-m-d' }}"
-                            data-rental="{{ item.rental_date|date:'Y-m-d' }}"
-                            data-return="{{ item.return_date|date:'Y-m-d' }}">Change return date</button>
-                          {% endif %}
-                        </td>
-                        <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">&#8369;{{ item.rental_price|floatformat:'-2g' }}</p></td>
-                        {% if forloop.first %}
-                        <td class="px-5 py-4 sm:px-6" rowspan="{{ item_count }}" style="vertical-align: top;">
-                          {% if r.state == 'overdue' %}
-                          <!-- The booking's own status stays "Confirmed" all the way through (nothing ever writes Active/Overdue onto it), so what
-                               staff read here is worked out from the gowns: Overdue = a gown is past its return date, Active = a gown has gone
-                               out, Confirmed = still waiting for the first pick-up. -->
-                          <p class="inline-flex rounded-full bg-error-50 px-2 py-0.5 text-theme-xs font-medium text-error-700 dark:bg-error-500/15 dark:text-error-500" title="At least one gown in this booking is past its return date">Overdue</p>
-                          {% elif r.state == 'active' %}
-                          <p class="inline-flex rounded-full bg-brand-50 px-2 py-0.5 text-theme-xs font-medium text-brand-500 dark:bg-brand-500/15 dark:text-brand-400" title="A gown from this booking is out with the customer">Active</p>
-                          {% else %}
-                          <p class="inline-flex rounded-full bg-success-50 px-2 py-0.5 text-theme-xs font-medium text-success-700 dark:bg-success-500/15 dark:text-success-500" title="Waiting for the first pick-up">Confirmed</p>
-                          {% endif %}
-                        </td>
-                        <td class="px-5 py-4 sm:px-6" rowspan="{{ item_count }}" style="vertical-align: top;">
-                          <div class="flex flex-wrap items-center gap-2">
-                            <a href="{% url 'arabela_admin:payment_verification' %}?search={{ r.display_customer_name|urlencode }}"
-                              class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View</a>
-                            <button type="button"
+                      <!-- The booking's own actions: three icon buttons, then (managers and the owner only) the cancel buttons, still with their words. -->
+                      <div class="ar-acts">
+                        <a href="{% url 'arabela_admin:payment_verification' %}?search={{ r.display_customer_name|urlencode }}" class="ar-ib"
+                          title="View payment" aria-label="View payment of {{ r.display_customer_name }}">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        </a>
+                        <button type="button"
                               @click="viewingCustomer = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reference: '{{ r.reference_code|escapejs }}', email: '{{ r.customer.email|default:"—"|escapejs }}', phone: '{{ r.phone|default:"—"|escapejs }}', address: '{{ r.address|escapejs }}', city: '{{ r.city|escapejs }}', postal: '{{ r.postal_code|escapejs }}', submitted: '{{ r.created_at|date:"M j, Y"|escapejs }} at {{ r.created_at|date:"g:i A"|escapejs }}' }; openCustomerModal = true"
-                              class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View Customer</button>
-                            <button type="button"
-                              @click="openTimeline = (openTimeline === {{ r.id }} ? null : {{ r.id }})"
-                              class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
-                              <span x-text="openTimeline === {{ r.id }} ? 'Hide Timeline' : 'Timeline'">Timeline</span>
-                            </button>
+                          class="ar-ib" title="View customer" aria-label="View customer {{ r.display_customer_name }}">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        </button>
+                        <button type="button" class="ar-ib" :class="openTimeline === {{ r.id }} ? 'is-on' : ''" :aria-pressed="openTimeline === {{ r.id }} ? 'true' : 'false'"
+                          @click="openTimeline = (openTimeline === {{ r.id }} ? null : {{ r.id }})"
+                          :title="openTimeline === {{ r.id }} ? 'Hide timeline' : 'Show timeline'" title="Show timeline" aria-label="Timeline">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                        </button>
                             {% if r.can_cancel and admin_can_manage %}
                             <!-- Only while nothing in the booking has been picked up. Opens the confirm window
                                  (partials/cancel_booking.html); nothing happens until the booking code is typed. -->
@@ -1448,35 +1430,131 @@
                               data-event="{{ r.unpicked_event_text }}"
                               data-reason="{{ r.unpicked_default_reason }}">Cancel all not picked up ({{ r.unpicked_count }})</button>
                             {% endif %}
+                      </div>
+
+                      <!-- One short line per gown: its circle, name, tag, dates and price. Everything you can DO to a gown is behind its dots. -->
+                      <div class="ar-gowns">
+                        {% for item in r.items.all %}
+                        <div class="ar-gown" x-data="{ more: false }">
+                          <div class="ar-gl">
+                            <span class="ar-num ar-num--{{ item.circle.kind }}" role="img" title="{{ item.circle.title }}" aria-label="{{ item.circle.title }}">{% if item.circle.kind == 'returned' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>{% elif item.circle.kind == 'cancelled' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>{% else %}{{ item.circle.number }}{% endif %}</span>
+                            <div class="ar-gname">
+                              <span class="ar-gtitle"{% if item.stage == "Cancelled" %} style="text-decoration: line-through; opacity: .65;"{% endif %}>{{ item.gown_name }}</span>
+                              {% if item_count > 1 %}<span class="ar-of">{{ forloop.counter }} of {{ item_count }}</span>{% endif %}
+                              {% if item.gown_code %}
+                              <span class="ar-tag" title="Match this to the tag on the dress">
+                                <span class="admin-tag-dot" style="background-color: {{ item.tag_hex }};"></span>
+                                <span>{{ item.tag_color }} tag &middot; <span class="admin-tag-number font-medium text-gray-600 dark:text-gray-300">{{ item.gown_code }}</span></span>
+                              </span>
+                              {% endif %}
+                            </div>
+                            <div class="ar-gdates">
+                              <span>{{ item.rental_date|date:"M j" }}{% if item.rental_date.year != item.return_date.year %}, {{ item.rental_date.year }}{% endif %} &rarr; {{ item.return_date|date:"M j, Y" }}</span>
+                              {% if item.rental_date != item.scheduled_pickup or item.return_date != item.scheduled_return %}
+                              <span class="ar-chg" role="img"
+                                title="Dates changed{% if item.rental_date != item.scheduled_pickup %} &middot; pick-up was {{ item.scheduled_pickup|date:'M j' }}{% endif %}{% if item.return_date != item.scheduled_return %} &middot; return was {{ item.scheduled_return|date:'M j' }}{% endif %}"
+                                aria-label="Dates changed{% if item.rental_date != item.scheduled_pickup %}, pick-up was {{ item.scheduled_pickup|date:'M j' }}{% endif %}{% if item.return_date != item.scheduled_return %}, return was {{ item.scheduled_return|date:'M j' }}{% endif %}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
+                              </span>
+                              {% endif %}
+                            </div>
+                            <div class="ar-gprice">&#8369;{{ item.rental_price|floatformat:'-2g' }}</div>
+                            <button type="button" class="ar-ib ar-more" :class="more ? 'is-on' : ''" @click="more = !more" :aria-expanded="more ? 'true' : 'false'" aria-controls="ar-more-{{ item.id }}"
+                              title="Show or hide what you can do with this gown" aria-label="Actions for {{ item.gown_name }}">
+                              <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+                            </button>
                           </div>
-                        </td>
-                        {% endif %}
-                          </tr>
-                          {% endfor %}
-                      <tr x-show="openTimeline === {{ r.id }} && (search === '' || '{{ r.display_customer_name|lower|escapejs }} {{ r.reference_code|lower|escapejs }}'.includes(search.toLowerCase()))" x-cloak>
-                        <td class="px-5 py-4 sm:px-6" colspan="6">
-                          {% include "arabela_admin/partials/timeline_rows.html" with timeline=r.timeline %}
-                        </td>
-                      </tr>
-                        </tbody>
-                      </table>
+
+                          <div class="ar-gmore" id="ar-more-{{ item.id }}" x-show="more" x-cloak>
+                            <!-- What staff used to read as chips and columns, written out (a phone has no hover): the status remarks, the real dates. -->
+                            <div class="ar-facts" data-item-remarks="{{ item.id }}">
+                              {% for remark in item.remarks %}
+                            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-theme-xs font-medium {% if remark.tone == 'warning' %}bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400{% elif remark.tone == 'success' %}bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500{% elif remark.tone == 'primary' %}bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400{% elif remark.tone == 'danger' %}bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500{% else %}bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400{% endif %}">{{ remark.text }}</span>
+                              {% endfor %}
+                              {% if item.picked_up_on %}<span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">Picked up {{ item.picked_up_on|date:"M j" }}</span>{% endif %}
+                              {% if item.returned_on %}<span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">Returned {{ item.returned_on|date:"M j" }}</span>{% endif %}
+                              {% if item.rental_date != item.scheduled_pickup %}<span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">Pick-up originally {{ item.scheduled_pickup|date:"M j" }}</span>{% endif %}
+                              {% if item.return_date != item.scheduled_return %}<span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">Return originally {{ item.scheduled_return|date:"M j" }}</span>{% endif %}
+                            </div>
+                            {% if item.stage != "Returned" and item.stage != "Cancelled" %}
+                            <div class="ar-gbtns" data-item-actions="{{ item.id }}">
+                              {% if r.has_account %}
+                              <button type="button" class="resv-remind-btn ar-ib"
+                                data-url="{% url 'arabela_admin:reservation_item_send_reminder' item.id %}"
+                                data-gown="{{ item.gown_name }}"
+                                data-customer="{{ r.display_customer_name }}"
+                                data-suggested="{{ item.suggested_reminder }}"
+                                title="Remind the customer" aria-label="Remind the customer about {{ item.gown_name }}"
+                                onclick="sendReminder(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/></svg></button>
+                              {% endif %}
+                              <!-- No website account (a walk-in): no Remind button, a message can't reach them. Staff call the number on the booking's line. -->
+                              {% if item.stage == "Pick-up" %}
+                              <!-- One click records today as the pick-up. The server only allows it on or after the booking's CURRENT pick-up date (the customer's
+                                   changed one if they moved it) and says so if it's too early. -->
+                              <button type="button" class="resv-mark-pickedup-btn ar-ib" title="Mark picked up" aria-label="Mark {{ item.gown_name }} picked up"
+                                data-item-id="{{ item.id }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+                              {% elif item.stage == "Reserved" or item.stage == "Return" or item.stage == "Overdue" %}
+                              <!-- The condition choices open in a floating popover (#row-popover near the end of <body>), not inline: revealing them in the row
+                                   would grow it and push every row below it down the page on every click. -->
+                              <button type="button" class="resv-mark-returned-btn ar-ib" title="Mark returned" aria-label="Mark {{ item.gown_name }} returned"
+                                data-item-id="{{ item.id }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></button>
+                              {% endif %}
+                              {% if item.picked_up_on %}
+                              <button type="button" class="resv-undo-pickup-btn ar-ib" title="Undo the pick-up" aria-label="Undo the pick-up of {{ item.gown_name }}"
+                                data-item-id="{{ item.id }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 103-7.7L3 8"/></svg></button>
+                              {% elif item.stage == "Pick-up" %}
+                              <button type="button" class="resv-change-date-btn ar-ib" title="Change pick-up date" aria-label="Change the pick-up date of {{ item.gown_name }}"
+                                data-kind="pickup" data-item-id="{{ item.id }}"
+                                data-current="{{ item.rental_date|date:'Y-m-d' }}"
+                                data-original="{{ item.scheduled_pickup|date:'Y-m-d' }}"
+                                data-rental="{{ item.rental_date|date:'Y-m-d' }}"
+                                data-return="{{ item.return_date|date:'Y-m-d' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M13.5 14l-2.5 2 2.5 2"/></svg></button>
+                              {% endif %}
+                              {% if not item.returned_on %}
+                              <button type="button" class="resv-change-date-btn ar-ib" title="Change return date" aria-label="Change the return date of {{ item.gown_name }}"
+                                data-kind="return" data-item-id="{{ item.id }}"
+                                data-current="{{ item.return_date|date:'Y-m-d' }}"
+                                data-original="{{ item.scheduled_return|date:'Y-m-d' }}"
+                                data-rental="{{ item.rental_date|date:'Y-m-d' }}"
+                                data-return="{{ item.return_date|date:'Y-m-d' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M10.5 14l2.5 2-2.5 2"/></svg></button>
+                              {% endif %}
+                            {% if item.can_cancel_gown and admin_can_manage %}
+                            <!-- Cancels just this gown (nobody picked it up); the rest of the booking carries on.
+                                 Opens the small confirm window in partials/cancel_booking.html. -->
+                            <button type="button" class="cb-open-btn cb-open-btn--small{% if item.cancel_urgent %} cb-open-btn--urgent{% endif %}"
+                              title="{% if item.cancel_urgent %}The event date has passed and this gown was never picked up{% else %}Cancel just this gown{% endif %}"
+                              data-mode="gown" data-ids="{{ item.id }}"
+                              data-url="{% url 'arabela_admin:reservation_cancel_gowns' r.id %}"
+                              data-ref="{{ r.reference_code }}"
+                              data-customer="{{ r.display_customer_name }}"
+                              data-gowns="{{ item.gown_name }}"
+                              data-event="{{ item.cancel_event_text }}"
+                              data-reason="{{ item.cancel_default_reason }}">Cancel gown</button>
+                            {% endif %}
+                            </div>
+                            {% endif %}
+                          </div>
+                        </div>
+                        {% endfor %}
+                      </div>
+
+                      <div class="ar-tl" x-show="openTimeline === {{ r.id }}" x-cloak>
+                        {% include "arabela_admin/partials/timeline_rows.html" with timeline=r.timeline %}
                       </div>
                     </div>
                   </div>
-                  {% endwith %}
-                  {% empty %}
-                  <div class="ar-empty">
-                    <p class="text-gray-500 text-theme-sm dark:text-gray-400">No active reservations yet. Approved bookings will appear here.</p>
-                  </div>
-                  {% endfor %}
-                  {% if reservations %}
-                  <div class="ar-empty" x-show="matchCount() === 0" x-cloak>
-                    <p class="text-gray-500 text-theme-sm dark:text-gray-400" x-text="search !== '' ? 'No running rentals match your search.' : (stateFilter === 'overdue' ? 'No overdue reservations right now.' : (stateFilter === 'active' ? 'No gown is out with a customer right now.' : 'No booking is waiting for its first pick-up.'))"></p>
-                    <p class="mt-1 text-gray-400 text-theme-xs dark:text-gray-500" x-show="search !== ''">Finished rentals are not listed here. Look for them in <a href="{% url 'arabela_admin:rental_history' %}" class="font-medium text-brand-500 hover:text-brand-600">Rental History</a>.</p>
-                  </div>
-                  {% endif %}
-                  </div>
+                {% endwith %}
+                {% empty %}
+                <div class="ar-empty">
+                  <p class="text-gray-500 text-theme-sm dark:text-gray-400">No active reservations yet. Approved bookings will appear here.</p>
                 </div>
+                {% endfor %}
+                {% if reservations %}
+                <div class="ar-empty" x-show="matchCount() === 0" x-cloak>
+                  <p class="text-gray-500 text-theme-sm dark:text-gray-400" x-text="search !== '' ? 'No running rentals match your search.' : (stateFilter === 'overdue' ? 'No overdue reservations right now.' : (stateFilter === 'active' ? 'No gown is out with a customer right now.' : 'No booking is waiting for its first pick-up.'))"></p>
+                  <p class="mt-1 text-gray-400 text-theme-xs dark:text-gray-500" x-show="search !== ''">Finished rentals are not listed here. Look for them in <a href="{% url 'arabela_admin:rental_history' %}" class="font-medium text-brand-500 hover:text-brand-600">Rental History</a>.</p>
+                </div>
+                {% endif %}
               </div>
             </div>
 
@@ -1607,9 +1685,10 @@
           return;
         }
 
-        var original = btn.textContent;
+        var original = btn.innerHTML, originalTitle = btn.title;      // the button is an icon: swap the icon, not text
         btn.disabled = true;
-        btn.textContent = 'Sending...';
+        btn.innerHTML = '<span class="ar-spin" aria-hidden="true"></span>';
+        btn.title = 'Sending...';
 
         fetch(url, {
           method: 'POST',
@@ -1624,15 +1703,17 @@
               throw new Error(result.data.error || 'Could not send this reminder.');
             }
             btn.disabled = false;
-            btn.textContent = 'Sent';
+            btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>';
+            btn.title = 'Sent';
             // Back to normal shortly: the button stays usable because staff legitimately
             // send more than one reminder to the same customer over a rental.
-            window.setTimeout(function () { btn.textContent = original; }, 2500);
+            window.setTimeout(function () { btn.innerHTML = original; btn.title = originalTitle; }, 2500);
             adminAlert({ title: 'Reminder sent', message: customer + ' will see it in their Messages, and it is now on the booking timeline.' });
           })
           .catch(function (err) {
             btn.disabled = false;
-            btn.textContent = original;
+            btn.innerHTML = original;
+            btn.title = originalTitle;
             adminAlert({ title: 'Could not send', message: err.message || 'Could not send this reminder.', danger: true });
           });
       });

@@ -75,8 +75,8 @@ class ActiveRentalsTile(Base):
         self.assertNotIn(reservation.reference_code, html)                                            # finished: not a running rental
         self.assertNotIn(">Completed</p>", html)
         self.assertIn(live.reference_code, html)
-        self.assertIn(">Active</p>", html)                                                            # the gown is out
-        self.assertIn(">Confirmed</p>", html)                                                         # still waiting for pick-up
+        self.assertIn('role="img" aria-label="Active"', html)                                         # the gown is out (the status is a blue circle before the name)
+        self.assertIn('role="img" aria-label="Confirmed"', html)                                      # still waiting for pick-up (green)
 
 
 class ApproveAndRejectRingTheBell(Base):

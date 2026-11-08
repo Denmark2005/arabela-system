@@ -4296,10 +4296,11 @@ class ScheduleActionsTests(TestCase):
         self.assertEqual(response.context["today_iso"], self.today.isoformat())
         self.assertIn(f'data-kind="pickup" data-item-id="{waiting.id}"', html)
         self.assertIn(f'data-kind="return" data-item-id="{waiting.id}"', html)
-        self.assertIn(f'data-item-id="{waiting.id}">Mark Picked Up', html)
+        self.assertRegex(html, r'<button[^>]*class="resv-mark-pickedup-btn[^"]*"[^>]*data-item-id="%d"' % waiting.id)      # an icon button now (its words are the tooltip)
         self.assertNotIn(f'data-kind="pickup" data-item-id="{out.id}"', html)   # already out
         self.assertIn(f'data-kind="return" data-item-id="{out.id}"', html)
-        self.assertIn(f'data-item-id="{out.id}">Undo', html)
+        self.assertRegex(html, r'<button[^>]*class="resv-undo-pickup-btn[^"]*"[^>]*data-item-id="%d"' % out.id)
+        self.assertNotRegex(html, r'<button[^>]*class="resv-mark-pickedup-btn[^"]*"[^>]*data-item-id="%d"' % out.id)      # a gown that is out cannot be picked up again
         self.assertNotIn("data-actual-date-field", html)
         self.assertNotIn("resv-actual-date-edit-btn", html)
 
