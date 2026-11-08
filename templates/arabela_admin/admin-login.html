@@ -77,6 +77,7 @@
         <div class="flex flex-col flex-1 w-full">
           <div class="flex flex-col justify-center flex-1 w-full max-w-md mx-auto">
             <div>
+              {% include "arabela_admin/partials/auth_logo.html" %}
               <div class="mb-5 sm:mb-8">
                 <h1
                   class="mb-2 font-semibold text-gray-800 text-title-sm dark:text-white/90 sm:text-title-md"
@@ -95,11 +96,7 @@
                   {% csrf_token %}
                   <div class="space-y-5">
                     <div>
-                      <label
-                        class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400"
-                      >
-                        Username<span class="text-error-500">*</span>
-                      </label>
+                      <label for="username" class="sr-only">Username</label>
                       <input
                         type="text"
                         id="username"
@@ -111,11 +108,7 @@
                     </div>
                     <!-- Password -->
                     <div>
-                      <label
-                        class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400"
-                      >
-                        Password<span class="text-error-500">*</span>
-                      </label>
+                      <label for="password" class="sr-only">Password</label>
                       <div x-data="{ showPassword: false }" class="relative">
                         <input
                           :type="showPassword ? 'text' : 'password'"

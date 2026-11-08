@@ -356,21 +356,31 @@ class VerifyCodeTests(RecoveryBase):
 # ---- 4. "Forgot password?" ------------------------------------------------------------------------------------------------------
 @override_settings(**SETTINGS)
 class ForgotPasswordTests(RecoveryBase):
-    def ask(self, username, client=None, **extra):
-        return (client or Client()).post(FORGOT, {"username": username}, **extra)
+    def ask(self, email, client=None, **extra):
+        return (client or Client()).post(FORGOT, {"email": email}, **extra)
 
-    def test_the_page_is_public_and_asks_for_a_username(self):
+    def test_the_page_is_public_and_asks_for_an_email_not_a_username(self):
         response = Client().get(FORGOT)
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'name="username"')
-        self.assertNotContains(response, 'name="email"')
+        self.assertContains(response, 'name="email"')
+        self.assertContains(response, 'type="email"')
+        self.assertContains(response, 'placeholder="Email"')
+        self.assertNotContains(response, 'name="username"')
+        self.assertNotContains(response, "Username")
         self.assertNotContains(response, "reset link is on its way")
         self.assertContains(Client().get(FORGOT + "?sent=1"), "reset link is on its way")
         self.assertIn("no-store", Client().get(FORGOT)["Cache-Control"])
 
+    def test_the_page_explains_it_is_the_recovery_email_and_has_no_visible_star_label(self):
+        html = Client().get(FORGOT).content.decode()
+        self.assertIn("Enter your recovery email. If it is confirmed on your account", html)
+        self.assertNotIn('<span class="text-error-500">*</span>', html)
+        self.assertIn('<label for="email" class="sr-only">Email</label>', html)        # still announced by screen readers, just not drawn
+        self.assertContains(Client().get(FORGOT + "?sent=1"), "If that email is a confirmed recovery email")
+
     def test_the_owner_with_a_recovery_email_gets_one_link_at_that_address(self):
         self.give_recovery()
-        response = self.ask("admin")
+        response = self.ask(RECOVERY_EMAIL)
         self.assertRedirects(response, SENT_LOCATION, fetch_redirect_response=False)
         self.assertEqual(len(mail.outbox), 1)
         message = mail.outbox[0]
@@ -379,71 +389,124 @@ class ForgotPasswordTests(RecoveryBase):
         self.assertIn("https://arabela.example.org/admin-panel/reset-password/", message.body)
         self.assertIn(self.link_from_outbox(), message.alternatives[0][0])             # the button carries the same link
 
-    def test_every_other_case_gets_the_very_same_answer_and_no_email(self):
+    def test_the_link_opens_the_new_password_page(self):
         self.give_recovery()
-        # a staff member WITH a recovery row (made by hand), the shared-Gmail customer, nobody, blank, a long string
+        self.ask(RECOVERY_EMAIL)
+        self.assertContains(Client().get(self.link_from_outbox()), "Choose a new password")
+
+    def test_every_other_well_formed_email_gets_the_very_same_answer_and_no_email(self):
+        self.give_recovery()
+        # a staff member WITH a recovery row (made by hand), that staff member's own address, the shared-Gmail customer / the owner's PROFILE
+        # email, a stranger, and a very long (but well-formed) address
         self.give_recovery("mark.recovery@gmail.com", user=self.staff)
         answers = set()
-        for name in ("mark", "custgoogle", "nobody-here", "", "x" * 500):
-            response = self.ask(name)
+        for address in ("mark.recovery@gmail.com", "mark.staff@gmail.com", PROFILE_EMAIL, "nobody-here@gmail.com", "x" * 60 + "@gmail.com"):
+            response = self.ask(address)
             answers.add((response.status_code, response.get("Location")))
         self.assertEqual(answers, {(302, SENT_LOCATION)})
         self.assertEqual(len(mail.outbox), 0)
 
     def test_the_owner_without_a_recovery_email_gets_nothing_but_the_same_answer(self):
-        response = self.ask("admin")
+        response = self.ask(RECOVERY_EMAIL)
         self.assertRedirects(response, SENT_LOCATION, fetch_redirect_response=False)
         self.assertEqual(len(mail.outbox), 0)
 
-    def test_the_answer_is_identical_for_a_real_and_a_made_up_username(self):
+    def test_the_answer_is_identical_for_a_real_and_a_made_up_email(self):
         self.give_recovery()
-        real = self.ask("admin")
-        made_up = self.ask("zzz-nobody")
+        real = self.ask(RECOVERY_EMAIL)
+        made_up = self.ask("zzz-nobody@gmail.com")
         self.assertEqual((real.status_code, real["Location"]), (made_up.status_code, made_up["Location"]))
         self.assertEqual(real.content, made_up.content)
 
-    def test_the_username_is_not_case_sensitive(self):
+    def test_the_email_is_not_case_or_space_sensitive(self):
         self.give_recovery()
-        self.ask("  ADMIN ")
+        self.ask("  OWNER.Recovery@Gmail.COM ")
         self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, [RECOVERY_EMAIL])
 
-    def test_an_email_address_typed_in_the_username_box_finds_nobody(self):
+    def test_the_profile_email_box_never_finds_the_owner(self):
         self.give_recovery()
         self.ask(PROFILE_EMAIL)
-        self.ask(RECOVERY_EMAIL)
         self.assertEqual(len(mail.outbox), 0)
+
+    # ---- text that is not an email address: a hint about the shape, nothing about accounts
+    def test_a_username_or_a_blank_box_gets_a_hint_instead_of_a_false_promise(self):
+        self.give_recovery()
+        for typed in ("admin", "", "   ", "owner.recovery", "two words@gmail.com", "x" * 500, "someone@example.com"):
+            with self.subTest(typed=typed[:30]):
+                response = self.ask(typed)
+                self.assertEqual(response.status_code, 400)
+                self.assertContains(response, "Please type a real email address, like name@gmail.com.", status_code=400)
+                self.assertNotContains(response, "reset link is on its way", status_code=400)
+                self.assertContains(response, 'role="alert"', status_code=400)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_the_hint_keeps_what_was_typed_and_escapes_it(self):
+        response = self.ask('"><script>alert(1)</script>')
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, "&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;", status_code=400)
+        self.assertNotContains(response, "<script>alert(1)</script>", status_code=400)
+        self.assertContains(self.ask("admin"), 'value="admin"', status_code=400)
+
+    def test_the_hint_says_the_same_for_a_real_username_and_a_made_up_one(self):
+        self.give_recovery()
+        def same_shape(response, typed):                                                   # only the typed value and the per-page CSRF token differ
+            body = response.content.replace(b'value="' + typed + b'"', b'value="X"')
+            return re.sub(rb'(name="csrfmiddlewaretoken" value=")[^"]*', lambda found: found.group(1) + b"T", body)
+
+        real = same_shape(self.ask("admin"), b"admin")
+        made_up = same_shape(self.ask("zzz-nobody"), b"zzz-nobody")
+        self.assertEqual(real, made_up)
 
     def test_an_inactive_owner_gets_nothing(self):
         self.give_recovery()
         User.objects.filter(pk=self.owner.pk).update(is_active=False)
-        self.ask("admin")
+        self.ask(RECOVERY_EMAIL)
         self.assertEqual(len(mail.outbox), 0)
 
     def test_a_staff_account_never_gets_a_link_even_with_a_recovery_row(self):
         self.give_recovery("mark.recovery@gmail.com", user=self.staff)
-        self.ask("mark")
+        self.ask("mark.recovery@gmail.com")
         self.assertEqual(len(mail.outbox), 0)
 
-    def test_at_most_three_links_per_username_per_hour_and_the_page_still_answers_the_same(self):
+    def test_two_owner_accounts_on_one_recovery_address_each_get_their_own_link(self):
+        """Not possible on the live site (one owner), but it must be safe: one link per owner account, each valid only for its own."""
+        self.give_recovery()
+        second = User.objects.create_superuser("admin2", "second@gmail.com", OWNER_PASSWORD)
+        UserProfile.objects.update_or_create(user=second, defaults={"role": UserProfile.Role.OWNER})
+        self.give_recovery(RECOVERY_EMAIL, user=second)
+        self.ask(RECOVERY_EMAIL)
+        self.assertEqual(len(mail.outbox), 2)
+        self.assertEqual({m.to[0] for m in mail.outbox}, {RECOVERY_EMAIL})
+        self.assertNotEqual(self.link_from_outbox(0), self.link_from_outbox(1))
+
+    def test_at_most_three_links_per_email_per_hour_and_the_page_still_answers_the_same(self):
         self.give_recovery()
         for _ in range(5):
-            self.assertRedirects(self.ask("admin"), SENT_LOCATION, fetch_redirect_response=False)
+            self.assertRedirects(self.ask(RECOVERY_EMAIL), SENT_LOCATION, fetch_redirect_response=False)
         self.assertEqual(len(mail.outbox), 3)
+
+    def test_the_hourly_limit_is_per_email_not_for_everyone(self):
+        self.give_recovery()
+        for _ in range(4):
+            self.ask("nobody@gmail.com")
+        self.ask(RECOVERY_EMAIL)
+        self.assertEqual(len(mail.outbox), 1)
 
     def test_at_most_ten_requests_per_connection_per_hour(self):
         self.give_recovery()
         for n in range(10):
-            self.ask(f"someone-{n}")
-        self.ask("admin")                                                              # the 11th request from this connection
+            self.ask(f"someone-{n}@gmail.com")
+        self.ask(RECOVERY_EMAIL)                                                       # the 11th request from this connection
         self.assertEqual(len(mail.outbox), 0)
 
     def test_the_connection_limit_counts_the_forwarded_address_render_appends(self):
         self.give_recovery()
         for n in range(10):
-            self.ask(f"someone-{n}", HTTP_X_FORWARDED_FOR="1.1.1.1, 203.0.113.9")
-        self.ask("admin", HTTP_X_FORWARDED_FOR="9.9.9.9, 203.0.113.9")                 # same real connection, a different claimed first entry
+            self.ask(f"someone-{n}@gmail.com", HTTP_X_FORWARDED_FOR="1.1.1.1, 203.0.113.9")
+        self.ask(RECOVERY_EMAIL, HTTP_X_FORWARDED_FOR="9.9.9.9, 203.0.113.9")          # same real connection, a different claimed first entry
         self.assertEqual(len(mail.outbox), 0)
-        self.ask("admin", HTTP_X_FORWARDED_FOR="9.9.9.9, 198.51.100.7")                # a different connection is fine
+        self.ask(RECOVERY_EMAIL, HTTP_X_FORWARDED_FOR="9.9.9.9, 198.51.100.7")         # a different connection is fine
         self.assertEqual(len(mail.outbox), 1)
 
     def test_changing_the_profile_email_does_not_change_where_the_link_goes(self):
@@ -452,18 +515,20 @@ class ForgotPasswordTests(RecoveryBase):
                                content_type="application/json")
         self.owner.refresh_from_db()
         self.assertEqual(self.owner.email, "attacker@gmail.com")
-        self.ask("admin")
+        self.ask("attacker@gmail.com")                                                 # the profile address finds nobody...
+        self.assertEqual(len(mail.outbox), 0)
+        self.ask(RECOVERY_EMAIL)                                                       # ...only the confirmed recovery address does
         self.assertEqual(mail.outbox[0].to, [RECOVERY_EMAIL])
 
     def test_the_form_is_protected_against_cross_site_posts(self):
         self.give_recovery()
-        response = Client(enforce_csrf_checks=True).post(FORGOT, {"username": "admin"})
+        response = Client(enforce_csrf_checks=True).post(FORGOT, {"email": RECOVERY_EMAIL})
         self.assertEqual(response.status_code, 403)
         self.assertEqual(len(mail.outbox), 0)
 
     def test_a_missing_database_table_does_not_break_the_page(self):
         with mock.patch.object(OwnerRecovery.objects, "filter", side_effect=DatabaseError("no such table")):
-            response = self.ask("admin")
+            response = self.ask(RECOVERY_EMAIL)
         self.assertRedirects(response, SENT_LOCATION, fetch_redirect_response=False)
         self.assertEqual(len(mail.outbox), 0)
 
@@ -471,7 +536,7 @@ class ForgotPasswordTests(RecoveryBase):
         self.give_recovery()
         with mock.patch("django.core.mail.EmailMultiAlternatives.send", side_effect=smtplib.SMTPServerDisconnected("down")), \
                 mock.patch.object(owner_recovery, "_sleep"):
-            response = self.ask("admin")
+            response = self.ask(RECOVERY_EMAIL)
         self.assertRedirects(response, SENT_LOCATION, fetch_redirect_response=False)
 
     def test_background_sending_answers_without_waiting_for_the_mail(self):
@@ -486,7 +551,7 @@ class ForgotPasswordTests(RecoveryBase):
                 pass
 
         with override_settings(CUSTOMER_EMAILS_BACKGROUND=True), mock.patch.object(owner_recovery.threading, "Thread", FakeThread):
-            response = self.ask("admin")
+            response = self.ask(RECOVERY_EMAIL)
         self.assertRedirects(response, SENT_LOCATION, fetch_redirect_response=False)
         self.assertEqual(len(started), 1)                                              # handed to a thread, not sent in the request
         self.assertEqual(len(mail.outbox), 0)
@@ -500,7 +565,7 @@ class ResetPasswordTests(RecoveryBase):
         self.give_recovery()
 
     def new_link(self):
-        Client().post(FORGOT, {"username": "admin"})
+        Client().post(FORGOT, {"email": RECOVERY_EMAIL})
         return self.link_from_outbox()
 
     def post_new(self, path, first=NEW_PASSWORD, second=None, client=None):
@@ -781,7 +846,60 @@ class PageTests(RecoveryBase):
 
     def test_the_forgot_and_reset_pages_have_no_dependency_on_a_cdn(self):
         self.give_recovery()
-        Client().post(FORGOT, {"username": "admin"})
+        Client().post(FORGOT, {"email": RECOVERY_EMAIL})
         for html in (Client().get(FORGOT).content.decode(), Client().get(self.link_from_outbox()).content.decode()):
             self.assertNotIn("cdn.jsdelivr", html)
             self.assertNotIn("alpinejs", html)
+
+
+# ---- 7. how the three sign-in pages look: the logo in the middle, and no repeated Username* / Password* labels -------------------------
+@override_settings(**SETTINGS)
+class SignInPagesLookTests(RecoveryBase):
+    LOGO = 'src="/static/arabela_admin/images/logo/logo.svg"'
+
+    def pages(self):
+        self.give_recovery()
+        Client().post(FORGOT, {"email": RECOVERY_EMAIL})
+        return {
+            "sign in": Client().get(LOGIN).content.decode(),
+            "forgot password": Client().get(FORGOT).content.decode(),
+            "forgot password (sent)": Client().get(FORGOT + "?sent=1").content.decode(),
+            "new password": Client().get(self.link_from_outbox()).content.decode(),
+            "link that cannot be used": Client().get(reverse("arabela_admin:reset_password", args=["x", "y"])).content.decode(),
+        }
+
+    def test_every_page_shows_the_arabela_logo_centred_above_the_heading(self):
+        for name, html in self.pages().items():
+            with self.subTest(page=name):
+                self.assertEqual(html.count(self.LOGO), 1)
+                self.assertIn('alt="Arabela"', html)
+                logo = html.index(self.LOGO)
+                self.assertIn("justify-content: center", html[logo - 220:logo])           # centred, by its own wrapper
+                self.assertLess(logo, html.index("<h1"))                                   # above the heading
+
+    def test_the_sign_in_page_has_no_username_or_password_label_drawn_above_the_boxes(self):
+        html = self.pages()["sign in"]
+        self.assertNotIn('Username<span class="text-error-500">*</span>', html)
+        self.assertNotIn('Password<span class="text-error-500">*</span>', html)
+        self.assertNotIn("*</span>", html)
+        self.assertIn('placeholder="Username"', html)                                      # the words live inside the boxes only
+        self.assertIn('placeholder="Enter your password"', html)
+        self.assertIn("Enter your username to sign in!", html)
+
+    def test_the_boxes_are_still_labelled_for_screen_readers_and_the_page_script_still_finds_them(self):
+        html = self.pages()["sign in"]
+        self.assertIn('<label for="username" class="sr-only">Username</label>', html)
+        self.assertIn('<label for="password" class="sr-only">Password</label>', html)
+        for needle in ('id="username"', 'id="password"', 'id="login_form"', 'id="error_container"', 'id="error_text"'):
+            with self.subTest(needle=needle):
+                self.assertIn(needle, html)
+        self.assertIn("Keep me logged in", html)
+
+    def test_signing_in_still_works(self):
+        self.assertEqual(Client().post(LOGIN, {"username": "admin", "password": OWNER_PASSWORD}).status_code, 302)
+        self.assertEqual(Client().post(LOGIN, {"username": "admin", "password": "wrong"}).status_code, 200)
+
+    def test_the_forgot_page_has_no_star_label_and_the_new_password_page_keeps_its_own_labels(self):
+        pages = self.pages()
+        self.assertNotIn("*</span>", pages["forgot password"])
+        self.assertIn("New password", pages["new password"])                              # different words from the box text, so left as they were

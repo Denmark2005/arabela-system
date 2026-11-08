@@ -78,9 +78,16 @@ def recovery_verify_code_view(request):
 @never_cache
 @require_http_methods(["GET", "POST"])
 def forgot_password_view(request):
-    """'Forgot password?': a username in, the SAME answer out -- whoever asks and whatever the username is."""
+    """'Forgot password?': a recovery email in, the SAME answer out -- whoever asks and whatever the address is.
+
+    Only text that is not shaped like a real email address (a username typed out of habit, a blank box) is sent back with a hint, which says
+    nothing about any account."""
     if request.method == "POST":
-        owner_recovery.request_reset(request.POST.get("username", ""), rate_limit.client_ip(request))
+        typed = request.POST.get("email", "")
+        if owner_recovery.normalize_email(typed) is None:
+            return render(request, "arabela_admin/forgot-password.html",
+                          {"sent": False, "typed": typed.strip()[:254], "error": "Please type a real email address, like name@gmail.com."}, status=400)
+        owner_recovery.request_reset(typed, rate_limit.client_ip(request))
         return redirect(reverse("arabela_admin:forgot_password") + "?sent=1")     # redirect, so a refresh cannot ask twice
     return render(request, "arabela_admin/forgot-password.html", {"sent": request.GET.get("sent") == "1"})
 

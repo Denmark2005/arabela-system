@@ -7,9 +7,11 @@ that can be typed into a profile box without proof must never decide who may res
     the code is typed back, so a mistyped or made-up address can never become the recovery address, and the old one stays active
     until the new one is proven. (The pending code lives in the owner's own session, as a keyed hash -- never in plain text and
     never in a table.)
-  * "Forgot password?" asks for the owner's USERNAME, never an email address, and always answers the same thing, whether or not the
-    username exists or has a recovery email. It mails a link only for an active owner account with a confirmed recovery email --
-    never staff, never customers (a customer account may even share the owner's Gmail), and nobody is looked up by email.
+  * "Forgot password?" asks for the owner's RECOVERY EMAIL and always answers the same thing, whether or not that address belongs to
+    anyone (only a typed text that is not shaped like a real email address gets a hint about its shape -- that says nothing about
+    accounts). The address is matched ONLY against the confirmed recovery emails in accounts.OwnerRecovery -- never the profile's
+    Email box, never staff, never customers (a customer account may even share the owner's Gmail) -- and a link is mailed only for an
+    active owner account, to that recovery address.
   * The link works once, for 30 minutes, and dies when the password, the last sign-in or the recovery email changes.
   * Everything is rate limited (accounts.rate_limit, kept in the database), and the code and link emails reuse the shop's one email
     design (templates/emails/email.html).
@@ -47,7 +49,7 @@ CODE_MAX_TRIES = 5                  # wrong codes before it is thrown away
 SEND_COOLDOWN_SECONDS = 30          # between two "send me a code" clicks
 SENDS_PER_HOUR = 5                  # code emails per owner per hour
 RESET_LINK_TTL_SECONDS = 30 * 60    # how long a reset link works
-FORGOT_PER_USERNAME = (3, 60 * 60)  # reset requests per username per hour
+FORGOT_PER_EMAIL = (3, 60 * 60)     # reset requests per email address per hour
 FORGOT_PER_IP = (10, 60 * 60)       # reset requests per connection per hour
 RESET_PAGE_PER_IP = (60, 60 * 60)   # opens/submits of the reset page per connection per hour
 SESSION_KEY = "owner_recovery_pending"
@@ -253,24 +255,27 @@ def user_for_reset(uidb64, token):
     return user if token_generator.check_token(user, token) else None
 
 
-def request_reset(username, ip):
-    """The 'Forgot password?' form. ALWAYS returns None: the page says the same thing whatever happens here."""
-    username = (username or "").strip()[:150]
-    if not username:
+def request_reset(email, ip):
+    """The 'Forgot password?' form. ALWAYS returns None: the page says the same thing whatever happens here.
+
+    `email` is matched, case-insensitively, against the CONFIRMED recovery emails only. At most three owner accounts are served (only one
+    exists on the live site); each gets its own link, mailed to its recovery address."""
+    address = normalize_email(email)
+    if address is None:
         return
     if not rate_limit.allowed(f"forgot-ip:{ip}", *FORGOT_PER_IP):
         return
-    if not rate_limit.allowed(f"forgot-user:{username.lower()}", *FORGOT_PER_USERNAME):
+    if not rate_limit.allowed(f"forgot-email:{address}", *FORGOT_PER_EMAIL):
         return
-    matches = list(User.objects.filter(username__iexact=username, is_active=True).order_by("pk")[:5])
-    user = next((u for u in matches if u.username == username), matches[0] if matches else None)
-    if user is None or not is_owner(user):
+    try:
+        rows = list(OwnerRecovery.objects.filter(email__iexact=address, user__is_active=True).select_related("user").order_by("user_id")[:3])
+    except DatabaseError:
+        logger.warning("Forgot-password lookup failed (the database table may not exist yet).")
         return
-    recovery = get_recovery(user)
-    if recovery is None:
-        return
-    built = build_email(KIND_RESET, first_name=_first_name(user), link=make_reset_link(user))
-    send_in_background(built, recovery.email)
+    for recovery in rows:
+        if is_owner(recovery.user):
+            built = build_email(KIND_RESET, first_name=_first_name(recovery.user), link=make_reset_link(recovery.user))
+            send_in_background(built, recovery.email)
 
 
 def notify_password_changed(user):
