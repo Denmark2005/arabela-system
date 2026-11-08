@@ -25,14 +25,33 @@
     .event-fc-color.fc-bg-danger .fc-event-title { color: #FFFFFF; font-weight: 600; }
     /* Maintenance blocks (cleaning/repair) aren't customer bookings, so they read as a
        neutral slate rather than competing with the four booking colours. */
-    .event-fc-color.fc-bg-blocked { background-color: #64748B; border-color: #64748B; }
-    .event-fc-color.fc-bg-blocked .fc-event-title { color: #FFFFFF; font-weight: 600; }
+    .event-fc-color.fc-bg-blocked { background-color: rgba(100, 116, 139, 0.16); border-color: rgba(100, 116, 139, 0.32); box-shadow: inset 3px 0 0 #64748B; }
+    .event-fc-color.fc-bg-blocked .fc-event-title { color: #475467; font-weight: 500; }
+    .dark .event-fc-color.fc-bg-blocked { background-color: rgba(148, 163, 184, 0.14); border-color: rgba(148, 163, 184, 0.3); }
+    .dark .event-fc-color.fc-bg-blocked .fc-event-title { color: #CBD5E1; }
     .event-fc-color.fc-bg-blocked .fc-daygrid-event-dot { background-color: #64748B; }
     .event-fc-color.fc-bg-blocked { cursor: default; }
     .event-fc-color.fc-bg-warning .fc-daygrid-event-dot { background-color: #F59E0B; }
     .event-fc-color.fc-bg-success .fc-daygrid-event-dot { background-color: #16A34A; }
     .event-fc-color.fc-bg-primary .fc-daygrid-event-dot { background-color: #2563EB; }
     .event-fc-color.fc-bg-danger .fc-daygrid-event-dot { background-color: #DC2626; }
+
+    /* The dim behind Booking Details and the "+N more" list: a plain tint, NO blur, so the calendar stays readable behind them. */
+    .calendar-backdrop { background: rgba(16, 24, 40, 0.5); }
+    .dark .calendar-backdrop { background: rgba(0, 0, 0, 0.6); }
+
+    /* Week and Day: every booking is an all-day item, so these two views are the day-grid kind (no empty hourly rows) and
+       show every booking in full. Roomier bars, names that wrap instead of being cut to "Overdue · Lu...", and a calm
+       "today" tint instead of the harsh yellow. */
+    .fc-dayGridWeek-view .fc-daygrid-day-frame { min-height: 15rem; }
+    .fc-dayGridDay-view .fc-daygrid-day-frame { min-height: 10rem; }
+    .fc-dayGridWeek-view .fc-daygrid-event,
+    .fc-dayGridDay-view .fc-daygrid-event { margin-bottom: 5px; padding: 4px 8px; border-radius: 0.5rem; }
+    .fc-dayGridWeek-view .fc-event-title { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.3; }
+    .fc-dayGridWeek-view .fc-day-today,
+    .fc-dayGridDay-view .fc-day-today { background-color: rgba(70, 95, 255, 0.06) !important; }
+    .dark .fc-dayGridWeek-view .fc-day-today,
+    .dark .fc-dayGridDay-view .fc-day-today { background-color: rgba(70, 95, 255, 0.14) !important; }
 
     /* Long titles (e.g. "Overdue · Denmark Concepcion — Dresses One") truncate cleanly
        with an ellipsis instead of wrapping or overflowing a narrow day cell. */
@@ -42,9 +61,10 @@
       text-overflow: ellipsis;
     }
 
-    /* Busy days (many bookings landing on the same date -- e.g. several customers with
-       the same event day) are capped via dayMaxEvents so the week row never balloons in
-       height; the rest collapse into a "+N more" link that opens a small readable list. */
+    /* Busy days in the MONTH view (many bookings landing on the same date -- e.g. several
+       customers with the same event day) are capped via dayMaxEvents so a week row never
+       balloons in height; the rest collapse into a "+N more" link that opens a small readable
+       list. The Week and Day views are not capped: they show every booking in full. */
     .fc-daygrid-more-link {
       font-size: 0.75rem;
       font-weight: 600;
@@ -93,6 +113,8 @@
       text-decoration: none;
     }
     #dayEventsModal .event-fc-color.fc-bg-warning.day-event-row { color: #78350F; }
+    #dayEventsModal .event-fc-color.fc-bg-blocked.day-event-row { color: #475467; }
+    .dark #dayEventsModal .event-fc-color.fc-bg-blocked.day-event-row { color: #CBD5E1; }
     /* A booking row (Pick-up/Reserved/Return/Overdue) opens the same Booking Details
        modal as clicking that event directly on the calendar -- see openBookingDetailsFor
        below. A maintenance row (Cooldown/Cleaning) stays an unclickable div, exactly
@@ -1317,7 +1339,7 @@
               id="bookingDetailModal"
             >
               <div
-                class="modal-close-btn fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]"
+                class="modal-close-btn calendar-backdrop fixed inset-0 h-full w-full"
               ></div>
               <div
                 class="modal-dialog modal-dialog-scrollable modal-lg no-scrollbar relative flex w-full max-w-[700px] flex-col overflow-y-auto rounded-3xl bg-white p-6 dark:bg-gray-900 lg:p-8"
@@ -1419,10 +1441,7 @@
                     <p id="bookingModalError" class="hidden text-sm text-error-500"></p>
                     </div>
                   </div>
-                  <div class="flex flex-col gap-3 mt-6 modal-footer sm:flex-row sm:justify-end">
-                    <button type="button" class="modal-close-btn flex w-full justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] sm:w-auto">
-                      Close
-                    </button>
+                  <div class="flex flex-col gap-3 modal-footer sm:flex-row sm:justify-end">
                     <button type="button" id="bookingModalMarkReturnedBtn" style="display: none;" tabindex="-1" class="flex w-full justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] sm:w-auto">
                       Mark Returned
                     </button>
@@ -1447,7 +1466,7 @@
               id="dayEventsModal"
             >
               <div
-                class="day-events-modal-close fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]"
+                class="day-events-modal-close calendar-backdrop fixed inset-0 h-full w-full"
               ></div>
               <div
                 class="day-events-dialog modal-dialog relative flex w-full flex-col rounded-3xl bg-white p-6 dark:bg-gray-900"
