@@ -156,3 +156,34 @@ class CatalogPageTests(TestCase):
     def test_only_the_owner_gets_add_category_in_the_manage_menu(self):
         self.assertNotIn("+ Add Category</button>", self.page(self.staff))
         self.assertIn("+ Add Category</button>", self.page(self.owner))
+
+
+class LaptopFitTests(SimpleTestCase):
+    """Laptop screens (about 1024-1599px): found on a real 1280 / 1366 laptop that Reservation Records hid its Actions column off to the right,
+    the Client List cut its View button off, and the booking number chip broke in two. Phones and big monitors are left alone."""
+
+    def text(self, name):
+        return (ADMIN / name).read_text(encoding="utf8").replace("\r\n", "\n")
+
+    def test_reservation_records_fits_a_laptop(self):
+        html = self.text("reservation-records.html")
+        self.assertIn("@media (min-width: 1024px) and (max-width: 1599px) {", html)
+        block = html[html.index("@media (min-width: 1024px) and (max-width: 1599px) {"):]
+        block = block[:block.index("\n      }\n")]
+        for rule in (".rr-stats { grid-template-columns: repeat(5, minmax(0, 1fr))", ".rr-filters--main > .rr-grow { flex: 1 1 100%; }",
+                     ".rr-scroll-x th, .rr-scroll-x td { padding-left: .5rem", ".rr-scroll-x .rr-dates { white-space: normal;", ".rr-scroll-x .rr-actions { flex-wrap: wrap; }"):
+            with self.subTest(rule=rule):
+                self.assertIn(rule, block)
+        self.assertEqual(html.count('class="rr-filters rr-filters--main"'), 1)             # only the main filter row, not the date rows
+        self.assertEqual(html.count("rr-dates text-theme-sm"), 1)
+        self.assertEqual(html.count('class="rr-actions flex items-center gap-2"'), 1)
+
+    def test_client_list_fits_a_laptop(self):
+        html = self.text("clients.html")
+        self.assertIn(".cl-table th, .cl-table td { padding-left: .875rem; padding-right: .875rem; }", html)
+        self.assertEqual(html.count('<div class="cl-table custom-scrollbar overflow-y-auto"'), 1)
+
+    def test_the_booking_number_chip_never_breaks_across_two_lines(self):
+        for name in ("pending-approval.html", "dashboard.html"):
+            with self.subTest(page=name):
+                self.assertRegex(self.text(name), r'text-gray-400" style="white-space: nowrap;">\{\{ r\.reference_code \}\}</span>')

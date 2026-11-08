@@ -10,7 +10,14 @@
     <meta http-equiv="X-UA-Compatible" content="ie=edge" />
     <title>Client List | Arabela System Admin Panel</title>
     <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
-  <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet"></head>
+  <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet">
+    <style>
+      /* Laptop screens (about 1024-1599px wide): tighter cell padding so the last column (View) is not cut off at the right edge. */
+      @media (min-width: 1024px) and (max-width: 1599px) {
+        .cl-table th, .cl-table td { padding-left: .875rem; padding-right: .875rem; }
+      }
+    </style>
+  </head>
   <body
     x-data="{ page: 'clients', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', searching: false, searchTimeout: null, filtering: false, filterTimeout: null, isViewCustomerModal: false, viewingCustomer: {}, customerFilter: 'All', pendingFlagAction: null, flagReasonText: '', flagReasonError: '' }"
     x-init="
@@ -1185,7 +1192,7 @@
                   <div class="h-10 w-10 animate-spin rounded-full border-4 border-solid border-gray-300 border-t-transparent dark:border-gray-600"></div>
                 </div>
                 <div x-show="!filtering" class="max-w-full overflow-x-auto">
-                  <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg="tbody" data-arpg-noun="customers">
+                  <div class="cl-table custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg="tbody" data-arpg-noun="customers">
                   <table class="min-w-full">
                     <thead class="sticky top-0 z-10 bg-white dark:bg-gray-900">
                       <tr class="border-b border-gray-100 dark:border-gray-800">

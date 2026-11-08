@@ -1189,7 +1189,7 @@
                             <div class="flex flex-col">
                               <span class="block font-medium text-gray-800 text-theme-sm dark:text-white/90">{{ r.display_customer_name }}</span>
                               {% if r.booked_as_name %}<span class="text-xs text-gray-400 dark:text-gray-500">Booked as: {{ r.booked_as_name }}</span>{% endif %}
-                              <span class="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ r.reference_code }}</span>
+                              <span class="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400" style="white-space: nowrap;">{{ r.reference_code }}</span>
                               {% if r.is_staff_recorded %}
                               <span class="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-theme-xs font-medium text-brand-500 dark:bg-brand-500/15 dark:text-brand-400" title="Recorded by staff in New Booking">{{ r.get_channel_display }}</span>
                               {% if r.phone %}<a href="tel:{{ r.phone }}" class="mt-1 text-theme-xs text-brand-500 underline" title="Call the customer">{{ r.phone }}</a>{% endif %}

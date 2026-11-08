@@ -1051,7 +1051,7 @@ class PaymentBreakdownTests(Base):
         html = self.client.get(reverse("arabela_admin:payment_verification")).content.decode()
         self.assertIn('<p class="font-medium text-gray-800 text-theme-sm dark:text-white/90">₱2,000</p>', html)
         self.assertIn('<p class="text-xs text-gray-400 dark:text-gray-500">Gown ₱5,500 · Total ₱7,500</p>', html)
-        self.assertNotIn('<p class="text-gray-500 text-theme-sm dark:text-gray-400">&#8369;7500</p>', html)    # the table cell no longer leads with the total
+        self.assertNotIn('<p class="text-gray-500 text-theme-sm dark:text-gray-400">&#8369;7,500</p>', html)    # the table cell no longer leads with the total
         self.assertIn("breakdown: JSON.parse(", html)
         self.assertIn("viewingPayment.breakdown ? viewingPayment.breakdown.paidLabel : 'Amount'", html)
         self.assertIn("viewingPayment.breakdown ? viewingPayment.breakdown.headline : viewingPayment.amount", html)
@@ -1061,7 +1061,7 @@ class PaymentBreakdownTests(Base):
     def test_an_old_booking_with_odd_amounts_still_shows_its_total(self):
         self.online(511, total="9000")
         html = self.client.get(reverse("arabela_admin:payment_verification")).content.decode()
-        self.assertIn("&#8369;9000", html)
+        self.assertIn("&#8369;9,000", html)
         self.assertNotIn("Gown ₱", html)
 
     def test_the_dashboard_card_and_window_and_security_deposits_window_show_it_too(self):

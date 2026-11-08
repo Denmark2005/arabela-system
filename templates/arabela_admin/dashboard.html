@@ -1323,7 +1323,7 @@
       <div class="min-w-0 flex-1">
         <p class="truncate font-medium text-gray-800 text-theme-sm dark:text-white/90">{{ r.display_customer_name }}</p>
         {% if r.booked_as_name %}<p class="truncate text-xs text-gray-400 dark:text-gray-500">Booked as: {{ r.booked_as_name }}</p>{% endif %}
-        <span class="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ r.reference_code }}</span>
+        <span class="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400" style="white-space: nowrap;">{{ r.reference_code }}</span>
         {% with bd=r.payment_breakdown %}<p class="mt-1 text-sm font-semibold" style="color:#D4AF37">{% if bd %}{{ bd.headline }}{% else %}&#8369;{{ r.total_amount|floatformat:'-2g' }}{% endif %}</p>{% if bd %}<p class="text-xs text-gray-400 dark:text-gray-500">{{ bd.sub }}</p>{% endif %}{% endwith %}
       </div>
       <div class="flex flex-wrap items-center gap-2">

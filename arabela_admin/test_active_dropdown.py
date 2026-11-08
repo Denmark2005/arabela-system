@@ -157,7 +157,7 @@ class DropdownContentTests(ActiveDropdownBase):
         panel = panel[:panel.index("</table>")]
         for column in ("Gown Name", "Rental Date", "Return Date", "Amount", "Status", "Action"):
             self.assertIn(f">{column}</p>", panel)
-        self.assertIn("&#8369; 3000", panel)
+        self.assertIn("&#8369;3,000", panel)                                       # every admin price carries its thousands comma
         self.assertIn(">Confirmed</p>", panel)
 
     def test_the_status_remarks_and_the_moved_dates_are_still_shown(self):
