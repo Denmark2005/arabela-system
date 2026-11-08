@@ -15,8 +15,6 @@
     /* New Booking (arabela_admin/new_booking.py). Its own small set of styles: the admin's compiled CSS only carries the
        classes the template pack itself uses. Light and dark follow the panel's own .dark switch. */
     .nb-wrap { max-width: 64rem; }
-    .nb-lead { margin: -0.75rem 0 1.25rem; font-size: .875rem; color: #667085; max-width: 46rem; }
-    .dark .nb-lead { color: #98a2b3; }
     .nb-card { background: #fff; border: 1px solid #e4e7ec; border-radius: 1rem; padding: 1.25rem; margin-bottom: 1.25rem; }
     .dark .nb-card { background: rgba(255,255,255,.03); border-color: #1d2939; }
     @media (min-width: 640px) { .nb-card { padding: 1.5rem; } }
@@ -1176,12 +1174,7 @@
           <div class="mx-auto max-w-(--breakpoint-2xl) p-4 md:p-6">
             <!-- Breadcrumb Start -->
             <div x-data="{ pageName: `New Booking`}">
-              <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
-  <h2
-    class="text-xl font-semibold text-gray-800 dark:text-white/90"
-    x-text="pageName"
-  ></h2>
-
+              <div class="mb-6 flex flex-wrap items-center justify-end gap-3">
   <nav>
     <ol class="flex items-center gap-1.5">
       <li>
@@ -1219,8 +1212,6 @@
             <!-- Breadcrumb End -->
 
             <div class="nb-wrap" x-data="newBooking()">
-              <p class="nb-lead">Record a booking for a customer who walked into the shop. It gets the next booking number, holds the gown on the calendar and the customer website, and then works like any online booking in Active Reservations.</p>
-
               <!-- Saved -->
               <template x-if="saved">
                 <div class="nb-saved" role="status" aria-live="polite">

@@ -619,7 +619,9 @@ class WalkInOnlyTests(Base):
         self.assertNotIn('name="nb-channel"', html)
         self.assertNotIn("Phone call", html)
         self.assertNotIn("a Facebook message", html)
-        self.assertIn("walked into the shop", html)
+        self.assertNotIn("walked into the shop", html)          # the explanation paragraph under the heading was removed on purpose
+        self.assertNotIn("nb-lead", html)
+        self.assertIn("Home", html)                                 # the breadcrumb that names the page is still there
 
     def test_a_booking_sent_without_a_channel_is_a_walk_in(self):
         gown = make_gown(120)
