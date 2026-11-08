@@ -1,0 +1,316 @@
+{% comment %}
+The Terms pop-up: a customer who has not agreed to the current Terms and Conditions reads them top to bottom here, and only when they
+reach the end can they tick "I have read and agree" and press Agree. base.html includes this ONLY for a signed-in customer who still has
+to agree (the terms_needed context flag), so nobody else pays for it.
+
+When it opens:
+  * on the page a customer lands on after signing in (once per browser tab: "Not now" keeps it quiet until they try to rent),
+  * when they press Proceed to Reservation (reservation-flow.js asks first, BEFORE the 20-minute hold starts),
+  * when they press Confirm Rental without having agreed (reservation.html).
+The server refuses all of those without an agreement as well (gowns.views._terms_refusal), so this is the friendly way in, not the only guard.
+
+API:  window.arabelaRequireTerms() -> Promise<boolean>   true = agreed, false = "Not now".
+Self-contained (.ara-terms* styles, no Tailwind needed for the sheet itself) like partials/dialog.html. NOTE: this comment must be
+{% comment %}, not {# #}, because it spans lines.
+{% endcomment %}
+<style>
+  .ara-terms {
+    position: fixed; inset: 0; z-index: 115;
+    display: flex; align-items: center; justify-content: center;
+    padding: 1.5rem; visibility: hidden; pointer-events: none;
+    font-family: 'Poppins', sans-serif;
+  }
+  .ara-terms.is-open { visibility: visible; pointer-events: auto; }
+  .ara-terms__backdrop {
+    position: absolute; inset: 0; background: rgba(27, 28, 28, 0.38);
+    opacity: 0; transition: opacity 0.24s ease;
+  }
+  .ara-terms.is-open .ara-terms__backdrop { opacity: 1; }
+  .ara-terms__card {
+    position: relative; display: flex; flex-direction: column;
+    width: 100%; max-width: 720px; height: min(820px, calc(100vh - 3rem)); height: min(820px, calc(100dvh - 3rem));
+    background: #ffffff; border-radius: 8px; text-align: left; overflow: hidden;
+    box-shadow: 0 18px 48px -16px rgba(27, 28, 28, 0.28);
+    opacity: 0; transform: translateY(12px);
+    transition: opacity 0.22s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .ara-terms.is-open .ara-terms__card { opacity: 1; transform: none; }
+
+  .ara-terms__head { flex: none; padding: 1.75rem 2rem 1.15rem; }
+  .ara-terms__title { margin: 0 0 0.45rem; font-size: 1.25rem; font-weight: 600; color: #1b1c1c; letter-spacing: -0.015em; line-height: 1.3; }
+  .ara-terms__lead { margin: 0; font-size: 0.82rem; line-height: 1.7; color: #615e57; }
+  .ara-terms__progress { margin-top: 1.1rem; height: 2px; background: rgba(11, 12, 12, 0.09); border-radius: 2px; overflow: hidden; }
+  .ara-terms__progress > span { display: block; height: 100%; width: 0; background: #0b0c0c; transition: width 0.12s linear; }
+
+  .ara-terms__scroll {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+    padding: 0.4rem 2rem 1.75rem; border-top: 1px solid rgba(11, 12, 12, 0.07);
+    -webkit-overflow-scrolling: touch;
+  }
+  .ara-terms__scroll:focus { outline: none; }
+  .ara-terms__scroll:focus-visible { outline: none; box-shadow: inset 0 0 0 1px rgba(11, 12, 12, 0.1); }
+
+  .ara-terms__keys { margin-top: 1.25rem; padding: 1.25rem 1.3rem 0.4rem; background: #f7f6f3; border: 1px solid rgba(11, 12, 12, 0.07); border-radius: 8px; }
+  .ara-terms__keys-title { margin: 0 0 1rem; font-size: 0.625rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.18em; color: #615e57; }
+  .ara-terms__keys-list { margin: 0; padding: 0; list-style: none; }
+  .ara-terms__keys-list li { display: flex; gap: 0.9rem; margin: 0 0 1rem; }
+  .ara-terms__keys-list p { margin: 0; font-size: 0.85rem; line-height: 1.65; color: #43413c; }
+  .ara-terms__keys-list strong { color: #1b1c1c; font-weight: 600; }
+  .ara-terms__num {
+    flex: none; width: 1.5rem; height: 1.5rem; margin-top: 0.1rem; border-radius: 999px; background: #0b0c0c; color: #fff;
+    font-size: 0.72rem; font-weight: 600; display: inline-flex; align-items: center; justify-content: center;
+  }
+  .ara-terms__keys-note { margin: 0 0 1rem; font-size: 0.75rem; line-height: 1.6; color: #615e57; }
+
+  .ara-terms__text { margin-top: 2.25rem; color: #43413c; font-size: 0.88rem; line-height: 1.85; }
+  .ara-terms__text > article + article { margin-top: 2.25rem; }
+  .ara-terms__end {
+    margin: 2.5rem 0 0.25rem; padding-top: 1.25rem; border-top: 1px solid rgba(11, 12, 12, 0.09);
+    text-align: center; font-size: 0.625rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.18em; color: #615e57;
+  }
+
+  .ara-terms__foot { flex: none; padding: 1rem 2rem 1.2rem; border-top: 1px solid rgba(11, 12, 12, 0.09); background: #ffffff; }
+  .ara-terms__row { display: flex; align-items: center; justify-content: space-between; gap: 1.25rem; margin-top: 0.85rem; }
+  /* The locked hint and the checkbox sit in the SAME place, so nothing jumps when the end of the terms is reached. */
+  .ara-terms__stack { display: grid; align-items: center; min-height: 2.5rem; }
+  .ara-terms__stack > * { grid-area: 1 / 1; }
+  .ara-terms__hint { margin: 0; font-size: 0.8rem; color: #615e57; transition: opacity 0.2s ease; }
+  .ara-terms__hint span { display: inline-block; animation: ara-terms-nudge 1.4s ease-in-out infinite; }
+  .ara-terms.is-unlocked .ara-terms__hint { opacity: 0; visibility: hidden; }
+  .ara-terms__agree {
+    display: flex; align-items: center;
+    opacity: 0; transform: translateY(14px); visibility: hidden; pointer-events: none;
+    transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s linear 0.4s;
+  }
+  .ara-terms.is-unlocked .ara-terms__agree {
+    opacity: 1; transform: none; visibility: visible; pointer-events: auto;
+    transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s;
+  }
+  .ara-terms__check { display: inline-flex; align-items: center; gap: 0.7rem; cursor: pointer; font-size: 0.86rem; line-height: 1.4; color: #1b1c1c; }
+  .ara-terms__check input { width: 1.2rem; height: 1.2rem; margin: 0; accent-color: #0b0c0c; cursor: pointer; flex: none; }
+  .ara-terms__error { margin: 0.7rem 0 0; font-size: 0.78rem; line-height: 1.5; color: #93370d; }
+  .ara-terms__error[hidden] { display: none; }
+
+  .ara-terms__btn {
+    cursor: pointer; font-family: inherit; font-size: 0.625rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.18em; transition: background-color 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+  }
+  .ara-terms__btn--ghost { flex: none; white-space: nowrap; background: none; border: 0; padding: 0.5rem 0; color: #615e57; text-decoration: underline; text-underline-offset: 5px; text-decoration-color: rgba(97, 94, 87, 0.35); }
+  .ara-terms__btn--ghost:hover { color: #1b1c1c; text-decoration-color: #1b1c1c; }
+  .ara-terms__btn--primary { background: #0b0c0c; color: #ffffff; border: 1px solid #0b0c0c; padding: 0.95rem 1.6rem; border-radius: 6px; white-space: nowrap; }
+  .ara-terms__btn--primary:hover:not(:disabled) { opacity: 0.82; }
+  .ara-terms__btn--primary:disabled { opacity: 0.3; cursor: not-allowed; }
+  .ara-terms__btn:focus-visible, .ara-terms__check input:focus-visible { outline: 1px solid #0b0c0c; outline-offset: 3px; }
+  .ara-terms__live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @keyframes ara-terms-nudge { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
+
+  /* A phone gets the whole screen, with the agree box stacked and the button as wide as the screen. */
+  @media (max-width: 640px) {
+    .ara-terms { padding: 0; }
+    .ara-terms__card { max-width: none; height: 100vh; height: 100dvh; border-radius: 0; }
+    .ara-terms__head { padding: 1.4rem 1.25rem 1rem; }
+    .ara-terms__scroll { padding: 0.3rem 1.25rem 1.5rem; }
+    .ara-terms__foot { padding: 0.9rem 1.25rem calc(1rem + env(safe-area-inset-bottom, 0px)); }
+    .ara-terms__row { flex-direction: column-reverse; align-items: stretch; gap: 0.45rem; }
+    .ara-terms__hint { text-align: center; }
+    .ara-terms__btn--primary { width: 100%; text-align: center; padding: 1.05rem 1rem; }
+    .ara-terms__btn--ghost { text-align: center; }
+    .ara-terms__error { text-align: center; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ara-terms__backdrop, .ara-terms__card, .ara-terms__agree, .ara-terms__hint { transition: opacity 0.15s ease; transform: none !important; }
+    .ara-terms__hint span, .ara-terms__progress > span { animation: none; transition: none; }
+  }
+</style>
+
+<div class="ara-terms" id="ara-terms" aria-hidden="true" data-accept-url="{% url 'accounts:accept_terms' %}">
+  <div class="ara-terms__backdrop"></div>
+  <section class="ara-terms__card" role="dialog" aria-modal="true" aria-labelledby="ara-terms-title" aria-describedby="ara-terms-lead">
+    {% csrf_token %}
+    <header class="ara-terms__head">
+      <h2 class="ara-terms__title" id="ara-terms-title">Before you rent</h2>
+      <p class="ara-terms__lead" id="ara-terms-lead">Please read our Terms and Conditions to the end. They explain the deposit, a damaged or lost gown, late returns and cancellations.</p>
+      <div class="ara-terms__progress" role="progressbar" aria-label="How much of the terms you have read" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="ara-terms-bar"></span></div>
+    </header>
+
+    <div class="ara-terms__scroll" id="ara-terms-scroll" tabindex="0" role="region" aria-label="Terms and Conditions. Scroll down to read them to the end.">
+      {% include "partials/terms_summary.html" %}
+      <div class="ara-terms__text font-body">
+        {% include "partials/terms_body.html" %}
+      </div>
+      <p class="ara-terms__end">End of the Terms and Conditions &middot; Version of {{ terms_label }}</p>
+    </div>
+
+    <footer class="ara-terms__foot">
+      <div class="ara-terms__stack">
+        <p class="ara-terms__hint" id="ara-terms-hint"><span aria-hidden="true">&darr;</span> Scroll down to the end to continue</p>
+        <div class="ara-terms__agree" id="ara-terms-agree">
+          <label class="ara-terms__check" for="ara-terms-check">
+            <input type="checkbox" id="ara-terms-check" disabled>
+            <span>I have read and agree to the Terms and Conditions</span>
+          </label>
+        </div>
+      </div>
+      <div class="ara-terms__row">
+        <button type="button" class="ara-terms__btn ara-terms__btn--ghost" id="ara-terms-later">Not now</button>
+        <button type="button" class="ara-terms__btn ara-terms__btn--primary" id="ara-terms-agree-btn" disabled>Agree and continue</button>
+      </div>
+      <p class="ara-terms__error" id="ara-terms-error" role="alert" hidden></p>
+      <span class="ara-terms__live" id="ara-terms-live" role="status" aria-live="polite"></span>
+    </footer>
+  </section>
+</div>
+
+<script>
+  (function () {
+    var root = document.getElementById('ara-terms');
+    if (!root) return;
+    var scroller = document.getElementById('ara-terms-scroll');
+    var bar = document.getElementById('ara-terms-bar');
+    var progress = root.querySelector('[role="progressbar"]');
+    var check = document.getElementById('ara-terms-check');
+    var agreeBtn = document.getElementById('ara-terms-agree-btn');
+    var laterBtn = document.getElementById('ara-terms-later');
+    var errorEl = document.getElementById('ara-terms-error');
+    var liveEl = document.getElementById('ara-terms-live');
+    var LATER_KEY = 'arabelaTermsLater';    // "Not now" for this tab: the sheet stays quiet until they try to rent
+    var END_SLACK = 24;                     // px from the very bottom that still counts as "reached the end"
+    var settle = null;
+    var pending = null;
+    var lastFocused = null;
+    var unlocked = false;
+    var busy = false;
+
+    function token() {
+      var field = root.querySelector('input[name="csrfmiddlewaretoken"]');
+      if (field && field.value) return field.value;
+      var match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+      return match ? decodeURIComponent(match[1]) : '';
+    }
+
+    function atEnd() {
+      return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= END_SLACK;
+    }
+
+    function unlock() {
+      if (unlocked) return;
+      unlocked = true;
+      root.classList.add('is-unlocked');
+      check.disabled = false;
+      liveEl.textContent = 'You have reached the end of the Terms and Conditions. You can tick the box and agree now.';
+    }
+
+    // Reading progress, and the moment the end is reached. A short screen or a tiny window that needs no scrolling counts as reached.
+    function refresh() {
+      var max = scroller.scrollHeight - scroller.clientHeight;
+      var pct = max <= 0 ? 100 : Math.min(100, Math.round((scroller.scrollTop / max) * 100));
+      bar.style.width = pct + '%';
+      progress.setAttribute('aria-valuenow', String(pct));
+      if (atEnd()) unlock();
+    }
+
+    function settleLater() {
+      refresh();
+      window.setTimeout(refresh, 250);
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(refresh);
+    }
+
+    scroller.addEventListener('scroll', refresh, { passive: true });
+    window.addEventListener('resize', function () { if (root.classList.contains('is-open')) refresh(); });
+
+    check.addEventListener('change', function () {
+      agreeBtn.disabled = !check.checked || busy;
+    });
+
+    function close(result) {
+      if (!settle) return;
+      var done = settle;
+      settle = null;
+      pending = null;
+      root.classList.remove('is-open');
+      root.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
+      if (lastFocused && typeof lastFocused.focus === 'function') lastFocused.focus();
+      done(result);
+    }
+
+    function open() {
+      if (pending) return pending;
+      pending = new Promise(function (resolve) { settle = resolve; });
+      lastFocused = document.activeElement;
+      errorEl.hidden = true;
+      root.classList.add('is-open');
+      root.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+      // Focus the text itself, so the arrow keys, Space and Page Down scroll it straight away.
+      window.setTimeout(function () { try { scroller.focus({ preventScroll: true }); } catch (err) { scroller.focus(); } }, 30);
+      settleLater();
+      return pending;
+    }
+
+    agreeBtn.addEventListener('click', function () {
+      if (busy || !unlocked || !check.checked) return;
+      busy = true;
+      agreeBtn.disabled = true;
+      agreeBtn.textContent = 'Saving...';
+      errorEl.hidden = true;
+      fetch(root.getAttribute('data-accept-url'), {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'X-CSRFToken': token(), 'X-Requested-With': 'XMLHttpRequest' }
+      })
+        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+        .then(function (result) {
+          if (!result.ok || !result.data.success) throw new Error((result.data && result.data.error) || 'not saved');
+          document.body.dataset.termsNeeded = 'false';
+          try { sessionStorage.removeItem(LATER_KEY); } catch (err) {}
+          busy = false;
+          agreeBtn.textContent = 'Agree and continue';
+          close(true);
+          window.dispatchEvent(new CustomEvent('arabela-terms-accepted'));
+        })
+        .catch(function () {
+          busy = false;
+          agreeBtn.textContent = 'Agree and continue';
+          agreeBtn.disabled = !check.checked;
+          errorEl.textContent = "We couldn't save that just now. Please check your internet connection and press Agree again.";
+          errorEl.hidden = false;
+        });
+    });
+
+    laterBtn.addEventListener('click', function () {
+      try { sessionStorage.setItem(LATER_KEY, '1'); } catch (err) {}
+      close(false);
+    });
+
+    // Tab stays inside the sheet. Escape and a click on the dimmed background do NOT close it: "Not now" is the way out.
+    document.addEventListener('keydown', function (e) {
+      if (!settle || e.key !== 'Tab') return;
+      var items = Array.prototype.filter.call(
+        root.querySelectorAll('button:not([disabled]), input:not([disabled]), [tabindex="0"]'),
+        function (el) { return window.getComputedStyle(el).visibility !== 'hidden'; }
+      );
+      if (!items.length) return;
+      var first = items[0];
+      var last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      else if (!root.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+    });
+
+    window.arabelaRequireTerms = function () {
+      if (document.body.dataset.termsNeeded !== 'true') return Promise.resolve(true);
+      return open();
+    };
+
+    // Right after sign-in (and on any customer page until they agree): open once per browser tab, unless they said Not now.
+    function autoOpen() {
+      if (document.body.dataset.termsNeeded !== 'true') return;
+      if (/\/terms-and-conditions\/?$/.test(window.location.pathname)) return;    // they are already reading it
+      try { if (sessionStorage.getItem(LATER_KEY)) return; } catch (err) {}
+      window.setTimeout(function () { if (document.body.dataset.termsNeeded === 'true') open(); }, 500);
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', autoOpen);
+    else autoOpen();
+  })();
+</script>

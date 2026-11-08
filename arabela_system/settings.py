@@ -127,6 +127,7 @@ TEMPLATES = [
                 'gowns.context_processors.featured_search_items',
                 'gowns.context_processors.active_reservations_count',
                 'gowns.context_processors.unread_messages_count',
+                'gowns.context_processors.terms_gate',
                 'gowns.context_processors.reservation_hold',
                 'gowns.context_processors.site_settings',
                 'arabela_admin.context_processors.admin_user',

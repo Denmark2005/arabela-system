@@ -8,6 +8,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.functional import SimpleLazyObject
 
+from accounts import terms
 from accounts.models import CustomerMessage, UserProfile
 from gowns.models import (
     CustomCategory, Gown, SiteSettings, custom_categories, group_gowns_by_name, hidden_category_names, pick_representative_gown,
@@ -273,6 +274,16 @@ def active_reservations_count(request):
     if not request.user.is_authenticated:
         return {"active_reservations_count": 0}
     return {"active_reservations_count": reservations_with_news_count(request.user)}
+
+
+def terms_gate(request):
+    """terms_needed: a signed-in CUSTOMER who has not agreed to the current Terms and Conditions yet (base.html then includes the pop-up).
+    Nothing for visitors, staff or the admin area, and no database query for them."""
+    from arabela_system.middleware import is_admin_area
+    user = getattr(request, "user", None)
+    if is_admin_area(request.path) or not terms.applies_to(user):
+        return {}
+    return {"terms_needed": not terms.has_accepted(user), "terms_label": terms.label()}
 
 
 def unread_messages_count(request):

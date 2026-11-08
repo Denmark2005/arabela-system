@@ -23,6 +23,7 @@ from gowns import proof_image
 from gowns.models import Gown
 from gowns.sample_images import TINY_JPEG, make_image_bytes
 from reservations.models import Reservation, ReservationItem
+from accounts.test_support import agreed
 
 User = get_user_model()
 
@@ -249,6 +250,7 @@ class ProofAtCheckoutTests(TestCase):
 
     def setUp(self):
         self.client.force_login(self.customer)
+        agreed(self.customer)
 
     def submit(self, file):
         items = [{"gown_name": self.gown.name, "gown_slug": self.gown.slug, "size": "Medium",

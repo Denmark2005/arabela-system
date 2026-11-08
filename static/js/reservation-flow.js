@@ -419,7 +419,7 @@
     //     restarts an existing clock) -- confirmed with the customer instead, and
     //     only released + restarted (a fresh 20:00, counted as one abandoned hold,
     //     same as pressing Cancel on the banner) if they agree.
-    window.beginReservationHold = function (storageKey, payload) {
+    function beginHold(storageKey, payload, askedForTerms) {
         var oldPayload = null;
         try {
             // This tab's copy, else the backup (a hold can have been started from another tab).
@@ -446,6 +446,12 @@
         }
 
         return window.startReservationHold().then(function (result) {
+            if (!result.success && result.terms_required && !askedForTerms) {
+                // The page thought the customer had agreed but the server says not (an old page, another tab): ask now, then try once more.
+                return askForTerms().then(function (agreed) {
+                    return agreed ? beginHold(storageKey, payload, true) : false;
+                });
+            }
             if (!result.success) {
                 alertMessage(holdRefusedTitle(result), result.error || 'Too many cancelled or abandoned reservations. Please try again later.');
                 return false;
@@ -468,6 +474,22 @@
             }).then(function (ok) {
                 return ok ? releaseThenRestart() : false;
             });
+        });
+    }
+
+    // The Terms pop-up (templates/partials/terms_gate.html) exists only for a customer who has not agreed yet.
+    function askForTerms() {
+        return typeof window.arabelaRequireTerms === 'function' ? window.arabelaRequireTerms() : Promise.resolve(false);
+    }
+
+    // Before the countdown starts the customer must have read and agreed to the Terms and Conditions -- so the time spent reading never
+    // runs down their 20-minute hold. Someone who has already agreed (or a page without the pop-up) goes straight on.
+    window.beginReservationHold = function (storageKey, payload) {
+        var body = document && document.body;
+        var needsTerms = body && body.dataset && body.dataset.termsNeeded === 'true';
+        if (!needsTerms) return beginHold(storageKey, payload, false);
+        return askForTerms().then(function (agreed) {
+            return agreed ? beginHold(storageKey, payload, true) : false;
         });
     };
 

@@ -20,6 +20,7 @@ from reservations.models import Reservation, ReservationItem
 
 User = get_user_model()
 from gowns.sample_images import TINY_JPEG as _TINY_JPEG      # a real picture: the proof upload now opens what it is given
+from accounts.test_support import agreed
 D = timedelta
 
 
@@ -176,6 +177,7 @@ class CheckoutPlanTests(TestCase):
 
     def submit(self, event, user=None, unit=None):
         self.client.force_login(user or self.customer)
+        agreed(user or self.customer)
         unit = unit or self.unit
         items = [{"gown_name": unit.name, "gown_slug": unit.slug, "size": "M",
                   "rental_date": (event - D(days=2)).isoformat(), "return_date": (event + D(days=2)).isoformat()}]

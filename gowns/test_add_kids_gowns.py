@@ -27,6 +27,7 @@ from gowns.test_add_barongs import SAVE
 
 CATEGORY = Gown.Category.KIDS_GOWN
 from gowns.sample_images import TINY_JPEG as _JPEG      # a real picture: the proof upload now opens what it is given
+from accounts.test_support import agreed
 
 # The owner's list, item by item: colour and price exactly as written.
 LIST = [("Red", 2500), ("Rose Gold", 2500), ("White", 1800), ("Lavender", 2800), ("Pink", 2800), ("Red", 2800), ("Rose", 2200), ("Pink", 2500),
@@ -186,6 +187,7 @@ class AddKidsGownsTests(TestCase):
         gown = self.gowns().get(name="Rose Gold Kids Gown 1")                              # Small only
         customer = get_user_model().objects.create_user("kids_customer", password="x")
         self.client.force_login(customer)
+        agreed(customer)
         start = timezone.localdate() + timedelta(days=20)
         item = {"gown_name": gown.name, "gown_slug": gown.slug, "size": "XL", "rental_date": start.isoformat(), "return_date": (start + timedelta(days=4)).isoformat()}
 

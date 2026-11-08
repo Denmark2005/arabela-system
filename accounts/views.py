@@ -1,8 +1,11 @@
 from django.contrib.auth import logout
+from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
 from django.shortcuts import redirect, render
+from django.views.decorators.http import require_http_methods
 from django.utils.http import url_has_allowed_host_and_scheme
 
-from accounts import login_next
+from accounts import login_next, terms
 
 
 def _allowed_next_url(request, candidate) -> str:
@@ -49,3 +52,14 @@ def login_view(request):
 def logout_view(request):
     logout(request)
     return redirect('gowns:homepage')
+
+
+@login_required(login_url="accounts:login")
+@require_http_methods(["POST"])
+def accept_terms(request):
+    """The customer ticked "I have read and agree" in the Terms pop-up and pressed Agree: remember it (accounts/terms.py).
+    Only customer accounts agree; an admin or staff sign-in is refused. Saying it twice changes nothing."""
+    if not terms.applies_to(request.user):
+        return JsonResponse({"success": False, "error": "Only customers agree to the Terms and Conditions."}, status=403)
+    when = terms.record_acceptance(request.user)
+    return JsonResponse({"success": True, "accepted_at": when.isoformat(), "version": terms.label()})

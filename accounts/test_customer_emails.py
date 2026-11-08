@@ -42,6 +42,7 @@ ON = dict(
     SITE_BASE_URL=BASE, DEFAULT_FROM_EMAIL="Arabela <shop@gmail.com>",
 )
 from gowns.sample_images import TINY_JPEG as _TINY_JPEG      # a real picture: the proof upload now opens what it is given
+from accounts.test_support import agreed
 
 
 def _built(kind, **changes):
@@ -406,6 +407,7 @@ class CustomerEmailHookTests(TestCase):
             gown_id="EMAILTEST-0001", name="Email Test Gown", category=Gown.Category.GUEST_GOWN,
             color_name="Red", color_code="RD", size=Gown.Size.MEDIUM, rental_price=Decimal("4500.00"))
         self.client.force_login(self.customer)
+        agreed(self.customer)
 
         def submit():
             return self.client.post(reverse("gowns:reservation_submit"), data={
@@ -522,8 +524,10 @@ class CustomerEmailHookTests(TestCase):
         self.assertEqual(CustomerMessage.objects.get(category=CustomerMessage.Category.RETURN_OVERDUE).recipient, self.customer)
         # and on the site: the renter's Messages page shows it, the other account's does not
         self.client.force_login(self.other)
+        agreed(self.other)
         self.assertNotContains(self.client.get(reverse("gowns:messages")), "overdue")
         self.client.force_login(self.customer)
+        agreed(self.customer)
         self.assertContains(self.client.get(reverse("gowns:messages")), "overdue")
 
     def test_a_reminder_staff_write_by_hand_is_emailed(self):

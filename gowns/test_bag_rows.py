@@ -25,6 +25,7 @@ from reservations.models import Reservation, ReservationItem
 
 User = get_user_model()
 from gowns.sample_images import TINY_JPEG as _JPEG      # a real picture: the proof upload now opens what it is given
+from accounts.test_support import agreed
 CART_LINES_JS = Path(settings.BASE_DIR) / "static" / "js" / "cart-lines.js"
 
 NODE_SCRIPT = r"""
@@ -171,6 +172,7 @@ class SubmitOneItemPerGownTests(TestCase):
 
     def setUp(self):
         self.client.force_login(self.customer)
+        agreed(self.customer)
         patcher = patch("gowns.views._save_proof_file", return_value="https://example.test/fake-proof.jpg")
         self.addCleanup(patcher.stop)
         patcher.start()
@@ -219,6 +221,7 @@ class SubmitOneItemPerGownTests(TestCase):
         gown = self.gown(6)
         self.assertEqual(self.submit(gown, 1).status_code, 200)
         self.client.force_login(self.other)
+        agreed(self.other)
         response = self.submit(gown, 1)                                  # someone else already holds those dates
         self.assertEqual(response.status_code, 400)
         self.assertIn("is no longer available for", response.json()["error"])

@@ -17,7 +17,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.views.decorators.http import require_http_methods
 
-from accounts import rate_limit
+from accounts import rate_limit, terms
 from accounts.models import CustomerMessage, SavedAddress, UserProfile
 from accounts.services import (
     cancel_lockout_notice,
@@ -881,6 +881,17 @@ def reservation(request):
     )
 
 
+def _terms_refusal(request):
+    """None when the signed-in customer has agreed to the current Terms and Conditions, else the JSON refusal that makes the page open
+    the Terms pop-up. The pop-up is the friendly way in; this is what stops anything that skips it (accounts/terms.py)."""
+    if terms.needs_to_accept(request.user):
+        return JsonResponse({
+            "success": False, "terms_required": True,
+            "error": "Please read and accept the Terms and Conditions before you rent a gown.",
+        }, status=403)
+    return None
+
+
 # Proof-of-payment upload rules, shared by the reservation form and the
 # upload-later endpoint so both accept exactly the same files.
 PROOF_ALLOWED_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.webp')
@@ -983,6 +994,9 @@ def reservation_submit(request):
     """Persist a customer's reservation request (status=Pending) so it flows into
     the admin's Pending Approval + Payment Verification modules. Sent as multipart
     form data from reservation.html so the uploaded proof-of-payment rides along."""
+    refusal = _terms_refusal(request)
+    if refusal:
+        return refusal
     try:
         raw_items = json.loads(request.POST.get("items") or "[]")
     except json.JSONDecodeError:
@@ -1290,6 +1304,11 @@ def reservation_submit(request):
             detail="Waiting for the shop to verify your payment.",
             actor=ReservationStatusEvent.Actor.CUSTOMER,
         )
+        ReservationStatusEvent.record(
+            reservation_obj, "Terms and Conditions accepted",
+            detail=f"The customer had agreed to the Terms and Conditions of {terms.label()} before booking.",
+            actor=ReservationStatusEvent.Actor.CUSTOMER, staff_only=True,
+        )
 
     # The reservation exists now, so the checkout hold is over -- drop the
     # countdown banner instead of leaving it ticking on the confirmation page.
@@ -1486,6 +1505,9 @@ def reservation_hold_start(request):
     outliving whatever it was originally holding."""
     if not rate_limit.allowed(f"hold:{request.user.pk}", *_HOLD_LIMIT):
         return _too_fast()
+    refusal = _terms_refusal(request)
+    if refusal:
+        return refusal
     lockout_seconds, lockout_message = cancel_lockout_notice(request.user)
     if lockout_seconds:
         return JsonResponse({"success": False, "locked": True, "error": lockout_message}, status=403)

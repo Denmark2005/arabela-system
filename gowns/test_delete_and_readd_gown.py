@@ -21,6 +21,7 @@ User = get_user_model()
 CAT = Gown.Category.BRIDESMAID_DRESSES
 NAME = "Black Bridesmaid Dress 4"
 from gowns.sample_images import TINY_JPEG as _JPEG      # a real picture: the proof upload now opens what it is given
+from accounts.test_support import agreed
 
 
 class DeleteAndReaddTests(TestCase):
@@ -138,6 +139,7 @@ class DeleteAndReaddTests(TestCase):
         item = {"gown_name": NAME, "gown_slug": old_slug, "size": "L", "rental_date": start.isoformat(), "return_date": (start + timedelta(days=4)).isoformat()}
         client = Client()
         client.force_login(self.customer)
+        agreed(self.customer)
         with patch("gowns.views._save_proof_file", return_value="https://example.test/p.jpg"):
             response = client.post(reverse("gowns:reservation_submit"), data={
                 "items": json.dumps([item]), "first_name": "A", "last_name": "B", "phone": "09171234567", "address": "1 St", "city": "C",
@@ -155,6 +157,7 @@ class DeleteAndReaddTests(TestCase):
         item = {"gown_name": NAME, "gown_slug": old_slug, "size": "S", "rental_date": start.isoformat(), "return_date": (start + timedelta(days=4)).isoformat()}
         client = Client()
         client.force_login(self.customer)
+        agreed(self.customer)
         with patch("gowns.views._save_proof_file", return_value="https://example.test/p.jpg"):
             response = client.post(reverse("gowns:reservation_submit"), data={
                 "items": json.dumps([item]), "first_name": "A", "last_name": "B", "phone": "09171234567", "address": "1 St", "city": "C",

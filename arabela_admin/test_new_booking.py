@@ -27,6 +27,7 @@ from reservations.models import ReceiptRecord, Reservation, ReservationItem, Res
 User = get_user_model()
 EMAILS_ON = dict(CUSTOMER_EMAILS_ENABLED=True, CUSTOMER_EMAILS_BACKGROUND=False)
 from gowns.sample_images import TINY_JPEG      # a REAL picture, for the one test that goes through the customer's checkout
+from accounts.test_support import agreed
 _JPEG_HEAD = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00"
 
 
@@ -448,6 +449,7 @@ class EverywhereElseTests(Base):
         for day in (self.event, self.event + timedelta(days=2 + COOLDOWN_DAYS)):
             self.assertIn(plans[day.isoformat()], ("booked", "rest"), day)
         self.client.force_login(self.customer)
+        agreed(self.customer)
         items = [{"gown_name": gown.name, "gown_slug": gown.slug, "size": "M",
                   "rental_date": (self.event - timedelta(days=2)).isoformat(), "return_date": (self.event + timedelta(days=2)).isoformat()}]
         with patch("gowns.views._save_proof_file", return_value="https://example.test/proof.jpg"):

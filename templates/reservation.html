@@ -759,6 +759,15 @@
         // "Failed to fetch". A lock that began after this page opened reloads it, so the page shows the
         // lock notice (and no stale countdown) in place of the form's Confirm button.
         function showSubmitError(err) {
+            if (err && err.data && err.data.terms_required && typeof window.arabelaRequireTerms === 'function') {
+                // The server wants the agreement first (this page was opened before it was needed): ask, then press Confirm again.
+                document.body.dataset.termsNeeded = 'true';
+                window.arabelaRequireTerms().then(function (agreed) {
+                    var again = document.getElementById('confirm-rental-btn');
+                    if (agreed && again) again.click();
+                });
+                return;
+            }
             if (err && err.data && err.data.locked) {
                 var reload = function () { window.location.reload(); };
                 arabelaAlert({ title: LOCKED_TITLE, message: err.data.error, danger: true }).then(reload, reload);
@@ -847,6 +856,11 @@
 
             if (btn) {
                 btn.addEventListener('click', function () {
+                    // Not agreed to the Terms and Conditions yet (they pressed Not now, or came straight here): ask first, then book.
+                    if (document.body.dataset.termsNeeded === 'true' && typeof window.arabelaRequireTerms === 'function') {
+                        window.arabelaRequireTerms().then(function (agreed) { if (agreed) btn.click(); });
+                        return;
+                    }
                     if (window.arabelaCheckoutLocked) {
                         var lockText = document.getElementById('reservation-lockout-notice-text');
                         arabelaAlert({ title: LOCKED_TITLE, message: lockText ? lockText.textContent : '', danger: true });

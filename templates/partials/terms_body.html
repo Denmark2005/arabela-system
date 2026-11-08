@@ -1,0 +1,83 @@
+{% comment %}
+The Terms and Conditions text -- ONE copy, used by the Terms page (reveal=True, so each section fades in as it is scrolled to) and by the
+pop-up customers must read to the end before they rent (partials/terms_gate.html). Change the wording here and move TERMS_UPDATED_ON in
+accounts/terms.py to the day it goes live: every customer then reads and agrees once more.
+{% endcomment %}
+<article{% if reveal %} class="terms-reveal terms-delay-100"{% endif %}>
+  <h2 class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-secondary mb-5">Rental Agreement</h2>
+  <p class="mb-5">The rental period begins when you pick up the gown from the shop up to two (2) days before your event date (or on the event day itself when the gown is still being cleaned after an earlier rental). The rental period ends when the gown has been returned to the shop within two (2) days after your event date and inspected by our staff to be in acceptable condition.</p>
+  <p class="mb-5">A gown you've booked is not available for another customer to book for 7 days after your event date &mdash; even after it's returned to us &mdash; so it can be checked, cleaned, and repaired if needed before it goes out again.</p>
+  <p class="mb-5">You are responsible for the gown while it is in your possession. You are expected to take good care of it as if it were your own. Do not attempt to wash, iron, or alter the gown in any way.</p>
+  <p class="mb-5">If the gown is damaged, our staff will check it and the cost of the repair will be deducted from your security deposit. If the repair costs more than your deposit, the balance will be discussed with you at the shop. If the gown is lost, the amount to be deducted depends on the gown and will be agreed with you at the shop. Always return the gown regardless of its condition so we can determine whether it can be repaired. You are liable for all repair and replacement costs.</p>
+  <p>Arabela Gown Rental shall not be liable for failure to perform any of its obligations due to reasons beyond its reasonable control, including fire, earthquake, natural disasters, and other force majeure events.</p>
+</article>
+
+<article{% if reveal %} class="terms-reveal terms-delay-200"{% endif %}>
+  <h2 class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-secondary mb-5">Laundry and Gown Condition</h2>
+  <p class="mb-5">All gowns are professionally cleaned and pressed before every rental. Each gown is inspected and prepared in ready-to-wear condition upon pickup. You will receive the gown clean, pressed, and in good condition.</p>
+  <p class="mb-5">Upon return, do not wash, dry clean, or attempt to clean the gown yourself. Arabela Gown Rental handles all cleaning and laundering after every rental. Simply return the gown as is after your event and our team will take care of the rest.</p>
+  <p>If the gown is returned with stains, tears, or any form of damage beyond normal wear, additional charges will apply and will be assessed by our staff upon inspection.</p>
+</article>
+
+<article{% if reveal %} class="terms-reveal terms-delay-300"{% endif %}>
+  <h2 class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-secondary mb-5">Security Deposit</h2>
+  <p class="mb-5">A security deposit of Php 2,000.00 is required for every reservation. This must be paid through the website via GCash only. You must upload your proof of payment on the platform for the admin to verify. The admin cannot confirm your reservation without a verified deposit payment.</p>
+  <p>The full security deposit will be refunded to you upon return of the gown on time and in good condition. Any applicable penalties or charges will be deducted from your deposit before it is returned.</p>
+</article>
+
+<article{% if reveal %} class="terms-reveal"{% endif %}>
+  <h2 class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-secondary mb-5">Rental Fee, Late Fee, and Cancellation</h2>
+  <p class="mb-5">Upon confirming a reservation, the full rental fee is to be paid separately on the day of pickup either at the shop in person or via GCash.</p>
+  <p class="mb-5">If the gown is returned beyond the allowed two (2) days after your event date, a late return penalty of Php 200.00 per day will be charged. This will be deducted from your security deposit.</p>
+  <p class="mb-3 font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-secondary">Cancellations</p>
+  <p class="mb-4">You may cancel your reservation through the website at any time before the admin confirms it, including a reservation that has already been confirmed and paid for, as long as it has not yet been picked up. Cancellation attempts are recorded on your account. Once a reservation is confirmed, its security deposit is not refunded if the reservation is cancelled, whether you cancel it or Arabela cancels it because the gown was not picked up. The cancelled reservation stays on record at the shop, so please contact Arabela if you would like to book again.</p>
+  <p class="mb-4">Both of the following count toward that total, every time:</p>
+  <ul class="list-disc pl-6 mb-5 space-y-1">
+    <li>Cancelling a reservation you already submitted — at any stage, including one already confirmed and paid for and awaiting pick-up</li>
+    <li>Holding a selection and leaving without submitting it — whether you press Cancel on the countdown or simply let it run out</li>
+  </ul>
+  <p class="mb-4">Repeated attempts lead to escalating, automatic consequences:</p>
+  <ul class="list-disc pl-6 mb-5 space-y-1">
+    <li><strong>5 attempts</strong> — your account is temporarily locked from starting a new reservation for 30 minutes</li>
+    <li><strong>10 attempts</strong> — a further temporary lockout of 2 hours</li>
+    <li><strong>15 attempts</strong> — your account is automatically flagged for review by our staff</li>
+  </ul>
+  <p class="mb-5">A flagged account can still browse the collection and submit reservations, but our staff will review the account before confirming any further bookings. If you believe your account was flagged in error, please contact us and an administrator can lift the flag.</p>
+  <p class="mb-5"><span class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-secondary">Reservation Hold</span><br/>When you proceed to the reservation page, your selection is held for twenty (20) minutes so that you can complete your details and pay the Php 2,000.00 security deposit. A countdown is shown at the bottom of the screen while the hold is active. If the hold runs out or you cancel it before you submit, your selection is released and becomes available to other customers again — you are free to select your items and start a new reservation, subject to the cancellation limits above. If you choose a different item while a hold is already active, you will be asked to confirm: doing so releases your current hold (counted as a cancellation attempt, as above) and starts a fresh twenty-minute hold for the new selection.</p>
+  <p><span class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-secondary">Unpaid Security Deposits</span><br/>Your reservation stays in Pending status until the Php 2,000.00 security deposit is paid and verified by our staff. If your proof of payment is missing, you can upload it from your Reservations page while the reservation is still pending. Reservations left unpaid may be cancelled by our staff, and those cancellations count toward the fifteen (15) attempt review threshold described above.</p>
+</article>
+
+<article{% if reveal %} class="terms-reveal"{% endif %}>
+  <h2 class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-secondary mb-5">Pickup and Return Policy</h2>
+  <p class="mb-5">All pickups and returns must be done in person at the Arabela Gown Rental shop only. Arabela Gown Rental does not offer delivery or courier services.</p>
+  <p class="mb-5"><span class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-secondary">Shop Hours: 1:00 PM – 5:00 PM</span></p>
+  <p class="mb-5">Pickup: Up to two (2) days before your event date, or on the event day itself when the gown is still being cleaned, within shop hours.<br/>Return: Two (2) days after your event date within shop hours.</p>
+  <p>Please make sure to arrive within shop hours. Pickups or returns outside of 1:00 PM – 5:00 PM will not be accommodated. Failure to return within the allowed period will result in a daily penalty of Php 200.00 deducted from your security deposit.</p>
+</article>
+
+<article{% if reveal %} class="terms-reveal"{% endif %}>
+  <h2 class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-secondary mb-5">Size and Fitting</h2>
+  <p>You may select your size when submitting your reservation online. If you are unsure of your size, you may leave it as TBD (To Be Determined). Upon pickup, inform our staff of your size and they will assist you with the fitting at the shop. Arabela Gown Rental is not liable for size issues if the correct size was not communicated prior to or during pickup.</p>
+</article>
+
+<article{% if reveal %} class="terms-reveal"{% endif %}>
+  <h2 class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-secondary mb-5">Account Responsibility</h2>
+  <p class="mb-5">You are responsible for all activity under your account. Make sure your reservation details, event date, and contact information are accurate when submitting a reservation.</p>
+  <p>Cancellation attempts — cancelled reservations (at any stage, including one already confirmed and paid for) or abandoned holds combined — lead to a temporary lockout on starting a new reservation at five (5) attempts, a longer lockout at ten (10), and at fifteen (15) or more your account is automatically flagged for staff review. An administrator can lift the flag once the matter is resolved.</p>
+</article>
+
+<article{% if reveal %} class="terms-reveal"{% endif %}>
+  <h2 class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-secondary mb-5">Reservation Status</h2>
+  <p>After submitting a reservation, it will remain in Pending status until you complete the GCash security deposit payment and the admin verifies it. Only after admin verification will your reservation be marked as confirmed and the gown officially reserved under your account.</p>
+</article>
+
+<article{% if reveal %} class="terms-reveal"{% endif %}>
+  <h2 class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-secondary mb-5">Your Receipt and Rental Agreement</h2>
+  <p>Once your payment is verified, the Order Summary &amp; Receipt panel on your reservation — reachable from Reservations — is your official proof of transaction: the gown, rental dates, amount breakdown, and the payment proof you uploaded, tied to your reference number. This Terms &amp; Conditions page is the rental agreement itself and applies to every booking.</p>
+</article>
+
+<article{% if reveal %} class="terms-reveal"{% endif %}>
+  <h2 class="font-label font-bold text-[0.78rem] uppercase tracking-[0.18em] text-secondary mb-5">Payment Methods</h2>
+  <p>Security Deposit — GCash via website only.<br/>Full Rental Fee — GCash or cash in person at the shop on pickup day.</p>
+  <p class="mt-5">No other payment methods are accepted.</p>
+</article>

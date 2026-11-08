@@ -23,6 +23,7 @@ from gowns.models import (
 from arabela_admin import views as views_module
 from reservations import reminders
 from reservations.models import ReceiptRecord, Reservation, ReservationItem, ReservationStatusEvent
+from accounts.test_support import agreed
 
 User = get_user_model()
 
@@ -5221,6 +5222,7 @@ class CustomerUnlockTests(TestCase):
         self.assertFalse(CustomerMessage.objects.filter(recipient=self.other).exists())
 
         self.client.force_login(self.customer)
+        agreed(self.customer)
         self.assertEqual(self.client.post(reverse("gowns:reservation_hold_start")).status_code, 200)
 
     def test_an_account_that_is_not_locked_is_refused(self):
@@ -5231,6 +5233,7 @@ class CustomerUnlockTests(TestCase):
 
     def test_only_staff_can_remove_a_lock_and_only_from_customers(self):
         self.client.force_login(self.other)
+        agreed(self.other)
         self.assertEqual(self.client.post(self.url, data="{}", content_type="application/json").status_code, 401)
         self.assertIsNotNone(UserProfile.objects.get(user=self.customer).cancel_lockout_until)
         self.client.force_login(self.staff)

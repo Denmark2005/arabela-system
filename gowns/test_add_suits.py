@@ -26,6 +26,7 @@ from gowns.test_add_barongs import SAVE
 
 CATEGORY = Gown.Category.SUIT
 from gowns.sample_images import TINY_JPEG as _JPEG      # a real picture: the proof upload now opens what it is given
+from accounts.test_support import agreed
 
 
 def make_photos(folder):
@@ -196,6 +197,7 @@ class AddSuitsTests(TestCase):
         suit = self.suits().get(name="Regular Collar Light Blue 1")                        # Medium only
         customer = get_user_model().objects.create_user("suit_customer", password="x")
         self.client.force_login(customer)
+        agreed(customer)
         start = timezone.localdate() + timedelta(days=20)
         item = {"gown_name": suit.name, "gown_slug": suit.slug, "size": "L", "rental_date": start.isoformat(), "return_date": (start + timedelta(days=4)).isoformat()}
         with mock.patch("gowns.views._save_proof_file", return_value="https://example.test/p.jpg"):

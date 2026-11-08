@@ -27,6 +27,7 @@ from gowns.test_add_barongs import SAVE
 
 CATEGORY = Gown.Category.FILIPINIANA
 from gowns.sample_images import TINY_JPEG as _JPEG      # a real picture: the proof upload now opens what it is given
+from accounts.test_support import agreed
 
 # The owner's list, typed in separately from the command: (colour, price, size) for items 1-30.
 LIST = [("Beige", 1500, "Large"), ("Beige", 3000, "XL"), ("Black and Beige", 3000, "XL"), ("Black", 1500, "Large"), ("Beige", 1500, "Large"),
@@ -179,6 +180,7 @@ class AddFilipinianaTests(TestCase):
         gown = self.gowns().get(name="Red Filipiniana 1")                                    # XL only
         customer = get_user_model().objects.create_user("filipiniana_customer", password="x")
         self.client.force_login(customer)
+        agreed(customer)
         start = timezone.localdate() + timedelta(days=20)
         item = {"gown_name": gown.name, "gown_slug": gown.slug, "size": "L", "rental_date": start.isoformat(), "return_date": (start + timedelta(days=4)).isoformat()}
 

@@ -27,6 +27,7 @@ gowns_migration = importlib.import_module("gowns.migrations.0024_rename_ball_gow
 reservations_migration = importlib.import_module("reservations.migrations.0023_rename_ball_gown_items")
 
 from gowns.sample_images import TINY_JPEG as _TINY_JPEG      # a real picture: the proof upload now opens what it is given
+from accounts.test_support import agreed
 
 
 def make_gown(gown_id, name, category, slug, color="Blue", code="BU"):
@@ -338,6 +339,7 @@ class BagFilledBeforeTheRenameTests(TestCase):
 
     def setUp(self):
         self.client.force_login(self.customer)
+        agreed(self.customer)
         patcher = patch("gowns.views._save_proof_file", return_value="https://example.test/fake-proof.jpg")
         self.addCleanup(patcher.stop)
         patcher.start()

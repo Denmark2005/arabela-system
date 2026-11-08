@@ -414,7 +414,8 @@
       data-hold-release-url="{% url 'gowns:reservation_hold_release' %}"
       data-home-url="{% url 'gowns:homepage' %}"
       data-cart-fetch-url="{% url 'gowns:cart_fetch' %}"
-      data-cart-save-url="{% url 'gowns:cart_save' %}">
+      data-cart-save-url="{% url 'gowns:cart_save' %}"{% if terms_needed %}
+      data-terms-needed="true"{% endif %}>
 
 {% csrf_token %}
 <!-- Rendering the tag above (even outside a <form>) makes Django set the csrftoken
@@ -1902,6 +1903,7 @@
 
   {% block extra_scripts %}{% endblock %}
 {% include "partials/dialog.html" %}
+{% if terms_needed %}{% include "partials/terms_gate.html" %}{% endif %}
 </body>
 {% endwith %}
 </html>

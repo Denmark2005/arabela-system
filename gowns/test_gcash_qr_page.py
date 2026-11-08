@@ -9,6 +9,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from gowns.models import Gown, SiteSettings
+from accounts.test_support import agreed
 
 User = get_user_model()
 QR_URL = "https://files.example/gcash_qr/shop.png"
@@ -157,6 +158,7 @@ class CheckoutWithoutTheReferenceTests(TestCase):
         import json
         from reservations.models import Reservation
         self.client.force_login(self.customer)
+        agreed(self.customer)
         gown = Gown.objects.create(
             gown_id="QRPAGE-0001", name="Qr Page Gown", category=Gown.Category.GUEST_GOWN, color_name="Red", color_code="RD",
             size=Gown.Size.MEDIUM, rental_price=Decimal("3000.00"), status=Gown.Status.AVAILABLE)

@@ -29,6 +29,7 @@ from reservations.models import Reservation, ReservationItem
 User = get_user_model()
 FLOW_JS = Path(settings.BASE_DIR) / "static" / "js" / "reservation-flow.js"
 from gowns.sample_images import TINY_JPEG as _TINY_JPEG      # a real picture: the proof upload now opens what it is given
+from accounts.test_support import agreed
 
 
 def make_unit(n, size, name="Big Size Gown", category=Gown.Category.WEDDING_GOWN, status=Gown.Status.AVAILABLE):
@@ -144,6 +145,7 @@ class XxlCheckoutTests(TestCase):
 
     def setUp(self):
         self.client.force_login(self.customer)
+        agreed(self.customer)
         patcher = patch("gowns.views._save_proof_file", return_value="https://example.test/fake-proof.jpg")
         self.addCleanup(patcher.stop)
         patcher.start()

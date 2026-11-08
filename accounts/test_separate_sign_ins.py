@@ -29,6 +29,7 @@ from reservations.models import Reservation
 User = get_user_model()
 STAFF_PASSWORD = "Staff-Pass-12345"
 from gowns.sample_images import TINY_JPEG as _TINY_JPEG      # a real picture: the proof upload now opens what it is given
+from accounts.test_support import agreed
 
 
 class SeparateSessionsTests(TestCase):
@@ -175,6 +176,7 @@ class CheckoutRefusesTheWrongAccountTests(TestCase):
         self.addCleanup(patcher.stop)
         patcher.start()
         self.client.force_login(self.customer)
+        agreed(self.customer)
         self.unit = make_unit(1)
 
     def submit(self, **extra):

@@ -19,6 +19,7 @@ from reservations.models import Reservation, ReservationItem
 
 User = get_user_model()
 from gowns.sample_images import TINY_JPEG as _JPEG      # a real picture: the proof upload now opens what it is given
+from accounts.test_support import agreed
 NAME = "Scenario Barong"
 
 
@@ -54,6 +55,7 @@ class SameGownOtherSizesTests(TestCase):
                   "return_date": (event + timedelta(days=2)).isoformat()} for size in sizes]
         client = Client()
         client.force_login(self.customers[who])
+        agreed(self.customers[who])
         return client.post(reverse("gowns:reservation_submit"), data={
             "items": json.dumps(items), "first_name": "Scen", "last_name": who.upper(), "phone": "09171234567", "address": "1 Test St",
             "city": "Test City", "postal_code": "1000", "payment_method": "GCash",

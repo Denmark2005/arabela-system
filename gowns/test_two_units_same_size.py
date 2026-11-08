@@ -21,6 +21,7 @@ User = get_user_model()
 CAT = Gown.Category.BRIDESMAID_DRESSES
 NAME = "Black Bridesmaid Dress 4"
 from gowns.sample_images import TINY_JPEG as _JPEG      # a real picture: the proof upload now opens what it is given
+from accounts.test_support import agreed
 
 
 class TwoSmallsAndALargeTests(TestCase):
@@ -45,6 +46,7 @@ class TwoSmallsAndALargeTests(TestCase):
                   "return_date": (self.event + timedelta(days=2)).isoformat()} for s in sizes]
         client = Client()
         client.force_login(self.users[who])
+        agreed(self.users[who])
         return client.post(reverse("gowns:reservation_submit"), data={
             "items": json.dumps(items), "first_name": "T", "last_name": who.upper(), "phone": "09171234567", "address": "1 St", "city": "C",
             "postal_code": "1000", "payment_method": "GCash", "proof_of_payment": SimpleUploadedFile("p.jpg", _JPEG, content_type="image/jpeg")})
@@ -113,6 +115,7 @@ class TwoSmallsAndALargeTests(TestCase):
         for who, event in (("a", self.event), ("b", later)):
             client = Client()
             client.force_login(self.users[who])
+            agreed(self.users[who])
             response = client.post(reverse("gowns:reservation_submit"), data={
                 "items": json.dumps(items(event)), "first_name": "T", "last_name": who, "phone": "09171234567", "address": "1 St", "city": "C",
                 "postal_code": "1000", "payment_method": "GCash", "proof_of_payment": SimpleUploadedFile("p.jpg", _JPEG, content_type="image/jpeg")})

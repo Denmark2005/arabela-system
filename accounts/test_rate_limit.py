@@ -13,6 +13,7 @@ from django.utils import timezone
 
 from accounts import rate_limit
 from accounts.models import LoginThrottle
+from accounts.test_support import agreed
 
 User = get_user_model()
 
@@ -92,6 +93,7 @@ class EndpointLimitTests(TestCase):
     def setUp(self):
         cache.clear()
         self.client.force_login(self.customer)
+        agreed(self.customer)
 
     def slowed(self, response):
         self.assertEqual(response.status_code, 429)
@@ -108,6 +110,7 @@ class EndpointLimitTests(TestCase):
             self.assertEqual(self.submit().status_code, 400)          # normal answers ("your bag is empty")
         self.slowed(self.submit())
         self.client.force_login(self.other)                           # a different customer is not affected
+        agreed(self.other)
         self.assertEqual(self.submit().status_code, 400)
 
     def test_the_real_submit_limit_is_far_above_normal_use(self):

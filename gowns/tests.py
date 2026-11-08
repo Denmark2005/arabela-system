@@ -32,6 +32,7 @@ User = get_user_model()
 # A real (tiny) JPEG: the proof upload opens what it is given and rebuilds the picture (gowns/proof_image.py),
 # so fake bytes with a JPEG header are refused exactly like a renamed PDF.
 from gowns.sample_images import TINY_JPEG as _TINY_JPEG      # a real picture: the proof upload now opens what it is given
+from accounts.test_support import agreed
 
 
 def _make_proof():
@@ -59,6 +60,7 @@ class ReservationSubmitPriceTrustTests(TestCase):
 
     def setUp(self):
         self.client.force_login(self.customer)
+        agreed(self.customer)
         self.submit_url = reverse("gowns:reservation_submit")
         patcher = patch("gowns.views._save_proof_file", return_value="https://example.test/fake-proof.jpg")
         self.addCleanup(patcher.stop)
@@ -351,6 +353,7 @@ class CustomerStatusEventTests(TestCase):
 
     def setUp(self):
         self.client.force_login(self.customer)
+        agreed(self.customer)
         patcher = patch("gowns.views._save_proof_file", return_value="https://example.test/proof.jpg")
         self.addCleanup(patcher.stop)
         patcher.start()
@@ -961,6 +964,7 @@ class CategorySwapTests(TestCase):
         one category proves them all."""
         customer = User.objects.create_user(username="catswap_checkout", password="x")
         self.client.force_login(customer)
+        agreed(customer)
         rental = date.today() + timedelta(days=10)
         before = Reservation.objects.count()
         with patch("gowns.views._save_proof_file", return_value="https://example.test/fake-proof.jpg"):
@@ -1647,6 +1651,7 @@ class CheckoutGcashWindowTests(TestCase):
 
     def setUp(self):
         self.client.force_login(self.customer)
+        agreed(self.customer)
         patcher = patch("gowns.views._save_proof_file", return_value="https://example.test/fake-proof.jpg")
         self.addCleanup(patcher.stop)
         patcher.start()
@@ -1879,6 +1884,7 @@ class CheckoutHoldBannerTests(TestCase):
 
     def setUp(self):
         self.client.force_login(self.customer)
+        agreed(self.customer)
 
     def _start_hold(self):
         response = self.client.post(reverse("gowns:reservation_hold_start"))
@@ -1986,6 +1992,7 @@ class CheckoutLockoutAndRetryTests(TestCase):
     def test_proceed_says_the_account_is_locked_for_how_long_and_until_when(self):
         self._lock(self.locked)
         self.client.force_login(self.locked)
+        agreed(self.locked)
         response = self.client.post(reverse("gowns:reservation_hold_start"))
         self.assertEqual(response.status_code, 403)
         data = response.json()
@@ -1996,6 +2003,7 @@ class CheckoutLockoutAndRetryTests(TestCase):
     def test_confirm_rental_is_refused_while_locked_and_books_nothing(self):
         self._lock(self.locked)
         self.client.force_login(self.locked)
+        agreed(self.locked)
         session = self.client.session
         session["reservation_hold_until"] = (timezone.now() + timedelta(minutes=10)).isoformat()
         session.save()
@@ -2012,17 +2020,20 @@ class CheckoutLockoutAndRetryTests(TestCase):
     def test_the_checkout_page_shows_the_lock_before_anything_is_filled_in(self):
         self._lock(self.locked)
         self.client.force_login(self.locked)
+        agreed(self.locked)
         html = self.client.get(reverse("gowns:reservation")).content.decode()
         self.assertIn('id="reservation-lockout-notice"', html)
         self.assertIn("Your account is temporarily locked", html)
         self.assertIn("paused for 30 minutes", html)
 
         self.client.force_login(self.other)
+        agreed(self.other)
         self.assertNotIn('id="reservation-lockout-notice"', self.client.get(reverse("gowns:reservation")).content.decode())
 
     def test_one_locked_customer_never_blocks_another(self):
         self._lock(self.locked)
         self.client.force_login(self.other)
+        agreed(self.other)
         self.assertEqual(self.client.post(reverse("gowns:reservation_hold_start")).status_code, 200)
         response = self._submit()
         self.assertEqual(response.status_code, 200, response.content)
@@ -2032,12 +2043,14 @@ class CheckoutLockoutAndRetryTests(TestCase):
         self._lock(self.locked)
         self.UserProfile.objects.filter(user=self.locked).update(cancel_lockout_until=timezone.now() - timedelta(seconds=1))
         self.client.force_login(self.locked)
+        agreed(self.locked)
         self.assertEqual(self.client.post(reverse("gowns:reservation_hold_start")).status_code, 200)
         self.assertEqual(self._submit().status_code, 200)
 
     # ---- pressing Confirm Rental again ---------------------------------------------------------------------------
     def test_pressing_confirm_again_after_a_lost_answer_does_not_book_twice(self):
         self.client.force_login(self.other)
+        agreed(self.other)
         first = self._submit()
         self.assertEqual(first.status_code, 200, first.content)
         again = self._submit()  # same gowns, dates and receipt: the phone never saw the first answer
@@ -2048,6 +2061,7 @@ class CheckoutLockoutAndRetryTests(TestCase):
 
     def test_a_new_booking_is_never_mistaken_for_a_repeat(self):
         self.client.force_login(self.other)
+        agreed(self.other)
         self.assertEqual(self._submit().status_code, 200)
         # Other dates: a different booking.
         self.assertEqual(self._submit(start="2027-04-10", end="2027-04-13").status_code, 200)
@@ -2061,6 +2075,7 @@ class CheckoutLockoutAndRetryTests(TestCase):
 
     def test_a_repeat_long_after_the_first_is_not_folded_into_it(self):
         self.client.force_login(self.other)
+        agreed(self.other)
         self.assertEqual(self._submit().status_code, 200)
         session = self.client.session
         last = session["reservation_last_submission"]
@@ -2071,6 +2086,7 @@ class CheckoutLockoutAndRetryTests(TestCase):
 
     def test_a_cancelled_first_booking_is_not_handed_back_as_the_repeat(self):
         self.client.force_login(self.other)
+        agreed(self.other)
         first = self._submit()
         Reservation.objects.filter(reference_code=first.json()["reference_code"]).update(status=Reservation.Status.CANCELLED)
         again = self._submit()
@@ -2081,6 +2097,7 @@ class CheckoutLockoutAndRetryTests(TestCase):
     # ---- the phone upload fix is loaded wherever a photo can be picked ----------------------------------------
     def test_every_page_with_a_photo_upload_loads_the_phone_upload_fix(self):
         self.client.force_login(self.other)
+        agreed(self.other)
         reservation = Reservation.objects.create(customer=self.other, customer_name="Upload Later",
                                                  status=Reservation.Status.PENDING)
         item = ReservationItem.objects.create(reservation=reservation, gown_name="Upload Later Gown",
