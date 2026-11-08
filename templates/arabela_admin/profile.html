@@ -221,9 +221,9 @@
             firstName: this.firstName,
             lastName: this.lastName,
             email: this.email,
+            bio: this.bio{% if can_edit_shop_settings %},
             phone: this.phone,
-            bio: this.bio,
-            facebook: this.facebook
+            facebook: this.facebook{% endif %}
           })
         })
         .then(response => response.json())
@@ -1599,6 +1599,7 @@
                         ></p>
                       </div>
 
+                      {% if can_edit_shop_settings %}
                       <div>
                         <p
                           class="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400"
@@ -1610,6 +1611,7 @@
                           x-text="phone"
                         ></p>
                       </div>
+                      {% endif %}
 
                       <div>
                         <p
@@ -1648,7 +1650,7 @@
                   </button>
                 </div>
               </div>
-              {% if admin_is_owner %}
+              {% if can_edit_shop_settings %}
               <!-- Shop address = core business setting (drives the public Contact page).
                    Owner-only; Staff/Managers don't see or edit it. -->
               <div
@@ -1968,7 +1970,7 @@
     </div>
     <form class="flex flex-col">
       <div class="custom-scrollbar h-[450px] overflow-y-auto px-2">
-        {% if admin_is_owner %}
+        {% if can_edit_shop_settings %}
         <!-- The shop's public Facebook link = core business setting. Owner-only. -->
         <div>
           <h5
@@ -2030,7 +2032,7 @@
               />
             </div>
 
-            <div class="col-span-2 lg:col-span-1">
+            <div class="col-span-2{% if can_edit_shop_settings %} lg:col-span-1{% endif %}">
               <label
                 class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400"
               >
@@ -2043,6 +2045,7 @@
               />
             </div>
 
+            {% if can_edit_shop_settings %}
             <div class="col-span-2 lg:col-span-1">
               <label
                 class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400"
@@ -2055,6 +2058,7 @@
                 class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
               />
             </div>
+            {% endif %}
 
             <div class="col-span-2">
               <label
@@ -2091,7 +2095,7 @@
   </div>
 </div>
 
-{% if admin_is_owner %}
+{% if can_edit_shop_settings %}
 <div
   x-show="isProfileAddressModal"
   class="fixed inset-0 flex items-center justify-center p-5 overflow-y-auto z-99999"

@@ -3983,6 +3983,9 @@ def page_view(request, page: str):
             "bio": profile.display_name,
             "admin_username": request.user.get_username(),
             "previous_login": _previous_login(request),
+            # The shop's public phone, Facebook link and address are the OWNER's to change. This is the very check save_profile_view
+            # makes before it writes them, so the page can never show a box the server would quietly throw away.
+            "can_edit_shop_settings": _is_owner(request),
         })
 
     # page == "account-settings"
