@@ -1223,7 +1223,7 @@
                   {% endif %}
                   {% if item.returned_on %}<p class="mt-1 text-theme-xs text-gray-400 dark:text-gray-500">Returned {{ item.returned_on|date:"M j, Y" }}</p>{% endif %}
                 </td>
-                <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">&#8369; {{ item.rental_price|floatformat:0 }}</p></td>
+                <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">&#8369;{{ item.rental_price|floatformat:'-2g' }}</p></td>
                 <td class="px-5 py-4 sm:px-6">
                   <p class="inline-flex rounded-full px-2 py-0.5 text-theme-xs font-medium
                     {% if item.history_status == 'Completed' %}bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500
@@ -1233,7 +1233,7 @@
                 </td>
                 <td class="px-5 py-4 sm:px-6">
                   <button type="button"
-                    @click="viewingRental = { name: '{{ r.display_customer_name|escapejs }}', gown: '{{ item.gown_name|escapejs }}', rentalDate: '{{ item.rental_date|date:"M j, Y"|escapejs }}', returnDate: '{{ item.return_date|date:"M j, Y"|escapejs }}', amount: '&#8369;{{ item.rental_price|floatformat:0 }}', status: '{{ item.history_status|escapejs }}', reference: '{{ r.reference_code|escapejs }}', proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}') }; openProofModal = true"
+                    @click="viewingRental = { name: '{{ r.display_customer_name|escapejs }}', gown: '{{ item.gown_name|escapejs }}', rentalDate: '{{ item.rental_date|date:"M j, Y"|escapejs }}', returnDate: '{{ item.return_date|date:"M j, Y"|escapejs }}', amount: '&#8369;{{ item.rental_price|floatformat:'-2g' }}', status: '{{ item.history_status|escapejs }}', reference: '{{ r.reference_code|escapejs }}', proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}') }; openProofModal = true"
                     class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
                     View Proof
                   </button>

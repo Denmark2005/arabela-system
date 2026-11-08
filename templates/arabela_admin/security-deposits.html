@@ -1226,7 +1226,7 @@
                         </div>
                       </td>
                       {% if forloop.first %}
-                      <td class="px-5 py-4 sm:px-6" rowspan="{{ item_count }}" style="vertical-align: top;"><p class="text-gray-500 text-theme-sm dark:text-gray-400">&#8369;{{ r.security_deposit|floatformat:0 }}</p></td>
+                      <td class="px-5 py-4 sm:px-6" rowspan="{{ item_count }}" style="vertical-align: top;"><p class="text-gray-500 text-theme-sm dark:text-gray-400">&#8369;{{ r.security_deposit|floatformat:'-2g' }}</p></td>
                       <td class="px-5 py-4 sm:px-6" rowspan="{{ item_count }}" style="vertical-align: top;">
                         <p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ r.created_at|date:"M j, Y" }}</p>
                         <p class="text-xs text-gray-400 dark:text-gray-500">{{ r.created_at|date:"g:i A" }}</p>
@@ -1249,7 +1249,7 @@
                         <div class="flex flex-wrap items-center gap-2">
                           {% with dup=r.gcash_duplicate_codes %}
                             <button type="button"
-                            @click="viewingPayment = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"—"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:0 }}', date: '{{ r.created_at|date:"M j, Y"|escapejs }}', status: '{{ r.status|escapejs }}', proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.deposit_receipts_json|escapejs }}'), breakdown: JSON.parse('{{ r.payment_breakdown_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', gcashDup: '{{ dup|escapejs }}' }; openReceiptModal = true"
+                            @click="viewingPayment = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"—"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:'-2g' }}', date: '{{ r.created_at|date:"M j, Y"|escapejs }}', status: '{{ r.status|escapejs }}', proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.deposit_receipts_json|escapejs }}'), breakdown: JSON.parse('{{ r.payment_breakdown_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', gcashDup: '{{ dup|escapejs }}' }; openReceiptModal = true"
                             class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View Payment</button>
                             {% if dup %}<span class="inline-flex items-center rounded-full bg-error-50 px-2 py-0.5 text-theme-xs font-medium text-error-700 dark:bg-error-500/15 dark:text-error-500" title="The same GCash reference number is also on {{ dup }}">Same GCash ref as {{ dup }}</span>{% endif %}
                             {% endwith %}

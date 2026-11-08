@@ -1216,7 +1216,7 @@
                           <p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ item.rental_date|date:"M j, Y" }}</p>
                           <p class="mt-0.5 text-gray-400 text-theme-xs dark:text-gray-500">Return {{ item.return_date|date:"M j, Y" }}</p>
                         </td>
-                        <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">&#8369; {{ item.rental_price|floatformat:0 }}</p></td>
+                        <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">&#8369;{{ item.rental_price|floatformat:'-2g' }}</p></td>
                         {% if forloop.first %}
                         <td class="px-5 py-4 sm:px-6" rowspan="{{ item_count }}" style="vertical-align: top;">
                           <p class="inline-flex rounded-full bg-warning-50 px-2 py-0.5 text-theme-xs font-medium text-warning-700 dark:bg-warning-500/15 dark:text-warning-400">{{ r.status }}</p>

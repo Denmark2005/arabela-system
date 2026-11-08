@@ -117,17 +117,16 @@
     var lastPages = 1;
 
     var topInfo = el("span", "arpg-info");
-    var topPos = el("span", "arpg-pagepos");
     var top = el("div", "arpg-top");
     top.appendChild(topInfo);
-    top.appendChild(topPos);
     var barPos = el("span", "arpg-pagepos");
     var nav = el("nav", "arpg-nav");
     nav.setAttribute("aria-label", "Pages");
     var bar = el("div", "arpg-bar");
     bar.appendChild(barPos);
     bar.appendChild(nav);
-    region.parentElement.insertBefore(top, region);
+    if (box.getAttribute("data-arpg-top") !== "off") { region.parentElement.insertBefore(top, region); }      // data-arpg-top="off": the page shows the count itself
+    var countEl = box.getAttribute("data-arpg-count") ? document.querySelector(box.getAttribute("data-arpg-count")) : null;
     region.parentElement.insertBefore(bar, region.nextSibling);
 
     // The rows as units: [firstRow, ...rowsThatGoWithIt]. The first row is the one the page's filter shows or hides.
@@ -168,15 +167,20 @@
       return b;
     }
 
+    // data-arpg-count="#id": that element always says how many rows there are ("Showing 1-15 of 390 gowns", or "7 gowns" when they all fit).
+    function setCount(page, pages, total, from, to) {
+      if (!countEl) { return; }
+      var one = noun.replace(/s$/, "");
+      countEl.textContent = total === 0 ? "No " + noun : pages > 1 ? "Showing " + (from + 1) + "–" + to + " of " + total + " " + noun : total + " " + (total === 1 ? one : noun);
+    }
+
     function paint(page, pages, total, from, to) {
       var on = pages > 1;
       top.classList.toggle("is-on", on);
       bar.classList.toggle("is-on", on);
       if (!on) { return; }
       topInfo.textContent = "Showing " + (from + 1) + "–" + to + " of " + total + " " + noun;
-      var position = "Page " + page + " / " + pages;
-      topPos.textContent = position;
-      barPos.textContent = position;
+      barPos.textContent = "Page " + page + " / " + pages;
       var keep = nav.contains(document.activeElement) ? document.activeElement.getAttribute("data-key") : null;
       while (nav.firstChild) { nav.removeChild(nav.firstChild); }
       nav.appendChild(button("«", "first", 1, page === 1, "arpg-wide", "First page"));
@@ -271,6 +275,7 @@
         });
         if (interacted) { wanted = page; syncUrl(page); }
         paint(page, pages, matching.length, from, to);
+        setCount(page, pages, matching.length, from, to);
         holdStill(to - from, pages);
         if (listChanged || page !== lastPage) {
           lastPage = page;

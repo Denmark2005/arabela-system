@@ -12,13 +12,101 @@
     <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
   <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet">
   {% include "arabela_admin/partials/photo_viewer_styles.html" %}
+  <style>
+    /* ===== Gown Catalog layout (gc- rules; nothing else uses them): slim stat strip, one list card, status circles + legend ===== */
+    .gc-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: #e4e7ec; border: 1px solid #e4e7ec; border-radius: 1rem; overflow: hidden; }
+    @media (min-width: 720px) { .gc-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    .dark .gc-stats { background: #1d2939; border-color: #1d2939; }
+    .gc-stat { margin: 0; padding: .85rem 1.15rem; text-align: left; background: #ffffff; border: 0; min-width: 0; font: inherit; }
+    .dark .gc-stat { background: #171f2f; }
+    button.gc-stat { cursor: pointer; transition: background-color .15s; }
+    button.gc-stat:hover { background: #f9fafb; }
+    .dark button.gc-stat:hover { background: #1c2536; }
+    button.gc-stat:focus-visible { outline: 2px solid #465fff; outline-offset: -2px; }
+    .gc-stat-label { margin: 0; display: flex; align-items: center; gap: .5rem; font-size: .8125rem; color: #667085; }
+    .dark .gc-stat-label { color: #98a2b3; }
+    .gc-stat-num { margin: .25rem 0 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem .7rem; font-size: 1.5rem; font-weight: 700; line-height: 1.2; color: #101828; font-variant-numeric: tabular-nums; }
+    .dark .gc-stat-num { color: rgba(255, 255, 255, .92); }
+    .gc-stat-link { font-size: .75rem; font-weight: 500; color: #465fff; }
+    .dark .gc-stat-link { color: #7592ff; }
+    .gc-stat-note { font-size: .75rem; font-weight: 400; color: #98a2b3; }
+
+    .gc-dot { display: inline-block; width: .75rem; height: .75rem; border-radius: 9999px; flex: none; vertical-align: middle; }
+    .gc-dot--available { background: #12b76a; box-shadow: 0 0 0 3px rgba(18, 183, 106, .18); }
+    .gc-dot--reserved { background: #f79009; box-shadow: 0 0 0 3px rgba(247, 144, 9, .2); }
+    .gc-dot--oos { background: #f04438; box-shadow: 0 0 0 3px rgba(240, 68, 56, .18); }
+    .gc-dot--blocked { background: #98a2b3; box-shadow: 0 0 0 3px rgba(152, 162, 179, .25); }
+    .gc-dot--row { width: .9rem; height: .9rem; }
+
+    .gc-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; padding: 1rem 1.25rem; }
+    .gc-toolbar-search { flex: 1 1 14rem; min-width: 0; }
+    .gc-field { display: inline-flex; align-items: center; gap: .6rem; height: 2.75rem; padding: 0 .95rem; border: 1px solid #d0d5dd; border-radius: .5rem; background: transparent; font-size: .875rem; color: #101828; white-space: nowrap; cursor: pointer; box-shadow: 0 1px 2px rgba(16, 24, 40, .05); }
+    .gc-field:hover { background: #f9fafb; }
+    .dark .gc-field { border-color: #344054; color: rgba(255, 255, 255, .9); background: #101828; }
+    .dark .gc-field:hover { background: #151f31; }
+    .gc-sel { width: 9.75rem; }
+    .gc-checks { display: inline-flex; align-items: center; gap: .4rem; }
+    .gc-checks .gc-sel { width: 10.5rem; }
+
+    .gc-menu { position: relative; }
+    .gc-menu > summary { list-style: none; }
+    .gc-menu > summary::-webkit-details-marker { display: none; }
+    .gc-menu > summary:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+    .gc-cur { flex: 1 1 auto; min-width: 9.5rem; max-width: 14rem; overflow: hidden; text-overflow: ellipsis; display: inline-flex; align-items: center; gap: .5rem; font-weight: 500; }
+    .gc-cur-in { display: inline-flex; align-items: center; gap: .5rem; max-width: 100%; }
+    .gc-caret { flex: none; width: .55rem; height: .55rem; margin: 0 .1rem 0 auto; border-right: 2px solid #667085; border-bottom: 2px solid #667085; transform: rotate(45deg) translateY(-2px); transition: transform .15s; }
+    .gc-menu[open] .gc-caret { transform: rotate(-135deg) translateY(-1px); }
+    .gc-menu[open] > summary { border-color: #465fff; box-shadow: 0 0 0 3px rgba(70, 95, 255, .12); }
+    .gc-panel { position: absolute; z-index: 30; top: calc(100% + .4rem); left: 0; min-width: 17rem; max-width: calc(100vw - 2.5rem); max-height: 23rem; overflow-y: auto; padding: .4rem; background: #ffffff; border: 1px solid #e4e7ec; border-radius: .75rem; box-shadow: 0 18px 40px -14px rgba(16, 24, 40, .3); }
+    .dark .gc-panel { background: #101828; border-color: #1d2939; box-shadow: 0 18px 40px -14px rgba(0, 0, 0, .7); }
+    .gc-panel--right { left: auto; right: 0; min-width: 13rem; }
+    .gc-opt { display: flex; align-items: center; gap: .65rem; width: 100%; padding: .55rem .7rem; border: 0; border-radius: .5rem; background: transparent; font: inherit; font-size: .875rem; text-align: left; color: #344054; cursor: pointer; }
+    .dark .gc-opt { color: #d0d5dd; }
+    .gc-opt:hover { background: #f2f4f7; }
+    .dark .gc-opt:hover { background: rgba(255, 255, 255, .06); }
+    .gc-opt.is-on { background: #eef2ff; color: #3641f5; font-weight: 600; }
+    .dark .gc-opt.is-on { background: rgba(70, 95, 255, .18); color: #9bb0ff; }
+    .gc-opt .gc-n { margin-left: auto; color: #98a2b3; font-variant-numeric: tabular-nums; }
+    .gc-opt--muted { color: #98a2b3; }
+    .gc-panel-sep { margin: .5rem .7rem .2rem; font-size: .6875rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #98a2b3; }
+
+    .gc-i { display: inline-flex; align-items: center; justify-content: center; width: 1.6rem; height: 1.6rem; border: 1px solid #d0d5dd; border-radius: 9999px; font-size: .75rem; font-weight: 700; font-style: italic; font-family: Georgia, serif; color: #667085; cursor: pointer; }
+    .dark .gc-i { border-color: #344054; color: #98a2b3; }
+    .gc-i:hover { color: #101828; background: #f2f4f7; }
+    .dark .gc-i:hover { color: #fff; background: rgba(255, 255, 255, .06); }
+    .gc-pop { width: 21rem; padding: .9rem 1rem; font-size: .8125rem; line-height: 1.6; color: #475467; }
+    .dark .gc-pop { color: #98a2b3; }
+    .gc-pop strong { color: #101828; font-weight: 600; }
+    .dark .gc-pop strong { color: rgba(255, 255, 255, .92); }
+    .gc-pop p { margin: 0; }
+    .gc-pop p + p { margin-top: .5rem; }
+
+    .gc-legend { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .45rem 1.5rem; padding: .7rem 1.25rem; border-top: 1px solid #eaecf0; border-bottom: 1px solid #eaecf0; }
+    .dark .gc-legend { border-color: #1d2939; }
+    .gc-legend-list { display: flex; flex-wrap: wrap; gap: .4rem 1.4rem; margin: 0; padding: 0; list-style: none; font-size: .8125rem; color: #475467; }
+    .dark .gc-legend-list { color: #98a2b3; }
+    .gc-legend-list li { display: inline-flex; align-items: center; gap: .5rem; }
+    .gc-count { margin: 0; font-size: .8125rem; color: #667085; font-variant-numeric: tabular-nums; }
+    .dark .gc-count { color: #98a2b3; }
+
+    @media (max-width: 640px) {
+      .gc-toolbar { padding: .9rem 1rem; gap: .6rem; }
+      .gc-toolbar > .gc-menu, .gc-toolbar > .gc-checks, .gc-toolbar > .gc-sel-wrap { flex: 1 1 100%; }
+      .gc-toolbar > .gc-menu > summary, .gc-checks .gc-sel, .gc-sel-wrap .gc-sel { width: 100%; }
+      .gc-cur { max-width: none; }
+      .gc-toolbar > .gc-btn { flex: 1 1 calc(50% - .4rem); }
+      .gc-panel { width: calc(100vw - 2.5rem); }
+      .gc-panel--right { right: auto; left: 0; }
+      .gc-pop { width: min(21rem, calc(100vw - 3rem)); }
+      .gc-legend { padding: .65rem 1rem; }
+    }
+  </style>
 </head>
   <body
     x-data="{ page: 'gown', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', category: 'All', status: 'All', filtering: false, filterTimeout: null,
       showEmptyCategories: false,
-      // Keys with zero real stock -- collapsed behind the 'more categories' chip.
-      // Picking one of these from the dropdown still needs its chip visible, so
-      // onGownFilterChanged() below checks membership here to auto-reveal it.
+      // Keys with zero real stock -- listed under Not stocked yet at the bottom of the category dropdown.
+      // (Left over from the chip strip: onGownFilterChanged() below still checks membership here.)
       emptyCategoryKeys: [{% for row in category_rows_empty %}'{{ row.key|escapejs }}',{% endfor %}],
       showBlockedGownsList: false,
       // Tag Colors. tagColorMap = what is saved (category -> {color, hex}); tagDraft = what
@@ -547,9 +635,8 @@
         this.filtering = true;
         clearTimeout(this.filterTimeout);
         this.filterTimeout = setTimeout(() => this.filtering = false, 500);
-        // Auto-reveal the collapsed row whenever the active category is one of
-        // those zero-stock ones, so choosing it from the dropdown doesn't leave
-        // its chip (and real count) hidden behind a manual 'more categories' click.
+        // Kept from the old chip strip: remembers when the picked category has no stock yet. The category dropdown
+        // lists those under Not stocked yet, so nothing has to be revealed by hand any more.
         this.showEmptyCategories = this.emptyCategoryKeys.includes(this.category);
         // Keeps the address bar in sync with search/category/status, so this page's
         // own post-action reloads (Add/Edit Gown, status change, delete, block
@@ -1894,37 +1981,34 @@
 </div>
 </div>
             <!-- Breadcrumb End -->
-            <div class="admin-stat-grid-4">
-              <div class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6">
-                <p class="text-sm text-gray-500 dark:text-gray-400">Total Gowns</p>
-                <h4 class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90">{{ total_gowns_count }}</h4>
+            <!-- Totals in one slim strip. The three coloured dots are the same circles the list uses for a gown's status. -->
+            <div class="gc-stats" role="group" aria-label="Gown totals">
+              <div class="gc-stat">
+                <p class="gc-stat-label">Total Gowns</p>
+                <p class="gc-stat-num">{{ total_gowns_count }}</p>
               </div>
-              <div class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6">
-                <p class="text-sm text-gray-500 dark:text-gray-400">Available</p>
-                <h4 class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90">{{ available_count }}</h4>
+              <div class="gc-stat">
+                <p class="gc-stat-label"><span class="gc-dot gc-dot--available" aria-hidden="true"></span>Available</p>
+                <p class="gc-stat-num">{{ available_count }}</p>
               </div>
-              <div class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6">
-                <p class="text-sm text-gray-500 dark:text-gray-400">Reserved</p>
-                <h4 class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90">{{ reserved_count }}</h4>
+              <div class="gc-stat">
+                <p class="gc-stat-label"><span class="gc-dot gc-dot--reserved" aria-hidden="true"></span>Reserved</p>
+                <p class="gc-stat-num">{{ reserved_count }}</p>
               </div>
               {% if blocked_gowns_today %}
-              <button
-                type="button"
-                @click="showBlockedGownsList = !showBlockedGownsList"
-                class="rounded-2xl border border-gray-200 bg-white p-5 text-left transition hover:bg-gray-50 dark:border-gray-800 dark:bg-white/[0.03] dark:hover:bg-white/[0.07] md:p-6"
-              >
-                <p class="text-sm text-gray-500 dark:text-gray-400">Blocked Gowns</p>
-                <h4 class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90">{{ blocked_gowns_today|length }}</h4>
-                <p class="mt-1 text-xs font-medium text-brand-500 dark:text-brand-400">
-                  <span x-show="!showBlockedGownsList">View &amp; release &darr;</span>
-                  <span x-show="showBlockedGownsList" x-cloak>Hide list &uarr;</span>
+              <button type="button" class="gc-stat" @click="showBlockedGownsList = !showBlockedGownsList" :aria-expanded="showBlockedGownsList ? 'true' : 'false'">
+                <p class="gc-stat-label"><span class="gc-dot gc-dot--blocked" aria-hidden="true"></span>Blocked Gowns</p>
+                <p class="gc-stat-num">{{ blocked_gowns_today|length }}
+                  <span class="gc-stat-link">
+                    <span x-show="!showBlockedGownsList">View &amp; release &darr;</span>
+                    <span x-show="showBlockedGownsList" x-cloak>Hide list &uarr;</span>
+                  </span>
                 </p>
               </button>
               {% else %}
-              <div class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6">
-                <p class="text-sm text-gray-500 dark:text-gray-400">Blocked Gowns</p>
-                <h4 class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90">0</h4>
-                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">None blocked today</p>
+              <div class="gc-stat">
+                <p class="gc-stat-label"><span class="gc-dot gc-dot--blocked" aria-hidden="true"></span>Blocked Gowns</p>
+                <p class="gc-stat-num">0 <span class="gc-stat-note">None blocked today</span></p>
               </div>
               {% endif %}
             </div>
@@ -1965,89 +2049,6 @@
               </div>
             </div>
             {% endif %}
-
-            <!-- Browse by category -- folded in from the old, now-removed Categories
-                 page: same real per-category counts (Out-of-Stock excluded), but a
-                 click here filters this same page instantly instead of navigating to
-                 a separate one. Drives the SAME `category` filter the dropdown below
-                 sets, so the two can never disagree about what's selected.
-
-                 Stocked categories only, by how much stock they actually carry --
-                 a shop that's only just started stocking one category would
-                 otherwise show a wall of "(0)" chips next to it, which reads as
-                 broken more than "nothing here yet". Everything still at zero
-                 collapses behind one toggle instead, muted so it reads as "not
-                 stocked yet" rather than sitting there looking identical to real
-                 inventory. -->
-            <div class="mt-5">
-              <div class="flex flex-wrap items-center gap-2">
-                {% for row in category_rows_populated %}
-                <button
-                  type="button"
-                  @click="category = '{{ row.key }}'; onGownFilterChanged()"
-                  :class="category === '{{ row.key }}' ? 'border-brand-500 bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.03]'"
-                  class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-theme-xs font-medium transition-colors"
-                >
-                  <span class="admin-tag-dot" style="background-color: {{ row.tag_hex }};" title="{{ row.tag_color }} tag"></span>
-                  {{ row.label }}
-                  <span class="text-gray-400 dark:text-gray-500">({{ row.count }})</span>
-                </button>
-                {% endfor %}
-
-                {% if category_rows_empty %}
-                <button
-                  type="button"
-                  @click="showEmptyCategories = !showEmptyCategories"
-                  class="inline-flex items-center gap-1 rounded-full border border-gray-200 px-3 py-1.5 text-theme-xs font-medium text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-600 dark:border-gray-800 dark:text-gray-500 dark:hover:bg-white/[0.03] dark:hover:text-gray-300"
-                >
-                  <span x-show="!showEmptyCategories">+{{ category_rows_empty|length }} more categor{{ category_rows_empty|length|pluralize:"y,ies" }}</span>
-                  <span x-show="showEmptyCategories" x-cloak>Show fewer</span>
-                </button>
-                {% endif %}
-              </div>
-
-              {% if category_rows_empty %}
-              <div class="mt-2 flex flex-wrap gap-2" x-show="showEmptyCategories" x-cloak style="opacity: 0.6;">
-                {% for row in category_rows_empty %}
-                <button
-                  type="button"
-                  @click="category = '{{ row.key }}'; onGownFilterChanged()"
-                  :class="category === '{{ row.key }}' ? 'border-brand-500 text-brand-500 dark:text-brand-400' : 'border-gray-200 text-gray-400 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-500 dark:hover:bg-white/[0.03]'"
-                  class="inline-flex items-center gap-1.5 rounded-full border border-dashed! px-3 py-1.5 text-theme-xs font-medium transition-colors"
-                >
-                  <span class="admin-tag-dot" style="background-color: {{ row.tag_hex }};" title="{{ row.tag_color }} tag"></span>
-                  {{ row.label }}
-                  <span>(0)</span>
-                </button>
-                {% endfor %}
-              </div>
-              {% endif %}
-            </div>
-
-            <!-- Tag Colors + Removal Log: two collapsed panels, opened from these buttons.
-                 Both are reference/record screens, so they stay out of the way until asked for. -->
-            <div class="mt-3 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                @click="showTagColors = !showTagColors; if (showTagColors) { showRemovalLog = false; showAddCategory = false }"
-                :class="showTagColors ? 'border-brand-500 bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.03]'"
-                class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-theme-xs font-medium transition-colors"
-              >Tag Colors</button>
-              <button
-                type="button"
-                @click="showRemovalLog = !showRemovalLog; if (showRemovalLog) { showTagColors = false; showAddCategory = false }"
-                :class="showRemovalLog ? 'border-brand-500 bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.03]'"
-                class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-theme-xs font-medium transition-colors"
-              >Removal Log ({{ gown_removals|length }})</button>
-              {% if can_edit_tag_colors %}
-              <button
-                type="button"
-                @click="showAddCategory = !showAddCategory; if (showAddCategory) { showTagColors = false; showRemovalLog = false }"
-                :class="showAddCategory ? 'border-brand-500 bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]'"
-                class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-theme-xs font-medium transition-colors"
-              >+ Add Category</button>
-              {% endif %}
-            </div>
 
             <!-- Tag Colors: one tag color per category. Everyone sees the list; only the owner
                  gets the pickers and Save (can_edit_tag_colors is decided by the same
@@ -2223,45 +2224,74 @@
             </div>
             {% endif %}
 
-            <div class="mt-5 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03] sm:p-5">
-              <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div class="sm:flex-1">
-                  <input
+            <!-- ONE card: search + filters, the status legend, the list and the page buttons. -->
+            <div class="gc-card mt-5 rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+          <div class="gc-toolbar">
+            <div class="gc-toolbar-search">
+              <input
                     type="text"
                     x-model="search"
                     @input="onGownFilterChanged()"
                     placeholder="Search by ID or tag number..."
                     class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
                   />
-                </div>
-                <div class="sm:w-52">
-                  <select x-model="category" @change="onGownFilterChanged()" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
-                    <option value="All">All Categories</option>
-                    {% for row in category_rows %}
-                    <option value="{{ row.key }}">{{ row.label }}</option>
-                    {% endfor %}
-                  </select>
-                </div>
-                <div class="sm:w-44">
-                  <select x-model="status" @change="onGownFilterChanged()" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
+            </div>
+            <details class="gc-menu" @click.outside="$el.removeAttribute('open')" @keydown.escape="$el.removeAttribute('open')">
+            <summary class="gc-field" aria-label="Filter by category">
+              <span class="gc-cur">
+              <span class="gc-cur-in" x-show="category === 'All'">All categories</span>
+              {% for row in category_rows %}<span class="gc-cur-in" x-show="category === '{{ row.key }}'" x-cloak><span class="admin-tag-dot" style="background-color: {{ row.tag_hex }};"></span>{{ row.label }} <span style="color:#98a2b3;">({{ row.count }})</span></span>{% endfor %}
+            </span>
+              <span class="gc-caret" aria-hidden="true"></span>
+            </summary>
+            <div class="gc-panel">
+              <button type="button" class="gc-opt" :class="category === 'All' ? 'is-on' : ''" @click="category = 'All'; onGownFilterChanged(); $el.closest('details').removeAttribute('open')">All categories</button>
+              {% for row in category_rows_populated %}
+              <button type="button" class="gc-opt" :class="category === '{{ row.key }}' ? 'is-on' : ''" @click="category = '{{ row.key }}'; onGownFilterChanged(); $el.closest('details').removeAttribute('open')">
+                <span class="admin-tag-dot" style="background-color: {{ row.tag_hex }};" title="{{ row.tag_color }} tag"></span>{{ row.label }}<span class="gc-n">{{ row.count }}</span>
+              </button>
+              {% endfor %}
+              {% if category_rows_empty %}
+              <p class="gc-panel-sep">Not stocked yet</p>
+              {% for row in category_rows_empty %}
+              <button type="button" class="gc-opt gc-opt--muted" :class="category === '{{ row.key }}' ? 'is-on' : ''" @click="category = '{{ row.key }}'; onGownFilterChanged(); $el.closest('details').removeAttribute('open')">
+                <span class="admin-tag-dot" style="background-color: {{ row.tag_hex }};" title="{{ row.tag_color }} tag"></span>{{ row.label }}<span class="gc-n">0</span>
+              </button>
+              {% endfor %}
+              {% endif %}
+            </div>
+          </details>
+            <div class="gc-sel-wrap">
+              <div class="gc-sel">
+                <select x-model="status" aria-label="Filter by status" @change="onGownFilterChanged()" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
                     <option value="All">All Status</option>
                     <option value="Available">Available</option>
                     <option value="Reserved">Reserved</option>
                     <option value="Out-of-Stock">Out-of-Stock</option>
                   </select>
-                </div>
-                <div class="sm:w-44">
-                  <select x-model="checkFilter" @change="onGownFilterChanged()" aria-label="Filter by physical check" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
+              </div>
+            </div>
+            <div class="gc-checks">
+              <div class="gc-sel">
+                <select x-model="checkFilter" @change="onGownFilterChanged()" aria-label="Filter by physical check" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
                     <option value="All">All checks</option>
                     <option value="due">Due for a check ({{ check_stale_days }}+ days)</option>
                   </select>
-                </div>
-                <!-- Can a gown be booked for a customer's date? (partials/availability_check.html) -->
-                <div class="w-full sm:w-auto">
-                  <button type="button" class="ca-open-btn" title="Can a gown be booked for a customer's event date?">Check a date</button>
-                </div>
-                <div class="w-full sm:w-auto">
-                  <button
+              </div>
+              <details class="gc-menu" @click.outside="$el.removeAttribute('open')" @keydown.escape="$el.removeAttribute('open')">
+              <summary class="gc-i" aria-label="About the physical check" title="About the physical check">i</summary>
+              <div class="gc-panel gc-panel--right gc-pop">
+                <p><strong>Physical check:</strong> {{ checked_recent_count }} of {{ total_gowns_count }} gowns confirmed present in the last {{ check_stale_days }} days.</p>
+                <p>Walking the shop? Tick the gowns you can see and press <strong>Mark Checked</strong>. Use the &ldquo;Due for a check&rdquo; filter to see what&rsquo;s left.</p>
+              </div>
+            </details>
+            </div>
+            <!-- Can a gown be booked for a customer's date? (partials/availability_check.html) -->
+            <div class="gc-btn">
+              <button type="button" class="ca-open-btn" title="Can a gown be booked for a customer's event date?">Check a date</button>
+            </div>
+            <div class="gc-btn">
+              <button
                     type="button"
                     @click="resetAddGownForm(); isAddGownModal = true"
                     class="inline-flex w-full items-center justify-center gap-2 rounded-full border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200 sm:w-auto"
@@ -2271,23 +2301,30 @@
                     </svg>
                     Add Gown
                   </button>
-                </div>
-              </div>
-              <!-- The walkthrough check: how the shop notices a gown that is no longer on the
-                   rack. Whoever walks the shop ticks the gowns they can see and presses Mark
-                   Checked; each gown remembers when and by whom. -->
-              <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                <span class="font-medium text-gray-700 dark:text-gray-300">Physical check:</span>
-                {{ checked_recent_count }} of {{ total_gowns_count }} gowns confirmed present in the last {{ check_stale_days }} days.
-                Walking the shop? Tick the gowns you can see and press <span class="font-medium">Mark Checked</span> &mdash; use the &ldquo;Due for a check&rdquo; filter to see what's left.
-              </p>
             </div>
-
-            <div class="mt-5 overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+            <details class="gc-menu gc-btn" @click.outside="$el.removeAttribute('open')" @keydown.escape="$el.removeAttribute('open')">
+            <summary class="gc-field" :style="(showTagColors || showRemovalLog || showAddCategory) ? 'border-color:#465fff;' : ''">Manage <span class="gc-caret" aria-hidden="true"></span></summary>
+            <div class="gc-panel gc-panel--right">
+              <button type="button" class="gc-opt" :class="showTagColors ? 'is-on' : ''" @click="showTagColors = !showTagColors; if (showTagColors) { showRemovalLog = false; showAddCategory = false }; $el.closest('details').removeAttribute('open')">Tag Colors</button>
+              <button type="button" class="gc-opt" :class="showRemovalLog ? 'is-on' : ''" @click="showRemovalLog = !showRemovalLog; if (showRemovalLog) { showTagColors = false; showAddCategory = false }; $el.closest('details').removeAttribute('open')">Removal Log <span class="gc-n">{{ gown_removals|length }}</span></button>
+              {% if can_edit_tag_colors %}
+              <button type="button" class="gc-opt" :class="showAddCategory ? 'is-on' : ''" @click="showAddCategory = !showAddCategory; if (showAddCategory) { showTagColors = false; showRemovalLog = false }; $el.closest('details').removeAttribute('open')">+ Add Category</button>
+              {% endif %}
+            </div>
+          </details>
+          </div>
+          <div class="gc-legend">
+            <ul class="gc-legend-list" aria-label="What the status circles mean">
+              <li><span class="gc-dot gc-dot--available" aria-hidden="true"></span>Available</li>
+              <li><span class="gc-dot gc-dot--reserved" aria-hidden="true"></span>Reserved</li>
+              <li><span class="gc-dot gc-dot--oos" aria-hidden="true"></span>Out-of-Stock</li>
+            </ul>
+            <p class="gc-count" id="gc-count" aria-live="polite">{{ total_gowns_count }} gown{{ total_gowns_count|pluralize }}</p>
+          </div>
               <div x-show="filtering" x-cloak class="flex items-center justify-center" style="height: 300px;">
                 <div class="h-10 w-10 animate-spin rounded-full border-4 border-solid border-gray-300 border-t-transparent dark:border-gray-600"></div>
               </div>
-              <div x-show="!filtering" class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg="tbody" data-arpg-noun="gowns">
+              <div x-show="!filtering" class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg="tbody" data-arpg-noun="gowns" data-arpg-top="off" data-arpg-count="#gc-count">
                 <table class="min-w-full">
                   <thead class="sticky top-0 z-10 bg-white dark:bg-gray-900">
                     <tr>
@@ -2346,9 +2383,9 @@
                         </div>
                       </td>
                       <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ gown.category }} &middot; {{ gown.color_name }} &middot; {{ gown.size }}</p></td>
-                      <td class="px-5 py-4 sm:px-6"><p class="text-sm font-semibold text-brand-500">&#8369; {{ gown.rental_price|floatformat:0 }}</p></td>
+                      <td class="px-5 py-4 sm:px-6"><p class="text-sm font-semibold text-brand-500">&#8369;{{ gown.rental_price|floatformat:'-2g' }}</p></td>
                       <td class="px-5 py-4 sm:px-6">
-                        <p class="inline-flex rounded-full px-2 py-0.5 text-theme-xs font-medium {% if gown.status == 'Available' %}bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500{% elif gown.status == 'Reserved' %}bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400{% else %}bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500{% endif %}">{{ gown.status }}</p>
+                        <span class="gc-dot gc-dot--row {% if gown.status == 'Available' %}gc-dot--available{% elif gown.status == 'Reserved' %}gc-dot--reserved{% else %}gc-dot--oos{% endif %}" role="img" aria-label="{{ gown.status }}" title="{{ gown.status }}"></span>
                         {% if gown.status == 'Reserved' %}
                         {% if gown.holders %}
                         {% with holder=gown.holders.0 %}
@@ -2361,7 +2398,7 @@
                         <p class="mt-1 text-theme-xs text-gray-400 dark:text-gray-500" title="No booking is holding this gown &mdash; its status was set by hand in the View window.">Set manually &middot; no booking</p>
                         {% endif %}
                         {% endif %}
-                        <p class="mt-1 text-theme-xs {% if gown.days_since_check is None or gown.days_since_check >= check_stale_days %}text-warning-700 dark:text-warning-400{% else %}text-gray-400 dark:text-gray-500{% endif %}" title="When someone last confirmed this gown is physically here">{{ gown.check_label }}</p>
+                        <p class="mt-1 text-theme-xs text-gray-400 dark:text-gray-500" title="When someone last confirmed this gown is physically here">{{ gown.check_label }}</p>
                       </td>
                       <td class="px-5 py-4 sm:px-6">
                         <div class="flex items-center gap-2">
@@ -2777,9 +2814,6 @@
         <p class="text-center text-sm font-medium text-gray-700 dark:text-gray-400" x-text="photoUpdateBusy ? 'Uploading...' : 'Drag and drop a new photo here or browse'"></p>
       </div>
     </div>
-    <div class="mt-6 flex justify-end px-2">
-      <button type="button" @click="isGownImageModal = false" class="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">Close</button>
-    </div>
   </div>
 </div>
 
@@ -2834,7 +2868,7 @@
         </div>
         <div>
           <p class="text-xs text-gray-500 dark:text-gray-400">Rental Price</p>
-          <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="'₱ ' + viewingGown.price"></p>
+          <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewingGown.price ? '₱' + Number(viewingGown.price).toLocaleString('en-PH', { maximumFractionDigits: 2 }) : '&mdash;'"></p>
         </div>
         <div>
           <p class="text-xs text-gray-500 dark:text-gray-400">Condition</p>

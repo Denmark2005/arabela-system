@@ -1395,7 +1395,7 @@
                             data-return="{{ item.return_date|date:'Y-m-d' }}">Change return date</button>
                           {% endif %}
                         </td>
-                        <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">&#8369; {{ item.rental_price|floatformat:0 }}</p></td>
+                        <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">&#8369;{{ item.rental_price|floatformat:'-2g' }}</p></td>
                         {% if forloop.first %}
                         <td class="px-5 py-4 sm:px-6" rowspan="{{ item_count }}" style="vertical-align: top;">
                           {% if r.state == 'overdue' %}
