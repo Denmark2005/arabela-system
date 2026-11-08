@@ -37,7 +37,8 @@ from reservations.models import Reservation
 logger = logging.getLogger(__name__)
 
 THUMB_WIDTH = 160
-SEARCH_LIMIT = 15
+SEARCH_LIMIT = 15            # how many a search answers with when the page does not say (the Check a date pop-up relies on this)
+SEARCH_PAGE_MAX = 50         # the most a single request may ask for
 
 
 def _peso(amount):
@@ -86,26 +87,46 @@ def new_booking_view(request):
         "max_gowns": staff_booking.MAX_GOWNS,
         "max_receipts": staff_booking.MAX_RECEIPTS,
         "note_max": staff_booking.NOTE_MAX,
+        # The picker's category filter: only categories that really have gowns, so the filter never leads to an empty list.
+        "gown_categories": sorted(set(Gown.objects.order_by().values_list("category", flat=True))),
     })
 
 
 # ---------------------------------------------------------------- lookups
+def _int_param(raw, default, low, high):
+    """A whole number from the address, kept inside [low, high]; the default when it is missing or not a number."""
+    try:
+        return max(low, min(high, int(raw)))
+    except (TypeError, ValueError):
+        return default
+
+
 def booking_gown_search_view(request):
-    """Gowns matching what staff typed: gown ID, tag number, name, color or category. Out-of-Stock gowns are listed (so
-    staff aren't left wondering) but marked, and can't be booked."""
+    """Gowns for the New Booking picker. With text: gowns matching the gown ID, tag number, name, color or category. With NO text: every
+    gown, grouped by category, so staff who forgot the name can browse the whole list. `category` narrows either to one category, and
+    `offset` / `limit` page through it (the answer says `hasMore`). Out-of-Stock gowns are listed (so staff aren't left wondering) but
+    marked, and can't be booked."""
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
     query = (request.GET.get("q") or "").strip()
-    if len(query) < 1:
-        return JsonResponse({"results": []})
-    match = (Q(gown_id__icontains=query) | Q(name__icontains=query) | Q(color_name__icontains=query)
-             | Q(category__icontains=query))
-    if query.isdigit():
-        # "12" finds the gown whose tag number is 12 ("...-012"), not only IDs that happen to contain "12".
-        match |= Q(gown_id__endswith=f"-{int(query):03d}") | Q(gown_id__endswith=f"-{query}")
-    gowns = list(Gown.objects.filter(match).order_by("status", "category", "name", "gown_id")[:SEARCH_LIMIT])
+    category = (request.GET.get("category") or "").strip()
+    offset = _int_param(request.GET.get("offset"), 0, 0, 10000)
+    limit = _int_param(request.GET.get("limit"), SEARCH_LIMIT, 1, SEARCH_PAGE_MAX)
+    gowns = Gown.objects.all()
+    if category:
+        gowns = gowns.filter(category=category)
+    if query:
+        match = (Q(gown_id__icontains=query) | Q(name__icontains=query) | Q(color_name__icontains=query)
+                 | Q(category__icontains=query))
+        if query.isdigit():
+            # "12" finds the gown whose tag number is 12 ("...-012"), not only IDs that happen to contain "12".
+            match |= Q(gown_id__endswith=f"-{int(query):03d}") | Q(gown_id__endswith=f"-{query}")
+        gowns = gowns.filter(match).order_by("status", "category", "name", "gown_id")
+    else:
+        gowns = gowns.order_by("category", "name", "gown_id")
+    rows = list(gowns[offset:offset + limit + 1])          # one extra row tells us whether there is a next page
     tag_colors = SiteSettings.load().tag_colors()
-    return JsonResponse({"results": [_gown_card(g, tag_colors) for g in gowns]})
+    return JsonResponse({"results": [_gown_card(g, tag_colors) for g in rows[:limit]], "hasMore": len(rows) > limit})
 
 
 def _check_payload(gown, result, *, now, tag_colors, with_extras=True):

@@ -15,10 +15,10 @@
     /* New Booking (arabela_admin/new_booking.py). Its own small set of styles: the admin's compiled CSS only carries the
        classes the template pack itself uses. Light and dark follow the panel's own .dark switch. */
     .nb-wrap { max-width: 64rem; }
-    .nb-card { background: #fff; border: 1px solid #e4e7ec; border-radius: 1rem; padding: 1.25rem; margin-bottom: 1.25rem; }
+    .nb-card { background: #fff; border: 1px solid #e4e7ec; border-radius: 1rem; padding: 1rem; margin-bottom: 1rem; }
     .dark .nb-card { background: rgba(255,255,255,.03); border-color: #1d2939; }
-    @media (min-width: 640px) { .nb-card { padding: 1.5rem; } }
-    .nb-step { display: flex; align-items: center; gap: .6rem; margin: 0 0 1rem; font-size: 1rem; font-weight: 600; color: #1d2939; }
+    @media (min-width: 640px) { .nb-card { padding: 1.1rem 1.25rem; } }
+    .nb-step { display: flex; align-items: center; gap: .6rem; margin: 0 0 .75rem; font-size: 1rem; font-weight: 600; color: #1d2939; }
     .dark .nb-step { color: #f2f4f7; }
     .nb-step-no { display: inline-flex; align-items: center; justify-content: center; width: 1.75rem; height: 1.75rem; border-radius: 999px; background: #eef4ff; color: #3538cd; font-size: .8125rem; font-weight: 700; flex: none; }
     .dark .nb-step-no { background: rgba(70,95,255,.18); color: #9bb0ff; }
@@ -50,15 +50,8 @@
     .dark .nb-btn--ghost { background: transparent; color: #d0d5dd; border-color: #344054; }
     .dark .nb-btn--ghost:hover:not(:disabled) { background: rgba(255,255,255,.04); }
     .nb-btn--small { padding: .35rem .7rem; font-size: .8125rem; }
-    .nb-btn--link { background: none; border: 0; padding: 0; color: #465fff; font-weight: 600; text-decoration: underline; }
-    .dark .nb-btn--link { color: #9bb0ff; }
-    .nb-btn--danger-link { background: none; border: 0; padding: 0; color: #d92d20; font-weight: 600; text-decoration: underline; }
     .nb-btn:disabled { opacity: .5; cursor: not-allowed; }
     .nb-btn:focus-visible, .nb-seg label:focus-within { outline: 2px solid #465fff; outline-offset: 2px; }
-    .nb-line { border: 1px solid #e4e7ec; border-radius: .85rem; padding: 1rem; margin-bottom: 1rem; }
-    .dark .nb-line { border-color: #1d2939; }
-    .nb-line-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: .75rem; font-size: .875rem; font-weight: 600; color: #344054; }
-    .dark .nb-line-head { color: #d0d5dd; }
     .nb-results { margin-top: .5rem; border: 1px solid #e4e7ec; border-radius: .7rem; max-height: 18rem; overflow-y: auto; }
     .dark .nb-results { border-color: #1d2939; }
     .nb-result { display: flex; width: 100%; align-items: center; gap: .75rem; padding: .6rem .75rem; border: 0; border-bottom: 1px solid #f2f4f7; background: transparent; text-align: left; font: inherit; color: inherit; cursor: pointer; }
@@ -75,9 +68,6 @@
     .nb-gmeta { font-size: .75rem; color: #667085; line-height: 1.45; }
     .dark .nb-gmeta { color: #98a2b3; }
     .nb-tagdot { display: inline-block; width: .6rem; height: .6rem; border-radius: 999px; vertical-align: -1px; margin-right: .2rem; box-shadow: 0 0 0 1px rgba(0,0,0,.15); }
-    .nb-chosen { display: flex; align-items: center; gap: .75rem; padding: .65rem .75rem; border-radius: .7rem; background: #f9fafb; border: 1px solid #e4e7ec; }
-    .dark .nb-chosen { background: rgba(255,255,255,.04); border-color: #1d2939; }
-    .nb-chosen-body { flex: 1 1 auto; min-width: 0; }
     .nb-check { display: flex; align-items: center; gap: .5rem; font-size: .875rem; color: #344054; cursor: pointer; }
     .dark .nb-check { color: #d0d5dd; }
     .nb-check input { width: 1rem; height: 1rem; accent-color: #465fff; }
@@ -93,8 +83,6 @@
     .nb-hint { margin-top: .75rem; padding: .65rem .85rem; border-radius: .7rem; background: #fffaeb; color: #93370d; border: 1px solid #fedf89; font-size: .8125rem; line-height: 1.5; }
     .dark .nb-hint { background: rgba(247,144,9,.12); color: #fdb022; border-color: rgba(247,144,9,.35); }
     .nb-hint a { color: inherit; font-weight: 600; text-decoration: underline; }
-    .nb-account { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .55rem .75rem; border-radius: .6rem; background: #eef4ff; color: #3538cd; font-size: .875rem; }
-    .dark .nb-account { background: rgba(70,95,255,.16); color: #c7d2fe; }
     .nb-sum { width: 100%; border-collapse: collapse; font-size: .875rem; }
     .nb-sum td { padding: .4rem 0; border-bottom: 1px solid #f2f4f7; color: #344054; }
     .dark .nb-sum td { border-bottom-color: #1d2939; color: #d0d5dd; }
@@ -114,6 +102,138 @@
     .nb-spinner { display: inline-block; width: .9rem; height: .9rem; border: 2px solid currentColor; border-top-color: transparent; border-radius: 999px; animation: nb-spin .8s linear infinite; vertical-align: -2px; }
     @keyframes nb-spin { to { transform: rotate(360deg); } }
     @media (prefers-reduced-motion: reduce) { .nb-spinner { animation-duration: 2.4s; } }
+    /* ---- compact layout (avoid crowding, repetition and wasted space) ---- */
+    .nb-card-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin: 0 0 .75rem; }
+    .nb-card-head .nb-step { margin: 0; }
+    .nb-count { margin-left: .15rem; padding: .05rem .5rem; border-radius: 999px; background: #f2f4f7; color: #475467; font-size: .75rem; font-weight: 600; }
+    .dark .nb-count { background: rgba(255,255,255,.08); color: #98a2b3; }
+    @media (min-width: 720px) { .nb-grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    .nb-opt { font-size: .75rem; font-weight: 400; color: #667085; }
+    .dark .nb-opt { color: #98a2b3; }
+    .nb-lblrow { display: flex; align-items: center; gap: .35rem; margin: 0 0 .35rem; }
+    .nb-lblrow .nb-label { margin: 0; }
+    .nb-inline { display: flex; align-items: center; gap: .5rem; }
+    .nb-input--sm { height: 2.25rem; padding: .35rem .65rem; }
+    .nb-r { text-align: right; }
+
+    /* icon buttons: every small action is an icon with a tooltip and a hidden label */
+    .nb-ib { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; padding: 0; flex: none; border: 1px solid #d0d5dd; border-radius: .55rem; background: #fff; color: #475467; cursor: pointer; transition: background-color .15s, color .15s, border-color .15s; }
+    .nb-ib svg { width: 1rem; height: 1rem; display: block; }
+    .nb-ib:hover:not(:disabled) { background: #f2f4f7; color: #1d2939; }
+    .dark .nb-ib { background: transparent; border-color: #344054; color: #98a2b3; }
+    .dark .nb-ib:hover:not(:disabled) { background: rgba(255,255,255,.06); color: #f2f4f7; }
+    .nb-ib--primary { background: #465fff; border-color: #465fff; color: #fff; }
+    .nb-ib--primary:hover:not(:disabled) { background: #3641f5; border-color: #3641f5; color: #fff; }
+    .dark .nb-ib--primary { background: #465fff; border-color: #465fff; color: #fff; }
+    .dark .nb-ib--primary:hover:not(:disabled) { background: #5b73ff; color: #fff; }
+    .nb-ib--danger:hover:not(:disabled) { background: #fef3f2; border-color: #fda29b; color: #d92d20; }
+    .dark .nb-ib--danger:hover:not(:disabled) { background: rgba(240,68,56,.14); border-color: rgba(240,68,56,.45); color: #fda29b; }
+    .nb-ib:disabled { opacity: .45; cursor: not-allowed; }
+    .nb-ib:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+    .nb-btn-ic { width: 1rem; height: 1rem; flex: none; }
+
+    /* the "?" that holds the long explanations */
+    .nb-tip { position: relative; display: inline-block; vertical-align: middle; }
+    .nb-tip > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 1.1rem; height: 1.1rem; border: 1px solid #98a2b3; border-radius: 999px; color: #667085; font-size: .68rem; font-weight: 700; line-height: 1; user-select: none; }
+    .nb-tip > summary::-webkit-details-marker { display: none; }
+    .nb-tip > summary::marker { content: ''; }
+    .nb-tip > summary:hover, .nb-tip[open] > summary { background: #465fff; border-color: #465fff; color: #fff; }
+    .nb-tip > summary:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+    .nb-tip-pop { position: absolute; z-index: 40; left: -.4rem; top: calc(100% + .4rem); width: max-content; max-width: min(19rem, calc(100vw - 3rem)); padding: .65rem .8rem; border-radius: .65rem; background: #101828; color: #f2f4f7; font-size: .78rem; font-weight: 400; line-height: 1.45; text-align: left; box-shadow: 0 12px 24px -8px rgba(16,24,40,.35); }
+    @media (min-width: 720px) { .nb-tip--right .nb-tip-pop { left: auto; right: -.4rem; } }       /* only where the date sits in the right-hand column */
+    /* on a phone the help opens across the width of its own row, so it can never run off the screen */
+    @media (max-width: 719px) {
+      .nb-tip { position: static; }
+      .nb-lblrow, .nb-label, .nb-account { position: relative; }
+      .nb-tip-pop { left: 0; right: 0; width: auto; max-width: none; }
+    }
+    .dark .nb-tip-pop { background: #1d2939; border: 1px solid #344054; }
+
+    /* the gown table: one short row per gown */
+    .nb-thead, .nb-row { display: grid; grid-template-columns: 1.75rem minmax(0, 1fr) 11rem 5.5rem 4.75rem 4.5rem; column-gap: .75rem; align-items: center; }
+    .nb-thead { padding: 0 .75rem .35rem; font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #667085; }
+    .dark .nb-thead { color: #98a2b3; }
+    .nb-row { padding: .55rem .75rem; margin-bottom: .45rem; border: 1px solid #e4e7ec; border-radius: .75rem; background: #fff; }
+    .dark .nb-row { background: rgba(255,255,255,.02); border-color: #1d2939; }
+    .nb-row--bad { border-color: #fda29b; background: #fffbfa; }
+    .dark .nb-row--bad { border-color: rgba(240,68,56,.5); background: rgba(240,68,56,.07); }
+    .nb-c-no { width: 1.5rem; height: 1.5rem; border-radius: 999px; background: #f2f4f7; color: #475467; font-size: .75rem; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+    .dark .nb-c-no { background: rgba(255,255,255,.08); color: #98a2b3; }
+    .nb-c-gown { display: flex; align-items: center; gap: .6rem; min-width: 0; }
+    .nb-c-gown .nb-gname, .nb-c-gown .nb-gmeta { overflow-wrap: anywhere; }
+    .nb-thumb--sm { width: 2.1rem; height: 2.7rem; }
+    .nb-dtext { font-size: .875rem; font-weight: 600; color: #1d2939; }
+    .dark .nb-dtext { color: #f2f4f7; }
+    .nb-trip { display: block; }
+    .nb-c-price { font-size: .875rem; font-weight: 600; font-variant-numeric: tabular-nums; color: #344054; white-space: nowrap; }
+    .dark .nb-c-price { color: #d0d5dd; }
+    .nb-c-act { display: flex; justify-content: flex-end; gap: .35rem; }
+    .nb-c-why { grid-column: 2 / -1; margin: .15rem 0 0; font-size: .8125rem; line-height: 1.45; color: #b42318; }
+    .dark .nb-c-why { color: #fda29b; }
+    .nb-st { display: inline-flex; align-items: center; gap: .3rem; font-size: .8125rem; font-weight: 600; }
+    .nb-st svg { width: .95rem; height: .95rem; flex: none; }
+    .nb-st--ok { color: #039855; }
+    .dark .nb-st--ok { color: #32d583; }
+    .nb-st--no { color: #d92d20; }
+    .dark .nb-st--no { color: #fda29b; }
+    .nb-st--wait { color: #667085; font-weight: 500; }
+    @media (max-width: 719px) {
+      .nb-thead { display: none; }
+      .nb-row { grid-template-columns: 1.75rem minmax(0, 1fr) auto; grid-template-areas: "no gown act" ". date date" ". state price" ". why why"; row-gap: .3rem; }
+      .nb-c-no { grid-area: no; } .nb-c-gown { grid-area: gown; } .nb-c-act { grid-area: act; }
+      .nb-c-date { grid-area: date; } .nb-c-state { grid-area: state; } .nb-c-price { grid-area: price; }
+      .nb-c-why { grid-area: why; grid-column: auto; }
+    }
+
+    /* the open editor */
+    .nb-edit { margin-bottom: .6rem; padding: .85rem .9rem; border: 1px solid #c7d2fe; border-radius: .85rem; background: #f8faff; }
+    .dark .nb-edit { border-color: rgba(98,114,243,.5); background: rgba(70,95,255,.06); }
+    .nb-edit-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .6rem; font-size: .8125rem; font-weight: 600; color: #344054; }
+    .dark .nb-edit-head { color: #d0d5dd; }
+    .nb-edit-actions { display: inline-flex; gap: .4rem; }
+    .nb-edit-grid { display: grid; gap: .75rem; grid-template-columns: minmax(0, 1fr); }
+    @media (min-width: 720px) { .nb-edit-grid { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); } }
+    .nb-edit-opts { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .6rem 1.5rem; margin-top: .75rem; }
+
+    /* the gown picker: a dropdown of ALL gowns with its own search */
+    .nb-pick { position: relative; }
+    .nb-pick-btn { display: flex; align-items: center; gap: .6rem; width: 100%; min-height: 2.75rem; padding: .3rem .65rem .3rem .8rem; border: 1px solid #d0d5dd; border-radius: .6rem; background: #fff; color: #1d2939; font: inherit; font-size: .875rem; text-align: left; cursor: pointer; }
+    .dark .nb-pick-btn { background: #0c111d; border-color: #344054; color: #f2f4f7; }
+    .nb-pick-btn[aria-expanded="true"], .nb-pick-btn:focus-visible { outline: 2px solid #465fff; outline-offset: 1px; border-color: #465fff; }
+    .nb-pick-sel { flex: 1 1 auto; min-width: 0; line-height: 1.3; }
+    .nb-pick-ph { flex: 1 1 auto; color: #98a2b3; }
+    .nb-pick-chev { width: 1rem; height: 1rem; margin-left: auto; flex: none; color: #667085; }
+    .nb-pick-panel { position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + .35rem); border: 1px solid #d0d5dd; border-radius: .75rem; background: #fff; box-shadow: 0 16px 32px -12px rgba(16,24,40,.28); overflow: hidden; }
+    .dark .nb-pick-panel { background: #101828; border-color: #344054; box-shadow: 0 16px 32px -12px rgba(0,0,0,.6); }
+    .nb-pick-tools { display: flex; flex-wrap: wrap; gap: .5rem; padding: .6rem; border-bottom: 1px solid #eaecf0; }
+    .dark .nb-pick-tools { border-bottom-color: #1d2939; }
+    .nb-pick-tools input { flex: 1 1 12rem; min-width: 0; }
+    .nb-pick-tools .nb-cat { flex: 0 1 11rem; min-width: 0; }
+    .nb-pick-list { max-height: 19rem; overflow-y: auto; overscroll-behavior: contain; }
+    .nb-pick-cat { position: sticky; top: 0; z-index: 1; padding: .3rem .75rem; background: #f9fafb; border-bottom: 1px solid #f2f4f7; font-size: .7rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #667085; }
+    .dark .nb-pick-cat { background: #0c111d; border-bottom-color: #1d2939; color: #98a2b3; }
+    .nb-result.is-active:not(:disabled) { background: #f2f4f7; }
+    .dark .nb-result.is-active:not(:disabled) { background: rgba(255,255,255,.07); }
+    .nb-pick-msg { margin: 0; padding: .75rem; font-size: .8125rem; color: #667085; }
+    .nb-pick-msg--no { color: #b42318; }
+    .dark .nb-pick-msg { color: #98a2b3; }
+    .dark .nb-pick-msg--no { color: #fda29b; }
+    .nb-pick-more { display: block; width: 100%; padding: .6rem; border: 0; border-top: 1px solid #f2f4f7; background: transparent; color: #465fff; font: inherit; font-size: .8125rem; font-weight: 600; cursor: pointer; }
+    .dark .nb-pick-more { border-top-color: #1d2939; color: #9bb0ff; }
+    .nb-pick-more:hover { background: #f9fafb; }
+    .dark .nb-pick-more:hover { background: rgba(255,255,255,.04); }
+
+    /* the optional website account, once linked */
+    .nb-account { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .4rem .5rem .4rem .75rem; border-radius: .6rem; background: #eef4ff; color: #3538cd; font-size: .875rem; }
+    .dark .nb-account { background: rgba(70,95,255,.16); color: #c7d2fe; }
+    .nb-account-ic { width: 1rem; height: 1rem; flex: none; }
+
+    /* payment: choices on the left, the amounts beside them */
+    .nb-pay { display: grid; gap: 1.1rem; grid-template-columns: minmax(0, 1fr); }
+    @media (min-width: 900px) { .nb-pay { grid-template-columns: minmax(0, 1fr) 18rem; align-items: start; } }
+    .nb-pay-sum { padding: .7rem .9rem; border: 1px solid #e4e7ec; border-radius: .75rem; background: #f9fafb; }
+    .dark .nb-pay-sum { background: rgba(255,255,255,.03); border-color: #1d2939; }
+    .nb-pay-sum .nb-sum { font-size: .8125rem; }
     .nb-hidden { display: none !important; }
     [x-cloak] { display: none !important; }
   </style></head>
@@ -1228,9 +1348,15 @@
               <form x-show="!saved" @submit.prevent="save()" novalidate>
                 <!-- ===== 1. Customer ===== -->
                 <section class="nb-card" aria-labelledby="nb-step-1">
-                  <h3 class="nb-step" id="nb-step-1"><span class="nb-step-no">1</span>Customer</h3>
+                  <div class="nb-card-head">
+                    <h3 class="nb-step" id="nb-step-1"><span class="nb-step-no">1</span>Customer</h3>
+                    <!-- The website account is optional and rare, so it hides behind this icon until staff need it. -->
+                    <button type="button" class="nb-ib" x-show="!account &amp;&amp; !linkOpen" @click="openLink()" title="Link a website account (optional)" aria-label="Link a website account (optional)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+                    </button>
+                  </div>
 
-                  <div class="nb-grid nb-grid--2">
+                  <div class="nb-grid nb-grid--3">
                     <div>
                       <label class="nb-label" for="nb-name">Customer's name <span class="nb-req">*</span></label>
                       <input class="nb-input" id="nb-name" type="text" maxlength="120" autocomplete="off" x-model="name" @input.debounce.500ms="loadHint()" placeholder="e.g. Maria Santos">
@@ -1238,6 +1364,10 @@
                     <div>
                       <label class="nb-label" for="nb-phone">Mobile number <span class="nb-req">*</span></label>
                       <input class="nb-input" id="nb-phone" type="tel" inputmode="numeric" maxlength="20" autocomplete="off" data-phone-digits x-model="phone" @input.debounce.500ms="loadHint()" placeholder="09171234567">
+                    </div>
+                    <div>
+                      <label class="nb-label" for="nb-address">Address <span class="nb-opt">(optional)</span></label>
+                      <input class="nb-input" id="nb-address" type="text" maxlength="255" autocomplete="off" x-model="address">
                     </div>
                   </div>
 
@@ -1252,213 +1382,333 @@
                     </div>
                   </template>
 
-                  <div class="nb-grid nb-grid--2" style="margin-top: 1rem;">
-                    <div>
-                      <label class="nb-label" for="nb-address">Address <span class="nb-help" style="display: inline;">(optional)</span></label>
-                      <input class="nb-input" id="nb-address" type="text" maxlength="255" autocomplete="off" x-model="address">
+                  <template x-if="account">
+                    <div class="nb-account" style="margin-top: .75rem;">
+                      <svg class="nb-account-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+                      <span>Website account: <strong x-text="account.name"></strong> <span x-text="'(' + account.email + ')'"></span></span>
+                      <details class="nb-tip" @click.outside="$el.removeAttribute('open')" @keydown.escape="$el.removeAttribute('open')">
+                        <summary aria-label="About the website account">?</summary>
+                        <div class="nb-tip-pop">The booking also shows on this customer's Reservations page on the website.</div>
+                      </details>
+                      <button type="button" class="nb-ib nb-ib--danger" style="margin-left: auto;" @click="clearAccount()" title="Unlink the website account" aria-label="Unlink the website account">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                      </button>
                     </div>
-                    <div>
-                      <label class="nb-label" for="nb-notebook">Notebook / paper number <span class="nb-help" style="display: inline;">(optional)</span></label>
-                      <input class="nb-input" id="nb-notebook" type="text" maxlength="30" autocomplete="off" x-model="notebook" placeholder="e.g. 0457">
-                      <p class="nb-help">Only if the shop also wrote it on paper. One number can't be used on two bookings. The booking number (RSV-…) is given automatically.</p>
+                  </template>
+                  <template x-if="!account &amp;&amp; linkOpen">
+                    <div style="margin-top: .75rem;" @keydown.escape="closeLink()">
+                      <div class="nb-lblrow">
+                        <label class="nb-label" for="nb-acc">Website account <span class="nb-opt">(optional)</span></label>
+                        <details class="nb-tip" @click.outside="$el.removeAttribute('open')" @keydown.escape.stop="$el.removeAttribute('open')">
+                          <summary aria-label="About the website account">?</summary>
+                          <div class="nb-tip-pop">Only if the customer already has an account on the website. The booking then also shows on their Reservations page. Most walk-ins have no account: leave this closed for them.</div>
+                        </details>
+                      </div>
+                      <div class="nb-inline">
+                        <input class="nb-input" id="nb-acc" type="search" autocomplete="off" x-model="accountQuery" @input.debounce.400ms="searchAccounts()" @keydown.enter.prevent placeholder="Search their name or email" aria-label="Search website accounts by name or email">
+                        <button type="button" class="nb-ib" @click="closeLink()" title="Close, no account" aria-label="Close, no account">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                        </button>
+                      </div>
+                      <div class="nb-results" x-show="accountResults.length">
+                        <template x-for="a in accountResults" :key="a.id">
+                          <button type="button" class="nb-result" @click="pickAccount(a)">
+                            <span><span class="nb-gname" x-text="a.name"></span><br><span class="nb-gmeta" x-text="a.email"></span></span>
+                          </button>
+                        </template>
+                      </div>
                     </div>
-                  </div>
-
-                  <div style="margin-top: 1rem;">
-                    <span class="nb-label">Website account <span class="nb-help" style="display: inline;">(optional)</span></span>
-                    <template x-if="account">
-                      <div class="nb-account">
-                        <span>Linked to <strong x-text="account.name"></strong> <span x-text="'(' + account.email + ')'"></span>. The booking also shows on this customer's Reservations page.</span>
-                        <button type="button" class="nb-btn--link" @click="clearAccount()">Remove</button>
-                      </div>
-                    </template>
-                    <template x-if="!account">
-                      <div>
-                        <input class="nb-input" type="search" autocomplete="off" x-model="accountQuery" @input.debounce.400ms="searchAccounts()" placeholder="Only if the customer already has an account: search their name or email" aria-label="Search website accounts">
-                        <p class="nb-help">Most walk-ins have no account. Leave this empty for them: the name and mobile number are enough.</p>
-                        <div class="nb-results" x-show="accountResults.length">
-                          <template x-for="a in accountResults" :key="a.id">
-                            <button type="button" class="nb-result" @click="pickAccount(a)">
-                              <span><span class="nb-gname" x-text="a.name"></span><br><span class="nb-gmeta" x-text="a.email"></span></span>
-                            </button>
-                          </template>
-                        </div>
-                      </div>
-                    </template>
-                  </div>
+                  </template>
                 </section>
 
-                <!-- ===== 2. Gown and dates ===== -->
+                <!-- ===== 2. Gowns: a short table; ONE row at a time opens into its editor ===== -->
                 <section class="nb-card" aria-labelledby="nb-step-2">
-                  <h3 class="nb-step" id="nb-step-2"><span class="nb-step-no">2</span>Gown and dates</h3>
+                  <div class="nb-card-head">
+                    <h3 class="nb-step" id="nb-step-2"><span class="nb-step-no">2</span>Gowns <span class="nb-count" x-show="chosenLines.length" x-text="chosenLines.length === 1 ? '1 gown' : chosenLines.length + ' gowns'"></span></h3>
+                    <button type="button" class="nb-ib nb-ib--primary" x-show="lines.length &lt; MAX_GOWNS" @click="addLine()" :disabled="!canAdd"
+                            :title="canAdd ? 'Add another gown' : 'Choose the gown and its event date first'" aria-label="Add another gown">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                    </button>
+                  </div>
+
+                  <div class="nb-thead" x-show="hasRows" aria-hidden="true">
+                    <span>#</span><span>Gown</span><span>Event date</span><span>Check</span><span class="nb-r">Rental</span><span></span>
+                  </div>
 
                   <template x-for="(line, index) in lines" :key="line.key">
-                    <div class="nb-line">
-                      <div class="nb-line-head">
-                        <span x-text="'Gown ' + (index + 1)"></span>
-                        <button type="button" class="nb-btn--danger-link" x-show="lines.length > 1" @click="removeLine(index)">Remove</button>
-                      </div>
-
-                      <template x-if="!line.gown">
-                        <div>
-                          <label class="nb-label" :for="'nb-gq-' + line.key">Find the gown the customer chose, by its ID, tag number or name <span class="nb-req">*</span></label>
-                          <input class="nb-input" :id="'nb-gq-' + line.key" type="search" autocomplete="off" x-model="line.query" @input.debounce.300ms="searchGowns(line)" placeholder="e.g. WH-003, 12, or Wedding Gown 3">
-                          <p class="nb-help" x-show="line.searching"><span class="nb-spinner"></span> Searching…</p>
-                          <div class="nb-results" x-show="line.results.length">
-                            <template x-for="g in line.results" :key="g.id">
-                              <button type="button" class="nb-result" :disabled="g.outOfStock || isChosenElsewhere(g.id, line)" @click="pickGown(line, g)">
-                                <template x-if="g.photo"><img class="nb-thumb" :src="g.photo" alt="" loading="lazy"></template>
-                                <template x-if="!g.photo"><span class="nb-thumb nb-thumb--empty"></span></template>
-                                <span style="min-width: 0;">
-                                  <span class="nb-gname" x-text="g.name"></span><br>
-                                  <span class="nb-gmeta">
-                                    <span x-text="g.gownId + ' · ' + g.size + ' · ' + g.color + ' · ' + g.price"></span><br>
-                                    <template x-if="g.tagColor"><span><span class="nb-tagdot" :style="'background:' + g.tagHex"></span><span x-text="g.tagColor + ' tag'"></span> · </span></template>
-                                    <span x-text="g.outOfStock ? 'Out-of-Stock (can\'t be booked)' : (isChosenElsewhere(g.id, line) ? 'Already in this booking' : g.status)"></span>
-                                  </span>
-                                </span>
-                              </button>
-                            </template>
+                    <div>
+                      <!-- the short row -->
+                      <template x-if="editKey !== line.key">
+                        <div class="nb-row" :class="stateOf(line).kind === 'no' &amp;&amp; 'nb-row--bad'">
+                          <div class="nb-c-no" x-text="index + 1"></div>
+                          <div class="nb-c-gown">
+                            <template x-if="line.gown &amp;&amp; line.gown.photo"><img class="nb-thumb nb-thumb--sm" :src="line.gown.photo" alt="" loading="lazy"></template>
+                            <template x-if="line.gown &amp;&amp; !line.gown.photo"><span class="nb-thumb nb-thumb--sm nb-thumb--empty"></span></template>
+                            <div style="min-width: 0;">
+                              <span class="nb-gname" x-text="line.gown ? line.gown.name : 'No gown chosen'"></span><br>
+                              <span class="nb-gmeta" x-show="line.gown">
+                                <span x-text="line.gown ? line.gown.gownId + ' · ' + line.gown.size + ' · ' + line.gown.color : ''"></span>
+                                <template x-if="line.gown &amp;&amp; line.gown.tagColor"><span class="nb-tagdot" :style="'background:' + line.gown.tagHex" :title="line.gown.tagColor + ' tag'"></span></template>
+                              </span>
+                            </div>
                           </div>
-                          <p class="nb-help" x-show="line.query.trim() && !line.searching && line.searched && !line.results.length">No gown matches that. Check the ID on the gown's tag.</p>
-                        </div>
-                      </template>
-
-                      <template x-if="line.gown">
-                        <div class="nb-chosen">
-                          <template x-if="line.gown.photo"><img class="nb-thumb" :src="line.gown.photo" alt=""></template>
-                          <template x-if="!line.gown.photo"><span class="nb-thumb nb-thumb--empty"></span></template>
-                          <div class="nb-chosen-body">
-                            <span class="nb-gname" x-text="line.gown.name"></span><br>
-                            <span class="nb-gmeta">
-                              <span x-text="line.gown.gownId + ' · ' + line.gown.size + ' · ' + line.gown.color + ' · ' + line.gown.price"></span>
-                              <template x-if="line.gown.tagColor"><span> · <span class="nb-tagdot" :style="'background:' + line.gown.tagHex"></span><span x-text="line.gown.tagColor + ' tag'"></span></span></template>
+                          <div class="nb-c-date">
+                            <span class="nb-dtext" x-text="rowDate(line)"></span>
+                            <span class="nb-gmeta nb-trip" x-show="rowTrip(line)" x-text="rowTrip(line)"></span>
+                          </div>
+                          <div class="nb-c-state">
+                            <span class="nb-st" :class="'nb-st--' + stateOf(line).kind" :title="stateOf(line).title" x-show="stateOf(line).kind !== 'none'">
+                              <span class="nb-spinner" x-show="stateOf(line).kind === 'wait'"></span>
+                              <svg x-show="stateOf(line).kind === 'ok'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+                              <svg x-show="stateOf(line).kind === 'no'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                              <span x-text="stateOf(line).text"></span>
                             </span>
                           </div>
-                          <button type="button" class="nb-btn nb-btn--ghost nb-btn--small" @click="changeGown(line)">Change</button>
-                        </div>
-                      </template>
-
-                      <div class="nb-grid nb-grid--2" style="margin-top: 1rem;">
-                        <div>
-                          <label class="nb-label" :for="'nb-ev-' + line.key">Event date <span class="nb-req">*</span></label>
-                          <input class="nb-input nb-datebtn" :id="'nb-ev-' + line.key" type="text" readonly inputmode="none" autocomplete="off"
-                                 :placeholder="line.gown ? 'Choose the event date' : 'Choose the gown first'" :value="eventLabel(line)" :disabled="!line.gown"
-                                 aria-haspopup="dialog" :aria-expanded="line.calOpen ? 'true' : 'false'"
-                                 @click="toggleCal(line, $event.target)" @keydown.enter.prevent="toggleCal(line, $event.target)"
-                                 @keydown.space.prevent="toggleCal(line, $event.target)" @keydown.down.prevent="openCal(line, $event.target)">
-                          <p class="nb-help">The day the customer wears it. Pick-up is planned up to 2 days before, and the return is 2 days after.</p>
-                          <div :id="'nb-cal-' + line.key" hidden></div>
-                        </div>
-                        <div>
-                          <label class="nb-check" style="margin-top: 1.6rem;"><input type="checkbox" x-model="line.takesNow" @change="closeCal(line); queueCheck(line, 0)"> Customer takes the gown now</label>
-                          <p class="nb-help">Tick this when the customer pays and leaves with the gown today. It's marked picked up right away.</p>
-                          {% if is_owner %}
-                          <div x-show="line.takesNow" x-cloak style="margin-top: .6rem;">
-                            <label class="nb-label" :for="'nb-pu-' + line.key">Picked up on</label>
-                            <input class="nb-input" :id="'nb-pu-' + line.key" type="date" :min="ownerMin" :max="TODAY" x-model="line.pickedUpOn" @change="closeCal(line); queueCheck(line, 0)">
-                            <p class="nb-help">Owner only: an earlier day records a walk-in that wasn't entered on the day.</p>
+                          <div class="nb-c-price nb-r" x-text="line.gown ? line.gown.price : ''"></div>
+                          <div class="nb-c-act">
+                            <button type="button" class="nb-ib" @click="openEditor(line)" :title="'Edit gown ' + (index + 1)" :aria-label="'Edit gown ' + (index + 1)">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                            </button>
+                            <button type="button" class="nb-ib nb-ib--danger" x-show="lines.length &gt; 1" @click="removeLine(index)" :title="'Remove gown ' + (index + 1)" :aria-label="'Remove gown ' + (index + 1)">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>
+                            </button>
                           </div>
-                          {% endif %}
+                          <p class="nb-c-why" x-show="failText(line)" x-text="failText(line)" role="alert"></p>
                         </div>
-                      </div>
+                      </template>
 
-                      <template x-if="line.checking">
-                        <div class="nb-verdict nb-verdict--wait" aria-live="polite"><span class="nb-spinner"></span> Checking the calendar…</div>
-                      </template>
-                      <template x-if="!line.checking && line.checkError">
-                        <div class="nb-verdict nb-verdict--no" role="alert" x-text="line.checkError"></div>
-                      </template>
-                      <template x-if="!line.checking && line.check">
-                        <div class="nb-verdict" :class="line.check.ok ? 'nb-verdict--ok' : 'nb-verdict--no'" aria-live="polite">
-                          <strong x-text="line.check.ok ? '✓ ' : '✕ '"></strong><span x-text="line.check.headline || line.check.message"></span>
-                          <template x-if="!line.check.ok && line.check.conflicts.length">
-                            <ul>
-                              <template x-for="c in line.check.conflicts" :key="c.text">
-                                <li>
-                                  <template x-if="c.url"><a :href="c.url" target="_blank" rel="noopener" style="color: inherit; text-decoration: underline;" x-text="c.text"></a></template>
-                                  <template x-if="!c.url"><span x-text="c.text"></span></template>
-                                </li>
-                              </template>
-                            </ul>
+                      <!-- the editor (only one is ever open) -->
+                      <template x-if="editKey === line.key">
+                        <div class="nb-edit" role="group" :aria-label="'Gown ' + (index + 1)">
+                          <div class="nb-edit-head">
+                            <span x-text="'Gown ' + (index + 1)"></span>
+                            <span class="nb-edit-actions">
+                              <button type="button" class="nb-ib nb-ib--primary" :disabled="!isComplete(line)" @click="finishEditor(line)"
+                                      :title="isComplete(line) ? 'Done' : 'Choose the gown and its event date first'" aria-label="Done">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+                              </button>
+                              <button type="button" class="nb-ib" @click="cancelEditor(line)" :title="line.snap ? 'Cancel the changes' : 'Discard this gown'" :aria-label="line.snap ? 'Cancel the changes' : 'Discard this gown'">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                              </button>
+                            </span>
+                          </div>
+
+                          <div class="nb-edit-grid">
+                            <div>
+                              <span class="nb-label" :id="'nb-gl-' + line.key">Gown <span class="nb-req">*</span>
+                                <details class="nb-tip" @click.outside="$el.removeAttribute('open')" @keydown.escape.stop="$el.removeAttribute('open')">
+                                  <summary aria-label="About choosing the gown">?</summary>
+                                  <div class="nb-tip-pop">The gown the customer chose. Open the list to browse every gown, or search it by its ID, tag number, name or color.</div>
+                                </details>
+                              </span>
+                              <!-- the gown picker: a dropdown of ALL gowns with its own search -->
+                              <div class="nb-pick" @click.outside="closePicker(line)">
+                                <button type="button" class="nb-pick-btn" :id="'nb-pb-' + line.key" aria-haspopup="listbox" :aria-expanded="line.pk.open ? 'true' : 'false'" :aria-labelledby="'nb-gl-' + line.key" @click="openPicker(line)">
+                                  <template x-if="line.gown &amp;&amp; line.gown.photo"><img class="nb-thumb nb-thumb--sm" :src="line.gown.photo" alt=""></template>
+                                  <template x-if="line.gown &amp;&amp; !line.gown.photo"><span class="nb-thumb nb-thumb--sm nb-thumb--empty"></span></template>
+                                  <span class="nb-pick-sel" x-show="line.gown">
+                                    <span class="nb-gname" x-text="line.gown ? line.gown.name : ''"></span><br>
+                                    <span class="nb-gmeta" x-text="line.gown ? line.gown.gownId + ' · ' + line.gown.size + ' · ' + line.gown.color + ' · ' + line.gown.price : ''"></span>
+                                  </span>
+                                  <span class="nb-pick-ph" x-show="!line.gown">Choose a gown…</span>
+                                  <svg class="nb-pick-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+                                </button>
+                                <div class="nb-pick-panel" x-show="line.pk.open" x-cloak role="dialog" aria-label="Choose a gown">
+                                  <div class="nb-pick-tools">
+                                    <input class="nb-input nb-input--sm" :id="'nb-pq-' + line.key" type="search" autocomplete="off" x-model="line.pk.q"
+                                           placeholder="Search by name, ID, tag number or color" aria-label="Search gowns"
+                                           @input.debounce.250ms="loadGowns(line, true)"
+                                           @keydown.arrow-down.prevent="moveActive(line, 1)" @keydown.arrow-up.prevent="moveActive(line, -1)"
+                                           @keydown.enter.prevent="pickActive(line)" @keydown.escape.stop="closePicker(line, true)">
+                                    <select class="nb-input nb-input--sm nb-cat" x-model="line.pk.category" @change="loadGowns(line, true)" aria-label="Filter by category">
+                                      <option value="">All categories</option>
+                                      <template x-for="c in CATEGORIES" :key="c"><option :value="c" x-text="c"></option></template>
+                                    </select>
+                                  </div>
+                                  <div class="nb-pick-list" role="listbox" @scroll.passive="onPickScroll(line, $event)">
+                                    <template x-for="(g, i) in line.pk.results" :key="g.id">
+                                      <div role="presentation">
+                                        <div class="nb-pick-cat" x-show="startsCategory(line, i)" x-text="g.category"></div>
+                                        <button type="button" role="option" class="nb-result" :id="'nb-pi-' + line.key + '-' + i" :class="line.pk.active === i &amp;&amp; 'is-active'"
+                                                :aria-selected="line.pk.active === i ? 'true' : 'false'" :disabled="!canPick(g, line)" @mousemove="line.pk.active = i" @click="pickGown(line, g)">
+                                          <template x-if="g.photo"><img class="nb-thumb" :src="g.photo" alt="" loading="lazy"></template>
+                                          <template x-if="!g.photo"><span class="nb-thumb nb-thumb--empty"></span></template>
+                                          <span style="min-width: 0;">
+                                            <span class="nb-gname" x-text="g.name"></span><br>
+                                            <span class="nb-gmeta">
+                                              <span x-text="g.gownId + ' · ' + g.size + ' · ' + g.color + ' · ' + g.price"></span><br>
+                                              <template x-if="g.tagColor"><span><span class="nb-tagdot" :style="'background:' + g.tagHex"></span><span x-text="g.tagColor + ' tag'"></span> · </span></template>
+                                              <span x-text="g.outOfStock ? 'Out-of-Stock (can\'t be booked)' : (isChosenElsewhere(g.id, line) ? 'Already in this booking' : g.status)"></span>
+                                            </span>
+                                          </span>
+                                        </button>
+                                      </div>
+                                    </template>
+                                    <p class="nb-pick-msg" x-show="line.pk.loading"><span class="nb-spinner"></span> Loading gowns…</p>
+                                    <p class="nb-pick-msg" x-show="!line.pk.loading &amp;&amp; line.pk.loaded &amp;&amp; !line.pk.failed &amp;&amp; !line.pk.results.length">No gown matches that. Check the ID on the gown's tag, or clear the search.</p>
+                                    <p class="nb-pick-msg nb-pick-msg--no" x-show="line.pk.failed" role="alert">The gowns could not be loaded. Close this list and open it again.</p>
+                                    <button type="button" class="nb-pick-more" x-show="line.pk.more &amp;&amp; !line.pk.loading" @click="loadGowns(line, false)">Show more gowns</button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div>
+                              <div class="nb-lblrow">
+                                <label class="nb-label" :for="'nb-ev-' + line.key">Event date <span class="nb-req">*</span></label>
+                                <details class="nb-tip nb-tip--right" @click.outside="$el.removeAttribute('open')" @keydown.escape.stop="$el.removeAttribute('open')">
+                                  <summary aria-label="About the event date">?</summary>
+                                  <div class="nb-tip-pop">The day the customer wears it. Pick-up is planned up to 2 days before, and the return is 2 days after.</div>
+                                </details>
+                              </div>
+                              <input class="nb-input nb-datebtn" :id="'nb-ev-' + line.key" type="text" readonly inputmode="none" autocomplete="off"
+                                     :placeholder="line.gown ? 'Choose the event date' : 'Choose the gown first'" :value="eventLabel(line)" :disabled="!line.gown"
+                                     aria-haspopup="dialog" :aria-expanded="line.calOpen ? 'true' : 'false'"
+                                     @click="toggleCal(line, $event.target)" @keydown.enter.prevent="toggleCal(line, $event.target)"
+                                     @keydown.space.prevent="toggleCal(line, $event.target)" @keydown.down.prevent="openCal(line, $event.target)">
+                              <div :id="'nb-cal-' + line.key" hidden></div>
+                            </div>
+                          </div>
+
+                          <div class="nb-edit-opts">
+                            <div class="nb-lblrow" style="margin: 0;">
+                              <label class="nb-check"><input type="checkbox" x-model="line.takesNow" @change="closeCal(line); queueCheck(line, 0)"> Customer takes the gown now</label>
+                              <details class="nb-tip" @click.outside="$el.removeAttribute('open')" @keydown.escape.stop="$el.removeAttribute('open')">
+                                <summary aria-label="About taking the gown now">?</summary>
+                                <div class="nb-tip-pop">Tick this when the customer pays and leaves with the gown today. It's marked picked up right away.</div>
+                              </details>
+                            </div>
+                            {% if is_owner %}
+                            <div x-show="line.takesNow" x-cloak>
+                              <div class="nb-lblrow">
+                                <label class="nb-label" :for="'nb-pu-' + line.key">Picked up on</label>
+                                <details class="nb-tip" @click.outside="$el.removeAttribute('open')" @keydown.escape.stop="$el.removeAttribute('open')">
+                                  <summary aria-label="About the pick-up day">?</summary>
+                                  <div class="nb-tip-pop">Owner only: an earlier day records a walk-in that wasn't entered on the day.</div>
+                                </details>
+                              </div>
+                              <input class="nb-input" :id="'nb-pu-' + line.key" type="date" :min="ownerMin" :max="TODAY" x-model="line.pickedUpOn" @change="closeCal(line); queueCheck(line, 0)">
+                            </div>
+                            {% endif %}
+                          </div>
+
+                          <template x-if="line.checking">
+                            <div class="nb-verdict nb-verdict--wait" aria-live="polite"><span class="nb-spinner"></span> Checking the calendar…</div>
                           </template>
-                          <div class="nb-verdict-actions" x-show="!line.check.ok && (line.check.nextFree || line.check.alternatives.length)">
-                            <template x-if="line.check.nextFree">
-                              <button type="button" class="nb-btn nb-btn--ghost nb-btn--small" @click="useDate(line, line.check.nextFree)" x-text="'Use the next free date: ' + line.check.nextFreeText"></button>
-                            </template>
-                            <template x-for="alt in line.check.alternatives" :key="alt.id">
-                              <button type="button" class="nb-btn nb-btn--ghost nb-btn--small" :disabled="isChosenElsewhere(alt.id, line)" @click="pickGown(line, alt)" x-text="'Use ' + alt.gownId + ' (' + alt.size + '), free on this date'"></button>
-                            </template>
-                          </div>
+                          <template x-if="!line.checking &amp;&amp; line.checkError">
+                            <div class="nb-verdict nb-verdict--no" role="alert" x-text="line.checkError"></div>
+                          </template>
+                          <template x-if="!line.checking &amp;&amp; line.check">
+                            <div class="nb-verdict" :class="line.check.ok ? 'nb-verdict--ok' : 'nb-verdict--no'" aria-live="polite">
+                              <strong x-text="line.check.ok ? '✓ ' : '✕ '"></strong><span x-text="line.check.headline || line.check.message"></span>
+                              <template x-if="!line.check.ok &amp;&amp; line.check.conflicts.length">
+                                <ul>
+                                  <template x-for="c in line.check.conflicts" :key="c.text">
+                                    <li>
+                                      <template x-if="c.url"><a :href="c.url" target="_blank" rel="noopener" style="color: inherit; text-decoration: underline;" x-text="c.text"></a></template>
+                                      <template x-if="!c.url"><span x-text="c.text"></span></template>
+                                    </li>
+                                  </template>
+                                </ul>
+                              </template>
+                              <div class="nb-verdict-actions" x-show="!line.check.ok &amp;&amp; (line.check.nextFree || line.check.alternatives.length)">
+                                <template x-if="line.check.nextFree">
+                                  <button type="button" class="nb-btn nb-btn--ghost nb-btn--small" @click="useDate(line, line.check.nextFree)" x-text="'Use the next free date: ' + line.check.nextFreeText"></button>
+                                </template>
+                                <template x-for="alt in line.check.alternatives" :key="alt.id">
+                                  <button type="button" class="nb-btn nb-btn--ghost nb-btn--small" :disabled="isChosenElsewhere(alt.id, line)" @click="pickGown(line, alt)" x-text="'Use ' + alt.gownId + ' (' + alt.size + '), free on this date'"></button>
+                                </template>
+                              </div>
+                            </div>
+                          </template>
                         </div>
                       </template>
                     </div>
                   </template>
-
-                  <button type="button" class="nb-btn nb-btn--ghost" @click="addLine()" x-show="lines.length < MAX_GOWNS">+ Add another gown</button>
                 </section>
 
                 <!-- ===== 3. Payment ===== -->
                 <section class="nb-card" aria-labelledby="nb-step-3">
                   <h3 class="nb-step" id="nb-step-3"><span class="nb-step-no">3</span>Payment</h3>
 
-                  <table class="nb-sum">
-                    <tbody>
-                      <template x-for="line in chosenLines" :key="'sum-' + line.key">
-                        <tr><td x-text="line.gown.name + ' (' + line.gown.gownId + ')'"></td><td x-text="line.gown.price"></td></tr>
-                      </template>
-                      <tr x-show="!chosenLines.length"><td colspan="2" style="color: #98a2b3;">Choose a gown above to see the amounts.</td></tr>
-                      <tr><td>Rental</td><td x-text="peso(rentalTotal)"></td></tr>
-                      <tr><td x-text="'Security deposit (' + peso(DEPOSIT) + ' per gown)'"></td><td x-text="peso(depositTotal)"></td></tr>
-                      <tr class="nb-sum-total"><td>Total</td><td x-text="peso(rentalTotal + depositTotal)"></td></tr>
-                      <tr x-show="payment === 'deposit'" x-cloak><td>Paid now (the deposit)</td><td x-text="peso(depositTotal)"></td></tr>
-                      <tr x-show="payment === 'deposit'" x-cloak><td>Still to pay (the rental)</td><td x-text="peso(rentalTotal)"></td></tr>
-                    </tbody>
-                  </table>
-
-                  <div style="margin-top: 1.1rem;">
-                    <span class="nb-label" id="nb-paid-label">Payment <span class="nb-req">*</span></span>
-                    <div class="nb-seg" role="radiogroup" aria-labelledby="nb-paid-label">
-                      <label :class="payment === 'full' && 'is-on'"><input type="radio" name="nb-payment" value="full" x-model="payment"> Paid in full</label>
-                      <label :class="payment === 'deposit' && 'is-on'"><input type="radio" name="nb-payment" value="deposit" x-model="payment"> Deposit only</label>
-                    </div>
-                    <p class="nb-help" x-show="payment === 'full'">The rental and the deposit were paid. The booking is confirmed straight away. Attach the shop's receipt below.</p>
-                    <p class="nb-help" x-show="payment === 'deposit'">Only the deposit was paid. The booking is confirmed straight away. Attach the deposit receipt below, and upload the rental receipt later in Reservation Records.</p>
-                    <p class="nb-hint" x-show="payment === 'deposit' && anyTakesNow">A gown can only leave the shop once the rental is paid. Choose "Paid in full", or untick "Customer takes the gown now".</p>
-                  </div>
-
-                  <div x-show="payment !== ''" x-cloak style="margin-top: 1.1rem;">
-                    <span class="nb-label">The shop's receipt <span class="nb-req">*</span></span>
-                    <template x-for="(rc, rIndex) in receipts" :key="rc.key">
-                      <div class="nb-receipt">
-                        <template x-if="rc.preview"><img :src="rc.preview" alt="Receipt photo"></template>
-                        <template x-if="rc.preparing"><span class="nb-help"><span class="nb-spinner"></span> Preparing photo…</span></template>
-                        <div style="flex: 1 1 12rem; min-width: 0;">
-                          <p class="nb-gmeta" style="margin: 0; overflow-wrap: anywhere;" x-text="rc.name"></p>
-                        </div>
-                        <button type="button" class="nb-btn--danger-link" @click="removeReceipt(rIndex)">Remove</button>
+                  <div class="nb-pay">
+                    <div class="nb-pay-main">
+                      <span class="nb-label" id="nb-paid-label">Payment <span class="nb-req">*</span>
+                        <details class="nb-tip" @click.outside="$el.removeAttribute('open')" @keydown.escape.stop="$el.removeAttribute('open')">
+                          <summary aria-label="About the payment choices">?</summary>
+                          <div class="nb-tip-pop"><strong>Paid in full:</strong> the rental and the deposit were paid.<br><strong>Deposit only:</strong> only the deposit was paid; upload the rental receipt later in Reservation Records.<br>Either way the booking is confirmed straight away.</div>
+                        </details>
+                      </span>
+                      <div class="nb-seg" role="radiogroup" aria-labelledby="nb-paid-label">
+                        <label :class="payment === 'full' &amp;&amp; 'is-on'"><input type="radio" name="nb-payment" value="full" x-model="payment"> Paid in full</label>
+                        <label :class="payment === 'deposit' &amp;&amp; 'is-on'"><input type="radio" name="nb-payment" value="deposit" x-model="payment"> Deposit only</label>
                       </div>
-                    </template>
-                    <input type="file" class="nb-hidden" x-ref="nbReceiptFile" accept="image/png,image/jpeg,image/webp" @change="pickReceipt($event)">
-                    <input type="file" class="nb-hidden" x-ref="nbReceiptCamera" accept="image/png,image/jpeg,image/webp" capture="environment" @change="pickReceipt($event)">
-                    <div class="nb-actions" style="justify-content: flex-start;" x-show="receipts.length < MAX_RECEIPTS">
-                      <button type="button" class="nb-btn nb-btn--ghost nb-btn--small" @click="$refs.nbReceiptCamera.click()">Take photo</button>
-                      <button type="button" class="nb-btn nb-btn--ghost nb-btn--small" @click="$refs.nbReceiptFile.click()">Choose from gallery</button>
-                    </div>
-                    <p class="nb-help">One photo. It is saved as the <span x-text="payment === 'full' ? 'Paid in full' : 'Deposit'"></span> receipt. The same photo can't be used for two bookings.</p>
-                  </div>
+                      <p class="nb-hint" x-show="payment === 'deposit' &amp;&amp; anyTakesNow">A gown can only leave the shop once the rental is paid. Choose "Paid in full", or untick "Customer takes the gown now".</p>
 
-                  <div style="margin-top: 1.1rem;">
-                    <label class="nb-label" for="nb-note">Note <span class="nb-help" style="display: inline;">(optional, staff only)</span></label>
-                    <textarea class="nb-input" id="nb-note" maxlength="{{ note_max }}" rows="2" x-model="note" placeholder="e.g. Customer will pay the rental on pick-up day"></textarea>
+                      <div x-show="payment !== ''" x-cloak style="margin-top: .9rem;">
+                        <span class="nb-label">The shop's receipt <span class="nb-req">*</span>
+                          <details class="nb-tip" @click.outside="$el.removeAttribute('open')" @keydown.escape.stop="$el.removeAttribute('open')">
+                            <summary aria-label="About the receipt">?</summary>
+                            <div class="nb-tip-pop">One photo of the shop's receipt. It is saved as the <span x-text="payment === 'full' ? 'Paid in full' : 'Deposit'"></span> receipt. The same photo can't be used for two bookings.</div>
+                          </details>
+                        </span>
+                        <template x-for="(rc, rIndex) in receipts" :key="rc.key">
+                          <div class="nb-receipt">
+                            <template x-if="rc.preview"><img :src="rc.preview" alt="Receipt photo"></template>
+                            <template x-if="rc.preparing"><span class="nb-help"><span class="nb-spinner"></span> Preparing photo…</span></template>
+                            <div style="flex: 1 1 8rem; min-width: 0;">
+                              <p class="nb-gmeta" style="margin: 0; overflow-wrap: anywhere;" x-text="rc.name"></p>
+                            </div>
+                            <button type="button" class="nb-ib nb-ib--danger" @click="removeReceipt(rIndex)" title="Remove this photo" aria-label="Remove this photo">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>
+                            </button>
+                          </div>
+                        </template>
+                        <input type="file" class="nb-hidden" x-ref="nbReceiptFile" accept="image/png,image/jpeg,image/webp" @change="pickReceipt($event)">
+                        <input type="file" class="nb-hidden" x-ref="nbReceiptCamera" accept="image/png,image/jpeg,image/webp" capture="environment" @change="pickReceipt($event)">
+                        <div class="nb-actions" style="justify-content: flex-start;" x-show="receipts.length &lt; MAX_RECEIPTS">
+                          <button type="button" class="nb-ib" @click="$refs.nbReceiptCamera.click()" title="Take a photo of the receipt" aria-label="Take a photo of the receipt">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                          </button>
+                          <button type="button" class="nb-ib" @click="$refs.nbReceiptFile.click()" title="Choose the receipt photo from the gallery" aria-label="Choose the receipt photo from the gallery">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style="margin-top: .9rem;">
+                        <label class="nb-label" for="nb-note">Note <span class="nb-opt">(optional, staff only)</span></label>
+                        <textarea class="nb-input" id="nb-note" maxlength="{{ note_max }}" rows="2" x-model="note" placeholder="e.g. Customer will pay the rental on pick-up day"></textarea>
+                      </div>
+                    </div>
+
+                    <aside class="nb-pay-sum" aria-label="Amounts">
+                      <table class="nb-sum">
+                        <tbody>
+                          <template x-for="line in chosenLines" :key="'sum-' + line.key">
+                            <tr><td x-text="line.gown.name + ' (' + line.gown.gownId + ')'"></td><td x-text="line.gown.price"></td></tr>
+                          </template>
+                          <tr x-show="!chosenLines.length"><td colspan="2" style="color: #98a2b3;">No gown chosen yet.</td></tr>
+                          <tr><td>Rental</td><td x-text="peso(rentalTotal)"></td></tr>
+                          <tr><td x-text="'Security deposit (' + peso(DEPOSIT) + ' per gown)'"></td><td x-text="peso(depositTotal)"></td></tr>
+                          <tr class="nb-sum-total"><td>Total</td><td x-text="peso(rentalTotal + depositTotal)"></td></tr>
+                          <tr x-show="payment === 'deposit'" x-cloak><td>Paid now (the deposit)</td><td x-text="peso(depositTotal)"></td></tr>
+                          <tr x-show="payment === 'deposit'" x-cloak><td>Still to pay (the rental)</td><td x-text="peso(rentalTotal)"></td></tr>
+                        </tbody>
+                      </table>
+                    </aside>
                   </div>
                 </section>
 
                 <p class="nb-error" x-show="error" x-cloak x-text="error" role="alert"></p>
                 <div class="nb-actions" style="margin-bottom: 1.5rem;">
-                  <a class="nb-btn nb-btn--ghost" href="{% url 'arabela_admin:active_reservations' %}">Cancel</a>
+                  <a class="nb-btn nb-btn--ghost" href="{% url 'arabela_admin:active_reservations' %}">
+                    <svg class="nb-btn-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                    Cancel
+                  </a>
                   <button type="submit" class="nb-btn nb-btn--primary" :disabled="saving">
                     <span x-show="saving" x-cloak class="nb-spinner"></span>
+                    <svg x-show="!saving" class="nb-btn-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
                     <span x-text="saving ? 'Saving…' : 'Save booking'"></span>
                   </button>
                 </div>
@@ -1472,6 +1722,7 @@
       <!-- ===== Content Area End ===== -->
     </div>
     <!-- ===== Page Wrapper End ===== -->
+  {{ gown_categories|json_script:"nb-categories" }}
   <script>
     // New Booking: a walk-in booking recorded by staff. Every rule is checked again by the server
     // (arabela_admin/new_booking.py -> reservations/staff_booking.py); this page is the friendly front of it.
@@ -1488,6 +1739,9 @@
       var TODAY = '{{ today_iso }}';
       var IS_OWNER = {{ is_owner|yesno:"true,false" }};
       var BACKDATE_DAYS = {{ owner_backdate_days }};
+      var PICK_PAGE = 30;                      // gowns the picker asks for at a time
+      var CATEGORIES = [];
+      try { CATEGORIES = JSON.parse(document.getElementById('nb-categories').textContent) || []; } catch (e) { CATEGORIES = []; }
       var keySeq = 0;
 
       function isoDay(d) {
@@ -1499,11 +1753,26 @@
         d.setDate(d.getDate() - days);
         return isoDay(d);
       }
+      function shortDay(iso) {
+        var p = String(iso || '').split('-');
+        if (p.length !== 3) { return ''; }
+        return new Date(Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2]))).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+      }
+      function shortMD(iso) {                    // "Dec 6": the year is already in the date above it
+        var p = String(iso || '').split('-');
+        if (p.length !== 3) { return ''; }
+        return new Date(Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2]))).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+      }
+      // One gown picker's own state: the dropdown list, its search, its category filter and where it has got to.
+      function newPicker() {
+        return { open: false, q: '', category: '', results: [], loading: false, more: false, loaded: false, failed: false, browse: true, seq: 0, active: -1 };
+      }
       function newLine() {
         return {
-          key: ++keySeq, query: '', results: [], searching: false, searched: false, searchSeq: 0,
-          gown: null, event: '', takesNow: false, pickedUpOn: TODAY, calOpen: false,
-          check: null, checking: false, checkError: '', checkSeq: 0, timer: null
+          key: ++keySeq, gown: null, event: '', takesNow: false, pickedUpOn: TODAY, calOpen: false,
+          check: null, checking: false, checkError: '', checkSeq: 0, timer: null,
+          snap: null,                          // what the row looked like when its editor opened (so the X can put it back)
+          pk: newPicker()
         };
       }
       function getJSON(url) {
@@ -1519,19 +1788,23 @@
         return (err && err.message) || fallback;
       }
 
+      var firstLine = newLine();
+
       return {
         MAX_GOWNS: {{ max_gowns }},
         MAX_RECEIPTS: {{ max_receipts }},
         DEPOSIT: {{ deposit_per_gown }},
         TODAY: TODAY,
         IS_OWNER: IS_OWNER,
+        CATEGORIES: CATEGORIES,
         ownerMin: daysBefore(TODAY, BACKDATE_DAYS),
 
         channel: 'Walk-in',
-        name: '', phone: '', address: '', notebook: '',
-        account: null, accountQuery: '', accountResults: [], accountSeq: 0,
+        name: '', phone: '', address: '',
+        account: null, accountQuery: '', accountResults: [], accountSeq: 0, linkOpen: false,
         hint: [], hintSeq: 0,
-        lines: [newLine()],
+        lines: [firstLine],
+        editKey: firstLine.key,                // the one gown row that is open as an editor (0 = none)
         payment: '', receipts: [], note: '',
         saving: false, error: '', saved: null,
 
@@ -1539,6 +1812,13 @@
         get anyTakesNow() { return this.lines.some(function (l) { return l.takesNow; }); },
         get rentalTotal() { return this.chosenLines.reduce(function (sum, l) { return sum + l.gown.priceValue; }, 0); },
         get depositTotal() { return this.chosenLines.length * this.DEPOSIT; },
+        get editingLine() { var key = this.editKey; return this.lines.find(function (l) { return l.key === key; }) || null; },
+        get hasRows() { var key = this.editKey; return this.lines.some(function (l) { return l.key !== key; }); },
+        get canAdd() {
+          if (this.lines.length >= this.MAX_GOWNS) { return false; }
+          var open = this.editingLine;
+          return !open || this.isComplete(open);
+        },
         peso: function (n) { return '₱' + Number(n || 0).toLocaleString('en-PH', { maximumFractionDigits: 2 }); },
 
         // A planned pick-up can't be in the past; the owner may record a walk-in who already took the gown up to
@@ -1550,11 +1830,11 @@
           var params = new URLSearchParams(window.location.search);
           var gownId = params.get('gown'), event = params.get('event') || '';
           if (!gownId) { return; }
-          var line = this.lines[0];
+          var line = this.lines[0], self = this;
           if (/^\d{4}-\d{2}-\d{2}$/.test(event)) { line.event = event; }
           getJSON(URLS.check + '?' + new URLSearchParams({ gown: gownId, event: line.event || TODAY })).then(function (data) {
             line.gown = data.gown;
-            if (line.event) { line.check = data; }
+            if (line.event) { line.check = data; self.finishEditor(line); }      // gown AND date are known: show it as a finished row
           }).catch(function () { /* the gown is simply not pre-filled */ });
         },
 
@@ -1567,6 +1847,12 @@
             if (seq === self.hintSeq) { self.hint = data.results || []; }
           }).catch(function () { /* only a hint */ });
         },
+        // The website account is optional: it stays closed behind an icon until staff ask for it.
+        openLink: function () {
+          this.linkOpen = true;
+          this.$nextTick(function () { var el = document.getElementById('nb-acc'); if (el) { el.focus(); } });
+        },
+        closeLink: function () { this.linkOpen = false; this.accountQuery = ''; this.accountResults = []; ++this.accountSeq; },
         searchAccounts: function () {
           var q = this.accountQuery.trim();
           if (q.length < 2) { this.accountResults = []; return; }
@@ -1576,42 +1862,166 @@
           }).catch(function () { self.accountResults = []; });
         },
         pickAccount: function (a) {
-          this.account = a; this.accountResults = []; this.accountQuery = '';
+          this.account = a; this.accountResults = []; this.accountQuery = ''; this.linkOpen = false;
           if (!this.name.trim()) { this.name = a.name; this.loadHint(); }
         },
-        clearAccount: function () { this.account = null; },
+        clearAccount: function () { this.account = null; this.linkOpen = false; },
 
-        // ---- gowns ----
+        // ---- gowns: a short table; one row at a time opens into its editor ----
+        isComplete: function (line) { return !!(line && line.gown && line.event); },
         isChosenElsewhere: function (gownId, line) {
           return this.lines.some(function (l) { return l !== line && l.gown && l.gown.id === gownId; });
         },
-        searchGowns: function (line) {
-          var q = line.query.trim();
-          if (!q) { line.results = []; line.searched = false; return; }
-          var seq = ++line.searchSeq;
-          line.searching = true;
-          getJSON(URLS.gowns + '?' + new URLSearchParams({ q: q })).then(function (data) {
-            if (seq !== line.searchSeq) { return; }
-            line.results = data.results || []; line.searched = true; line.searching = false;
+        canPick: function (g, line) { return !g.outOfStock && !this.isChosenElsewhere(g.id, line); },
+
+        openEditor: function (line) {
+          var current = this.editingLine;
+          if (current && current.key !== line.key) { this.closeOpenEditor(); }
+          line.snap = this.isComplete(line) ? { gown: line.gown, event: line.event, takesNow: line.takesNow, pickedUpOn: line.pickedUpOn } : null;
+          line.pk.open = false;
+          this.editKey = line.key;
+        },
+        closeOpenEditor: function () {
+          var open = this.editingLine;
+          if (!open) { return; }
+          if (this.isComplete(open)) { this.finishEditor(open); } else { this.cancelEditor(open); }
+        },
+        // The check mark: keep what was chosen and show the short row.
+        finishEditor: function (line) {
+          this.closeCal(line); this.closePicker(line);
+          line.snap = null;
+          if (this.editKey === line.key) { this.editKey = 0; }
+        },
+        // The X: put the row back as it was, or throw away a gown that was never finished.
+        cancelEditor: function (line) {
+          this.closeCal(line); this.closePicker(line);
+          var snap = line.snap;
+          if (snap) {
+            line.gown = snap.gown; line.event = snap.event; line.takesNow = snap.takesNow; line.pickedUpOn = snap.pickedUpOn;
+            line.snap = null;
+            if (this.editKey === line.key) { this.editKey = 0; }
+            this.queueCheck(line, 0);
+          } else {
+            this.discardLine(line);
+          }
+        },
+        discardLine: function (line) {
+          clearTimeout(line.timer); ++line.checkSeq;
+          if (this.lines.length > 1) {
+            var at = this.lines.findIndex(function (l) { return l.key === line.key; });
+            if (at !== -1) { this.lines.splice(at, 1); }
+            if (this.editKey === line.key) { this.editKey = 0; }
+          } else {                                                   // the only gown: empty it and keep the editor open
+            line.gown = null; line.event = ''; line.takesNow = false; line.pickedUpOn = TODAY;
+            line.check = null; line.checking = false; line.checkError = ''; line.snap = null;
+            this.editKey = line.key;
+          }
+        },
+        addLine: function () {
+          if (!this.canAdd) { return; }
+          var open = this.editingLine;
+          if (open) { this.finishEditor(open); }
+          this.lines.push(newLine());
+          var line = this.lines[this.lines.length - 1];                  // the page's own (reactive) copy of the new gown, not the plain object
+          this.openEditor(line);
+          var self = this;
+          this.$nextTick(function () { self.openPicker(line); });        // a new gown starts at the list, ready to choose
+        },
+        removeLine: function (index) {
+          var line = this.lines[index];
+          if (!line) { return; }
+          this.closeCal(line); this.closePicker(line);
+          clearTimeout(line.timer); ++line.checkSeq;
+          if (this.editKey === line.key) { this.editKey = 0; }
+          this.lines.splice(index, 1);
+        },
+        useDate: function (line, iso) { line.event = iso; this.runCheck(line); },
+
+        // What the short row shows.
+        rowDate: function (line) { return line.event ? shortDay(line.event) : '—'; },
+        rowTrip: function (line) {
+          var c = line.check;
+          if (!c || !c.ok || line.checking) { return ''; }
+          return (c.pickup ? 'Pick-up ' + shortMD(c.pickup) + ' · ' : '') + 'Return ' + shortMD(c.returnDate);
+        },
+        stateOf: function (line) {
+          if (line.checking) { return { kind: 'wait', text: 'Checking', title: 'Checking the calendar…' }; }
+          if (line.checkError) { return { kind: 'no', text: 'No answer', title: line.checkError }; }
+          if (line.check) {
+            var message = line.check.headline || line.check.message || '';
+            return line.check.ok ? { kind: 'ok', text: 'Free', title: message } : { kind: 'no', text: 'Not free', title: message };
+          }
+          return { kind: 'none', text: '', title: '' };
+        },
+        failText: function (line) {
+          if (line.checking) { return ''; }
+          if (line.checkError) { return line.checkError; }
+          if (line.check && !line.check.ok) { return (line.check.headline || line.check.message || '') + ' Edit the gown to see the free dates.'; }
+          return '';
+        },
+
+        // ---- the gown picker: a dropdown of ALL gowns, with its own search and category filter ----
+        openPicker: function (line) {
+          if (line.pk.open) { this.closePicker(line, true); return; }
+          this.closeCal(line);
+          line.pk.open = true; line.pk.active = -1;
+          if (!line.pk.loaded) { this.loadGowns(line, true); }
+          var key = line.key;
+          this.$nextTick(function () { var el = document.getElementById('nb-pq-' + key); if (el) { el.focus(); } });
+        },
+        closePicker: function (line, refocus) {
+          if (!line || !line.pk.open) { return; }
+          line.pk.open = false;
+          if (refocus) {
+            var key = line.key;
+            this.$nextTick(function () { var el = document.getElementById('nb-pb-' + key); if (el) { el.focus(); } });
+          }
+        },
+        loadGowns: function (line, reset) {
+          var pk = line.pk;
+          if (!reset && (pk.loading || !pk.more)) { return; }
+          if (reset) { pk.results = []; pk.more = false; pk.active = -1; pk.failed = false; }
+          var offset = pk.results.length, seq = ++pk.seq, text = pk.q.trim();
+          pk.loading = true;
+          getJSON(URLS.gowns + '?' + new URLSearchParams({ q: text, category: pk.category, offset: offset, limit: PICK_PAGE })).then(function (data) {
+            if (seq !== pk.seq) { return; }
+            pk.results = pk.results.concat(data.results || []);
+            pk.more = !!data.hasMore; pk.browse = !text; pk.loading = false; pk.loaded = true; pk.failed = false;
           }).catch(function () {
-            if (seq !== line.searchSeq) { return; }
-            line.results = []; line.searched = true; line.searching = false;
+            if (seq !== pk.seq) { return; }
+            pk.loading = false; pk.more = false; pk.loaded = true; pk.failed = true;
           });
+        },
+        onPickScroll: function (line, event) {
+          var el = event.target;
+          if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) { this.loadGowns(line, false); }
+        },
+        startsCategory: function (line, i) {
+          var list = line.pk.results;
+          return line.pk.browse && (i === 0 || list[i - 1].category !== list[i].category);
+        },
+        moveActive: function (line, step) {
+          var count = line.pk.results.length;
+          if (!count) { return; }
+          var next = line.pk.active < 0 ? (step > 0 ? 0 : count - 1) : Math.max(0, Math.min(count - 1, line.pk.active + step));
+          line.pk.active = next;
+          var el = document.getElementById('nb-pi-' + line.key + '-' + next);
+          this.$nextTick(function () { if (el) { el.scrollIntoView({ block: 'nearest' }); } });
+          if (next >= count - 3) { this.loadGowns(line, false); }
+        },
+        pickActive: function (line) {
+          var g = line.pk.results[line.pk.active];
+          if (g && this.canPick(g, line)) { this.pickGown(line, g); }
         },
         pickGown: function (line, gown) {
           this.closeCal(line);
-          line.gown = gown; line.results = []; line.query = ''; line.searched = false;
+          line.gown = gown; line.pk.open = false; line.pk.active = -1;
           this.queueCheck(line, 0);
+          if (!line.event) {                                           // the date is the next thing to choose
+            var key = line.key;
+            this.$nextTick(function () { var el = document.getElementById('nb-ev-' + key); if (el) { el.focus(); } });
+          }
         },
-        changeGown: function (line) {
-          this.closeCal(line);
-          line.gown = null; line.check = null; line.checkError = '';
-          var key = line.key;
-          this.$nextTick(function () { var el = document.getElementById('nb-gq-' + key); if (el) { el.focus(); } });
-        },
-        addLine: function () { if (this.lines.length < this.MAX_GOWNS) { this.lines.push(newLine()); } },
-        removeLine: function (index) { this.closeCal(this.lines[index]); this.lines.splice(index, 1); },
-        useDate: function (line, iso) { line.event = iso; this.runCheck(line); },
 
         // ---- the event-date calendar (static/js/availability-calendar.js): one month of THIS gown, read from the server ----
         eventLabel: function (line) {
@@ -1626,6 +2036,7 @@
         openCal: function (line, anchor) {
           var cal = window.arabelaAvailabilityCalendar, root = this.calRoot(line), self = this;
           if (!cal || !root || !line.gown) { return; }
+          this.closePicker(line);
           cal.open(root, {
             anchor: anchor,
             today: TODAY,
@@ -1724,12 +2135,12 @@
           var problems = this.problems();
           if (problems.length) { this.error = problems.join(' '); return; }
           this.error = '';
+          this.closeOpenEditor();                                      // every gown is complete here, so this just closes the open row
           var form = new FormData();
           form.append('channel', this.channel);
           form.append('name', this.name);
           form.append('phone', this.phone);
           form.append('address', this.address);
-          form.append('notebook_number', this.notebook);
           form.append('account', this.account ? this.account.id : '');
           form.append('lines', JSON.stringify(this.lines.map(function (l) {
             return {
