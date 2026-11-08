@@ -1666,6 +1666,15 @@ def gown_catalog_view(request):
     )
 
 
+# "Reserved" is the system's word for "a booking is holding this gown": it is set when a booking is approved or picked up and cleared when
+# the booking is cancelled, rejected or returned. Setting it by hand left gowns stuck as Reserved with no booking behind them (the customer
+# calendar goes by booking dates, so it never held the gown for anyone) and inflated every Reserved count. So the three places staff can set a
+# status by hand -- the View window button, the bulk toolbar and Add Gown -- all refuse it with this one message.
+RESERVED_IS_AUTOMATIC_MESSAGE = (
+    "Reserved is set automatically when a booking is approved. To hold a gown for a customer, make a booking in New Booking."
+)
+
+
 @require_http_methods(["POST"])
 def gown_status_update_view(request, gown_id):
     if not _is_admin_staff(request):
@@ -1682,6 +1691,8 @@ def gown_status_update_view(request, gown_id):
     new_status = data.get("status")
     if new_status not in Gown.Status.values:
         return JsonResponse({"error": "Invalid status"}, status=400)
+    if new_status == Gown.Status.RESERVED:
+        return JsonResponse({"error": RESERVED_IS_AUTOMATIC_MESSAGE}, status=400)
 
     gown.status = new_status
     gown.save(update_fields=["status", "updated_at"])
@@ -1838,6 +1849,8 @@ def gown_bulk_action_view(request):
         new_status = data.get("status")
         if new_status not in Gown.Status.values:
             return JsonResponse({"error": "Invalid status."}, status=400)
+        if new_status == Gown.Status.RESERVED:
+            return JsonResponse({"error": RESERVED_IS_AUTOMATIC_MESSAGE}, status=400)
         # QuerySet.update() bypasses Model.save(), so it does NOT auto-bump the
         # auto_now `updated_at` -- set it here, or the admin notification feed
         # (which orders Out-of-Stock gowns by -updated_at) would show stale order.
@@ -2256,6 +2269,8 @@ def gown_create_view(request):
 
     if status not in Gown.Status.values:
         status = Gown.Status.AVAILABLE
+    if status == Gown.Status.RESERVED:
+        return JsonResponse({"error": RESERVED_IS_AUTOMATIC_MESSAGE}, status=400)
 
     rental_price, price_error = _parse_rental_price(request.POST.get("rental_price"))
     if price_error:

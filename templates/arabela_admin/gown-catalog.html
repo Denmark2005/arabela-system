@@ -2603,7 +2603,6 @@
             <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Status</label>
             <select x-model="newGownStatus" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
               <option value="Available">Available</option>
-              <option value="Reserved">Reserved</option>
               <option value="Out-of-Stock">Out-of-Stock</option>
             </select>
           </div>
@@ -2892,10 +2891,9 @@
         ></p>
         <div class="flex flex-wrap gap-2">
           <button type="button" @click="changeGownStatus('Available')" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">Mark Available</button>
-          <button type="button" @click="changeGownStatus('Reserved')" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">Mark Reserved</button>
           <button type="button" @click="changeGownStatus('Out-of-Stock')" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">Mark Out-of-Stock</button>
         </div>
-        <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">Damaged or otherwise unavailable? Use "Mark Out-of-Stock" — it hides the gown from availability without deleting its record. For a scheduled cleaning or repair gap with a known end date, add a range under Blocked Dates below instead — it frees itself when the dates pass.</p>
+        <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">Damaged or otherwise unavailable? Use "Mark Out-of-Stock" — it hides the gown from availability without deleting its record. For a scheduled cleaning or repair gap with a known end date, add a range under Blocked Dates below instead — it frees itself when the dates pass. Reserved is set automatically when a booking is approved; to hold a gown for a customer, make a booking in New Booking.</p>
       </div>
 
       <!-- Booked by: who a Reserved gown is reserved for, each booking with a link to open it. -->
