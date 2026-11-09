@@ -10,18 +10,85 @@
     <meta http-equiv="X-UA-Compatible" content="ie=edge" />
     <title>Rental History | Arabela System Admin Panel</title>
     <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
-  <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet"></head>
+  <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet">
+  {% include "arabela_admin/partials/ar_list_styles.html" %}
+  <style>
+    /* Rental History: the same look as Security Deposits and Active Reservations (partials/ar_list_styles.html). Its own container class is `rh-card`. */
+    .rh-card { margin-bottom: 1.25rem; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; }
+    .dark .rh-card { background: rgba(255,255,255,.03); border-color: #1d2939; }
+    .ar-search-input.rh-select { flex: 0 0 9.5rem; width: 9.5rem; padding-left: .8rem; }
+    .rh-year-wrap { flex: none; width: 6.5rem; }
+    .rh-year-input { padding-left: .8rem; }
+    /* the status buttons (they are the legend and the filter) on the left, the count on the right */
+    .rh-keyrow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; padding: 0 1.25rem .85rem; }
+    .rh-keyrow .ar-count { min-height: 0; padding: 0; }
+    .rh-dot--missed { background: #f79009; }
+    /* customer | gown | rental dates | late | amount | eye | arrow. Every column is fixed or has a minimum, never "auto" (an auto column is sized per row and
+       the column titles would stop lining up). */
+    .ar-head.rh-grid, .ar-line.rh-grid { grid-template-columns: minmax(9rem, 1.6fr) minmax(9rem, 1.5fr) 11.5rem 6.5rem 6.5rem 2.75rem 2.25rem; }
+    .rh-cust, .rh-gown, .rh-dates, .rh-late { min-width: 0; }
+    .rh-gown { font-size: .875rem; color: #475467; overflow-wrap: anywhere; }
+    .dark .rh-gown { color: #98a2b3; }
+    .rh-dates { font-size: .875rem; color: #667085; }
+    .dark .rh-dates { color: #98a2b3; }
+    .rh-amt { font-size: .875rem; font-weight: 600; color: #344054; font-variant-numeric: tabular-nums; }
+    .dark .rh-amt { color: #d0d5dd; }
+    .rh-chip { display: inline-flex; align-items: center; padding: .1rem .55rem; border-radius: 999px; font-size: .75rem; font-weight: 500; white-space: nowrap; }
+    .rh-chip--ok { background: #ecfdf3; color: #027a48; }
+    .rh-chip--bad { background: #fef3f2; color: #b42318; }
+    .dark .rh-chip--ok { background: rgba(18,183,106,.16); color: #32d583; }
+    .dark .rh-chip--bad { background: rgba(240,68,56,.18); color: #fda29b; }
+    /* the opened row: the facts in words, then the timeline */
+    .rh-facts { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem 1.5rem; padding: .8rem 1.25rem .6rem; font-size: .8125rem; }
+    .rh-fact { display: inline-flex; align-items: center; gap: .45rem; min-width: 0; }
+    .rh-k { color: #98a2b3; }
+    .rh-v { display: inline-flex; align-items: center; gap: .45rem; color: #344054; font-weight: 500; overflow-wrap: anywhere; }
+    .dark .rh-v { color: #d0d5dd; }
+    .rh-why { font-weight: 400; color: #667085; }
+    .dark .rh-why { color: #98a2b3; }
+    /* A small laptop: the dates and the amount drop to a second line under the rental (the column titles go: they no longer line up). */
+    @media (max-width: 1180px) {
+      .ar-head.rh-grid { display: none; }
+      .ar-line.rh-grid { grid-template-columns: minmax(9rem, 1.4fr) minmax(8rem, 1.2fr) 8rem 2.75rem 2.25rem; grid-template-areas: "cust gown late eye chev" "dates dates amt amt amt"; row-gap: .5rem; }
+      .ar-line.rh-grid > .rh-cust { grid-area: cust; }
+      .ar-line.rh-grid > .rh-gown { grid-area: gown; }
+      .ar-line.rh-grid > .rh-late { grid-area: late; }
+      .ar-line.rh-grid > .rh-dates { grid-area: dates; }
+      .ar-line.rh-grid > .rh-amt { grid-area: amt; }
+      .ar-line.rh-grid > .rh-eye { grid-area: eye; }
+      .ar-line.rh-grid > .ar-chev { grid-area: chev; }
+    }
+    /* A phone: one column, in the order staff read it. */
+    @media (max-width: 760px) {
+      .ar-line.rh-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.75rem 2.25rem; grid-template-areas: "cust cust eye chev" "gown gown gown gown" "dates dates dates dates" "late late amt amt"; }
+      .ar-search-input.rh-select { flex: 1 1 8rem; width: auto; }
+      .rh-keyrow { padding: 0 1rem .75rem; }
+      .rh-facts { padding: .8rem 1rem .6rem; }
+    }
+  </style>
+</head>
   <body
-    x-data="{ page: 'rental-history', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', monthFilter: 'All', yearFilter: '', filtering: false, filterTimeout: null, openProofModal: false, viewingRental: {}, openTimeline: null,
+    x-data="{ page: 'rental-history', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', statusFilter: 'All', monthFilter: 'All', yearFilter: '', openProofModal: false, viewingRental: {}, openRows: [],
       rentalRecords: [],
-      totalRentals() {
-        const q = this.search.toLowerCase();
+      matches(el) {
+        return (this.statusFilter === 'All' || el.getAttribute('data-status') === this.statusFilter)
+          && (this.monthFilter === 'All' || el.getAttribute('data-month') === this.monthFilter)
+          && (this.yearFilter === '' || el.getAttribute('data-year') === this.yearFilter)
+          && (this.search === '' || (el.getAttribute('data-search') || '').indexOf(String(this.search).toLowerCase()) !== -1);
+      },
+      matchCount() { return Array.from(document.querySelectorAll('.ar-booking[data-row-id]')).filter(el => this.matches(el)).length; },
+      // The number on each status button: how many rentals of that kind match the search, month and year (so the buttons add up to the count line).
+      countFor(status) {
+        const q = String(this.search).toLowerCase();
         return this.rentalRecords.filter(r =>
-          (this.monthFilter === 'All' || r.month === this.monthFilter)
-          &amp;&amp; (this.yearFilter === '' || r.year === this.yearFilter)
-          &amp;&amp; (q === '' || r.q.includes(q))
+          (status === 'All' || r.status === status)
+          && (this.monthFilter === 'All' || r.month === this.monthFilter)
+          && (this.yearFilter === '' || r.year === this.yearFilter)
+          && (q === '' || r.q.includes(q))
         ).length;
-      }
+      },
+      isRowOpen(id) { return this.openRows.includes(id); },
+      toggleRow(id) { this.openRows = this.isRowOpen(id) ? this.openRows.filter(x => x !== id) : this.openRows.concat([id]); }
     }"
     x-init="
          darkMode = JSON.parse(localStorage.getItem('darkMode'));
@@ -1122,141 +1189,113 @@
 </div>
 </div>
             <!-- Breadcrumb End -->
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              <div class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6">
-                <p class="text-sm text-gray-500 dark:text-gray-400">Total Rentals</p>
-                <h4 class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90" x-text="totalRentals()"></h4>
+            <!-- ONE box, the same look as Security Deposits and Active Reservations: the search, the month and the year, the status buttons (they are the
+                 legend too, and the number on each one is the count) with the "Showing 1-15 of 50 rentals" line (it replaces the old big number tile), then
+                 one short line per gown. The proof is an eye icon; the timeline is inside the opened row. The page's own name is not repeated here. -->
+            <div class="rh-card">
+              <div class="ar-toolbar">
+                <div class="ar-search">
+                  <svg class="ar-search-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                  <input type="text" class="ar-search-input" x-model="search" placeholder="Search by customer or gown..." aria-label="Search rental history">
+                </div>
+                <select x-model="monthFilter" class="ar-search-input rh-select" aria-label="Show one month only">
+                  <option value="All">All months</option>
+                  <option value="Jan">January</option>
+                  <option value="Feb">February</option>
+                  <option value="Mar">March</option>
+                  <option value="Apr">April</option>
+                  <option value="May">May</option>
+                  <option value="Jun">June</option>
+                  <option value="Jul">July</option>
+                  <option value="Aug">August</option>
+                  <option value="Sep">September</option>
+                  <option value="Oct">October</option>
+                  <option value="Nov">November</option>
+                  <option value="Dec">December</option>
+                </select>
+                <div class="rh-year-wrap">
+                  <input type="text" inputmode="numeric" class="ar-search-input rh-year-input" x-model="yearFilter" @input="yearFilter = yearFilter.replace(/[^0-9]/g, '').slice(0, 4)" maxlength="4" placeholder="Year" aria-label="Show one year only, for example 2026" title="Show one year only, for example 2026">
+                </div>
               </div>
-            </div>
+              <div class="rh-keyrow">
+                <div class="ar-filters" role="group" aria-label="Show rentals by status">
+                  <button type="button" class="ar-filter" :class="statusFilter === 'All' ? 'is-on' : ''" :aria-pressed="statusFilter === 'All' ? 'true' : 'false'" @click="statusFilter = 'All'">All <span class="ar-n" x-text="countFor('All')">{{ rental_items|length }}</span></button>
+                  <button type="button" class="ar-filter" :class="statusFilter === 'Ongoing' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Ongoing' ? 'true' : 'false'" @click="statusFilter = 'Ongoing'" title="Waiting for pick-up, or out with the customer and not late yet"><span class="ar-dot ar-dot--active"></span>Ongoing <span class="ar-n" x-text="countFor('Ongoing')"></span></button>
+                  <button type="button" class="ar-filter" :class="statusFilter === 'Completed' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Completed' ? 'true' : 'false'" @click="statusFilter = 'Completed'" title="The gown is back"><span class="ar-dot ar-dot--done"></span>Completed <span class="ar-n" x-text="countFor('Completed')"></span></button>
+                  <button type="button" class="ar-filter ar-filter--hot" :class="statusFilter === 'Overdue' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Overdue' ? 'true' : 'false'" @click="statusFilter = 'Overdue'" title="The gown is out with the customer and past its return date"><span class="ar-dot ar-dot--overdue"></span>Overdue <span class="ar-n" x-text="countFor('Overdue')"></span></button>
+                  <button type="button" class="ar-filter" :class="statusFilter === 'Not picked up' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Not picked up' ? 'true' : 'false'" @click="statusFilter = 'Not picked up'" title="The dates passed and nobody picked the gown up"><span class="ar-dot rh-dot--missed"></span>Not picked up <span class="ar-n" x-text="countFor('Not picked up')"></span></button>
+                </div>
+                <div class="ar-count"><span id="ar-count" aria-live="polite"></span></div>
+              </div>
 
-            <div class="mt-5 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03] sm:p-5">
-              <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div class="sm:flex-1">
-                  <input
-                    type="text"
-                    x-model="search"
-                    @input="filtering = true; clearTimeout(filterTimeout); filterTimeout = setTimeout(() => filtering = false, 500)"
-                    placeholder="Search by customer or gown..."
-                    class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-                  />
+              <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg=".ar-booking" data-arpg-noun="rentals" data-arpg-top="off" data-arpg-count="#ar-count">
+                <div class="ar-head rh-grid">
+                  <span>Customer</span>
+                  <span>Gown</span>
+                  <span>Rental dates</span>
+                  <span>Late</span>
+                  <span>Amount</span>
+                  <span></span>
+                  <span></span>
                 </div>
-                <div class="sm:w-52">
-                  <select x-model="monthFilter" @change="filtering = true; clearTimeout(filterTimeout); filterTimeout = setTimeout(() => filtering = false, 500)" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
-                    <option value="All">All Months</option>
-                    <option value="Jan">January</option>
-                    <option value="Feb">February</option>
-                    <option value="Mar">March</option>
-                    <option value="Apr">April</option>
-                    <option value="May">May</option>
-                    <option value="Jun">June</option>
-                    <option value="Jul">July</option>
-                    <option value="Aug">August</option>
-                    <option value="Sep">September</option>
-                    <option value="Oct">October</option>
-                    <option value="Nov">November</option>
-                    <option value="Dec">December</option>
-                  </select>
-                </div>
-                <div class="sm:w-44">
-                  <input
-                    type="text"
-                    inputmode="numeric"
-                    x-model="yearFilter"
-                    @input="yearFilter = yearFilter.replace(/[^0-9]/g, '').slice(0, 4); filtering = true; clearTimeout(filterTimeout); filterTimeout = setTimeout(() => filtering = false, 500)"
-                    maxlength="4"
-                    placeholder="Year (e.g. 2026)"
-                    class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div class="mt-5 overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
-              <div x-show="filtering" x-cloak class="flex items-center justify-center" style="height: 300px;">
-                <div class="h-10 w-10 animate-spin rounded-full border-4 border-solid border-gray-300 border-t-transparent dark:border-gray-600"></div>
-              </div>
-              <div x-show="!filtering" class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg="tbody" data-arpg-noun="rentals">
-                <table class="min-w-full">
-                  <thead class="sticky top-0 z-10 bg-white dark:bg-gray-900">
-                    <tr>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Customer</p></th>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Gown</p></th>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Rental Date</p></th>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Return Date</p></th>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Days late</p></th>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Amount</p></th>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Status</p></th>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Actions</p></th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-              {% for item in rental_items %}
-              {% with r=item.reservation %}
-              <tr x-show="(monthFilter === 'All' || monthFilter === '{{ item.rental_date|date:"M" }}') && (yearFilter === '' || yearFilter === '{{ item.rental_date|date:"Y" }}') && (search === '' || '{{ r.display_customer_name|lower|escapejs }} {{ item.gown_name|lower|escapejs }}'.includes(search.toLowerCase()))">
-                <td class="px-5 py-4 sm:px-6">
-                  <div class="flex items-center gap-3">
-                    <div class="flex flex-col">
-                      <span class="block font-medium text-gray-800 text-theme-sm dark:text-white/90">{{ r.display_customer_name }}</span>
-                      {% if r.booked_as_name %}<span class="text-xs text-gray-400 dark:text-gray-500">Booked as: {{ r.booked_as_name }}</span>{% endif %}
+                {% for item in rental_items %}
+                {% with r=item.reservation %}
+                <!-- One gown that went out: a closed line (status circle and name, the gown, the dates, how late, the amount, the proof icon) and, hidden until it is
+                     opened, the facts in words and the timeline. -->
+                <div class="ar-booking" data-row-id="{{ item.id }}" data-status="{{ item.history_status }}" data-month="{{ item.rental_date|date:'M' }}" data-year="{{ item.rental_date|date:'Y' }}" data-search="{{ r.display_customer_name|lower }} {{ item.gown_name|lower }}" x-show="matches($el)">
+                  <!-- A click on the line opens it, except a click on the proof icon (it does not stop the click: other scripts on the page may listen for it). -->
+                  <div class="ar-line rh-grid" :class="isRowOpen({{ item.id }}) ? 'is-open' : ''" @click="if (!$event.target.closest('.rh-eye')) { toggleRow({{ item.id }}) }">
+                    <div class="rh-cust">
+                      <div class="ar-who"><span class="ar-dot {% if item.history_kind == 'missed' %}rh-dot--missed{% else %}ar-dot--{{ item.history_kind }}{% endif %}" role="img" aria-label="{{ item.history_status }}" title="{{ item.history_status }}: {{ item.history_tip }}"></span><span class="ar-name">{{ r.display_customer_name }}</span></div>
+                    </div>
+                    <div class="rh-gown">{{ item.gown_name }}</div>
+                    <div class="rh-dates">{{ item.rental_date|date:"M j" }}{% if item.rental_date.year != item.return_date.year %}, {{ item.rental_date|date:"Y" }}{% endif %} &rarr; {{ item.return_date|date:"M j, Y" }}</div>
+                    <div class="rh-late">
+                      <!-- How late the gown was (or is, so far): counted from the return date the customer booked, like Active Reservations. -->
+                      {% if item.late_days is None %}
+                      <span class="ar-none">&mdash;</span>
+                      {% elif item.late_days == 0 %}
+                      <span class="rh-chip rh-chip--ok">On time</span>
+                      {% else %}
+                      <span class="rh-chip rh-chip--bad"{% if item.history_status == 'Overdue' %} title="Still not back, so this keeps growing"{% endif %}>{{ item.late_days }} day{{ item.late_days|pluralize }} late</span>
+                      {% endif %}
+                    </div>
+                    <div class="rh-amt">&#8369;{{ item.rental_price|floatformat:'-2g' }}</div>
+                    <button type="button"
+                      @click="viewingRental = { name: '{{ r.display_customer_name|escapejs }}', gown: '{{ item.gown_name|escapejs }}', rentalDate: '{{ item.rental_date|date:"M j, Y"|escapejs }}', returnDate: '{{ item.return_date|date:"M j, Y"|escapejs }}', amount: '&#8369;{{ item.rental_price|floatformat:'-2g' }}', status: '{{ item.history_status|escapejs }}', reference: '{{ r.reference_code|escapejs }}', proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}') }; openProofModal = true"
+                      class="ar-ib rh-eye" title="View proof" aria-label="View proof of {{ r.display_customer_name }}, {{ item.gown_name }}">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
+                    <button type="button" class="ar-chev" @click.stop="toggleRow({{ item.id }})" aria-expanded="false"
+                      :aria-expanded="isRowOpen({{ item.id }}) ? 'true' : 'false'" aria-controls="rh-panel-{{ item.id }}"
+                      aria-label="Show or hide the details and timeline of {{ r.display_customer_name }}, {{ item.gown_name }}">
+                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7.5l5 5 5-5" /></svg>
+                    </button>
+                  </div>
+                  <div class="ar-panel" id="rh-panel-{{ item.id }}" x-show="isRowOpen({{ item.id }})" x-cloak>
+                    <div class="rh-facts">
+                      <span class="rh-fact"><span class="rh-k">Status</span><span class="rh-v"><span class="ar-dot {% if item.history_kind == 'missed' %}rh-dot--missed{% else %}ar-dot--{{ item.history_kind }}{% endif %}"></span>{{ item.history_status }}<span class="rh-why">&middot; {{ item.history_tip }}</span></span></span>
+                      {% if item.returned_on %}<span class="rh-fact"><span class="rh-k">Returned</span><span class="rh-v">{{ item.returned_on|date:"M j, Y" }}</span></span>{% endif %}
+                      <span class="rh-fact"><span class="rh-k">Booking</span><span class="rh-v ar-ref"><b>{{ r.reference_code }}</b></span></span>
+                      {% if r.booked_as_name %}<span class="rh-fact"><span class="rh-k">Booked as</span><span class="rh-v">{{ r.booked_as_name }}</span></span>{% endif %}
+                    </div>
+                    <div class="ar-tl">
+                      {% include "arabela_admin/partials/timeline_rows.html" with timeline=item.timeline %}
                     </div>
                   </div>
-                </td>
-                <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ item.gown_name }}</p></td>
-                <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ item.rental_date|date:"M j, Y" }}</p></td>
-                <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ item.return_date|date:"M j, Y" }}</p></td>
-                <td class="px-5 py-4 sm:px-6">
-                  <!-- How late the gown was (or is, so far): counted from the return date the customer booked, like Active Reservations. -->
-                  {% if item.late_days is None %}
-                  <p class="text-gray-400 text-theme-sm dark:text-gray-500">&mdash;</p>
-                  {% elif item.late_days == 0 %}
-                  <p class="inline-flex rounded-full bg-success-50 px-2 py-0.5 text-theme-xs font-medium text-success-700 dark:bg-success-500/15 dark:text-success-500" style="white-space: nowrap;">On time</p>
-                  {% else %}
-                  <p class="inline-flex rounded-full bg-error-50 px-2 py-0.5 text-theme-xs font-medium text-error-700 dark:bg-error-500/15 dark:text-error-500" style="white-space: nowrap;">{{ item.late_days }} day{{ item.late_days|pluralize }} late{% if item.history_status == 'Overdue' %} so far{% endif %}</p>
-                  {% endif %}
-                  {% if item.returned_on %}<p class="mt-1 text-theme-xs text-gray-400 dark:text-gray-500">Returned {{ item.returned_on|date:"M j, Y" }}</p>{% endif %}
-                </td>
-                <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">&#8369;{{ item.rental_price|floatformat:'-2g' }}</p></td>
-                <td class="px-5 py-4 sm:px-6">
-                  <p class="inline-flex rounded-full px-2 py-0.5 text-theme-xs font-medium
-                    {% if item.history_status == 'Completed' %}bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500
-                    {% elif item.history_status == 'Overdue' %}bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500
-                    {% elif item.history_status == 'Not picked up' %}bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400
-                    {% else %}bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400{% endif %}" style="white-space: nowrap;">{{ item.history_status }}</p>
-                </td>
-                <td class="px-5 py-4 sm:px-6">
-                  <button type="button"
-                    @click="viewingRental = { name: '{{ r.display_customer_name|escapejs }}', gown: '{{ item.gown_name|escapejs }}', rentalDate: '{{ item.rental_date|date:"M j, Y"|escapejs }}', returnDate: '{{ item.return_date|date:"M j, Y"|escapejs }}', amount: '&#8369;{{ item.rental_price|floatformat:'-2g' }}', status: '{{ item.history_status|escapejs }}', reference: '{{ r.reference_code|escapejs }}', proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}') }; openProofModal = true"
-                    class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
-                    View Proof
-                  </button>
-                  <button type="button"
-                    @click="openTimeline = (openTimeline === {{ item.id }} ? null : {{ item.id }})"
-                    class="mt-2 inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
-                    <span x-text="openTimeline === {{ item.id }} ? 'Hide Timeline' : 'Timeline'">Timeline</span>
-                  </button>
-                </td>
-              </tr>
-              <tr x-show="openTimeline === {{ item.id }} && ((monthFilter === 'All' || monthFilter === '{{ item.rental_date|date:"M" }}') && (yearFilter === '' || yearFilter === '{{ item.rental_date|date:"Y" }}') && (search === '' || '{{ r.display_customer_name|lower|escapejs }} {{ item.gown_name|lower|escapejs }}'.includes(search.toLowerCase())))" x-cloak>
-                <td class="px-5 py-4 sm:px-6" colspan="8">
-                  {% include "arabela_admin/partials/timeline_rows.html" with timeline=item.timeline %}
-                </td>
-              </tr>
-              {% endwith %}
-              {% empty %}
-              <tr>
-                <td colspan="8" class="px-5 py-6 text-center text-sm text-gray-500 dark:text-gray-400">No rentals recorded yet. Approved bookings appear here once a gown goes out.</td>
-              </tr>
-              {% endfor %}
-              <!-- Shown when rows exist but the current month/year/search hides them all.
-                   totalRentals() counts the same records the row filter matches, so this
-                   can never disagree with what is on screen. -->
-              {% if rental_items %}
-              <tr x-show="totalRentals() === 0" x-cloak>
-                <td colspan="8" class="px-5 py-6 text-center text-sm text-gray-500 dark:text-gray-400">No rental records found for this period.</td>
-              </tr>
-              {% endif %}
-                  </tbody>
-                </table>
+                </div>
+                {% endwith %}
+                {% empty %}
+                <div class="ar-empty">
+                  <p class="text-gray-500 text-theme-sm dark:text-gray-400">No rentals recorded yet. Approved bookings appear here once a gown goes out.</p>
+                </div>
+                {% endfor %}
+                <!-- Shown when rows exist but the current search, status, month or year hides them all. -->
+                {% if rental_items %}
+                <div class="ar-empty" x-show="matchCount() === 0" x-cloak>
+                  <p class="text-gray-500 text-theme-sm dark:text-gray-400">No rental records found for this period.</p>
+                </div>
+                {% endif %}
               </div>
             </div>
 
@@ -1336,9 +1375,8 @@
     </div>
     <!-- ===== Page Wrapper End ===== -->
 
-    <!-- One {month, year, q} per visible row, so the "Total Rentals" card counts exactly
-         what the table shows. Read by x-init; bundle.js (and therefore Alpine) is
-         deferred, so this is already in the DOM by the time x-init runs. -->
+    <!-- One {month, year, status, q} per row, so the number on each status button counts exactly what the list shows. Read by x-init; bundle.js (and
+         therefore Alpine) is deferred, so this is already in the DOM by the time x-init runs. -->
     {{ rental_records|json_script:"rental-records-data" }}
 
   <script defer src="{% static 'arabela_admin/bundle.js' %}?v={{ admin_asset_version }}"></script>

@@ -284,7 +284,8 @@ class ActionsTests(PvBase):
         html = self.client.get(reverse("arabela_admin:dashboard")).content.decode()
         self.assertNotIn("Verify payment", html)
         self.assertNotRegex(html, r">\s*Verify\s*</button>")
-        self.assertRegex(html, r'data-action="verify"[^>]*onclick="reviewQuickVerify\(this\)"[^>]*>Approve</button>')
+        self.assertRegex(html, r'data-action="verify"[^>]*onclick="reviewQuickVerify\(this\)"[^>]*title="Approve payment"')           # an icon button now: the words are its hover and its label
+        self.assertRegex(html, r'data-action="reject"[^>]*onclick="reviewQuickVerify\(this\)"[^>]*title="Reject payment"')
         self.assertIn("title: isVerify ? 'Approve payment' : 'Reject payment'", html)
         self.assertIn("confirmText: isVerify ? 'Approve payment' : 'Reject payment'", html)
         self.assertIn('data-action="reject"', html)

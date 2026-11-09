@@ -232,14 +232,17 @@ class RentalHistoryDaysLate(Base):
     def test_the_page_words_it_for_people(self):
         self.assertIn("2 days late", self.html)
         self.assertIn("On time", self.html)
-        self.assertIn("5 days late so far", self.html)
+        self.assertIn("5 days late", self.html)
+        self.assertIn("Still not back, so this keeps growing", self.html)          # the hover on a gown that is still out: this number is "so far"
+        self.assertIn("The gown is out with the customer and past its return date", self.html)
         self.assertIn("Not picked up", self.html)
-        self.assertIn("Days late", self.html)
-        self.assertIn(f"Returned {(self.today - timedelta(days=6)):%b} {(self.today - timedelta(days=6)).day}, ", self.html)
+        self.assertIn("<span>Late</span>", self.html)                              # the column title (the old table said "Days late")
+        back = self.today - timedelta(days=6)
+        self.assertIn(f'<span class="rh-k">Returned</span><span class="rh-v">{back:%b} {back.day}, {back.year}</span>', self.html)
 
-    def test_the_empty_and_timeline_rows_still_span_the_whole_table(self):
-        self.assertNotIn('colspan="7"', self.html)
-        self.assertIn('colspan="8"', self.html)
+    def test_the_empty_message_is_a_block_not_a_table_row(self):
+        self.assertNotIn("colspan=", self.html[self.html.index("<main>"):])         # the list is no longer a table
+        self.assertIn("No rental records found for this period", self.html)
 
     def test_the_same_number_as_active_reservations(self):
         page = self.client.get(ACTIVE_URL)

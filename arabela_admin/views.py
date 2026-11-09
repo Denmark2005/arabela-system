@@ -150,12 +150,15 @@ def dashboard_view(request):
     except Exception:
         pass
 
-    quick_verify_reservations = (
+    # Quick Verify lists only the latest few however many are waiting (a short fixed list never crowds the page); `pending_total` is the real
+    # number waiting, for the "N waiting" count and "Showing the latest 5 of N".
+    quick_verify_reservations = list(
         Reservation.objects.filter(status=Reservation.Status.PENDING)
         .select_related("customer__profile")
         .prefetch_related(_receipts_prefetch())
         .order_by("-created_at")[:5]
     )
+    pending_total = Reservation.objects.filter(status=Reservation.Status.PENDING).count()
 
     # Every figure here is counted the SAME way as the page it links to, so the
     # dashboard can never contradict the detail page a staffer clicks through to --
@@ -194,6 +197,8 @@ def dashboard_view(request):
         "arabela_admin/dashboard.html",
         {
             "quick_verify_reservations": quick_verify_reservations,
+            "quick_verify_count": len(quick_verify_reservations),
+            "pending_total": pending_total,
             "registered_customers": User.objects.filter(
                 is_staff=False, is_superuser=False
             ).count(),
@@ -750,6 +755,15 @@ def payment_verification_view(request):
     )
 
 
+# Rental History: the circle each status gets (the page's CSS knows done / active / overdue / missed) and the one sentence that says what it means.
+_HISTORY_LOOK = {
+    "Completed": ("done", "The gown is back"),
+    "Ongoing": ("active", "Waiting for pick-up, or out with the customer and not late yet"),
+    "Overdue": ("overdue", "The gown is out with the customer and past its return date"),
+    "Not picked up": ("missed", "The dates passed and nobody picked the gown up"),
+}
+
+
 @_require_admin_staff
 def rental_history_view(request):
     """Every gown that has gone out, one row per gown (ReservationItem), bucketed by
@@ -787,17 +801,19 @@ def rental_history_view(request):
             item.history_status = "Not picked up"
         else:
             item.history_status = "Ongoing"
+        item.history_kind, item.history_tip = _HISTORY_LOOK[item.history_status]
         item.late_days = _days_late(item, today)       # None = nothing to say, 0 = on time, N = N days late (so far, if it is still out)
 
     reservation_timeline.attach_to_items(items)
 
-    # Mirrors the visible rows so the "Total Rentals" card can count what is actually
-    # on screen. `q` is the same lowercase haystack the row filter searches, so the
-    # card and the table can never disagree about what matches.
+    # Mirrors the visible rows so the number on each status button can count what is
+    # actually on screen. `q` is the same lowercase haystack the row filter searches, so the
+    # buttons and the list can never disagree about what matches.
     rental_records = [
         {
             "month": item.rental_date.strftime("%b"),
             "year": item.rental_date.strftime("%Y"),
+            "status": item.history_status,
             "q": f"{item.reservation.display_customer_name} {item.gown_name}".lower(),
         }
         for item in items

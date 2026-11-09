@@ -1067,8 +1067,9 @@ class PaymentBreakdownTests(Base):
     def test_the_dashboard_card_and_window_and_security_deposits_window_show_it_too(self):
         self.online(512)
         dashboard = self.client.get(reverse("arabela_admin:dashboard")).content.decode()
-        self.assertIn('style="color:#D4AF37">₱2,000</p>', dashboard)
-        self.assertIn("Gown ₱5,500 · Total ₱7,500", dashboard)
+        card = dashboard[dashboard.index('class="qv-card"'):dashboard.index("Quick Verify End")]
+        self.assertIn('<div class="qv-amt">₱2,000</div>', card)                         # the Quick Verify line shows what was PAID ...
+        self.assertNotIn("Gown ₱5,500", card)                                           # ... and no longer the "Gown + Total" sub-line (the window's breakdown has it)
         self.assertEqual(dashboard.count("breakdown: JSON.parse("), 1)                 # the Quick Verify row's View button opens the window with it (the icon thumbnail that also did is gone)
         self.assertIn('class="pbd" x-show="receiptPreview.breakdown"', dashboard)
         self.assertIn("receiptPreview.breakdown ? receiptPreview.breakdown.headline : receiptPreview.amount", dashboard)
