@@ -118,7 +118,7 @@ class DropdownLayoutTests(SimpleTestCase):
 
     def test_each_gown_is_one_line_that_opens_its_own_dates(self):
         markup = window_markup()
-        for needle in ('class="rrd-gline"', "toggleGown(itemIndex)", ':aria-expanded="gownOpen === itemIndex', 'x-show="gownOpen === itemIndex"',
+        for needle in ('class="rrd-gline"', "toggleGown(itemIndex)", ':aria-expanded="gownOpen === itemIndex', """:class="gownOpen === itemIndex ? 'is-open' : ''\"""",
                        "gownDates(item)", "stageDot(item.stage)", "stageLabel(item.stage)", "gownSummary(viewing)", 'class="rrd-steps"', "Actually picked up", "Actually returned"):
             with self.subTest(needle=needle):
                 self.assertIn(needle, markup)
@@ -155,7 +155,7 @@ class DropdownLayoutTests(SimpleTestCase):
         markup = window_markup()
         self.assertEqual(markup.count('class="rrd-acch"'), 2)
         for needle in ('@click="payOpen = !payOpen"', '@click="historyOpen = !historyOpen"', ":aria-expanded=\"payOpen ? 'true' : 'false'\"",
-                       ":aria-expanded=\"historyOpen ? 'true' : 'false'\"", 'x-show="payOpen" x-cloak', 'x-show="historyOpen" x-cloak', "historyLatest(viewing)",
+                       ":aria-expanded=\"historyOpen ? 'true' : 'false'\"", """:class="payOpen ? 'is-open' : ''\"""", """:class="historyOpen ? 'is-open' : ''\"""", "historyLatest(viewing)",
                        "historyCount(viewing)", "viewing.subtotal", "viewing.paymentState", "timelineHtml(viewing)"):
             with self.subTest(needle=needle):
                 self.assertIn(needle, markup)
@@ -199,3 +199,58 @@ class DropdownLayoutTests(SimpleTestCase):
     def test_the_file_keeps_its_windows_line_endings(self):
         raw = PAGE.read_bytes()
         self.assertEqual(raw.count(b"\r\n"), raw.count(b"\n"))                  # this template is CRLF all the way, like four other admin pages
+
+
+class StayPutAndSlideTests(SimpleTestCase):
+    """The window must not MOVE when a dropdown opens (a box centred by CSS re-centres every time its height changes), and the dropdowns slide open
+    instead of snapping: the window's top edge is measured once when it opens, then fixed; the three dropdown bodies use a height transition."""
+
+    def css(self):
+        return page_text().split("/* ===== Booking details window (View)")[1].split("</style>")[0]
+
+    def test_the_overlay_is_top_anchored_at_a_measured_position_and_the_window_follows_it(self):
+        html = page_text()
+        self.assertIn('<div x-show="openDetail" x-cloak class="rr-overlay rr-z1 rrd-overlay">', html)
+        css = self.css()
+        self.assertIn(".rrd-overlay { align-items: flex-start; padding-top: min(var(--rrd-top, 1.25rem), 45vh); }", css)
+        self.assertIn("max-height: calc(100vh - var(--rrd-top, 1.25rem) - 1.25rem);", css)
+        self.assertIn("max-height: calc(100dvh - var(--rrd-top, 1.25rem) - 1.25rem);", css)
+        self.assertNotIn('style="max-height: calc(100vh - 2.5rem);" role="dialog"', html)       # the old inline limit (it would beat the rule above)
+
+    def test_opening_a_booking_places_the_window_once_and_only_sets_a_css_variable(self):
+        html = page_text()
+        self.assertEqual(html.count("placeWindow() {"), 1)
+        opening = function_body("openRecord(r)")
+        self.assertIn("this.$nextTick(() => this.placeWindow());", opening)
+        placing = function_body("placeWindow()")
+        for needle in ("document.querySelector('.rrd-win')", "closest('.rrd-overlay')", "setProperty('--rrd-top'", "window.innerHeight"):
+            with self.subTest(needle=needle):
+                self.assertIn(needle, placing)
+        self.assertNotIn("style.top", placing)
+        self.assertNotIn("this.viewing", placing)                                     # it never touches the record
+
+    def test_the_three_dropdown_bodies_slide_with_a_height_transition(self):
+        markup = window_markup()
+        self.assertEqual(markup.count('class="rrd-collapse"'), 3)                     # one per gown (drawn by x-for), Payment, History
+        self.assertEqual(markup.count('class="rrd-collapse-in"'), 3)
+        for old in ('x-show="payOpen"', 'x-show="historyOpen"', 'x-show="gownOpen === itemIndex"'):
+            with self.subTest(old=old):
+                self.assertNotIn(old, markup)                                          # no more instant show / hide
+        css = self.css()
+        for rule in (".rrd-collapse { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .28s ease; }",
+                     ".rrd-collapse.is-open { grid-template-rows: 1fr; }",
+                     ".rrd-collapse > .rrd-collapse-in { min-height: 0; overflow: hidden; visibility: hidden; transition: visibility 0s linear .28s; }",
+                     ".rrd-collapse.is-open > .rrd-collapse-in { visibility: visible; transition-delay: 0s; }"):
+            with self.subTest(rule=rule):
+                self.assertIn(rule, css)
+
+    def test_people_who_asked_for_less_motion_get_none(self):
+        self.assertIn("@media (prefers-reduced-motion: reduce) { .rrd-collapse, .rrd-collapse > .rrd-collapse-in { transition: none; } }", self.css())
+
+    def test_a_closed_dropdown_cannot_be_tabbed_into(self):
+        """visibility: hidden (after the slide ends) takes the closed body out of the tab order and out of screen readers; the buttons that
+        open them stay real buttons with aria-expanded."""
+        markup = window_markup()
+        self.assertEqual(markup.count(":aria-expanded=\"payOpen ? 'true' : 'false'\""), 1)
+        self.assertEqual(markup.count(":aria-expanded=\"historyOpen ? 'true' : 'false'\""), 1)
+        self.assertIn("visibility: hidden;", self.css())

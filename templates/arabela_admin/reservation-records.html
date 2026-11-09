@@ -197,7 +197,15 @@
       @keyframes rr-spin { to { transform: rotate(360deg); } }
       @media (prefers-reduced-motion: reduce) { .rr-spinner { animation-duration: 2s; } }
       /* ===== Booking details window (View): one calm scroll, larger type, nothing wider than the window. All rules are rrd- only. ===== */
-      .rrd-win { max-width: 900px; }
+      .rrd-win { max-width: 900px; max-height: calc(100vh - var(--rrd-top, 1.25rem) - 1.25rem); max-height: calc(100dvh - var(--rrd-top, 1.25rem) - 1.25rem); }
+      /* Opens in the middle (placeWindow measures it once) and then STAYS: the top edge is fixed, so a dropdown only makes the box grow downward instead of re-centring it. */
+      .rrd-overlay { align-items: flex-start; padding-top: min(var(--rrd-top, 1.25rem), 45vh); }
+      /* A dropdown body slides open and shut (row height 0fr <-> 1fr); closed it is also hidden from the keyboard and screen readers once the slide ends. */
+      .rrd-collapse { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .28s ease; }
+      .rrd-collapse.is-open { grid-template-rows: 1fr; }
+      .rrd-collapse > .rrd-collapse-in { min-height: 0; overflow: hidden; visibility: hidden; transition: visibility 0s linear .28s; }
+      .rrd-collapse.is-open > .rrd-collapse-in { visibility: visible; transition-delay: 0s; }
+      @media (prefers-reduced-motion: reduce) { .rrd-collapse, .rrd-collapse > .rrd-collapse-in { transition: none; } }
       .rrd-head { position: sticky; top: 0; z-index: 3; padding: 1.125rem 1.75rem .875rem; background: #fff; border-bottom: 1px solid #e4e7ec; border-radius: 1.5rem 1.5rem 0 0; }
       .dark .rrd-head { background: #101828; border-bottom-color: #1f2a3d; }
       .rrd-head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
@@ -965,6 +973,19 @@
             this.payOpen = false;
             this.historyOpen = false;
             this.openDetail = true;
+            this.$nextTick(() => this.placeWindow());
+          },
+
+          // The View window opens in the middle of the screen and then stays exactly there: measure its (closed) height once, put its top edge at the
+          // middle, and leave it. A dropdown opened afterwards makes it grow downward (up to the bottom of the screen, then it scrolls inside); the
+          // box itself never jumps. Display only: it only sets a CSS variable on the overlay.
+          placeWindow() {
+            const win = document.querySelector('.rrd-win');
+            const overlay = win ? win.closest('.rrd-overlay') : null;
+            if (!overlay) { return; }
+            overlay.style.setProperty('--rrd-top', '1.25rem');
+            const height = win.getBoundingClientRect().height;
+            overlay.style.setProperty('--rrd-top', Math.max(20, Math.round((window.innerHeight - height) / 2)) + 'px');
           },
 
           timelineHtml(record) {
@@ -2587,9 +2608,9 @@
     <!-- Closed by its own backdrop / Close button / Escape -- deliberately not
          @click.outside, which would also fire while the photo viewer or upload dialog
          (separate overlays stacked on top) is being used. -->
-    <div x-show="openDetail" x-cloak class="rr-overlay rr-z1">
+    <div x-show="openDetail" x-cloak class="rr-overlay rr-z1 rrd-overlay">
       <div class="rr-backdrop" @click="openDetail = false"></div>
-      <div class="no-scrollbar rr-panel rrd-win relative w-full overflow-y-auto rounded-3xl bg-white dark:bg-gray-900" style="max-height: calc(100vh - 2.5rem);" role="dialog" aria-modal="true" aria-label="Booking details">
+      <div class="no-scrollbar rr-panel rrd-win relative w-full overflow-y-auto rounded-3xl bg-white dark:bg-gray-900" role="dialog" aria-modal="true" aria-label="Booking details">
         <template x-if="viewing">
           <div>
             <!-- Who and what state. Pinned at the top while the rest scrolls. -->
@@ -2706,7 +2727,8 @@
                         <span class="rrd-gl-stage" :class="stageTone(item.stage)" x-text="stageLabel(item.stage)"></span>
                         <svg class="rrd-chev" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7.5l5 5 5-5"/></svg>
                       </button>
-                      <div class="rrd-gdetail" x-show="gownOpen === itemIndex" x-cloak>
+                      <div class="rrd-collapse" :class="gownOpen === itemIndex ? 'is-open' : ''"><div class="rrd-collapse-in">
+                      <div class="rrd-gdetail">
                         <p class="rrd-gtag" x-show="item.tagColor || item.gownCode">Match this to the tag on the dress: <b x-text="(item.tagColor ? item.tagColor + ' tag' : '') + (item.tagColor &amp;&amp; item.gownCode ? ' \u00b7 ' : '') + (item.gownCode || '')"></b></p>
                         <ol class="rrd-steps" aria-label="Pick-up, event and return dates">
                           <li :class="item.pickedUpOn ? 'is-done' : ''"><p class="k">Pick-up</p><p class="v" x-text="item.pickup"></p></li>
@@ -2718,6 +2740,7 @@
                           <span>Actually returned<b x-text="item.returnedOn || '\u2014'"></b></span>
                         </div>
                       </div>
+                      </div></div>
                     </div>
                   </template>
                 </div>
@@ -2732,7 +2755,8 @@
                   <span class="rrd-accs" x-text="(viewing.subtotal || '\u2014') + ' rental + ' + (viewing.deposit || '\u2014') + ' deposit \u00b7 ' + (viewing.paymentState || '\u2014')"></span>
                   <svg class="rrd-chev" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7.5l5 5 5-5"/></svg>
                 </button>
-                <div class="rrd-accb" x-show="payOpen" x-cloak>
+                <div class="rrd-collapse" :class="payOpen ? 'is-open' : ''"><div class="rrd-collapse-in">
+                <div class="rrd-accb">
                   <dl class="rrd-lines">
                     <div><dt>Rental fee</dt><dd x-text="viewing.subtotal"></dd></div>
                     <div><dt>Security deposit</dt><dd x-text="viewing.deposit"></dd></div>
@@ -2743,6 +2767,7 @@
                     <a x-show="viewing.depositLink" :href="viewing.depositLink" class="rrd-ib" :title="viewing.depositLinkLabel" :aria-label="viewing.depositLinkLabel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7M8 7h9v9"/></svg></a>
                   </div>
                 </div>
+                </div></div>
               </section>
 
               <!-- Manual receipts: one header line with an upload icon; one short line per receipt only when there are some -->
@@ -2773,11 +2798,13 @@
                   <span class="rrd-accs" x-text="historyLatest(viewing)"></span>
                   <svg class="rrd-chev" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7.5l5 5 5-5"/></svg>
                 </button>
-                <div class="rrd-accb" x-show="historyOpen" x-cloak>
+                <div class="rrd-collapse" :class="historyOpen ? 'is-open' : ''"><div class="rrd-collapse-in">
+                <div class="rrd-accb">
                   <p class="rrd-label">Philippine time</p>
                   <div class="rrd-history" :class="historyAll ? 'is-all' : ''" x-html="timelineHtml(viewing)"></div>
                   <button type="button" class="rrd-linkbtn" x-show="historyCount(viewing) > 3" @click="historyAll = !historyAll" x-text="historyAll ? 'Show fewer' : 'Show all ' + historyCount(viewing) + ' updates'"></button>
                 </div>
+                </div></div>
               </section>
             </div>
           </div>
