@@ -102,6 +102,18 @@ class ClosedLineTests(DepositsBase):
         self.assertIn("Gown not back yet", closed)
         self.assertIn("<span>Held</span>", closed)
 
+    def test_a_booking_with_no_gowns_at_all_does_not_claim_they_were_cancelled(self):
+        reservation = Reservation.objects.create(customer=None, customer_name="Empty Booking", phone="09170000099", status=Reservation.Status.CONFIRMED)
+        _, html = self.page()
+        closed = self.booking_html(html, reservation)
+        closed = closed[:closed.index('<div class="ar-panel"')]
+        self.assertIn("No gowns on this booking", closed)
+        self.assertNotIn("Every gown was cancelled", closed)
+        every, _ = self.book("All Cancelled", "09170000098", [(3, 6, CAN, {}), (3, 6, CAN, {})])
+        _, html = self.page()
+        shown = self.booking_html(html, every)
+        self.assertIn("Every gown was cancelled", shown[:shown.index('<div class="ar-panel"')])
+
     def test_a_returned_deposit_says_returned_and_the_day(self):
         back = self.today - timedelta(days=2)
         reservation, _ = self.book("Back Home", "09170000005", [self.returned_item(back_days_ago=2)])
@@ -192,12 +204,14 @@ class FiltersAndSearchTests(DepositsBase):
 
 
 class PageChromeTests(DepositsBase):
-    def test_the_title_row_the_two_tiles_and_the_fake_spinner_are_gone(self):
+    def test_the_heading_the_two_tiles_and_the_fake_spinner_are_gone(self):
         self.book("Chrome", "09170000021", [(3, 6, P, {})])
         _, html = self.page()
-        for gone in ("pageName", "Breadcrumb Start", "Deposits Held", "Returned This Month", "filtering", "filterTimeout", 'style="height: 300px;"'):
+        for gone in ("Deposits Held", "Returned This Month", "filtering", "filterTimeout", 'style="height: 300px;"'):
             self.assertNotIn(gone, html)
-        self.assertNotRegex(html, r'<h2\s[^>]*x-text="pageName"')
+        self.assertNotRegex(html, r'<h2\s[^>]*x-text="pageName"')                    # no big heading ...
+        self.assertIn("pageName: `Security Deposits`", html)                         # ... but the "Home > Security Deposits" breadcrumb is there
+        self.assertIn("mb-4 flex flex-wrap items-center justify-end gap-3", html)
         self.assertEqual(html.count('class="sd-card"'), 1)
         self.assertNotIn('<table', html[html.index('class="sd-card"'):html.index('x-show="openReceiptModal"')])
 

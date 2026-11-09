@@ -1869,12 +1869,14 @@ class ClientListReservationNameTests(TestCase):
 
     def test_the_table_keeps_exactly_the_columns_it_had(self):
         # An extra column pushed the View button off-screen on 1366-1500px laptops, so the name sits
-        # under the account name instead. Same 8 columns, same empty-state width.
+        # under the account name instead. Now 7 columns: the Status column became a circle before the
+        # name; the empty-state row spans the same 7.
         html = self.client.get(reverse("arabela_admin:clients")).content.decode()
-        self.assertEqual(html.count("<th "), 8)
+        self.assertEqual(html.count("<th "), 7)
         self.assertIn(">Customer</p>", html)
         self.assertNotIn(">Reservation Name</p>", html)
-        self.assertIn('colspan="8"', html)
+        self.assertNotIn(">Status</p>", html)
+        self.assertIn('colspan="7"', html)
 
     def test_the_names_cost_no_extra_queries(self):
         from django.db import connection

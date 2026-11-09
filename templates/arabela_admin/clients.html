@@ -17,9 +17,34 @@
         .cl-table th, .cl-table td { padding-left: .875rem; padding-right: .875rem; }
       }
     </style>
+    {% include "arabela_admin/partials/ar_list_styles.html" %}
+    <style>
+      /* Client List: the same look as the other lists (partials/ar_list_styles.html). Its own container class is `cl-card`. */
+      .cl-card { margin-bottom: 1.25rem; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; }
+      .dark .cl-card { background: rgba(255,255,255,.03); border-color: #1d2939; }
+      .cl-countrow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .25rem 1rem; }
+      /* The key to the circles: always visible (three words, no click needed). */
+      .cl-legend { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .15rem .9rem; color: #667085; }
+      .dark .cl-legend { color: #98a2b3; }
+      .cl-legend > span { display: inline-flex; align-items: center; gap: .35rem; }
+      .cl-legend .ar-dot { width: .6rem; height: .6rem; box-shadow: none; }
+      /* The account's status: a circle before the name (green Active, grey Inactive, amber Flagged). */
+      .cl-who { display: flex; align-items: flex-start; gap: .6rem; }
+      .cl-who > .ar-dot { margin-top: .32rem; }
+      .cl-dot--active { background: #039855; }
+      .cl-dot--inactive { background: #98a2b3; }
+      .cl-dot--flagged { background: #f79009; }
+      .cl-na { color: #98a2b3; }
+      .dark .cl-na { color: #667085; }
+      /* A little less air above and below every row. */
+      .cl-table td { padding-top: .7rem; padding-bottom: .7rem; }
+      /* The phone number and the registered date never split over two lines (a very long name or e-mail makes the OTHER columns give way). */
+      .cl-table td:nth-child(3), .cl-table td:nth-child(4) { white-space: nowrap; }
+      .cl-table td:nth-child(2) { overflow-wrap: anywhere; min-width: 10rem; }
+    </style>
   </head>
   <body
-    x-data="{ page: 'clients', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', searching: false, searchTimeout: null, filtering: false, filterTimeout: null, isViewCustomerModal: false, viewingCustomer: {}, customerFilter: 'All', pendingFlagAction: null, flagReasonText: '', flagReasonError: '' }"
+    x-data="{ page: 'clients', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', isViewCustomerModal: false, viewingCustomer: {}, customerFilter: 'All', pendingFlagAction: null, flagReasonText: '', flagReasonError: '' }"
     x-init="
          darkMode = JSON.parse(localStorage.getItem('darkMode'));
          $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)));
@@ -1098,12 +1123,7 @@
           <div class="mx-auto max-w-(--breakpoint-2xl) p-4 md:p-6">
             <!-- Breadcrumb Start -->
             <div x-data="{ pageName: `Client List`}">
-              <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
-  <h2
-    class="text-xl font-semibold text-gray-800 dark:text-white/90"
-    x-text="pageName"
-  ></h2>
-
+              <div class="mb-4 flex flex-wrap items-center justify-end gap-3">
   <nav>
     <ol class="flex items-center gap-1.5">
       <li>
@@ -1139,60 +1159,30 @@
 </div>
 </div>
             <!-- Breadcrumb End -->
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              <div class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6">
-                <p class="text-sm text-gray-500 dark:text-gray-400">Total Customers</p>
-                <h4 class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90">{{ total_customers }}</h4>
-              </div>
-              <div class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6">
-                <p class="text-sm text-gray-500 dark:text-gray-400">New This Month</p>
-                <h4 class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90">{{ new_this_month }}</h4>
-              </div>
-              <div class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6">
-                <p class="text-sm text-gray-500 dark:text-gray-400">Flagged Accounts</p>
-                <h4 class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90">{{ flagged_count }}</h4>
-              </div>
-            </div>
-
-            <div class="mt-5 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03] sm:p-5">
-              <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div class="relative sm:flex-1" style="min-width: min(430px, 100%);">
-                  <span class="absolute left-4 top-1/2 -translate-y-1/2">
-                    <div x-show="searching" class="h-4 w-4 animate-spin rounded-full border-2 border-solid border-gray-300 border-t-transparent dark:border-gray-600"></div>
-                    <svg x-show="!searching" class="fill-gray-400 dark:fill-gray-500" width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path fill-rule="evenodd" clip-rule="evenodd" d="M3.04175 9.37363C3.04175 5.87693 5.87711 3.04199 9.37508 3.04199C12.8731 3.04199 15.7084 5.87693 15.7084 9.37363C15.7084 12.8703 12.8731 15.7053 9.37508 15.7053C5.87711 15.7053 3.04175 12.8703 3.04175 9.37363ZM9.37508 1.54199C5.04902 1.54199 1.54175 5.04817 1.54175 9.37363C1.54175 13.6991 5.04902 17.2053 9.37508 17.2053C11.2674 17.2053 13.003 16.5344 14.357 15.4176L17.177 18.238C17.4699 18.5309 17.9448 18.5309 18.2377 18.238C18.5306 17.9451 18.5306 17.4703 18.2377 17.1774L15.418 14.3573C16.5365 13.0033 17.2084 11.2669 17.2084 9.37363C17.2084 5.04817 13.7011 1.54199 9.37508 1.54199Z" fill=""/>
-                    </svg>
-                  </span>
-                  <input
-                    type="text"
-                    x-model="search"
-                    @input="searching = true; clearTimeout(searchTimeout); searchTimeout = setTimeout(() => searching = false, 400); filtering = true; clearTimeout(filterTimeout); filterTimeout = setTimeout(() => filtering = false, 500)"
-                    placeholder="Search by account name, reservation name or email..."
-                    class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none py-2.5 pr-4 pl-11 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-                  />
+            <!-- ONE box, the same look as the other lists: the search, the filter buttons (they carry the numbers the three tiles used to show) and the
+                 list. The circle before each name is the account's status; the key to it is on the right of the count line. -->
+            <div class="cl-card">
+              <div class="ar-toolbar">
+                <div class="ar-search">
+                  <svg class="ar-search-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                  <input type="text" class="ar-search-input" x-model="search" placeholder="Search by account name, reservation name or email..." aria-label="Search customers">
                 </div>
-                <div class="sm:w-52">
-                  <select x-model="customerFilter" @change="filtering = true; clearTimeout(filterTimeout); filterTimeout = setTimeout(() => filtering = false, 500)" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
-                    <option value="All">All Status</option>
-                    <option value="New">New This Month</option>
-                    <option value="Flagged">Flagged Accounts</option>
-                  </select>
+                <div class="ar-filters" role="group" aria-label="Show customers">
+                  <button type="button" class="ar-filter" :class="customerFilter === 'All' ? 'is-on' : ''" :aria-pressed="customerFilter === 'All' ? 'true' : 'false'" @click="customerFilter = 'All'" title="Every registered customer">All <span class="ar-n">{{ total_customers }}</span></button>
+                  <button type="button" class="ar-filter" :class="customerFilter === 'New' ? 'is-on' : ''" :aria-pressed="customerFilter === 'New' ? 'true' : 'false'" @click="customerFilter = 'New'" title="Accounts that joined this month">New this month <span class="ar-n">{{ new_this_month }}</span></button>
+                  <button type="button" class="ar-filter" :class="customerFilter === 'Flagged' ? 'is-on' : ''" :aria-pressed="customerFilter === 'Flagged' ? 'true' : 'false'" @click="customerFilter = 'Flagged'" title="Accounts flagged by staff or for too many cancellations"><span class="ar-dot cl-dot--flagged"></span>Flagged <span class="ar-n">{{ flagged_count }}</span></button>
                 </div>
               </div>
-            </div>
-
-            <div
-              class="mt-5 rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]"
-            >
-              <div class="px-5 py-4 sm:px-6 sm:py-5">
-                <h3 class="text-base font-medium text-gray-800 dark:text-white/90">Registered Customer Accounts</h3>
+              <div class="ar-count cl-countrow">
+                <span id="cl-count" aria-live="polite"></span>
+                <span class="cl-legend" role="group" aria-label="What the circles mean">
+                  <span><i class="ar-dot cl-dot--active"></i>Active</span>
+                  <span><i class="ar-dot cl-dot--inactive"></i>Inactive</span>
+                  <span><i class="ar-dot cl-dot--flagged"></i>Flagged</span>
+                </span>
               </div>
-              <div class="border-t border-gray-100 dark:border-gray-800">
-                <div x-show="filtering" x-cloak class="flex items-center justify-center" style="height: 300px;">
-                  <div class="h-10 w-10 animate-spin rounded-full border-4 border-solid border-gray-300 border-t-transparent dark:border-gray-600"></div>
-                </div>
-                <div x-show="!filtering" class="max-w-full overflow-x-auto">
-                  <div class="cl-table custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg="tbody" data-arpg-noun="customers">
+              <div class="max-w-full overflow-x-auto">
+                  <div class="cl-table custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg="tbody" data-arpg-noun="customers" data-arpg-top="off" data-arpg-count="#cl-count">
                   <table class="min-w-full">
                     <thead class="sticky top-0 z-10 bg-white dark:bg-gray-900">
                       <tr class="border-b border-gray-100 dark:border-gray-800">
@@ -1215,9 +1205,6 @@
                           <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Cancel Attempts</p>
                         </th>
                         <th class="px-5 py-3 sm:px-6 text-left">
-                          <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Status</p>
-                        </th>
-                        <th class="px-5 py-3 sm:px-6 text-left">
                           <p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Action</p>
                         </th>
                       </tr>
@@ -1226,7 +1213,11 @@
                     {% for c in customers %}
                     <tr x-data="{ status: '{% if c.is_flagged %}Flagged{% elif not c.is_active %}Inactive{% else %}Active{% endif %}' }" x-show="(customerFilter === 'All' || (customerFilter === 'Flagged' && status === 'Flagged') || (customerFilter === 'New' && {{ c.is_new_this_month|yesno:'true,false' }})) && (search === '' || '{{ c.display_name|lower|escapejs }} {{ c.email|lower|escapejs }} {{ c.reservation_names_search|escapejs }}'.includes(search.toLowerCase()))" :class="search !== '' && '{{ c.email|lower|escapejs }}' === search.toLowerCase() ? 'bg-brand-50 dark:bg-brand-500/15' : ''">
                       <td class="px-5 py-4 sm:px-6">
-                        <div class="flex items-center gap-3">
+                        <div class="cl-who">
+                          <!-- The status: same rule as the row's `status` (Flagged, else Inactive, else Active). The words are on hover and in the key above the list. -->
+                          <span class="ar-dot cl-dot--{% if c.is_flagged %}flagged{% elif not c.is_active %}inactive{% else %}active{% endif %}" role="img"
+                            aria-label="{% if c.is_flagged %}Flagged{% elif not c.is_active %}Inactive{% else %}Active{% endif %} account"
+                            title="{% if c.is_flagged %}Flagged account{% elif not c.is_active %}Inactive account{% else %}Active account{% endif %}"></span>
                           <div style="min-width: 0;">
                             <span class="block font-medium text-gray-800 text-theme-sm dark:text-white/90">{{ c.display_name }}</span>
                             {% if c.reservation_name %}
@@ -1241,7 +1232,7 @@
                         </div>
                       </td>
                       <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ c.email|default:"—" }}</p></td>
-                      <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ c.contact_phone|default:"Not provided" }}</p></td>
+                      <td class="px-5 py-4 sm:px-6">{% if c.contact_phone %}<p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ c.contact_phone }}</p>{% else %}<p class="cl-na text-theme-sm" title="No phone number on file">N/A</p>{% endif %}</td>
                       <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ c.date_joined|date:"M j, Y" }}</p></td>
                       <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ c.reservation_count }}</p></td>
                       <td class="px-5 py-4 sm:px-6">
@@ -1255,12 +1246,9 @@
                         {% endif %}
                       </td>
                       <td class="px-5 py-4 sm:px-6">
-                        <p class="inline-flex rounded-full px-2 py-0.5 text-theme-xs font-medium" :class="{ 'bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500': status === 'Active', 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400': status === 'Inactive', 'bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400': status === 'Flagged' }" x-text="status"></p>
-                      </td>
-                      <td class="px-5 py-4 sm:px-6">
                         <button
                           type="button"
-                          @click="viewingCustomer = { userId: {{ c.id }}, name: '{{ c.display_name|escapejs }}', email: '{{ c.email|default:"—"|escapejs }}', phone: '{{ c.contact_phone|default:"Not provided"|escapejs }}', address: '{{ c.contact_address|escapejs }}', city: '{{ c.contact_city|escapejs }}', postal: '{{ c.contact_postal|escapejs }}', registered: '{{ c.date_joined|date:"M j, Y"|escapejs }}', reservations: '{{ c.reservation_count }}', cancellations: '{{ c.cancellation_count }}', submittedCancellations: '{{ c.submitted_cancellations }}', abandonedHolds: '{{ c.abandoned_holds }}', atCancellationLimit: {{ c.at_cancellation_limit|yesno:'true,false' }}, cancelLockedNow: {{ c.cancel_locked_now|yesno:'true,false' }}, cancelLockoutUntil: '{{ c.cancel_lockout_until|date:"M j, g:i A"|default:""|escapejs }}', reservationName: '{{ c.reservation_name|escapejs }}', names: JSON.parse('{{ c.reservation_names_json|escapejs }}'), status: status }; pendingFlagAction = null; flagReasonText = ''; flagReasonError = ''; isViewCustomerModal = true"
+                          @click="viewingCustomer = { userId: {{ c.id }}, name: '{{ c.display_name|escapejs }}', email: '{{ c.email|default:"—"|escapejs }}', phone: '{{ c.contact_phone|default:"N/A"|escapejs }}', address: '{{ c.contact_address|escapejs }}', city: '{{ c.contact_city|escapejs }}', postal: '{{ c.contact_postal|escapejs }}', registered: '{{ c.date_joined|date:"M j, Y"|escapejs }}', reservations: '{{ c.reservation_count }}', cancellations: '{{ c.cancellation_count }}', submittedCancellations: '{{ c.submitted_cancellations }}', abandonedHolds: '{{ c.abandoned_holds }}', atCancellationLimit: {{ c.at_cancellation_limit|yesno:'true,false' }}, cancelLockedNow: {{ c.cancel_locked_now|yesno:'true,false' }}, cancelLockoutUntil: '{{ c.cancel_lockout_until|date:"M j, g:i A"|default:""|escapejs }}', reservationName: '{{ c.reservation_name|escapejs }}', names: JSON.parse('{{ c.reservation_names_json|escapejs }}'), status: status }; pendingFlagAction = null; flagReasonText = ''; flagReasonError = ''; isViewCustomerModal = true"
                           class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
                         >
                           View
@@ -1269,7 +1257,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                      <td class="px-5 py-10 sm:px-6 text-center" colspan="8">
+                      <td class="px-5 py-10 sm:px-6 text-center" colspan="7">
                         <p class="text-gray-500 text-theme-sm dark:text-gray-400">No registered customers yet.</p>
                       </td>
                     </tr>
@@ -1278,7 +1266,6 @@
                   </table>
                   </div>
                 </div>
-              </div>
             </div>
 
           </div>
@@ -1336,7 +1323,7 @@
       </div>
       <div class="sm:col-span-2" style="min-width: 0; overflow-wrap: break-word;">
         <p class="text-xs text-gray-500 dark:text-gray-400">Address</p>
-        <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="[viewingCustomer.address, viewingCustomer.city, viewingCustomer.postal].filter(Boolean).join(', ') || 'Not provided'"></p>
+        <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="[viewingCustomer.address, viewingCustomer.city, viewingCustomer.postal].filter(Boolean).join(', ') || 'N/A'"></p>
       </div>
       <div style="min-width: 0; overflow-wrap: break-word;">
         <p class="text-xs text-gray-500 dark:text-gray-400">Registered</p>

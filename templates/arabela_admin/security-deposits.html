@@ -1168,6 +1168,44 @@
         <!-- ===== Main Content Start ===== -->
         <main>
           <div class="mx-auto max-w-(--breakpoint-2xl) p-4 md:p-6">
+            <!-- Breadcrumb Start -->
+            <div x-data="{ pageName: `Security Deposits`}">
+              <div class="mb-4 flex flex-wrap items-center justify-end gap-3">
+  <nav>
+    <ol class="flex items-center gap-1.5">
+      <li>
+        <a
+          class="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400"
+          href="{% url 'arabela_admin:dashboard' %}"
+        >
+          Home
+          <svg
+            class="stroke-current"
+            width="17"
+            height="16"
+            viewBox="0 0 17 16"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M6.0765 12.667L10.2432 8.50033L6.0765 4.33366"
+              stroke=""
+              stroke-width="1.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </a>
+      </li>
+      <li
+        class="text-sm text-gray-800 dark:text-white/90"
+        x-text="pageName"
+      ></li>
+    </ol>
+  </nav>
+</div>
+</div>
+            <!-- Breadcrumb End -->
             <!-- ONE box, the same look as Active Reservations and Pending Approval: the search, the three filter buttons (they carry the counts the two big
                  number tiles used to show) and the year, then one short line per booking. A booking with several gowns shows "10 gowns" and opens to one
                  short line per gown. The page's own name is not repeated here: the sidebar already shows where you are. -->
@@ -1216,7 +1254,7 @@
                       <div class="sd-g1">{{ r.live_items.0.gown_name }}</div>
                       {% if r.cancelled_count %}<div class="sd-g2">{{ r.cancelled_count }} cancelled</div>{% endif %}
                       {% else %}
-                      <div class="sd-g2">Every gown was cancelled</div>
+                      <div class="sd-g2">{% if r.cancelled_count %}Every gown was cancelled{% else %}No gowns on this booking{% endif %}</div>
                       {% endif %}
                     </div>
                     <div class="sd-dep">

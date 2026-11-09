@@ -1155,12 +1155,8 @@
           <div class="mx-auto max-w-(--breakpoint-2xl) p-4 md:p-6">
             <!-- Breadcrumb Start -->
             <div x-data="{ pageName: `Pending Approval`}">
-              <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+              <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
   <div class="flex flex-wrap items-center gap-3">
-  <h2
-    class="text-xl font-semibold text-gray-800 dark:text-white/90"
-    x-text="pageName"
-  ></h2>
   <a href="{% url 'arabela_admin:new_booking' %}" title="Record a walk-in booking"
     class="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-3 py-1.5 text-theme-xs font-medium text-white shadow-theme-xs hover:bg-brand-600">+ New Booking</a>
   </div>
