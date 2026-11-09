@@ -225,7 +225,7 @@ class PageMarkupPromisesTests(Base):
 
     def test_the_gown_actions_are_the_icons_that_were_asked_for(self):
         for label in ('aria-label="Add another gown"', ':aria-label="\'Edit gown \' + (index + 1)"', ':aria-label="\'Remove gown \' + (index + 1)"',
-                      'aria-label="Done"', 'aria-label="Take a photo of the receipt"', 'aria-label="Choose the receipt photo from the gallery"',
+                      'aria-label="Done"', 'aria-label="Take a photo of the receipt"', 'aria-label="Choose the receipt photo"',
                       'aria-label="Remove this photo"'):
             with self.subTest(label=label):
                 self.assertIn(label, self.form)

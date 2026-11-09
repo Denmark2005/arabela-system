@@ -14,6 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('dark');}catch(e){}</script>
+{% include "arabela_admin/partials/help_tip_styles.html" %}
 <style>
   :root {
     --bg: #f9fafb; --card: #ffffff; --border: #e4e7ec; --text: #1d2939; --muted: #667085; --soft: #f2f4f7;
@@ -131,8 +132,7 @@
   </section>
 
   <section class="card" aria-labelledby="preview-title">
-    <h2 id="preview-title">Preview and test</h2>
-    <p class="sub">Every email uses sample details (not a real customer). Pick one, check how it looks on a computer and on a phone, then send it to yourself.</p>
+    <h2><span id="preview-title">Preview and test</span><details class="ht-tip"><summary aria-label="About this preview" title="About this preview">?</summary><div class="ht-tip-pop">Every email uses sample details (not a real customer). Pick one, check how it looks on a computer and on a phone, then send it to yourself.</div></details></h2>
 
     <div class="controls">
       <label class="label" for="kind">Email</label>
@@ -155,18 +155,16 @@
       <span class="label">{% if owner_email %}Goes only to <strong>{{ owner_email }}</strong>.{% else %}Your admin account has no email address &mdash; add one in Edit Profile first.{% endif %}</span>
     </div>
     <div class="actions">
-      <label class="label" for="customer-to">Or to a customer</label>
+      <label class="label" for="customer-to">Or to a customer</label><details class="ht-tip"><summary aria-label="About sending to a customer" title="About sending to a customer">?</summary><div class="ht-tip-pop">Use this to check that an email really reaches a customer's Gmail (for example a test customer account). Only the address of an account that has signed in to Arabela is accepted.</div></details>
       <input class="field" type="email" id="customer-to" placeholder="customer@gmail.com" autocomplete="off">
       <button type="button" class="btn" id="send-test-customer">Send test to this customer</button>
     </div>
-    <p class="sub" style="margin:8px 0 0;">Use this to check that an email really reaches a customer's Gmail (for example a test customer account). Only the address of an account that has signed in to Arabela is accepted.</p>
     <div class="actions"><div id="result" role="status" aria-live="polite"></div></div>
   </section>
 
   <section class="card" id="history" aria-labelledby="recent-title">
-    <h2 id="recent-title">Email history</h2>
+    <h2><span id="recent-title">Email history</span>{% if history.saved %}<details class="ht-tip"><summary aria-label="About the email history" title="About the email history">?</summary><div class="ht-tip-pop">Every email the site tried to send to a customer, newest first. It is saved, so it is still here after the site restarts.</div></details>{% endif %}</h2>
     {% if history.saved %}
-    <p class="sub">Every email the site tried to send to a customer, newest first. It is saved, so it is still here after the site restarts.</p>
     <div class="filters" role="group" aria-label="Show">
       {% for f in history.filters %}<a class="chip{% if f.active %} active{% endif %}" href="{{ f.url }}">{{ f.label }} &middot; {{ f.count }}</a>{% endfor %}
     </div>

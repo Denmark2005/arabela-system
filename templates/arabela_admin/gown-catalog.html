@@ -12,6 +12,7 @@
     <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
   <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet">
   {% include "arabela_admin/partials/photo_viewer_styles.html" %}
+  {% include "arabela_admin/partials/ar_list_styles.html" %}
   <style>
     /* ===== Gown Catalog layout (gc- rules; nothing else uses them): slim stat strip, one list card, status circles + legend ===== */
     .gc-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: #e4e7ec; border: 1px solid #e4e7ec; border-radius: 1rem; overflow: hidden; }
@@ -99,6 +100,56 @@
       .gc-panel--right { right: auto; left: 0; }
       .gc-pop { width: min(21rem, calc(100vw - 3rem)); }
       .gc-legend { padding: .65rem 1rem; }
+    }
+
+    /* ===== The list: one short line per gown, the shared admin list look (partials/ar_list_styles.html). Everything else about a gown is in its dropdown. ===== */
+    /* tick box | gown (photo, status circle + ID, name) | category and size | price | eye + pencil | arrow. Every column is fixed or has a minimum, never "auto". */
+    .ar-head.gc-grid, .ar-line.gc-grid { grid-template-columns: 1.75rem minmax(14rem, 2.2fr) minmax(9rem, 1.2fr) 6rem 5.25rem 2.25rem; padding-left: 1.1rem; }
+    .gc-sort { display: inline-flex; align-items: center; gap: .25rem; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; user-select: none; }
+    .gc-sort:hover { color: #344054; }
+    .dark .gc-sort:hover { color: #d0d5dd; }
+    .gc-pick { display: flex; align-items: center; justify-content: center; }
+    .gc-gown { display: flex; align-items: center; gap: .75rem; min-width: 0; }
+    .gc-gtext { min-width: 0; }
+    .gc-photo { flex: none; }
+    .gc-gtext .ar-name { overflow-wrap: anywhere; }
+    .gc-sub { display: block; margin: .15rem 0 0 1.55rem; font-size: .75rem; color: #667085; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dark .gc-sub { color: #98a2b3; }
+    .gc-cat { min-width: 0; font-size: .8125rem; color: #475467; overflow-wrap: anywhere; }
+    .dark .gc-cat { color: #98a2b3; }
+    .gc-price { font-size: .875rem; font-weight: 600; color: #465fff; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .dark .gc-price { color: #7592ff; }
+    .gc-acts { display: flex; align-items: center; gap: .4rem; justify-self: start; }
+    .gc-row.is-highlight > .ar-line { background: #ecf3ff; }
+    .dark .gc-row.is-highlight > .ar-line { background: rgba(70,95,255,.12); }
+    /* The opened gown: its facts in small labelled pairs (one quiet style for all of them, the physical-check line included). */
+    .gc-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); gap: .75rem 1.5rem; margin: 0; padding: .85rem 1.25rem; }
+    .gc-facts > div { min-width: 0; }
+    .gc-facts dt { margin: 0; font-size: .6875rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #98a2b3; }
+    .gc-facts dd { margin: .25rem 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: .15rem .4rem; font-size: .875rem; color: #344054; overflow-wrap: anywhere; }
+    .dark .gc-facts dd { color: #d0d5dd; }
+    .gc-held { display: block; width: 100%; font-size: .75rem; color: #667085; }
+    .dark .gc-held { color: #98a2b3; }
+    .gc-notes { margin: 0; padding: 0 1.25rem .85rem; font-size: .8125rem; color: #475467; overflow-wrap: anywhere; }
+    .dark .gc-notes { color: #98a2b3; }
+    .gc-notes b { font-weight: 600; }
+    /* The gown window's six facts: three to a row (two on a phone). The admin's compiled stylesheet has no grid-cols-3, so the rule is here. */
+    .gc-win-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem 1rem; }
+    @media (max-width: 520px) { .gc-win-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    /* A small laptop: the category column goes (it is in the dropdown and in the ID) and its sort with it. */
+    @media (max-width: 1180px) {
+      .ar-head.gc-grid, .ar-line.gc-grid { grid-template-columns: 1.75rem minmax(12rem, 1fr) 6rem 5.25rem 2.25rem; }
+      .gc-cat, .gc-h-cat { display: none; }
+    }
+    /* A phone: the price sits under the gown; the column titles are hidden by the shared list rule. */
+    @media (max-width: 760px) {
+      .ar-line.gc-grid { grid-template-columns: 1.75rem minmax(0, 1fr) auto 2.25rem; grid-template-areas: "pick gown gown chev" ". price acts acts"; row-gap: .4rem; padding-left: .9rem; }
+      .ar-line.gc-grid > .gc-pick { grid-area: pick; }
+      .ar-line.gc-grid > .gc-gown { grid-area: gown; }
+      .ar-line.gc-grid > .gc-price { grid-area: price; margin-left: 3.25rem; }
+      .ar-line.gc-grid > .gc-acts { grid-area: acts; justify-self: end; }
+      .ar-line.gc-grid > .ar-chev { grid-area: chev; }
+      .gc-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: .75rem 1rem; }
     }
   </style>
 </head>
@@ -446,6 +497,7 @@
       // isViewModal = true) -- it's the one place per-gown modal state gets reset.
       openGownBlockForm() {
         this.blockError = '';
+        this.showBlockForm = false;
         this.releasingBlockId = null;
         this.newBlockStart = ''; this.newBlockEnd = ''; this.newBlockReason = 'Cleaning'; this.newBlockNote = '';
       },
@@ -475,6 +527,7 @@
         .then(({ ok, data }) => {
           this.blockBusy = false;
           if (!ok) { this.blockError = data.error || 'Could not block those dates.'; return; }
+          this.showBlockForm = false;
           this.gownToast('Dates blocked for ' + this.viewingGown.gownId);
           setTimeout(() => window.location.reload(), 800);
         })
@@ -566,6 +619,11 @@
         .catch(() => { this.removeBusy = false; this.removeError = 'Network error. Please try again.'; });
       },
       selectedGownIds: [], pageTick: 0, sortKey: '', sortDir: 1, gownsMin: [], bulkBusy: false,
+      // Which gown lines are opened (each line's dropdown), and whether the Blocked Dates form in the View window is unfolded. Display only.
+      openGowns: [],
+      isGownOpen(id) { return this.openGowns.includes(id); },
+      toggleGown(id) { this.openGowns = this.openGowns.includes(id) ? this.openGowns.filter(x => x !== id) : this.openGowns.concat([id]); },
+      showBlockForm: false,
       // What staff type is split into words and EVERY word has to appear in the gown's
       // search text (ID, name, category, real color, size, tag color, tag number) -- so
       // 'white 012' or 'blue #4' narrow down instead of finding nothing, while a single
@@ -656,7 +714,7 @@
         else { this.sortKey = key; this.sortDir = 1; }
         const tbody = this.$refs.gownTableBody;
         if (!tbody) { return; }
-        const rows = Array.from(tbody.querySelectorAll('tr[data-gown-row]'));
+        const rows = Array.from(tbody.querySelectorAll('[data-gown-row]'));
         const numeric = key === 'price';
         rows.sort((a, b) => {
           let av = a.getAttribute('data-sort-' + key) || '';
@@ -2021,10 +2079,9 @@
               x-cloak
             >
               <div class="flex items-center justify-between">
-                <h3 class="text-base font-semibold text-gray-800 dark:text-white/90">Blocked Gowns Today</h3>
+                <h3 class="flex items-center text-base font-semibold text-gray-800 dark:text-white/90">Blocked Gowns Today<details class="ht-tip"><summary aria-label="About blocked gowns" title="About blocked gowns">?</summary><div class="ht-tip-pop">Sorted by soonest to free up. Click a gown to open it and release its block early if it's already done.</div></details></h3>
                 <button type="button" @click="showBlockedGownsList = false" class="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Close</button>
               </div>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Sorted by soonest to free up. Click a gown to open it and release its block early if it's already done.</p>
               <div class="mt-4 overflow-y-auto pr-1" style="max-height: 320px;">
                 <div class="divide-y divide-gray-100 dark:divide-gray-800">
                   {% for row in blocked_gowns_today %}
@@ -2051,8 +2108,7 @@
             <div class="mt-3 rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6" x-show="showTagColors" x-cloak>
               <div class="flex items-start justify-between gap-3">
                 <div>
-                  <h3 class="text-base font-semibold text-gray-800 dark:text-white/90">Tag Colors</h3>
-                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Every category has one tag color. Put a tag or ribbon in that color on each gown in the category and write the gown's number on it &mdash; the color tells you the category from across the room, the number tells you which gown.</p>
+                  <h3 class="flex items-center text-base font-semibold text-gray-800 dark:text-white/90">Tag Colors<details class="ht-tip"><summary aria-label="About tag colors" title="About tag colors">?</summary><div class="ht-tip-pop">Every category has one tag color. Put a tag or ribbon in that color on each gown in the category and write the gown's number on it: the color tells you the category from across the room, the number tells you which gown.</div></details></h3>
                 </div>
                 <button type="button" @click="showTagColors = false" class="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Close</button>
               </div>
@@ -2155,8 +2211,7 @@
             <div class="mt-3 rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6" x-show="showAddCategory" x-cloak>
               <div class="flex items-start justify-between gap-3">
                 <div>
-                  <h3 class="text-base font-semibold text-gray-800 dark:text-white/90">Add Category</h3>
-                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">A new kind of gown or outfit, like &ldquo;Debut Gown&rdquo;. It shows up in Add Gown, in Tag Colors and on the customer website.</p>
+                  <h3 class="flex items-center text-base font-semibold text-gray-800 dark:text-white/90">Add Category<details class="ht-tip"><summary aria-label="About adding a category" title="About adding a category">?</summary><div class="ht-tip-pop">A new kind of gown or outfit, like &ldquo;Debut Gown&rdquo;. It shows up in Add Gown, in Tag Colors and on the customer website.</div></details></h3>
                 </div>
                 <button type="button" @click="showAddCategory = false" class="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Close</button>
               </div>
@@ -2179,8 +2234,7 @@
               <p x-show="categoryError" x-cloak x-text="categoryError" class="mt-3 rounded-lg bg-error-50 p-3 text-xs font-medium text-error-600"></p>
 
               <div style="margin-top: 1.5rem;">
-                <p class="text-sm font-medium text-gray-800 dark:text-white/90">All categories</p>
-                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Only an empty category can be removed. The original ones can be brought back by adding a category with the same name.</p>
+                <p class="flex items-center text-sm font-medium text-gray-800 dark:text-white/90">All categories<details class="ht-tip"><summary aria-label="About removing a category" title="About removing a category">?</summary><div class="ht-tip-pop">Only an empty category can be removed. The original ones can be brought back by adding a category with the same name.</div></details></p>
                 <div class="mt-3 divide-y divide-gray-100 dark:divide-gray-800">
                   {% for row in category_rows %}
                   <div class="flex items-center justify-between gap-3 py-3">
@@ -2319,105 +2373,109 @@
               <div x-show="filtering" x-cloak class="flex items-center justify-center" style="height: 300px;">
                 <div class="h-10 w-10 animate-spin rounded-full border-4 border-solid border-gray-300 border-t-transparent dark:border-gray-600"></div>
               </div>
-              <div x-show="!filtering" class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg="tbody" data-arpg-noun="gowns" data-arpg-top="off" data-arpg-count="#gc-count">
-                <table class="min-w-full">
-                  <thead class="sticky top-0 z-10 bg-white dark:bg-gray-900">
-                    <tr>
-                      <th class="px-5 py-3 sm:px-6 text-left">
-                        <input type="checkbox" class="admin-bulk-check" :checked="allVisibleSelected()" x-effect="$el.indeterminate = someVisibleSelected()" @change="toggleSelectAllVisible($event.target.checked)" aria-label="Select all visible gowns" />
-                      </th>
-                      <th class="px-5 py-3 sm:px-6 text-left">
-                        <button type="button" @click="sortGowns('gown')" class="inline-flex items-center gap-1 cursor-pointer select-none font-medium text-gray-500 text-theme-xs dark:text-gray-400">Gown <span class="text-gray-400" x-show="sortKey === 'gown'" x-text="sortDir === 1 ? '↑' : '↓'"></span></button>
-                      </th>
-                      <th class="px-5 py-3 sm:px-6 text-left">
-                        <button type="button" @click="sortGowns('category')" class="inline-flex items-center gap-1 cursor-pointer select-none font-medium text-gray-500 text-theme-xs dark:text-gray-400">Category &middot; Color &middot; Size <span class="text-gray-400" x-show="sortKey === 'category'" x-text="sortDir === 1 ? '↑' : '↓'"></span></button>
-                      </th>
-                      <th class="px-5 py-3 sm:px-6 text-left">
-                        <button type="button" @click="sortGowns('price')" class="inline-flex items-center gap-1 cursor-pointer select-none font-medium text-gray-500 text-theme-xs dark:text-gray-400">Price <span class="text-gray-400" x-show="sortKey === 'price'" x-text="sortDir === 1 ? '↑' : '↓'"></span></button>
-                      </th>
-                      <th class="px-5 py-3 sm:px-6 text-left">
-                        <button type="button" @click="sortGowns('status')" class="inline-flex items-center gap-1 cursor-pointer select-none font-medium text-gray-500 text-theme-xs dark:text-gray-400">Status <span class="text-gray-400" x-show="sortKey === 'status'" x-text="sortDir === 1 ? '↑' : '↓'"></span></button>
-                      </th>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Actions</p></th>
-                    </tr>
-                  </thead>
-                  <tbody x-ref="gownTableBody" class="divide-y divide-gray-100 dark:divide-gray-800">
-                    {% for gown in gowns %}
-                    <tr data-gown-row data-sort-gown="{{ gown.category|lower }}-{{ gown.tag_number }}-{{ gown.gown_id|lower }}" data-sort-category="{{ gown.category|lower }}" data-sort-price="{{ gown.rental_price }}" data-sort-status="{{ gown.status|lower }}" x-show="gownMatchesFilters('{{ gown.category|escapejs }}', '{{ gown.status|escapejs }}', '{{ gown.search_hay|escapejs }}', {{ gown.days_since_check|default_if_none:'null' }})" :class="search !== '' && '{{ gown.gown_id|lower|escapejs }}' === search.toLowerCase() ? 'bg-brand-50 dark:bg-brand-500/15' : ''">
-                      <td class="px-5 py-4 sm:px-6">
-                        <input type="checkbox" class="admin-bulk-check" value="{{ gown.id }}" x-model.number="selectedGownIds" aria-label="Select {{ gown.gown_id }}" />
-                      </td>
-                      <td class="px-5 py-4 sm:px-6">
-                        <div class="flex items-center gap-3">
-                          <button
-                            type="button"
-                            @click="photoUpdateError = ''; viewingGownImage = { id: {{ gown.id }}, gownId: '{{ gown.gown_id|escapejs }}', details: '{{ gown.category|escapejs }} &middot; {{ gown.color_name|escapejs }} &middot; {{ gown.size|escapejs }}', photoUrl: '{{ gown.photo_url|escapejs }}' }; isGownImageModal = true"
-                            title="View or replace gown photo"
-                            class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-800 dark:hover:bg-white/[0.05] dark:hover:text-gray-300"
-                          >
-                            {% if gown.photo_url %}
-                            <img src="{{ gown.photo_url }}" alt="{{ gown.gown_id }}" class="h-full w-full object-cover" />
-                            {% else %}
-                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></svg>
-                            {% endif %}
-                          </button>
-                          <div>
-                            <span class="block font-medium text-gray-800 text-theme-sm dark:text-white/90">{{ gown.gown_id }}</span>
-                            <div class="mt-0.5 flex items-center gap-1.5">
-                              <span class="text-gray-500 text-theme-xs dark:text-gray-400">{{ gown.name }}</span>
-                              {% if gown.design_variant %}
-                              <span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ gown.design_variant }}</span>
-                              {% endif %}
-                            </div>
-                            <!-- The tag for this gown: its category's tag color and the number to write on it. -->
-                            <div class="mt-1 flex items-center gap-1.5 text-theme-xs text-gray-500 dark:text-gray-400" title="Tag this gown with a {{ gown.tag_color }} tag, number {{ gown.tag_number }}">
-                              <span class="admin-tag-dot" style="background-color: {{ gown.tag_hex }};"></span>
-                              <span>{{ gown.tag_color }} tag &middot; No. <span class="admin-tag-number font-semibold text-gray-700 dark:text-white/90">{{ gown.tag_number }}</span></span>
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ gown.category }} &middot; {{ gown.color_name }} &middot; {{ gown.size }}</p></td>
-                      <td class="px-5 py-4 sm:px-6"><p class="text-sm font-semibold text-brand-500">&#8369;{{ gown.rental_price|floatformat:'-2g' }}</p></td>
-                      <td class="px-5 py-4 sm:px-6">
-                        <span class="gc-dot gc-dot--row {% if gown.status == 'Available' %}gc-dot--available{% elif gown.status == 'Reserved' %}gc-dot--reserved{% else %}gc-dot--oos{% endif %}" role="img" aria-label="{{ gown.status }}" title="{{ gown.status }}"></span>
-                        {% if gown.status == 'Reserved' %}
-                        {% if gown.holders %}
-                        {% with holder=gown.holders.0 %}
-                        <p class="mt-1 text-theme-xs text-gray-500 dark:text-gray-400" style="word-break: break-word;">
-                          {% if holder.url %}<a href="{{ holder.url }}" class="font-medium text-brand-500" style="text-decoration: underline;" title="Open {{ holder.reference }} in {% if holder.pending %}Pending Approval{% else %}Active Reservations{% endif %}">{{ holder.customer }} &middot; {{ holder.range }}</a>{% else %}<span class="font-medium">{{ holder.customer }} &middot; {{ holder.range }}</span>{% endif %}{% if gown.holders|length > 1 %} <span>+{{ gown.holders|length|add:"-1" }} more</span>{% endif %}
-                        </p>
-                        {% if holder.pending %}<p class="text-theme-xs text-gray-400 dark:text-gray-500">awaiting payment approval</p>{% endif %}
-                        {% endwith %}
+              <div x-show="!filtering" x-ref="gownTableBody" class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg=".gc-row" data-arpg-noun="gowns" data-arpg-top="off" data-arpg-count="#gc-count">
+                <div class="ar-head gc-grid">
+                  <span class="gc-pick">
+                    <input type="checkbox" class="admin-bulk-check" :checked="allVisibleSelected()" x-effect="$el.indeterminate = someVisibleSelected()" @change="toggleSelectAllVisible($event.target.checked)" aria-label="Select all visible gowns" />
+                  </span>
+                  <button type="button" @click="sortGowns('gown')" class="gc-sort">Gown <span class="text-gray-400" x-show="sortKey === 'gown'" x-text="sortDir === 1 ? '↑' : '↓'"></span></button>
+                  <button type="button" @click="sortGowns('category')" class="gc-sort gc-h-cat">Category &middot; Size <span class="text-gray-400" x-show="sortKey === 'category'" x-text="sortDir === 1 ? '↑' : '↓'"></span></button>
+                  <button type="button" @click="sortGowns('price')" class="gc-sort">Price <span class="text-gray-400" x-show="sortKey === 'price'" x-text="sortDir === 1 ? '↑' : '↓'"></span></button>
+                  <span>Actions</span>
+                  <span></span>
+                </div>
+                {% if gowns %}
+                <div class="ar-empty" x-show="matchingGownCount() === 0" x-cloak>
+                  <p class="text-sm text-gray-400 dark:text-gray-500">No gowns match your filters.</p>
+                </div>
+                {% endif %}
+                {% for gown in gowns %}
+                <!-- One gown: a closed line (tick box, photo, status circle + ID + name, category and size, price, the eye and the pencil) and, hidden until it
+                     is opened, its tag, details, physical check and who holds it. A click on the line opens it, except on the tick box, the photo and the two buttons. -->
+                <div class="ar-booking gc-row" data-gown-row data-sort-gown="{{ gown.category|lower }}-{{ gown.tag_number }}-{{ gown.gown_id|lower }}" data-sort-category="{{ gown.category|lower }}" data-sort-price="{{ gown.rental_price }}" x-show="gownMatchesFilters('{{ gown.category|escapejs }}', '{{ gown.status|escapejs }}', '{{ gown.search_hay|escapejs }}', {{ gown.days_since_check|default_if_none:'null' }})" :class="search !== '' && '{{ gown.gown_id|lower|escapejs }}' === search.toLowerCase() ? 'is-highlight' : ''">
+                  <div class="ar-line gc-grid" :class="isGownOpen({{ gown.id }}) ? 'is-open' : ''" @click="if (!$event.target.closest('.gc-pick, .gc-photo, .gc-acts, a')) { toggleGown({{ gown.id }}) }">
+                    <span class="gc-pick">
+                      <input type="checkbox" class="admin-bulk-check" value="{{ gown.id }}" x-model.number="selectedGownIds" aria-label="Select {{ gown.gown_id }}" />
+                    </span>
+                    <div class="gc-gown">
+                      <button
+                        type="button"
+                        @click="photoUpdateError = ''; viewingGownImage = { id: {{ gown.id }}, gownId: '{{ gown.gown_id|escapejs }}', details: '{{ gown.category|escapejs }} &middot; {{ gown.color_name|escapejs }} &middot; {{ gown.size|escapejs }}', photoUrl: '{{ gown.photo_url|escapejs }}' }; isGownImageModal = true"
+                        title="View or replace gown photo"
+                        class="gc-photo flex h-10 w-10 flex-none items-center justify-center overflow-hidden rounded-lg bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-800 dark:hover:bg-white/[0.05] dark:hover:text-gray-300"
+                      >
+                        {% if gown.photo_url %}
+                        <img src="{{ gown.photo_url }}" alt="{{ gown.gown_id }}" class="h-full w-full object-cover" />
                         {% else %}
-                        <p class="mt-1 text-theme-xs text-gray-400 dark:text-gray-500" title="No booking is holding this gown &mdash; its status was set by hand in the View window.">Set manually &middot; no booking</p>
+                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></svg>
                         {% endif %}
-                        {% endif %}
-                        <p class="mt-1 text-theme-xs text-gray-400 dark:text-gray-500" title="When someone last confirmed this gown is physically here">{{ gown.check_label }}</p>
-                      </td>
-                      <td class="px-5 py-4 sm:px-6">
-                        <div class="flex items-center gap-2">
-                        <button type="button"
-                          @click="viewingGown = { id: {{ gown.id }}, gownId: '{{ gown.gown_id|escapejs }}', name: '{{ gown.name|escapejs }}', category: '{{ gown.category|escapejs }}', colorName: '{{ gown.color_name|escapejs }}', colorCode: '{{ gown.color_code|escapejs }}', size: '{{ gown.size|escapejs }}', designVariant: '{{ gown.design_variant|escapejs }}', price: '{{ gown.rental_price }}', condition: '{{ gown.condition|escapejs }}', status: '{{ gown.status|escapejs }}', notes: '{{ gown.notes|escapejs }}', slug: '{{ gown.slug|escapejs }}' }; openGownBlockForm(); isViewModal = true"
-                          class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View</button>
-                        <button type="button"
-                          @click="openEditGownModal({ id: {{ gown.id }}, name: '{{ gown.name|escapejs }}', category: '{{ gown.category|escapejs }}', colorName: '{{ gown.color_name|escapejs }}', colorCode: '{{ gown.color_code|escapejs }}', size: '{{ gown.size|escapejs }}', designVariant: '{{ gown.design_variant|escapejs }}', price: '{{ gown.rental_price }}', condition: '{{ gown.condition|escapejs }}', status: '{{ gown.status|escapejs }}', notes: '{{ gown.notes|escapejs }}', slug: '{{ gown.slug|escapejs }}' })"
-                          class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">Edit</button>
+                      </button>
+                      <div class="gc-gtext">
+                        <div class="ar-who">
+                          <span class="gc-dot gc-dot--row {% if gown.status == 'Available' %}gc-dot--available{% elif gown.status == 'Reserved' %}gc-dot--reserved{% else %}gc-dot--oos{% endif %}" role="img" aria-label="{{ gown.status }}" title="{{ gown.status }}"></span>
+                          <span class="ar-name">{{ gown.gown_id }}</span>
                         </div>
-                      </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                      <td colspan="6" class="px-5 py-10 text-center text-sm text-gray-400 dark:text-gray-500">No gowns in the catalog yet. Click &quot;Add Gown&quot; to create the first one.</td>
-                    </tr>
-                    {% endfor %}
-                    {% if gowns %}
-                    <tr x-show="matchingGownCount() === 0" x-cloak>
-                      <td colspan="6" class="px-5 py-10 text-center text-sm text-gray-400 dark:text-gray-500">No gowns match your filters.</td>
-                    </tr>
-                    {% endif %}
-                  </tbody>
-                </table>
+                        <span class="gc-sub">{{ gown.name }}</span>
+                      </div>
+                    </div>
+                    <div class="gc-cat">{{ gown.category }} &middot; {{ gown.size }}</div>
+                    <div class="gc-price">&#8369;{{ gown.rental_price|floatformat:'-2g' }}</div>
+                    <div class="gc-acts">
+                      <button type="button"
+                        @click="viewingGown = { id: {{ gown.id }}, gownId: '{{ gown.gown_id|escapejs }}', name: '{{ gown.name|escapejs }}', category: '{{ gown.category|escapejs }}', colorName: '{{ gown.color_name|escapejs }}', colorCode: '{{ gown.color_code|escapejs }}', size: '{{ gown.size|escapejs }}', designVariant: '{{ gown.design_variant|escapejs }}', price: '{{ gown.rental_price }}', condition: '{{ gown.condition|escapejs }}', status: '{{ gown.status|escapejs }}', notes: '{{ gown.notes|escapejs }}', slug: '{{ gown.slug|escapejs }}' }; openGownBlockForm(); isViewModal = true"
+                        class="ar-ib" title="View gown" aria-label="View {{ gown.gown_id }}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                      </button>
+                      <button type="button"
+                        @click="openEditGownModal({ id: {{ gown.id }}, name: '{{ gown.name|escapejs }}', category: '{{ gown.category|escapejs }}', colorName: '{{ gown.color_name|escapejs }}', colorCode: '{{ gown.color_code|escapejs }}', size: '{{ gown.size|escapejs }}', designVariant: '{{ gown.design_variant|escapejs }}', price: '{{ gown.rental_price }}', condition: '{{ gown.condition|escapejs }}', status: '{{ gown.status|escapejs }}', notes: '{{ gown.notes|escapejs }}', slug: '{{ gown.slug|escapejs }}' })"
+                        class="ar-ib" title="Edit gown" aria-label="Edit {{ gown.gown_id }}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                      </button>
+                    </div>
+                    <button type="button" class="ar-chev" @click.stop="toggleGown({{ gown.id }})" aria-expanded="false"
+                      :aria-expanded="isGownOpen({{ gown.id }}) ? 'true' : 'false'" aria-controls="gc-panel-{{ gown.id }}"
+                      aria-label="Show or hide the details of {{ gown.gown_id }}">
+                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7.5l5 5 5-5" /></svg>
+                    </button>
+                  </div>
+                  <div class="ar-panel" id="gc-panel-{{ gown.id }}" x-show="isGownOpen({{ gown.id }})" x-cloak>
+                    <dl class="gc-facts">
+                      <div>
+                        <dt>Tag</dt>
+                        <dd title="Tag this gown with a {{ gown.tag_color }} tag, number {{ gown.tag_number }}"><span class="admin-tag-dot" style="background-color: {{ gown.tag_hex }};"></span>{{ gown.tag_color }} tag &middot; No. <span class="admin-tag-number font-semibold">{{ gown.tag_number }}</span></dd>
+                      </div>
+                      <div><dt>Category</dt><dd>{{ gown.category }}</dd></div>
+                      <div><dt>Color</dt><dd>{{ gown.color_name }}</dd></div>
+                      <div><dt>Size</dt><dd>{{ gown.size }}</dd></div>
+                      {% if gown.design_variant %}<div><dt>Variant</dt><dd>{{ gown.design_variant }}</dd></div>{% endif %}
+                      <div><dt>Condition</dt><dd>{{ gown.condition }}</dd></div>
+                      <div>
+                        <dt>Status</dt>
+                        <dd>
+                          {{ gown.status }}
+                          {% if gown.status == 'Reserved' %}
+                          {% if gown.holders %}
+                          {% with holder=gown.holders.0 %}
+                          <span class="gc-held">
+                            {% if holder.url %}<a href="{{ holder.url }}" class="font-medium text-brand-500" style="text-decoration: underline;" title="Open {{ holder.reference }} in {% if holder.pending %}Pending Approval{% else %}Active Reservations{% endif %}">{{ holder.customer }} &middot; {{ holder.range }}</a>{% else %}<span class="font-medium">{{ holder.customer }} &middot; {{ holder.range }}</span>{% endif %}{% if gown.holders|length > 1 %} <span>+{{ gown.holders|length|add:"-1" }} more</span>{% endif %}{% if holder.pending %}<span style="display: block;">awaiting payment approval</span>{% endif %}
+                          </span>
+                          {% endwith %}
+                          {% else %}
+                          <span class="gc-held" title="No booking is holding this gown &mdash; its status was set by hand in the View window.">Set manually &middot; no booking</span>
+                          {% endif %}
+                          {% endif %}
+                        </dd>
+                      </div>
+                      <div><dt>Physical check</dt><dd title="When someone last confirmed this gown is physically here">{{ gown.check_label }}</dd></div>
+                    </dl>
+                    {% if gown.notes %}<p class="gc-notes"><b>Notes:</b> {{ gown.notes }}</p>{% endif %}
+                  </div>
+                </div>
+                {% empty %}
+                <div class="ar-empty">
+                  <p class="text-sm text-gray-400 dark:text-gray-500">No gowns in the catalog yet. Click &quot;Add Gown&quot; to create the first one.</p>
+                </div>
+                {% endfor %}
               </div>
             </div>
 
@@ -2452,16 +2510,15 @@
          docstring) -- shown read-only here so staff can find a gown's ID or its
          customer-facing link without leaving the panel. -->
     <div class="px-2" x-show="isEditMode" x-cloak>
-      <div class="mb-5 flex flex-col gap-1 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-500 dark:border-gray-700 dark:bg-white/[0.03] dark:text-gray-400">
-        <span>Gown ID and product link are permanent and can't be changed here.</span>
-        <span>Product slug: <span class="font-medium text-gray-700 dark:text-gray-300" x-text="editingGownSlug"></span></span>
+      <div class="mb-5 flex items-center rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-500 dark:border-gray-700 dark:bg-white/[0.03] dark:text-gray-400">
+        <span>Product slug: <span class="font-medium text-gray-700 dark:text-gray-300" x-text="editingGownSlug"></span></span><details class="ht-tip"><summary aria-label="About the gown ID and product link" title="About the gown ID and product link">?</summary><div class="ht-tip-pop">Gown ID and product link are permanent and can't be changed here.</div></details>
       </div>
     </div>
     <form class="flex flex-col" @submit.prevent="addGown()">
       <div class="px-2">
         <div class="grid grid-cols-1 gap-x-6 gap-y-5 lg:grid-cols-2">
           <div class="col-span-2">
-            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Gown Name</label>
+            <div class="mb-1.5 flex items-center"><label class="block text-sm font-medium text-gray-700 dark:text-gray-400">Gown Name</label><details class="ht-tip" x-show="!isEditMode" x-cloak><summary aria-label="About naming a gown" title="About naming a gown">?</summary><div class="ht-tip-pop">Name a gown by its color. It fills in from the Color you pick below: only type your own if you need to.</div></details></div>
             <input
               type="text"
               x-model="newGownName"
@@ -2470,7 +2527,6 @@
               placeholder="e.g. White"
               class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
             />
-            <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400" x-show="!isEditMode" x-cloak>Name a gown by its color. It fills in from the Color you pick below &mdash; only type your own if you need to.</p>
           </div>
 
           <div class="col-span-2 lg:col-span-1">
@@ -2646,11 +2702,11 @@
               <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <button type="button" @click="addGown('same')" :disabled="addGownBusy" class="rounded-lg border border-gray-300 bg-white px-3 py-3 text-left text-sm shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-white/[0.03]">
                   <span class="block font-medium text-gray-800 dark:text-white/90">The same gown &mdash; another unit or size</span>
-                  <span class="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">Keeps the name. The website shows one listing with a quantity (like &ldquo;3 available&rdquo;).</span>
+                  <span class="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">Keeps the name. One listing with a quantity (like &ldquo;3 available&rdquo;).</span>
                 </button>
                 <button type="button" @click="addGown('different')" :disabled="addGownBusy" class="rounded-lg border border-gray-300 bg-white px-3 py-3 text-left text-sm shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-white/[0.03]">
                   <span class="block font-medium text-gray-800 dark:text-white/90">A different gown</span>
-                  <span class="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">Gets its own number in the name (like &ldquo;<span x-text="nameConflict && nameConflict.name"></span> (2)&rdquo;) so it has its own listing.</span>
+                  <span class="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">Gets its own number (like &ldquo;<span x-text="nameConflict && nameConflict.name"></span> (2)&rdquo;) and its own listing.</span>
                 </button>
               </div>
             </div>
@@ -2659,13 +2715,11 @@
           <!-- Photo already has its own working click-the-thumbnail replace flow in the
                catalog table, so editing doesn't duplicate it -- only shown when adding. -->
           <div class="col-span-2" x-show="isEditMode" x-cloak>
-            <p class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-xs text-gray-500 dark:border-gray-700 dark:bg-white/[0.03] dark:text-gray-400">
-              To change this gown's photo, close this window and click its thumbnail in the catalog table.
-            </p>
+            <p class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-xs text-gray-500 dark:border-gray-700 dark:bg-white/[0.03] dark:text-gray-400">To change the photo, click the gown's thumbnail in the list.</p>
           </div>
 
           <div class="col-span-2" x-show="!isEditMode" x-cloak>
-            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Gown Photo <span class="text-gray-400">(optional -- add later if you don't have one yet)</span></label>
+            <div class="mb-1.5 flex items-center"><label class="block text-sm font-medium text-gray-700 dark:text-gray-400">Gown Photo <span class="text-gray-400">(optional)</span></label><details class="ht-tip"><summary aria-label="About the gown photo" title="About the gown photo">?</summary><div class="ht-tip-pop">You can add the photo later if you don't have one yet. A portrait photo (3:4) works best; other shapes are cropped to fit on the customer site.</div></details></div>
             <input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" x-ref="newGownPhotoInput" @change="onGownPhotoChosen($event.target.files[0]); $event.target.value = ''" />
             <div
               class="dropzone hover:border-brand-500! dark:hover:border-brand-500! rounded-xl border border-dashed! border-gray-300! bg-gray-50 p-6 dark:border-gray-700! dark:bg-gray-900 cursor-pointer"
@@ -2704,7 +2758,6 @@
               <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
               View Full Image
             </a>
-            <p class="mt-2 text-xs text-gray-400">Portrait photo works best (3:4) -- other shapes will be cropped to fit on the customer site.</p>
           </div>
         </div>
       </div>
@@ -2843,7 +2896,7 @@
       </p>
     </div>
     <div class="px-2">
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div class="gc-win-facts">
         <div>
           <p class="text-xs text-gray-500 dark:text-gray-400">Category</p>
           <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewingGown.category"></p>
@@ -2875,7 +2928,7 @@
       </div>
 
       <div class="mt-6 border-t border-gray-100 pt-5 dark:border-gray-800">
-        <p class="mb-3 text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Current Status</p>
+        <div class="mb-3 flex items-center"><p class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Current Status</p><details class="ht-tip"><summary aria-label="About the status" title="About the status">?</summary><div class="ht-tip-pop">Damaged or otherwise unavailable? Use &quot;Mark Out-of-Stock&quot;: it hides the gown from availability without deleting its record. For a scheduled cleaning or repair gap with a known end date, add a range under Blocked Dates instead: it frees itself when the dates pass. Reserved is set automatically when a booking is approved; to hold a gown for a customer, make a booking in New Booking.</div></details></div>
         <p class="mb-4 inline-flex rounded-full px-3 py-1 text-sm font-medium"
           :class="{
             'bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500': viewingGown.status === 'Available',
@@ -2888,16 +2941,13 @@
           <button type="button" @click="changeGownStatus('Available')" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">Mark Available</button>
           <button type="button" @click="changeGownStatus('Out-of-Stock')" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">Mark Out-of-Stock</button>
         </div>
-        <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">Damaged or otherwise unavailable? Use "Mark Out-of-Stock" — it hides the gown from availability without deleting its record. For a scheduled cleaning or repair gap with a known end date, add a range under Blocked Dates below instead — it frees itself when the dates pass. Reserved is set automatically when a booking is approved; to hold a gown for a customer, make a booking in New Booking.</p>
       </div>
 
       <!-- Booked by: who a Reserved gown is reserved for, each booking with a link to open it. -->
       <div class="mt-6 border-t border-gray-100 pt-5 dark:border-gray-800" x-show="viewingGown.status === 'Reserved'">
-        <p class="mb-2 text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Booked by</p>
+        <div class="mb-2 flex items-center"><p class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Booked by</p><details class="ht-tip"><summary aria-label="About who holds this gown" title="About who holds this gown">?</summary><div class="ht-tip-pop">Who the gown is reserved for. If no booking holds it, its status was set to Reserved by hand: use &quot;Mark Available&quot; above if it should be free.</div></details></div>
         <template x-if="currentHolders().length === 0">
-          <p class="rounded-lg bg-gray-50 p-3 text-xs text-gray-500 dark:bg-white/[0.03] dark:text-gray-400">
-            No booking is holding this gown &mdash; its status was set to Reserved by hand. Use "Mark Available" above if it should be free.
-          </p>
+          <p class="rounded-lg bg-gray-50 p-3 text-xs text-gray-500 dark:bg-white/[0.03] dark:text-gray-400">Not held by any booking.</p>
         </template>
         <div style="display:flex; flex-direction:column; gap:0.5rem;">
           <template x-for="(holder, holderIndex) in currentHolders()" :key="holderIndex">
@@ -2920,9 +2970,9 @@
            give (partials/availability_check.html). Read-only; a free date offers "Book it". -->
       <div class="mt-6 border-t border-gray-100 pt-5 dark:border-gray-800"
            x-init="$watch('viewingGown', () => window.arabelaAvailability && window.arabelaAvailability.clear($refs.caInlineOut))">
-        <p class="mb-2 text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Check availability</p>
+        <div class="mb-2 flex items-center"><p class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Check availability</p><details class="ht-tip"><summary aria-label="About Check availability" title="About Check availability">?</summary><div class="ht-tip-pop">Can this gown be booked for a customer's event date? Nothing is saved. A free date offers &quot;Book it in New Booking&quot;.</div></details></div>
         <div class="ca-row">
-          <input type="date" class="ca-field" x-ref="caInlineDate" aria-label="Event date to check">
+          <input type="date" class="ca-field" x-ref="caInlineDate" aria-label="Event date to check" x-init="window.arabelaAvailability && window.arabelaAvailability.limit($el)">
           <button type="button" class="ca-btn" @click="window.arabelaAvailability.inline($refs.caInlineDate, viewingGown.id, $refs.caInlineOut)">Check</button>
         </div>
         <div class="ca-out" x-ref="caInlineOut" aria-live="polite"></div>
@@ -2932,16 +2982,10 @@
            a right-now switch; this is the dated version -- the gap after a return while the
            gown is being washed or repaired, which nothing else in the system can express. -->
       <div class="mt-6 border-t border-gray-100 pt-5 dark:border-gray-800">
-        <p class="mb-2 text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Blocked Dates</p>
-        <p class="mb-3 text-xs text-gray-400">
-          Days this gown can't go out even though nobody booked it — cleaning, repairs, alterations.
-          Customers see these greyed out on the product calendar. Release a block and the gown is bookable again straight away.
-        </p>
+        <div class="mb-2 flex items-center"><p class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Blocked Dates</p><details class="ht-tip"><summary aria-label="About blocked dates" title="About blocked dates">?</summary><div class="ht-tip-pop">Days this gown can't go out even though nobody booked it: cleaning, repairs, alterations. Customers see these greyed out on the product calendar. Release a block and the gown is bookable again straight away.</div></details></div>
 
         <template x-if="currentBlocks().length === 0">
-          <p class="mb-3 rounded-lg bg-gray-50 p-3 text-xs text-gray-500 dark:bg-white/[0.03] dark:text-gray-400">
-            No blocked dates — this gown is bookable on any day it isn't already reserved.
-          </p>
+          <p class="mb-3 rounded-lg bg-gray-50 p-3 text-xs text-gray-500 dark:bg-white/[0.03] dark:text-gray-400">No blocked dates.</p>
         </template>
 
         <template x-if="currentBlocks().length > 0">
@@ -2972,6 +3016,11 @@
           </div>
         </template>
 
+        <div x-show="!showBlockForm">
+          <button type="button" @click="showBlockForm = true" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">+ Block dates</button>
+        </div>
+
+        <div x-show="showBlockForm" x-cloak>
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label class="mb-2 block text-xs font-medium text-gray-700 dark:text-gray-400">Unavailable from</label>
@@ -2979,7 +3028,6 @@
               type="date"
               x-model="newBlockStart"
               min="{{ today_iso }}"
-              onclick="this.showPicker()"
               class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
             />
           </div>
@@ -2989,7 +3037,6 @@
               type="date"
               x-model="newBlockEnd"
               :min="newBlockStart || '{{ today_iso }}'"
-              onclick="this.showPicker()"
               class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
             />
           </div>
@@ -3015,7 +3062,12 @@
 
         <p x-show="blockError" x-cloak class="mt-3 rounded-lg bg-error-50 p-3 text-xs font-medium text-error-600" x-text="blockError"></p>
 
-        <div class="mt-3" style="display:flex; justify-content:flex-end;">
+        <div class="mt-3" style="display:flex; justify-content:flex-end; gap:0.5rem;">
+          <button
+            type="button"
+            @click="showBlockForm = false; blockError = ''"
+            class="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]"
+          >Cancel</button>
           <button
             type="button"
             @click="addGownBlock()"
@@ -3025,11 +3077,12 @@
             x-text="blockBusy ? 'Blocking…' : 'Block These Dates'"
           ></button>
         </div>
+        </div>
       </div>
 
       <!-- Physical Check: when someone last saw this gown on the rack. -->
       <div class="mt-6 border-t border-gray-100 pt-5 dark:border-gray-800">
-        <p class="mb-2 text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Physical Check</p>
+        <div class="mb-2 flex items-center"><p class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Physical Check</p><details class="ht-tip"><summary aria-label="About the physical check" title="About the physical check">?</summary><div class="ht-tip-pop">Press &quot;Mark as checked now&quot; when you've just seen this gown on the rack.</div></details></div>
         <p class="mb-3 text-sm text-gray-700 dark:text-gray-300" x-text="gownCheckLabel(viewingGown.id)"></p>
         <button
           type="button"
@@ -3038,7 +3091,6 @@
           :style="bulkBusy ? 'opacity:0.6; cursor:not-allowed;' : ''"
           class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]"
         >Mark as checked now</button>
-        <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">Press this when you've just seen this gown on the rack.</p>
       </div>
     </div>
     {% if admin_can_manage %}

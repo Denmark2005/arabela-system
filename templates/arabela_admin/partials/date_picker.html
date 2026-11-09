@@ -1,0 +1,44 @@
+{% comment %}
+  Every admin date box gets a visible calendar icon on its right; a click on that icon opens the calendar. A click on the date itself (month, day,
+  year) does NOT open it, so a date can still be typed: opening the calendar on every click was tried before and dropped, because the open calendar takes
+  the keyboard and the date could no longer be typed.
+
+  Why this is needed: the admin theme's stylesheet hides the browser's own calendar button on every date box, and only a few boxes had a script of their
+  own to open it, so most date boxes looked typing-only. One rule and one click handler for all of them replaces the per-box scripts. Included ONCE per
+  admin page from partials/notifications.html.
+
+  The icon is a background picture (not the browser's button), so it looks the same in every browser, and !important is used so that a box's own
+  `background: transparent` or Tailwind `bg-none` / `px-4` classes cannot remove it or sit the text on top of it.
+{% endcomment %}
+<style>
+  input[type="date"] {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23667085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'/%3E%3Cpath d='M16 2v4M8 2v4M3 10h18'/%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right .8rem center !important;
+    background-size: 1.1rem 1.1rem !important;
+    padding-right: 2.6rem !important;
+    accent-color: #465fff;
+    color-scheme: light;
+  }
+  .dark input[type="date"] {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%2398a2b3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'/%3E%3Cpath d='M16 2v4M8 2v4M3 10h18'/%3E%3C/svg%3E") !important;
+    color-scheme: dark;
+  }
+  input[type="date"]:disabled, input[type="date"][readonly] { cursor: not-allowed; opacity: .6; }
+</style>
+<script>
+  (function () {
+    if (window.__arabelaDatePicker) { return; }
+    window.__arabelaDatePicker = true;
+    var ICON_ZONE = 46;      // pixels from the box's right edge: the icon (1.1rem) plus its margin
+    document.addEventListener('click', function (event) {
+      var box = event.target;
+      if (!box || box.tagName !== 'INPUT' || box.type !== 'date') { return; }
+      if (box.disabled || box.readOnly || typeof box.showPicker !== 'function') { return; }
+      // Only the icon (the right-hand end of the box, where the padding keeps the text clear) opens the calendar.
+      if (box.getBoundingClientRect().right - event.clientX > ICON_ZONE) { return; }
+      // showPicker() can refuse (an old browser, or a box that is not on screen): the box still works by typing, so never let it throw.
+      try { box.showPicker(); } catch (ignore) { /* typing still works */ }
+    });
+  })();
+</script>

@@ -53,7 +53,10 @@ class TemplateRulesTests(SimpleTestCase):
     def test_nothing_in_the_admin_is_blurred(self):
         for path in admin_templates():
             with self.subTest(template=rel(path)):
-                self.assertNotIn("backdrop-blur", path.read_text(encoding="utf8"))
+                text = path.read_text(encoding="utf8")
+                self.assertNotIn("backdrop-blur", text)                    # the Tailwind class ...
+                self.assertNotIn("backdrop-filter", text)                  # ... and the same thing written as plain CSS (Reservation Records, Categories, the confirm pop-up)
+                self.assertNotRegex(text, r"(?<!-)filter:\s*blur")
 
     def test_a_wording_close_button_only_survives_in_a_window_that_has_no_x(self):
         found = {}

@@ -128,8 +128,9 @@ class CatalogPageTests(TestCase):
 
     def test_the_hand_set_reserved_gown_still_shows_its_old_explanation_and_the_way_out(self):
         html = self.page()
-        self.assertIn("its status was set to Reserved by hand", html)
-        self.assertIn("Use \"Mark Available\" above if it should be free.", html)
+        # The explanation is behind the "?" next to "Booked by"; the box itself only says "Not held by any booking."
+        self.assertIn("its status was set to Reserved by hand: use &quot;Mark Available&quot; above if it should be free.", html)
+        self.assertIn("Not held by any booking.", html)
 
     def test_the_add_gown_status_list_has_no_reserved_but_the_status_filter_keeps_it(self):
         html = self.page().replace("\r\n", "\n")
@@ -161,13 +162,16 @@ class DateBoxIsReadableInDarkModeTests(SimpleTestCase):
         self.assertIn("color-scheme: dark", line)
         self.assertIn("background: #0c111d", line)
 
-    def test_the_view_window_box_keeps_typing_and_the_calendar_icon_untouched(self):
+    def test_the_view_window_box_keeps_typing_and_gets_the_shared_calendar_icon(self):
         """A click handler that opened the calendar on every click was tried and dropped: the popup takes the keyboard, so a date could no longer be typed.
-        The fix for this box is only its colour; the native calendar icon (now visible) and typing both work as before."""
+        The shared handler (partials/date_picker.html) opens the calendar only from the icon at the right end of the box, so typing keeps working."""
         html = self.text("gown-catalog.html")
         box = html[html.index('x-ref="caInlineDate"'):]
         box = box[:box.index(">")]
         self.assertNotIn("onclick", box)
         self.assertNotIn("@click", box)
-        self.assertEqual(html.count("showPicker"), 2)         # only the two Blocked Dates boxes below it, as before
+        self.assertEqual(html.count("showPicker"), 0)         # no per-box handler any more: the one shared handler does it
+        picker = self.text("partials/date_picker.html")
+        self.assertIn("box.getBoundingClientRect().right - event.clientX > ICON_ZONE", picker)      # only the icon end opens the calendar
+        self.assertIn("var ICON_ZONE = 46;", picker)
 

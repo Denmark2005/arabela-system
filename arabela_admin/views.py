@@ -694,7 +694,7 @@ def payment_verification_view(request):
     reservations = (
         Reservation.objects.all()
         .select_related("customer__profile")
-        .prefetch_related(_receipts_prefetch())
+        .prefetch_related(_receipts_prefetch(), "items")
         .order_by("-created_at")
     )
     now = timezone.now()
@@ -715,12 +715,30 @@ def payment_verification_view(request):
         .prefetch_related("items")
         .order_by("-reviewed_at")
     )
+
+    # What the redesigned lists show (display only -- nothing here is read by a rule): per booking how many gowns it has (a gown the shop
+    # cancelled never went out, so it is not counted), one status word, and whether the same GCash number is on another booking, answered
+    # for the whole list in ONE query instead of one query per booking.
+    rows = list(reservations)
+    duplicates = _same_gcash_number_elsewhere(rows)
+    status_words = {
+        Reservation.Status.PENDING: "Pending", Reservation.Status.REJECTED: "Rejected", Reservation.Status.CANCELLED: "Cancelled",
+    }
+    for booking in rows + verified_today:
+        items = list(booking.items.all())
+        live = [i for i in items if i.stage != ReservationItem.Stage.CANCELLED]
+        booking.live_items = live or items
+        booking.gown_count = len(live)
+        booking.cancelled_count = len(items) - len(live)
+        booking.item_total = len(items)
+        booking.gcash_dups = duplicates.get(booking.id, "")
+        booking.pv_status = status_words.get(booking.status, "Verified")
     return render(
         request,
         "arabela_admin/payment-verification.html",
         {
             "page": "payment-verification",
-            "reservations": reservations,
+            "reservations": rows,
             "verified_today": verified_today,
             "pending_review_count": reservations.filter(status=Reservation.Status.PENDING).count(),
             "verified_this_month_count": reservations.filter(

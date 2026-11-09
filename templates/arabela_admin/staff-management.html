@@ -1472,13 +1472,12 @@
             </div>
           </div>
           <div class="col-span-2">
-            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Role</label>
+            <div class="mb-1.5 flex items-center"><label class="block text-sm font-medium text-gray-700 dark:text-gray-400">Role</label><details class="ht-tip"><summary aria-label="About the roles" title="About the roles">?</summary><div class="ht-tip-pop">Staff do the daily work. A Manager can also delete gowns, cancel bookings, flag customers, and delete receipt photos. Neither can open Staff Management.</div></details></div>
             <select x-model="newAccountRole"
               class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
               <option value="Manager">Manager</option>
               <option value="Staff">Staff</option>
             </select>
-            <p class="mt-1.5 text-xs text-gray-400 dark:text-gray-400">Staff do the daily work. A Manager can also delete gowns, cancel bookings, flag customers, and delete receipt photos. Neither can open Staff Management.</p>
           </div>
         </div>
         <p x-show="accountError" x-cloak x-text="accountError" class="mt-3 text-theme-xs text-error-500"></p>
@@ -1520,7 +1519,7 @@
     </button>
     <div class="px-2 pr-14">
       <h4 class="mb-2 text-2xl font-semibold text-gray-800 dark:text-white/90">Edit Account</h4>
-      <p class="mb-6 text-sm text-gray-500 dark:text-gray-400 lg:mb-7">Update the account details. Leave the password blank to keep it unchanged.</p>
+      <p class="mb-6 text-sm text-gray-500 dark:text-gray-400 lg:mb-7">Leave the password blank to keep it unchanged.</p>
     </div>
     <form class="flex flex-col" @submit.prevent="saveEdit()">
       <div class="px-2">

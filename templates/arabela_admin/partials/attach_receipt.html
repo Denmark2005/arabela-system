@@ -47,8 +47,9 @@
 
     <span class="ar-label">Receipt photo</span>
     <div class="ar-pick">
-      <button type="button" class="ar-btn ar-btn--ghost" id="ar-camera-btn">Take photo</button>
-      <button type="button" class="ar-btn ar-btn--ghost" id="ar-file-btn">Choose from gallery</button>
+      <!-- The camera button is for phones and tablets (see .touch-only in partials/notifications.html); a computer only gets the file button. -->
+      <button type="button" class="ar-btn ar-btn--ghost touch-only" id="ar-camera-btn">Take photo</button>
+      <button type="button" class="ar-btn ar-btn--ghost" id="ar-file-btn"><span class="touch-only">Choose from gallery</span><span class="pc-only">Choose photo</span></button>
     </div>
     <input type="file" class="ar-hidden" id="ar-camera" accept="image/png,image/jpeg,image/webp" capture="environment">
     <input type="file" class="ar-hidden" id="ar-file" accept="image/png,image/jpeg,image/webp">
@@ -101,7 +102,9 @@
       lead.textContent = 'For ' + current.customer + ' · ' + current.ref + '. Attach it when the customer pays, then press Approve.';
       overlay.classList.add('is-open');
       overlay.setAttribute('aria-hidden', 'false');
-      document.getElementById('ar-camera-btn').focus();
+      // The first button staff can actually see: the camera button is hidden on a computer.
+      var cameraBtn = document.getElementById('ar-camera-btn');
+      (cameraBtn.offsetParent !== null ? cameraBtn : document.getElementById('ar-file-btn')).focus();
     }
     function close() {
       if (busy) { return; }

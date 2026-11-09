@@ -1,0 +1,71 @@
+{% comment %}
+  The small round "?" that explains something on demand, so the explanation is not printed on the page all the time. Same look as New Booking's "?"
+  (its own .nb-tip is left as it is). Included ONCE per admin page from partials/notifications.html (the header partial every admin page has), so no page
+  has to include it again.
+
+  Use it next to a title or a label. NEVER inside a button, and never inside a label element that wraps a control: a click on the "?" would be taken as a
+  click on that button or control. The markup (shown here with entities so that it is not read as markup):
+
+      &lt;details class="ht-tip"&gt;&lt;summary aria-label="About blocked dates" title="About blocked dates"&gt;?&lt;/summary&gt;&lt;div class="ht-tip-pop"&gt;The explanation.&lt;/div&gt;&lt;/details&gt;
+
+  Plain script, no framework: it also works in the windows and on the pages that are not built on Alpine. A click outside or Escape closes it (Escape closes
+  ONLY the "?" while one is open, not the window behind it), and a bubble that would run off the edge of the screen is slid back inside (or opened above the
+  "?" when there is no room below it).
+{% endcomment %}
+<style>
+  .ht-tip { position: relative; display: inline-block; vertical-align: middle; margin-left: .4rem; font-style: normal; font-weight: 400; text-transform: none; letter-spacing: 0; }
+  .ht-tip > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 1.1rem; height: 1.1rem; border: 1px solid #98a2b3; border-radius: 999px; color: #667085; font-size: .68rem; font-weight: 700; line-height: 1; user-select: none; }
+  .ht-tip > summary::-webkit-details-marker { display: none; }
+  .ht-tip > summary::marker { content: ''; }
+  .ht-tip > summary:hover, .ht-tip[open] > summary { background: #465fff; border-color: #465fff; color: #fff; }
+  .ht-tip > summary:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+  .ht-tip-pop { position: absolute; z-index: 60; left: -.4rem; top: calc(100% + .4rem); width: max-content; max-width: min(19rem, calc(100vw - 3rem)); padding: .65rem .8rem; border-radius: .65rem; background: #101828; color: #f2f4f7; font-size: .78rem; font-weight: 400; line-height: 1.45; text-align: left; white-space: normal; box-shadow: 0 12px 24px -8px rgba(16,24,40,.35); }
+  .dark .ht-tip-pop { background: #1d2939; border: 1px solid #344054; }
+  .ht-tip-pop p { margin: 0; }
+  .ht-tip-pop p + p { margin-top: .45rem; }
+  .ht-tip-pop b { font-weight: 600; color: #fff; }
+</style>
+<script>
+  (function () {
+    if (window.__arabelaHelpTips) { return; }
+    window.__arabelaHelpTips = true;
+    var SELECTOR = 'details.ht-tip[open]';
+    // Keep a bubble on the screen: slide it back in when it would run off the left or right edge, and open it ABOVE the "?" when there is no room
+    // below it (a "?" near the bottom of the screen) and there is room above.
+    function place(tip) {
+      var pop = tip.querySelector('.ht-tip-pop');
+      if (!pop) { return; }
+      pop.style.transform = '';
+      pop.style.top = '';
+      pop.style.bottom = '';
+      var box = pop.getBoundingClientRect();
+      var width = document.documentElement.clientWidth;
+      var height = document.documentElement.clientHeight;
+      var shift = 0;
+      if (box.right > width - 8) { shift = (width - 8) - box.right; }
+      if (box.left + shift < 8) { shift = 8 - box.left; }
+      if (shift) { pop.style.transform = 'translateX(' + Math.round(shift) + 'px)'; }
+      var tipBox = tip.getBoundingClientRect();
+      if (box.bottom > height - 8 && tipBox.top - box.height - 8 > 0) {
+        pop.style.top = 'auto';
+        pop.style.bottom = 'calc(100% + .4rem)';
+      }
+    }
+    document.addEventListener('toggle', function (event) {
+      var tip = event.target;
+      if (tip && tip.classList && tip.classList.contains('ht-tip') && tip.open) { place(tip); }
+    }, true);
+    document.addEventListener('click', function (event) {
+      Array.prototype.forEach.call(document.querySelectorAll(SELECTOR), function (tip) {
+        if (!tip.contains(event.target)) { tip.removeAttribute('open'); }
+      });
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key !== 'Escape') { return; }
+      var open = document.querySelectorAll(SELECTOR);
+      if (!open.length) { return; }
+      Array.prototype.forEach.call(open, function (tip) { tip.removeAttribute('open'); });
+      event.stopPropagation();
+    }, true);
+  })();
+</script>

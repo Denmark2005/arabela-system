@@ -1168,7 +1168,8 @@
                  box, round close button top right, big title, the picture uncropped, details and a Close button. */
               .cvr-view { position: fixed; inset: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; padding: 20px; overflow-y: auto; overscroll-behavior: contain; }
               .cvr-view[hidden] { display: none; }
-              .cvr-view-backdrop { position: fixed; inset: 0; background: rgba(152,162,179,.5); -webkit-backdrop-filter: blur(32px); backdrop-filter: blur(32px); }
+              .cvr-view-backdrop { position: fixed; inset: 0; background: rgba(16, 24, 40, 0.5); }
+              .dark .cvr-view-backdrop { background: rgba(0, 0, 0, 0.6); }
               .cvr-view-box { position: relative; width: 100%; max-width: min(820px, 94vw); max-height: calc(100vh - 40px); overflow-y: auto; padding: 32px; border-radius: 24px; background: #fff; box-shadow: 0 24px 48px -12px rgba(16,24,40,.25); }
               .dark .cvr-view-box { background: #101828; }
               .cvr-view-x { position: absolute; top: 20px; right: 20px; z-index: 2; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 999px; background: #f2f4f7; color: #98a2b3; cursor: pointer; }
@@ -1218,7 +1219,7 @@
               }
             </style>
 
-            <p class="cvr-hint">One tall photo of the whole gown on a plain white background &middot; JPG, PNG or WEBP &middot; at least 400 &times; 650 px, up to 5 MB.</p>
+            <p class="cvr-hint" style="display: flex; align-items: center;">Photo requirements<details class="ht-tip"><summary aria-label="About the photo requirements" title="About the photo requirements">?</summary><div class="ht-tip-pop">One tall photo of the whole gown on a plain white background. JPG, PNG or WEBP, at least 400 &times; 650 px, up to 5 MB.</div></details></p>
 
             {% if not covers_ready %}
             <div class="cvr-notice" role="status">Uploads aren't ready yet. One database update is still waiting.</div>

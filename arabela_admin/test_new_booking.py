@@ -1049,9 +1049,9 @@ class PaymentBreakdownTests(Base):
     def test_payment_verification_shows_the_paid_amount_with_the_breakdown_window(self):
         self.online(510)
         html = self.client.get(reverse("arabela_admin:payment_verification")).content.decode()
-        self.assertIn('<p class="font-medium text-gray-800 text-theme-sm dark:text-white/90">₱2,000</p>', html)
-        self.assertIn('<p class="text-xs text-gray-400 dark:text-gray-500">Gown ₱5,500 · Total ₱7,500</p>', html)
-        self.assertNotIn('<p class="text-gray-500 text-theme-sm dark:text-gray-400">&#8369;7,500</p>', html)    # the table cell no longer leads with the total
+        self.assertIn('<div class="pv-amt">₱2,000</div>', html)
+        self.assertNotIn('Gown ₱5,500 · Total ₱7,500', html.split('x-show="openReceiptModal"')[0])      # the split is not repeated in the list: the proof window has it
+        self.assertNotIn('<div class="pv-amt">&#8369;7,500</div>', html)    # the payment cell no longer leads with the total
         self.assertIn("breakdown: JSON.parse(", html)
         self.assertIn("viewingPayment.breakdown ? viewingPayment.breakdown.paidLabel : 'Amount'", html)
         self.assertIn("viewingPayment.breakdown ? viewingPayment.breakdown.headline : viewingPayment.amount", html)

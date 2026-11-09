@@ -1328,15 +1328,15 @@
         <button type="button" x-show="status === 'Pending'"
           data-url="{% url 'arabela_admin:reservation_approve' r.id %}"
           data-action="verify"
-          data-customer="{{ r.display_customer_name|escapejs }}"
-          data-reservation="{{ r.reference_code|escapejs }}"
+          data-customer="{{ r.display_customer_name }}"
+          data-reservation="{{ r.reference_code }}"
           onclick="reviewQuickVerify(this)"
-          style="background-color:#12b76a;color:#fff;min-width:72px" class="rounded-full px-4 py-2 text-xs font-semibold shadow-sm">Verify</button>
+          style="background-color:#12b76a;color:#fff;min-width:72px" class="rounded-full px-4 py-2 text-xs font-semibold shadow-sm">Approve</button>
         <button type="button" x-show="status === 'Pending'"
           data-url="{% url 'arabela_admin:reservation_reject' r.id %}"
           data-action="reject"
-          data-customer="{{ r.display_customer_name|escapejs }}"
-          data-reservation="{{ r.reference_code|escapejs }}"
+          data-customer="{{ r.display_customer_name }}"
+          data-reservation="{{ r.reference_code }}"
           onclick="reviewQuickVerify(this)"
           style="background-color:#ef4444;color:#fff;min-width:72px" class="rounded-full px-4 py-2 text-xs font-semibold shadow-sm">Reject</button>
         <p x-show="status !== 'Pending'" class="inline-flex rounded-full px-3 py-1 text-xs font-semibold"
@@ -1465,11 +1465,11 @@
       var customer = btn.dataset.customer || 'this customer';
       var reservation = btn.dataset.reservation || '';
       adminConfirm({
-        title: isVerify ? 'Verify payment' : 'Reject payment',
+        title: isVerify ? 'Approve payment' : 'Reject payment',
         message: isVerify
           ? customer + ' · ' + reservation + '\n\nMake sure you have reviewed the proof of payment. This approves the reservation and adds it to the Rental Schedule.'
           : customer + ' · ' + reservation + '\n\nThis will mark the reservation as rejected.',
-        confirmText: isVerify ? 'Verify payment' : 'Reject payment',
+        confirmText: isVerify ? 'Approve payment' : 'Reject payment',
         danger: !isVerify,
       }).then(function (ok) {
         if (!ok) return;

@@ -4820,7 +4820,7 @@ class GownCatalogReservedHolderTests(TestCase):
         holders = response.context["gown_holders"][gown.id]
         self.assertEqual([h["reference"] for h in holders], [sooner.reference_code, later.reference_code])
         html = response.content.decode()
-        row = html.split("<tr data-gown-row")[1]
+        row = html.split('class="ar-booking gc-row" data-gown-row')[1]
         self.assertIn("Sooner Customer", row)
         self.assertIn("+1 more", row)
         self.assertNotIn("Later Customer", row.split("Never checked")[0])

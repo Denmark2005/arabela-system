@@ -60,10 +60,10 @@ class LayoutFilesTests(SimpleTestCase):
         card = html[html.index('class="gc-card '):html.index("<!-- Add Gown Modal")]
         self.assertIn('class="gc-toolbar"', card)
         self.assertIn('class="gc-legend"', card)
-        self.assertIn('data-arpg="tbody" data-arpg-noun="gowns" data-arpg-top="off" data-arpg-count="#gc-count"', card)
+        self.assertIn('data-arpg=".gc-row" data-arpg-noun="gowns" data-arpg-top="off" data-arpg-count="#gc-count"', card)
         self.assertEqual(card.count('id="gc-count"'), 1)
         self.assertLess(card.index('class="gc-toolbar"'), card.index('class="gc-legend"'))
-        self.assertLess(card.index('class="gc-legend"'), card.index('data-arpg="tbody"'))
+        self.assertLess(card.index('class="gc-legend"'), card.index('data-arpg=".gc-row"'))
         for name in ("Available", "Reserved", "Out-of-Stock"):
             self.assertIn(f"</span>{name}</li>", card)
 
@@ -143,7 +143,7 @@ class CatalogPageTests(TestCase):
         for word, circle in (("Available", "gc-dot--available"), ("Reserved", "gc-dot--reserved"), ("Out-of-Stock", "gc-dot--oos")):
             with self.subTest(status=word):
                 self.assertRegex(html, r'gc-dot gc-dot--row %s" role="img" aria-label="%s"' % (circle, re.escape(word)))
-        rows = re.findall(r'<p class="text-sm font-semibold text-brand-500">&#8369;([^<]*)</p>', html)
+        rows = re.findall(r'<div class="gc-price">&#8369;([^<]*)</div>', html)
         self.assertEqual(sorted(rows), sorted(["1,500", "12,500.50", "999"]))
 
     def test_the_page_shows_the_legend_the_strip_and_the_dropdown_with_counts(self):
@@ -166,17 +166,17 @@ class LaptopFitTests(SimpleTestCase):
         return (ADMIN / name).read_text(encoding="utf8").replace("\r\n", "\n")
 
     def test_reservation_records_fits_a_laptop(self):
+        """Records is now the one-line-per-booking list (no Actions column to push off to the right): the five counts stay in one row, and the search shares
+        its row with the three boxes, below 1180px. The full checks are in test_records_redesign."""
         html = self.text("reservation-records.html")
-        self.assertIn("@media (min-width: 1024px) and (max-width: 1599px) {", html)
-        block = html[html.index("@media (min-width: 1024px) and (max-width: 1599px) {"):]
+        block = html[html.index("@media (max-width: 1180px) {"):]
         block = block[:block.index("\n      }\n")]
-        for rule in (".rr-stats { grid-template-columns: repeat(5, minmax(0, 1fr))", ".rr-filters--main > .rr-grow { flex: 1 1 100%; }",
-                     ".rr-scroll-x th, .rr-scroll-x td { padding-left: .5rem", ".rr-scroll-x .rr-dates { white-space: normal;", ".rr-scroll-x .rr-actions { flex-wrap: wrap; }"):
+        for rule in (".rr-tile { padding: .8rem .9rem; }", ".ar-search-input.rr-select { flex-basis: 8rem; width: 8rem; }", ".rr-card .ar-search { flex-basis: 12rem; }"):
             with self.subTest(rule=rule):
                 self.assertIn(rule, block)
-        self.assertEqual(html.count('class="rr-filters rr-filters--main"'), 1)             # only the main filter row, not the date rows
-        self.assertEqual(html.count("rr-dates text-theme-sm"), 1)
-        self.assertEqual(html.count('class="rr-actions flex items-center gap-2"'), 1)
+        self.assertIn(".rr-strip { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));", html)
+        self.assertEqual(html.count('class="rr-strip"'), 1)
+        self.assertNotIn("<table", html[html.index('class="rr-card"'):html.index('x-show="openDetail"')])
 
     def test_client_list_fits_a_laptop(self):
         html = self.text("clients.html")

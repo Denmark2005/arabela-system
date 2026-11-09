@@ -16,6 +16,9 @@ notifications-live.js polls that feed, swaps the fresh HTML into the data-notif-
 containers below, and announces anything new (chime, toast, tab title, optional desktop
 pop-up). Everything the script needs is in the data-notif-* attributes on the root.
 {% endcomment %}
+{% comment %} Two things every admin page shares, pulled in here because this header partial is on all of them: the "?" help bubble and the date box's calendar icon. {% endcomment %}
+{% include "arabela_admin/partials/help_tip_styles.html" %}
+{% include "arabela_admin/partials/date_picker.html" %}
 <style>
   .anf-contents { display: contents; }
   /* ---- dropdown ---- */
@@ -48,6 +51,11 @@ pop-up). Everything the script needs is in the data-notif-* attributes on the ro
      all of them, which is why the class lives here): a plain tint, NO blur, so the page stays readable behind it (same as the Rental Schedule pop-ups). */
   .admin-backdrop { background: rgba(16, 24, 40, 0.5); }
   .dark .admin-backdrop { background: rgba(0, 0, 0, 0.6); }
+  /* Phones and tablets only / computers only. "Take photo" opens the camera only on a phone or tablet: a computer's browser ignores it and just
+     opens the file chooser. So a button marked .touch-only is hidden on a device whose main pointer is a mouse or trackpad (a laptop with a touch
+     screen counts as a computer), and a label marked .pc-only is hidden everywhere else. Pure CSS: no script, no flicker. */
+  @media (hover: hover) and (pointer: fine) { .touch-only { display: none !important; } }
+  @media not all and (hover: hover) and (pointer: fine) { .pc-only { display: none !important; } }
   /* ---- rows ---- */
   .anf-row { padding: 10px 12px; }
   .anf-text { display: block; font-size: 13.5px; line-height: 19px; margin-bottom: 4px; }

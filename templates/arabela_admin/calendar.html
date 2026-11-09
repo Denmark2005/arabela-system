@@ -1326,12 +1326,8 @@
                 <span style="display:inline-block;width:16px;height:16px;border-radius:9999px;background:#64748B;box-shadow:0 0 0 2px rgba(0,0,0,0.06)"></span>
                 Blocked
               </span>
+              <details class="ht-tip"><summary aria-label="About blocked days" title="About blocked days">?</summary><div class="ht-tip-pop">Blocked days are gowns held back for cleaning or repair, not customer bookings: set them from a gown's row in <a href="{% url 'arabela_admin:gown_catalog' %}" style="color: #9bb0ff; text-decoration: underline;">Gown Catalog</a>. Customers can't book a date until every gown in that category is free.</div></details>
             </div>
-            <p class="mb-3 text-sm text-gray-500 dark:text-gray-400">
-              Blocked days are gowns held back for cleaning or repair, not customer bookings — set them
-              from a gown's row in <a href="{% url 'arabela_admin:gown_catalog' %}" class="text-brand-500">Gown Catalog</a>.
-              Customers can't book a date until every gown in that category is free.
-            </p>
             <div
               class="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]"
             >
@@ -1386,8 +1382,7 @@
                         <div class="flex justify-between gap-4"><dt class="text-gray-500 dark:text-gray-400">Return</dt><dd id="roReturn" class="font-medium text-gray-800 dark:text-white/90"></dd></div>
                         <div class="flex justify-between gap-4" id="roOriginalRow" style="display: none;"><dt class="text-gray-500 dark:text-gray-400">Originally booked</dt><dd id="roOriginal" class="text-gray-500 dark:text-gray-400"></dd></div>
                       </dl>
-                      <p class="text-xs text-gray-500 dark:text-gray-400">This calendar is view-only. To change a date or mark a pick-up or return, use Active Reservations.</p>
-                      <a id="bookingModalOpenActive" href="#" class="inline-flex items-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600">Open in Active Reservations</a>
+                      <div class="flex items-center"><a id="bookingModalOpenActive" href="#" class="inline-flex items-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600">Open in Active Reservations</a><details class="ht-tip"><summary aria-label="About this calendar" title="About this calendar">?</summary><div class="ht-tip-pop">This calendar is view-only. To change a date or mark a pick-up or return, use Active Reservations.</div></details></div>
                     </div>
                     <div id="bookingModalEditable" style="display: none;" aria-hidden="true">
                     <div>
@@ -1403,20 +1398,20 @@
                     <div class="booking-date-grid">
                       <div>
                         <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Pick-up Date</label>
-                        <input id="bookingModalRentalDate" type="date" class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" onclick="this.showPicker()" />
+                        <input id="bookingModalRentalDate" type="date" class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" />
                       </div>
                       <div>
                         <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Event Date</label>
-                        <input id="bookingModalEventDate" type="date" class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" onclick="this.showPicker()" />
+                        <input id="bookingModalEventDate" type="date" class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" />
                         <p id="bookingModalEventOriginalNote" class="mt-1.5 text-xs text-gray-500 dark:text-gray-400" style="display: none;"></p>
                       </div>
                       <div>
                         <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Return Date</label>
-                        <input id="bookingModalReturnDate" type="date" class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" onclick="this.showPicker()" />
+                        <input id="bookingModalReturnDate" type="date" class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" />
                       </div>
                       <div>
                         <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Overdue Date</label>
-                        <input id="bookingModalOverdueDate" type="date" class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" onclick="this.showPicker()" />
+                        <input id="bookingModalOverdueDate" type="date" class="admin-date-input dark:bg-dark-900 h-11 w-full cursor-pointer appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800" />
                       </div>
                     </div>
                     <p class="text-xs text-gray-500 dark:text-gray-400">Pick-up = pick-up date to the day before the event · Return date shows automatically once Reserved is picked · Overdue = the overdue date.</p>

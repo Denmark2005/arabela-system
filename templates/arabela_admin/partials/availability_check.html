@@ -16,9 +16,7 @@
   .ca-overlay.is-open { display: flex; }
   .ca-card { width: 100%; max-width: 34rem; max-height: calc(100vh - 2rem); overflow-y: auto; background: #fff; color: #1d2939; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 24px 48px -12px rgba(16, 24, 40, .35); }
   .dark .ca-card { background: #101828; color: #f2f4f7; border: 1px solid #1d2939; }
-  .ca-title { margin: 0 0 .25rem; font-size: 1.125rem; font-weight: 600; }
-  .ca-lead { margin: 0 0 1rem; font-size: .875rem; color: #667085; }
-  .dark .ca-lead { color: #98a2b3; }
+  .ca-title { margin: 0 0 1rem; font-size: 1.125rem; font-weight: 600; }
   .ca-label { display: block; margin: 0 0 .35rem; font-size: .8125rem; font-weight: 500; }
   .ca-field { display: block; width: 100%; box-sizing: border-box; padding: .6rem .75rem; border: 1px solid #d0d5dd; border-radius: .6rem; background: #fff; color: inherit; font: inherit; font-size: .875rem; }
   .dark .ca-field { background: #0c111d; border-color: #344054; color: #f2f4f7; color-scheme: dark; }
@@ -57,8 +55,7 @@
 
 <div class="ca-overlay" id="ca-overlay" aria-hidden="true">
   <div class="ca-card" role="dialog" aria-modal="true" aria-labelledby="ca-title">
-    <h2 class="ca-title" id="ca-title">Check a date</h2>
-    <p class="ca-lead">Can a gown be booked for a customer's event date? Nothing is saved. Use it for a Facebook or phone question too.</p>
+    <h2 class="ca-title"><span id="ca-title">Check a date</span><details class="ht-tip"><summary aria-label="About Check a date" title="About Check a date">?</summary><div class="ht-tip-pop">Can a gown be booked for a customer's event date? Nothing is saved. Use it for a Facebook or phone question too.</div></details></h2>
 
     <label class="ca-label" for="ca-query">Gown (ID, tag number or name)</label>
     <input class="ca-field" id="ca-query" type="search" autocomplete="off" placeholder="e.g. WH-003, 12, or Wedding Gown 3">
@@ -132,6 +129,8 @@
     function inline(dateInput, gownId, out) {
       if (!out) { return; }
       if (!dateInput || !dateInput.value) { out.innerHTML = fail('Choose the event date first.'); return; }
+      var wrong = problem(dateInput);
+      if (wrong) { out.innerHTML = fail(wrong); return; }
       out.innerHTML = wait();
       var asked = dateInput.value;
       out.dataset.asked = asked + ':' + gownId;
@@ -142,7 +141,23 @@
       });
     }
     function clear(out) { if (out) { out.innerHTML = ''; out.dataset.asked = ''; } }
-    window.arabelaAvailability = { check: check, render: render, inline: inline, clear: clear };
+
+    // An event date is today or later, and not absurdly far away (a typed year such as 275760 used to be accepted). The calendar already greys
+    // the rest out; typing a date by hand is caught here.
+    function pad(n) { return String(n).padStart(2, '0'); }
+    function isoOf(date) { return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()); }
+    function limit(input) {
+      if (!input) { return; }
+      var now = new Date();
+      if (!input.min) { input.min = isoOf(now); }
+      input.max = isoOf(new Date(now.getFullYear() + 3, now.getMonth(), now.getDate()));
+    }
+    function problem(input) {
+      if (input.min && input.value < input.min) { return 'That date has already passed. Choose today or a later date.'; }
+      if (input.max && input.value > input.max) { return 'That date is too far ahead. Choose a date within the next 3 years.'; }
+      return '';
+    }
+    window.arabelaAvailability = { check: check, render: render, inline: inline, clear: clear, limit: limit };
 
     // ---- the "Check a date" window ----
     var overlay = document.getElementById('ca-overlay');
@@ -153,11 +168,8 @@
     var dateEl = document.getElementById('ca-date');
     var out = document.getElementById('ca-out');
     var chosen = null, timer = null, seq = 0, opener = null;
-    // No past event dates (the shop's clock decides in the end; this only keeps the picker honest).
-    if (!dateEl.min) {
-      var now = new Date();
-      dateEl.min = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
-    }
+    // No past event dates, none years away (the shop's clock decides in the end; this only keeps the picker honest).
+    limit(dateEl);
 
     function showChosen() {
       if (!chosen) { chosenEl.hidden = true; chosenEl.innerHTML = ''; return; }
@@ -194,6 +206,8 @@
     function run() {
       if (!chosen) { out.innerHTML = fail('Find and choose the gown first.'); return; }
       if (!dateEl.value) { out.innerHTML = fail('Choose the event date first.'); return; }
+      var wrong = problem(dateEl);
+      if (wrong) { out.innerHTML = fail(wrong); return; }
       out.innerHTML = wait();
       var mine = ++seq;
       check(chosen.id, dateEl.value).then(function (data) {

@@ -12,43 +12,157 @@
     <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
   <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet">
   {% include "arabela_admin/partials/photo_viewer_styles.html" %}
+  {% include "arabela_admin/partials/ar_list_styles.html" %}
   <style>
-    /* Customer icon + name in the payments table open that booking in Reservation Records. */
-    .pv-customer-link { text-decoration: none; color: inherit; cursor: pointer; border-radius: 0.5rem; }
-    .pv-customer-link:hover span.block.font-medium { text-decoration: underline; }
-    .pv-customer-link:hover > div:first-child { box-shadow: 0 0 0 2px #465fff; }
+    /* Payment Verification: the same look as Pending Approval and Security Deposits (partials/ar_list_styles.html). Its own container class is
+       `pv-card`, not `ar-card`. */
+    /* The customer's name opens that booking in Reservation Records. */
+    .pv-customer-link { min-width: 0; text-decoration: none; color: inherit; cursor: pointer; border-radius: .4rem; }
+    .pv-customer-link:hover .ar-name { text-decoration: underline; }
     .pv-customer-link:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
-    /* Verified Today: capped-height scroll instead of growing the page taller with
-       every verification (mirrors the notification bell's own "All Notifications"
-       list -- same custom-scrollbar class, same 420px cap -- so this behaves like
-       something already native to the panel, not a one-off addition). */
-    #verified-today-list {
-      max-height: 420px;
-      overflow-y: auto;
-      scroll-behavior: smooth;
-      padding-right: 0.375rem;
-      padding-bottom: 0.25rem;
-    }
 
-    /* A gentle one-time reveal on page load -- this list is server-rendered fresh on
-       every load (never reordered by client JS afterward), so a plain per-card CSS
-       delay is enough; no JS/observer needed the way the customer-side collection
-       grid's stagger reveal requires for its own, different (client-sorted) case. */
-    @keyframes verified-today-card-in {
-      from { opacity: 0; transform: translateY(6px); }
-      to { opacity: 1; transform: translateY(0); }
+    .resv-btn-approve { background-color: #12B76A; color: #ffffff; }
+    .resv-btn-approve:hover { background-color: #039855; }
+    .resv-btn-reject { background-color: #F04438; color: #ffffff; }
+    .resv-btn-reject:hover { background-color: #D92D20; }
+    .resv-btn[disabled] { opacity: 0.55; cursor: not-allowed; }
+
+    /* The three counts: one strip like the Gown Catalog's. Each is still a button that filters the list; the chosen one is highlighted. */
+    .pv-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin-bottom: 1.25rem; background: #e4e7ec; border: 1px solid #e4e7ec; border-radius: 1rem; overflow: hidden; }
+    .dark .pv-strip { background: #1d2939; border-color: #1d2939; }
+    .pv-stat { display: flex; align-items: center; justify-content: space-between; gap: .75rem; min-width: 0; margin: 0; padding: .85rem 1.15rem; text-align: left; background: #fff; border: 0; font: inherit; cursor: pointer; transition: background-color .15s, box-shadow .15s; }
+    .dark .pv-stat { background: #171f2f; }
+    .pv-stat:hover { background: #f9fafb; }
+    .dark .pv-stat:hover { background: #1c2536; }
+    .pv-stat:focus-visible { outline: 2px solid #465fff; outline-offset: -2px; }
+    .pv-stat.is-on { background: #f5f7ff; box-shadow: inset 0 -3px 0 #465fff; }
+    .dark .pv-stat.is-on { background: rgba(70,95,255,.14); }
+    .pv-stat-l { display: flex; align-items: center; gap: .5rem; font-size: .8125rem; color: #667085; }
+    .dark .pv-stat-l { color: #98a2b3; }
+    .pv-stat-n { font-size: 1.5rem; font-weight: 700; line-height: 1.2; color: #101828; font-variant-numeric: tabular-nums; }
+    .dark .pv-stat-n { color: rgba(255,255,255,.92); }
+
+    /* The status circles (the colour is the whole message; the words are on hover and in the key above the list). */
+    .pv-dot--pending { background: #f79009; }
+    .pv-dot--verified { background: #039855; }
+    .pv-dot--rejected { background: #d92d20; }
+    .pv-dot--cancelled { background: #98a2b3; }
+
+    /* Verified Today: a calm, slim card -- one balanced line per booking. It scrolls inside a capped height instead of growing the page with every
+       verification. */
+    .pv-vt { margin-bottom: 1.25rem; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; box-shadow: inset 3px 0 0 #12b76a; overflow: hidden; }
+    .dark .pv-vt { background: rgba(255,255,255,.03); border-color: #1d2939; }
+    .pv-vt-head { display: flex; flex-wrap: wrap; align-items: center; gap: .15rem .6rem; padding: .75rem 1.25rem; }
+    .pv-vt-head h3 { margin: 0; font-size: .875rem; font-weight: 600; color: #1d2939; }
+    .dark .pv-vt-head h3 { color: rgba(255,255,255,.9); }
+    .pv-vt-n { min-width: 1.4rem; padding: 0 .45rem; border-radius: 999px; background: #ecfdf3; color: #027a48; font-size: .75rem; font-weight: 600; text-align: center; }
+    .dark .pv-vt-n { background: rgba(18,183,106,.16); color: #32d583; }
+    #verified-today-list { max-height: 420px; overflow-y: auto; scroll-behavior: smooth; }
+    .pv-vt-item { border-top: 1px solid #f2f4f7; }
+    .dark .pv-vt-item { border-color: #1d2939; }
+    .pv-vt-row { display: grid; grid-template-columns: minmax(11rem, 1.3fr) minmax(12rem, 2fr) 8rem 2rem 2rem; align-items: center; column-gap: .75rem; padding: .6rem 1.25rem; }
+    .pv-vt-who { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .5rem; min-width: 0; }
+    .pv-vt-name { font-size: .875rem; font-weight: 500; color: #1d2939; overflow-wrap: anywhere; }
+    .dark .pv-vt-name { color: rgba(255,255,255,.9); }
+    .pv-vt-what { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .75rem; min-width: 0; }
+    .pv-vt-g { font-size: .875rem; color: #344054; overflow-wrap: anywhere; }
+    .dark .pv-vt-g { color: #d0d5dd; }
+    .pv-vt-names { min-width: 0; font-size: .8125rem; color: #667085; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dark .pv-vt-names { color: #98a2b3; }
+    .pv-vt-stage { display: inline-flex; align-items: center; gap: .35rem; font-size: .8125rem; color: #667085; white-space: nowrap; }
+    .dark .pv-vt-stage { color: #98a2b3; }
+    .pv-vt-stage i { width: .5rem; height: .5rem; border-radius: 999px; background: #98a2b3; }
+    .pv-st--pickup i { background: #f79009; }
+    .pv-st--reserved i { background: #039855; }
+    .pv-st--overdue i { background: #d92d20; }
+    .pv-vt-time { font-size: .8125rem; color: #667085; white-space: nowrap; }
+    .dark .pv-vt-time { color: #98a2b3; }
+    .pv-vt-more { padding: .1rem 1.25rem .6rem 1.25rem; background: rgba(152,162,179,.05); }
+    .pv-vt-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .2rem .75rem; padding: .35rem 0; border-bottom: 1px dashed #e4e7ec; }
+    .pv-vt-line:last-child { border-bottom: 0; }
+    .dark .pv-vt-line { border-color: #1d2939; }
+    .verified-today-card { animation: verified-today-card-in 0.35s ease-out both; animation-delay: calc(var(--i, 0) * 60ms); }
+    @keyframes verified-today-card-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    @media (prefers-reduced-motion: reduce) { .verified-today-card { animation: none; } }
+
+    /* The one list box. */
+    .pv-card { margin-bottom: 1.25rem; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; }
+    .dark .pv-card { background: rgba(255,255,255,.03); border-color: #1d2939; }
+    .ar-search-input.pv-select { flex: 0 0 9.5rem; width: 9.5rem; padding-left: .8rem; }
+    .pv-year-wrap { flex: none; width: 5.5rem; }
+    .ar-search-input.pv-year { padding-left: .8rem; }
+    .pv-countrow { display: flex; flex-wrap: wrap; align-items: center; gap: .1rem .75rem; }
+    .pv-legend { display: flex; flex-wrap: wrap; align-items: center; gap: .15rem .9rem; margin-left: auto; font-size: .75rem; color: #667085; }
+    .dark .pv-legend { color: #98a2b3; }
+    .pv-legend > span { display: inline-flex; align-items: center; gap: .35rem; }
+    .pv-legend .ar-dot { width: .6rem; height: .6rem; box-shadow: none; }
+
+    /* customer | payment | submitted | actions | arrow. Every column is fixed or has a minimum, never "auto" (an auto column is sized per row and the
+       column titles would stop lining up). */
+    .ar-head.pv-grid, .ar-line.pv-grid { grid-template-columns: minmax(10rem, 1.6fr) minmax(10.5rem, 1.4fr) 6.75rem 12rem 2.25rem; }
+    .pv-cust, .pv-pay, .pv-sub-at { min-width: 0; }
+    .pv-sub { margin: .3rem 0 0 1.4rem; }
+    .pv-sub b { white-space: nowrap; }
+    .pv-amt { font-size: .875rem; font-weight: 600; color: #344054; font-variant-numeric: tabular-nums; }
+    .dark .pv-amt { color: #d0d5dd; }
+    .pv-note { margin-top: .2rem; font-size: .72rem; color: #667085; overflow-wrap: anywhere; }
+    .dark .pv-note { color: #98a2b3; }
+    .pv-note--bad { color: #d92d20; font-weight: 500; }
+    .dark .pv-note--bad { color: #fda29b; }
+    .pv-day { font-size: .875rem; color: #667085; white-space: nowrap; }
+    .dark .pv-day { color: #98a2b3; }
+    .pv-acts { display: flex; flex-wrap: nowrap; align-items: center; gap: .4rem; justify-self: start; }
+    .ar-gl.pv-gl { grid-template-columns: minmax(0, 1fr) auto auto; }
+
+    /* A small laptop: the actions drop to a second row under the booking, so nothing is squeezed (the column titles go: they no longer line up). */
+    @media (max-width: 1180px) {
+      .ar-head.pv-grid { display: none; }
+      .ar-line.pv-grid { grid-template-columns: minmax(10rem, 1.5fr) minmax(9rem, 1.3fr) 7rem 2.25rem; grid-template-areas: "cust pay at chev" "acts acts acts acts"; row-gap: .6rem; }
+      .ar-line.pv-grid > .pv-cust { grid-area: cust; }
+      .ar-line.pv-grid > .pv-pay { grid-area: pay; }
+      .ar-line.pv-grid > .pv-sub-at { grid-area: at; }
+      .ar-line.pv-grid > .pv-acts { grid-area: acts; flex-wrap: wrap; }
+      .ar-line.pv-grid > .ar-chev { grid-area: chev; }
+      /* the search, the two boxes and the year share ONE row on a small laptop instead of the year sitting alone on a second row */
+      .ar-search-input.pv-select { flex-basis: 8.5rem; width: 8.5rem; }
+      .pv-card .ar-search { flex-basis: 14rem; }
     }
-    .verified-today-card {
-      animation: verified-today-card-in 0.35s ease-out both;
-      animation-delay: calc(var(--i, 0) * 60ms);
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .verified-today-card { animation: none; }
+    /* A phone: one column, in the order staff read it. */
+    @media (max-width: 760px) {
+      .pv-strip { grid-template-columns: minmax(0, 1fr); }
+      .pv-stat-n { font-size: 1.25rem; }
+      .ar-line.pv-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.25rem; grid-template-areas: "cust cust chev" "pay at at" "acts acts acts"; }
+      .ar-gl.pv-gl { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name name" "dates price"; row-gap: .3rem; }
+      .ar-gl.pv-gl > .ar-gname { grid-area: name; }
+      .ar-gl.pv-gl > .ar-gdates { grid-area: dates; }
+      .ar-gl.pv-gl > .ar-gprice { grid-area: price; }
+      .ar-search-input.pv-select { flex: 1 1 8rem; width: auto; }
+      .pv-legend { margin-left: 0; }
+      .pv-vt-head { padding: .7rem 1rem; }
+      .pv-vt-row { grid-template-columns: minmax(0, 1fr) 2rem 2rem; grid-template-areas: "who cal chev" "what what what" "time time time"; row-gap: .3rem; padding: .6rem 1rem; }
+      .pv-vt-row > .pv-vt-who { grid-area: who; }
+      .pv-vt-row > .pv-vt-what { grid-area: what; }
+      .pv-vt-row > .pv-vt-time { grid-area: time; }
+      .pv-vt-row > .ar-ib { grid-area: cal; }
+      .pv-vt-row > .ar-chev, .pv-vt-row > span:last-child { grid-area: chev; }
+      .pv-vt-more { padding: .1rem 1rem .6rem 1rem; }
     }
   </style>
 </head>
   <body
-    x-data="{ page: 'payment-verification', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', statusFilter: 'All', monthFilter: 'All', yearFilter: '', showYearToast: false, yearToastTimeout: null, filtering: false, filterTimeout: null, openReceiptModal: false, viewingPayment: {} }"
+    x-data="{ page: 'payment-verification', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', statusFilter: 'All', monthFilter: 'All', yearFilter: '', showYearToast: false, yearToastTimeout: null, openReceiptModal: false, viewingPayment: {}, openBookings: [], autoOpen: [],
+      matches(el) {
+        return (this.statusFilter === 'All' || el.getAttribute('data-status') === this.statusFilter)
+          && (this.yearFilter === '' || el.getAttribute('data-year') === this.yearFilter)
+          && (this.monthFilter === 'All' || el.getAttribute('data-month') === this.monthFilter)
+          && (this.search === '' || (el.getAttribute('data-search') || '').indexOf(String(this.search).toLowerCase()) !== -1);
+      },
+      isBookingOpen(id) { return this.openBookings.includes(id) || this.autoOpen.includes(id); },
+      toggleBooking(id) {
+        if (this.isBookingOpen(id)) { this.openBookings = this.openBookings.filter(x => x !== id); this.autoOpen = this.autoOpen.filter(x => x !== id); }
+        else { this.openBookings = this.openBookings.concat([id]); }
+      },
+      matchCount() { return Array.from(document.querySelectorAll('.ar-booking[data-booking-id]')).filter(el => this.matches(el)).length; } }"
     x-init="
          darkMode = JSON.parse(localStorage.getItem('darkMode'));
          $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)));
@@ -84,7 +198,8 @@
          }
          $watch('search', syncFilterParamsToUrl);
          $watch('statusFilter', syncFilterParamsToUrl);
-         $watch('monthFilter', syncFilterParamsToUrl);"
+         $watch('monthFilter', syncFilterParamsToUrl);
+         pvSetupBookings($data, $watch);"
     :class="{'dark bg-gray-900': darkMode === true}"
   >
     <!-- ===== Preloader Start ===== -->
@@ -1173,30 +1288,19 @@
 </div>
 </div>
             <!-- Breadcrumb End -->
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              <button
-                type="button"
-                @click="statusFilter = 'Pending'; filtering = true; clearTimeout(filterTimeout); filterTimeout = setTimeout(() => filtering = false, 500)"
-                class="block w-full rounded-2xl border border-gray-200 bg-white p-5 text-left transition hover:bg-gray-50 dark:border-gray-800 dark:bg-white/[0.03] dark:hover:bg-white/[0.07] md:p-6"
-              >
-                <p class="text-sm text-gray-500 dark:text-gray-400">Pending Review</p>
-                <h4 class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90">{{ pending_review_count }}</h4>
+            <!-- The three counts are still buttons that filter the list (the same filter the Status box below sets); the selected one is highlighted. -->
+            <div class="pv-strip">
+              <button type="button" class="pv-stat" :class="statusFilter === 'Pending' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Pending' ? 'true' : 'false'" @click="statusFilter = 'Pending'">
+                <span class="pv-stat-l"><i class="ar-dot pv-dot--pending"></i>Pending Review</span>
+                <span class="pv-stat-n">{{ pending_review_count }}</span>
               </button>
-              <button
-                type="button"
-                @click="statusFilter = 'Verified'; filtering = true; clearTimeout(filterTimeout); filterTimeout = setTimeout(() => filtering = false, 500)"
-                class="block w-full rounded-2xl border border-gray-200 bg-white p-5 text-left transition hover:bg-gray-50 dark:border-gray-800 dark:bg-white/[0.03] dark:hover:bg-white/[0.07] md:p-6"
-              >
-                <p class="text-sm text-gray-500 dark:text-gray-400">Verified This Month</p>
-                <h4 class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90">{{ verified_this_month_count }}</h4>
+              <button type="button" class="pv-stat" :class="statusFilter === 'Verified' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Verified' ? 'true' : 'false'" @click="statusFilter = 'Verified'">
+                <span class="pv-stat-l"><i class="ar-dot pv-dot--verified"></i>Verified This Month</span>
+                <span class="pv-stat-n">{{ verified_this_month_count }}</span>
               </button>
-              <button
-                type="button"
-                @click="statusFilter = 'Rejected'; filtering = true; clearTimeout(filterTimeout); filterTimeout = setTimeout(() => filtering = false, 500)"
-                class="block w-full rounded-2xl border border-gray-200 bg-white p-5 text-left transition hover:bg-gray-50 dark:border-gray-800 dark:bg-white/[0.03] dark:hover:bg-white/[0.07] md:p-6"
-              >
-                <p class="text-sm text-gray-500 dark:text-gray-400">Rejected</p>
-                <h4 class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90">{{ rejected_count }}</h4>
+              <button type="button" class="pv-stat" :class="statusFilter === 'Rejected' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Rejected' ? 'true' : 'false'" @click="statusFilter = 'Rejected'">
+                <span class="pv-stat-l"><i class="ar-dot pv-dot--rejected"></i>Rejected</span>
+                <span class="pv-stat-n">{{ rejected_count }}</span>
               </button>
             </div>
 
@@ -1204,188 +1308,207 @@
             <!-- Same-day follow-up: a payment that just got verified must not simply
                  vanish from Pending with nothing left to double-check. This clears
                  itself tomorrow (scoped to reviewed_at__date == today), so there is
-                 nothing here to manually dismiss or forget about. -->
-            <div class="mt-5 rounded-2xl border border-success-500 bg-success-50 p-4 dark:border-success-500 dark:bg-white/[0.03]">
-              <div class="mb-4 flex items-center justify-between gap-3">
-                <div>
-                  <h3 class="text-sm font-semibold text-gray-800 dark:text-white/90">Verified Today</h3>
-                  <p class="mt-0.5 text-theme-xs text-gray-500 dark:text-gray-400">Double-check these are correctly scheduled before you move on.</p>
-                </div>
-                <span class="shrink-0 rounded-full bg-success-50 px-2.5 py-1 text-theme-xs font-semibold text-success-700 dark:bg-success-500/15 dark:text-success-500">{{ verified_today|length }}</span>
+                 nothing here to manually dismiss or forget about. One balanced line per
+                 booking; a booking with several gowns shows "5 gowns" and opens to one short line per gown. -->
+            <div class="pv-vt">
+              <div class="pv-vt-head">
+                <h3>Verified Today</h3>
+                <span class="pv-vt-n">{{ verified_today|length }}</span>
+                <details class="ht-tip"><summary aria-label="About Verified Today" title="About Verified Today">?</summary><div class="ht-tip-pop">Double-check these are correctly scheduled before you move on.</div></details>
               </div>
-              <div id="verified-today-list" class="custom-scrollbar flex flex-col gap-3">
+              <div id="verified-today-list" class="custom-scrollbar">
                 {% for r in verified_today %}
-                <div class="verified-today-card flex flex-col gap-3 rounded-xl border border-gray-100 bg-white p-4 dark:border-gray-800 dark:bg-gray-900 sm:flex-row sm:items-center sm:justify-between" style="--i: {{ forloop.counter0 }};">
-                  <div style="min-width: 0;">
-                    <p class="font-medium text-gray-800 text-theme-sm dark:text-white/90">
-                      {{ r.display_customer_name }}
-                      <span class="font-normal text-gray-400 dark:text-gray-400">&middot; {{ r.reference_code }}</span>
-                    </p>
-                    <p class="mt-1 text-theme-xs text-gray-500 dark:text-gray-400">Verified {{ r.reviewed_at|date:"g:i A" }}</p>
-                    <div class="mt-2 flex flex-wrap gap-1.5">
-                      {% for item in r.items.all %}
-                      <span class="inline-flex items-center rounded-full px-2.5 py-1 text-theme-xs font-medium
-                        {% if item.stage == 'Pick-up' %}bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400
-                        {% elif item.stage == 'Reserved' %}bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500
-                        {% elif item.stage == 'Overdue' %}bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500
-                        {% else %}bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400{% endif %}">
-                        {{ item.gown_name }} &middot; {{ item.stage }} {{ item.rental_date|date:"M j" }}
-                      </span>
-                      {% endfor %}
+                <div class="verified-today-card pv-vt-item" style="--i: {{ forloop.counter0 }};" x-data="{ open: false }">
+                  <div class="pv-vt-row">
+                    <div class="pv-vt-who">
+                      <span class="pv-vt-name">{{ r.display_customer_name }}</span>
+                      <span class="ar-ref"><b>{{ r.reference_code }}</b></span>
                     </div>
+                    <div class="pv-vt-what">
+                      {% if r.gown_count > 1 %}
+                      <span class="ar-count-pill" title="{{ r.gown_count }} gowns in this booking"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0"/></svg>{{ r.gown_count }} gowns</span>
+                      <span class="pv-vt-names">{% for item in r.live_items %}{{ item.gown_name }}{% if not forloop.last %} &middot; {% endif %}{% endfor %}</span>
+                      {% else %}
+                      {% for item in r.live_items %}
+                      <span class="pv-vt-g">{{ item.gown_name }}</span>
+                      <span class="pv-vt-stage{% if item.stage == 'Pick-up' %} pv-st--pickup{% elif item.stage == 'Reserved' %} pv-st--reserved{% elif item.stage == 'Overdue' %} pv-st--overdue{% endif %}"><i></i>{{ item.stage }} {{ item.rental_date|date:"M j" }}</span>
+                      {% endfor %}
+                      {% endif %}
+                    </div>
+                    <div class="pv-vt-time">Verified {{ r.reviewed_at|date:"g:i A" }}</div>
+                    <a href="{% url 'arabela_admin:active_reservations' %}?search={{ r.reference_code|urlencode }}" class="ar-ib" title="View schedule" aria-label="View the schedule of {{ r.display_customer_name }}, {{ r.reference_code }}">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                    </a>
+                    {% if r.gown_count > 1 %}
+                    <button type="button" class="ar-chev" @click="open = !open" :aria-expanded="open ? 'true' : 'false'" aria-expanded="false"
+                      aria-label="Show or hide the gowns of {{ r.display_customer_name }}, {{ r.reference_code }}">
+                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7.5l5 5 5-5" /></svg>
+                    </button>
+                    {% else %}<span></span>{% endif %}
                   </div>
-                  <a href="{% url 'arabela_admin:active_reservations' %}?search={{ r.reference_code|urlencode }}"
-                     class="inline-flex shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
-                    View Schedule
-                  </a>
+                  {% if r.gown_count > 1 %}
+                  <div class="pv-vt-more" x-show="open" x-cloak>
+                    {% for item in r.live_items %}
+                    <div class="pv-vt-line">
+                      <span class="pv-vt-g">{{ item.gown_name }}</span>
+                      <span class="pv-vt-stage{% if item.stage == 'Pick-up' %} pv-st--pickup{% elif item.stage == 'Reserved' %} pv-st--reserved{% elif item.stage == 'Overdue' %} pv-st--overdue{% endif %}"><i></i>{{ item.stage }} {{ item.rental_date|date:"M j" }}</span>
+                    </div>
+                    {% endfor %}
+                  </div>
+                  {% endif %}
                 </div>
                 {% endfor %}
               </div>
             </div>
             {% endif %}
 
-            <div class="mt-5 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03] sm:p-5">
-              <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div class="sm:flex-1">
-                  <input
-                    type="text"
-                    x-model="search"
-                    @input="filtering = true; clearTimeout(filterTimeout); filterTimeout = setTimeout(() => filtering = false, 500)"
-                    placeholder="Search by customer or reference..."
-                    class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-                  />
+            <!-- ONE box, the same look as the other lists: the search, the month / status / year, the count with the key to the circles, and one short
+                 line per booking. The circle before the name is the booking's status; a booking with several gowns shows "5 gowns" and opens to one short
+                 line per gown. Approve / Reject are only offered while the booking is Pending, exactly as before. -->
+            <div class="pv-card">
+              <div class="ar-toolbar">
+                <div class="ar-search">
+                  <svg class="ar-search-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                  <input type="text" class="ar-search-input" x-model="search" placeholder="Search by customer, booking number or gown..." aria-label="Search payments">
                 </div>
-                <div class="sm:w-48">
-                  <select x-model="monthFilter" @change="filtering = true; clearTimeout(filterTimeout); filterTimeout = setTimeout(() => filtering = false, 500)" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
-                    <option value="All">All Months</option>
-                    <option value="Jan">January</option>
-                    <option value="Feb">February</option>
-                    <option value="Mar">March</option>
-                    <option value="Apr">April</option>
-                    <option value="May">May</option>
-                    <option value="Jun">June</option>
-                    <option value="Jul">July</option>
-                    <option value="Aug">August</option>
-                    <option value="Sep">September</option>
-                    <option value="Oct">October</option>
-                    <option value="Nov">November</option>
-                    <option value="Dec">December</option>
-                  </select>
-                </div>
-                <div class="sm:w-52">
-                  <select x-model="statusFilter" @change="filtering = true; clearTimeout(filterTimeout); filterTimeout = setTimeout(() => filtering = false, 500)" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
-                    <option value="All">All Status</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Verified">Verified</option>
-                    <option value="Rejected">Rejected</option>
-                    <option value="Cancelled">Cancelled</option>
-                  </select>
-                </div>
-                <div class="sm:w-44">
-                  <input
-                    type="text"
-                    inputmode="numeric"
-                    x-model="yearFilter"
-                    @input="yearFilter = yearFilter.replace(/[^0-9]/g, '').slice(0, 4); filtering = true; clearTimeout(filterTimeout); filterTimeout = setTimeout(() => filtering = false, 500)"
-                    maxlength="4"
-                    placeholder="Year (e.g. 2026)"
-                    class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-                  />
+                <select x-model="monthFilter" class="ar-search-input pv-select" aria-label="Show one month">
+                  <option value="All">All Months</option>
+                  <option value="Jan">January</option>
+                  <option value="Feb">February</option>
+                  <option value="Mar">March</option>
+                  <option value="Apr">April</option>
+                  <option value="May">May</option>
+                  <option value="Jun">June</option>
+                  <option value="Jul">July</option>
+                  <option value="Aug">August</option>
+                  <option value="Sep">September</option>
+                  <option value="Oct">October</option>
+                  <option value="Nov">November</option>
+                  <option value="Dec">December</option>
+                </select>
+                <select x-model="statusFilter" class="ar-search-input pv-select" aria-label="Show one status">
+                  <option value="All">All Status</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Verified">Verified</option>
+                  <option value="Rejected">Rejected</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+                <div class="pv-year-wrap">
+                  <input type="text" inputmode="numeric" class="ar-search-input pv-year" x-model="yearFilter" @input="yearFilter = yearFilter.replace(/[^0-9]/g, '').slice(0, 4)" maxlength="4" placeholder="Year" aria-label="Show one year only, for example 2026" title="Show one year only, for example 2026">
                 </div>
               </div>
-            </div>
+              <div class="ar-count pv-countrow">
+                <span id="pv-count" aria-live="polite"></span>
+                <span class="pv-legend" role="group" aria-label="What the circles mean">
+                  <span><i class="ar-dot pv-dot--pending"></i>Pending</span>
+                  <span><i class="ar-dot pv-dot--verified"></i>Verified</span>
+                  <span><i class="ar-dot pv-dot--rejected"></i>Rejected</span>
+                  <span><i class="ar-dot pv-dot--cancelled"></i>Cancelled</span>
+                </span>
+              </div>
 
-            <div class="mt-5 overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
-              <div x-show="filtering" x-cloak class="flex items-center justify-center" style="height: 300px;">
-                <div class="h-10 w-10 animate-spin rounded-full border-4 border-solid border-gray-300 border-t-transparent dark:border-gray-600"></div>
-              </div>
-              <div x-show="!filtering" class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg="tbody" data-arpg-noun="bookings">
-                <table class="min-w-full">
-                  <thead class="sticky top-0 z-10 bg-white dark:bg-gray-900">
-                    <tr>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Customer</p></th>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Reservation</p></th>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Reference No.</p></th>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Amount</p></th>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Date Submitted</p></th>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Status</p></th>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="font-medium text-gray-500 text-theme-xs dark:text-gray-400">Actions</p></th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-                      {% for r in reservations %}
-                      <tr x-data="{ status: '{% if r.status == "Pending" %}Pending{% elif r.status == "Rejected" %}Rejected{% elif r.status == "Cancelled" %}Cancelled{% else %}Verified{% endif %}' }"
-                          x-show="(statusFilter === 'All' || statusFilter === status) && (yearFilter === '' || yearFilter === '{{ r.created_at|date:"Y" }}') && (monthFilter === 'All' || monthFilter === '{{ r.created_at|date:"M" }}') && (search === '' || '{{ r.display_customer_name|lower }} {{ r.reference_code|lower }}'.includes(search.toLowerCase()))"
-                          :class="search !== '' && '{{ r.reference_code|lower|escapejs }}' === search.toLowerCase() ? 'bg-brand-50 dark:bg-brand-500/15' : ''">
-                        <td class="px-5 py-4 sm:px-6">
-                          <a href="{% url 'arabela_admin:reservation_records' %}?search={{ r.reference_code|urlencode }}" class="pv-customer-link flex items-center gap-3" title="Open {{ r.reference_code }} in Reservation Records" aria-label="Open {{ r.display_customer_name }}, {{ r.reference_code }}, in Reservation Records">
-                            <div>
-                              <span class="block font-medium text-gray-800 text-theme-sm dark:text-white/90">{{ r.display_customer_name }}</span>
-                              {% if r.booked_as_name %}<span class="block text-xs text-gray-400 dark:text-gray-500">Booked as: {{ r.booked_as_name }}</span>{% endif %}
-                            </div>
-                          </a>
-                        </td>
-                        <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ r.reference_code }}</p></td>
-                        <td class="px-5 py-4 sm:px-6"><p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ r.payment_method|default:"&mdash;" }}</p></td>
-                        <td class="px-5 py-4 sm:px-6">{% with bd=r.payment_breakdown %}{% if bd %}<p class="font-medium text-gray-800 text-theme-sm dark:text-white/90">{{ bd.headline }}</p><p class="text-xs text-gray-400 dark:text-gray-500">{{ bd.sub }}</p>{% else %}<p class="text-gray-500 text-theme-sm dark:text-gray-400">&#8369;{{ r.total_amount|floatformat:'-2g' }}</p>{% endif %}{% endwith %}</td>
-                        <td class="px-5 py-4 sm:px-6">
-                          <p class="text-gray-500 text-theme-sm dark:text-gray-400">{{ r.created_at|date:"M j, Y" }}</p>
-                          <p class="text-xs text-gray-400 dark:text-gray-500">{{ r.created_at|date:"g:i A" }}</p>
-                        </td>
-                        <td class="px-5 py-4 sm:px-6">
-                          <p class="inline-flex rounded-full px-2 py-0.5 text-theme-xs font-medium"
-                             :class="{
-                               'bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400': status === 'Pending',
-                               'bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500': status === 'Verified',
-                               'bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500': status === 'Rejected',
-                               'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400': status === 'Cancelled'
-                             }" x-text="status"></p>
-                          {% if not r.payment_proof_url %}
-                          {% if r.receipt_records.all %}
-                          <span class="mt-1 block text-theme-xs font-medium text-gray-500 dark:text-gray-400">Shop receipt attached</span>
-                          {% else %}
-                          <span class="mt-1 block text-theme-xs font-medium text-error-600 dark:text-error-500">No proof uploaded</span>
-                          {% endif %}
-                          {% endif %}
-                        </td>
-                        <td class="px-5 py-4 sm:px-6">
-                          <div class="flex flex-wrap items-center gap-2">
-                            {% with dup=r.gcash_duplicate_codes %}
-                            <button type="button"
-                              @click="viewingPayment = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"&mdash;"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:'-2g' }}', date: '{{ r.created_at|date:"M j, Y" }}', status: status, proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}'), breakdown: JSON.parse('{{ r.payment_breakdown_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', gcashDup: '{{ dup|escapejs }}' }; openReceiptModal = true"
-                              class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">
-                              View Proof
-                            </button>
-                            {% if dup %}<span class="inline-flex items-center rounded-full bg-error-50 px-2 py-0.5 text-theme-xs font-medium text-error-700 dark:bg-error-500/15 dark:text-error-500" title="The same GCash reference number is also on {{ dup }}">Same GCash ref as {{ dup }}</span>{% endif %}
-                            {% endwith %}
-                            {% if r.status == "Pending" %}
-                            <button type="button"
-                              data-url="{% url 'arabela_admin:reservation_approve' r.id %}"
-                              data-action="verify"
-                              data-customer="{{ r.display_customer_name }}"
-                              data-reservation="{{ r.reference_code }}"
-                              onclick="reviewPayment(this)"
-                              style="background-color:#12b76a;color:#fff;min-width:72px" class="rounded-full px-3 py-1.5 text-xs font-semibold shadow-sm hover:bg-[#0f9d5c] focus:outline-none focus:ring-2 focus:ring-[#12b76a]/50">Verify</button>
-                            <button type="button"
-                              data-url="{% url 'arabela_admin:reservation_reject' r.id %}"
-                              data-action="reject"
-                              data-customer="{{ r.display_customer_name }}"
-                              data-reservation="{{ r.reference_code }}"
-                              onclick="reviewPayment(this)"
-                              style="background-color:#ef4444;color:#fff;min-width:72px" class="rounded-full px-3 py-1.5 text-xs font-semibold shadow-sm hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500/50">Reject</button>
-                            {% endif %}
+              <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg=".ar-booking" data-arpg-noun="bookings" data-arpg-top="off" data-arpg-count="#pv-count">
+                <div class="ar-head pv-grid">
+                  <span>Customer</span>
+                  <span>Payment</span>
+                  <span>Submitted</span>
+                  <span>Actions</span>
+                  <span></span>
+                </div>
+                {% for r in reservations %}
+                <!-- One booking: a closed line (status circle + name, booking number, the payment, when it was submitted, the actions) and, hidden until it is
+                     opened, who it was booked as, the amount breakdown and one short line per gown. -->
+                <div class="ar-booking" data-booking-id="{{ r.id }}" data-status="{{ r.pv_status }}" data-year="{{ r.created_at|date:'Y' }}" data-month="{{ r.created_at|date:'M' }}" data-search="{{ r.display_customer_name|lower }} {{ r.reference_code|lower }}{% for gi in r.items.all %} {{ gi.gown_name|lower }}{% endfor %}" x-show="matches($el)">
+                  <!-- A click on the line opens the booking, except a click on the name (it opens Reservation Records) or on an action. The actions do NOT stop the click. -->
+                  <div class="ar-line pv-grid" :class="isBookingOpen({{ r.id }}) ? 'is-open' : ''" @click="if (!$event.target.closest('.pv-acts, a')) { toggleBooking({{ r.id }}) }">
+                    <div class="pv-cust">
+                      <div class="ar-who">
+                        <span class="ar-dot pv-dot--{{ r.pv_status|lower }}" role="img" aria-label="{{ r.pv_status }}"
+                          title="{% if r.pv_status == 'Pending' %}Pending: waiting for the payment to be checked{% elif r.pv_status == 'Verified' %}Verified: the payment was approved{% elif r.pv_status == 'Rejected' %}Rejected: the payment was not accepted{% else %}Cancelled: the booking was cancelled{% endif %}"></span>
+                        <a href="{% url 'arabela_admin:reservation_records' %}?search={{ r.reference_code|urlencode }}" class="pv-customer-link" title="Open {{ r.reference_code }} in Reservation Records" aria-label="Open {{ r.display_customer_name }}, {{ r.reference_code }}, in Reservation Records"><span class="ar-name">{{ r.display_customer_name }}</span></a>
+                      </div>
+                      <div class="ar-ref pv-sub">
+                        <b>{{ r.reference_code }}</b>
+                        {% if r.gown_count > 1 %}<span class="ar-count-pill" title="{{ r.gown_count }} gowns in this booking"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0"/></svg>{{ r.gown_count }} gowns</span>{% endif %}
+                      </div>
+                    </div>
+                    <div class="pv-pay">
+                      <div class="pv-amt">{% with bd=r.payment_breakdown %}{% if bd %}{{ bd.headline }}{% else %}&#8369;{{ r.total_amount|floatformat:'-2g' }}{% endif %}{% endwith %}</div>
+                      {% if r.payment_method %}<div class="pv-note">{{ r.payment_method }}{% if r.gcash_reference %} &middot; {{ r.gcash_reference }}{% endif %}</div>{% endif %}
+                      {% if not r.payment_proof_url %}
+                      {% if r.receipt_records.all %}
+                      <div class="pv-note">Shop receipt attached</div>
+                      {% else %}
+                      <div class="pv-note pv-note--bad">No proof uploaded</div>
+                      {% endif %}
+                      {% endif %}
+                      {% if r.gcash_dups %}<div class="pv-note pv-note--bad" title="The same GCash reference number is also on {{ r.gcash_dups }}">Same GCash ref as {{ r.gcash_dups }}</div>{% endif %}
+                    </div>
+                    <div class="pv-sub-at">
+                      <div class="pv-day">{{ r.created_at|date:"M j, Y" }}</div>
+                      <div class="pv-note">{{ r.created_at|date:"g:i A" }}</div>
+                    </div>
+                    <div class="pv-acts">
+                      <button type="button"
+                        @click="viewingPayment = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"&mdash;"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:'-2g' }}', date: '{{ r.created_at|date:"M j, Y" }}', status: '{{ r.pv_status }}', proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}'), breakdown: JSON.parse('{{ r.payment_breakdown_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', gcashDup: '{{ r.gcash_dups|escapejs }}' }; openReceiptModal = true"
+                        class="ar-ib" title="View payment proof" aria-label="View the payment proof of {{ r.display_customer_name }}, {{ r.reference_code }}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                      </button>
+                      {% if r.status == "Pending" %}
+                      <button type="button"
+                        data-url="{% url 'arabela_admin:reservation_approve' r.id %}"
+                        data-action="verify"
+                        data-customer="{{ r.display_customer_name }}"
+                        data-reservation="{{ r.reference_code }}"
+                        onclick="reviewPayment(this)"
+                        class="resv-btn resv-btn-approve inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-theme-xs font-medium shadow-theme-xs transition">Approve</button>
+                      <button type="button"
+                        data-url="{% url 'arabela_admin:reservation_reject' r.id %}"
+                        data-action="reject"
+                        data-customer="{{ r.display_customer_name }}"
+                        data-reservation="{{ r.reference_code }}"
+                        onclick="reviewPayment(this)"
+                        class="resv-btn resv-btn-reject inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-theme-xs font-medium shadow-theme-xs transition">Reject</button>
+                      {% endif %}
+                    </div>
+                    <button type="button" class="ar-chev" @click.stop="toggleBooking({{ r.id }})" aria-expanded="false"
+                      :aria-expanded="isBookingOpen({{ r.id }}) ? 'true' : 'false'" aria-controls="ar-panel-{{ r.id }}"
+                      aria-label="Show or hide the details of {{ r.display_customer_name }}, {{ r.reference_code }}">
+                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7.5l5 5 5-5" /></svg>
+                    </button>
+                  </div>
+                  <div class="ar-panel" id="ar-panel-{{ r.id }}" x-show="isBookingOpen({{ r.id }})" x-cloak>
+                    {% if r.booked_as_name %}
+                    <div class="ar-strip"><span>Booked as: {{ r.booked_as_name }}</span></div>
+                    {% endif %}
+                    <!-- One short line per gown: its name, dates and price. -->
+                    <div class="ar-gowns">
+                      {% for item in r.items.all %}
+                      <div class="ar-gown">
+                        <div class="ar-gl pv-gl">
+                          <div class="ar-gname">
+                            <span class="ar-gtitle"{% if item.stage == "Cancelled" %} style="text-decoration: line-through; opacity: .65;"{% endif %}>{{ item.gown_name }}</span>
+                            {% if item.stage == "Cancelled" %}<span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">Cancelled</span>{% endif %}
+                            {% if r.item_total > 1 %}<span class="ar-of">{{ forloop.counter }} of {{ r.item_total }}</span>{% endif %}
                           </div>
-                        </td>
-                      </tr>
-                      {% empty %}
-                      <tr>
-                        <td class="px-5 py-10 sm:px-6 text-center" colspan="7">
-                          <p class="text-gray-500 text-theme-sm dark:text-gray-400">No reservations have been submitted yet.</p>
-                        </td>
-                      </tr>
+                          <div class="ar-gdates"><span>{{ item.rental_date|date:"M j" }}{% if item.rental_date.year != item.return_date.year %}, {{ item.rental_date.year }}{% endif %} &rarr; {{ item.return_date|date:"M j, Y" }}</span></div>
+                          <div class="ar-gprice">&#8369;{{ item.rental_price|floatformat:'-2g' }}</div>
+                        </div>
+                      </div>
                       {% endfor %}
-                  </tbody>
-                </table>
+                    </div>
+                  </div>
+                </div>
+                {% empty %}
+                <div class="ar-empty">
+                  <p class="text-gray-500 text-theme-sm dark:text-gray-400">No reservations have been submitted yet.</p>
+                </div>
+                {% endfor %}
+                {% if reservations %}
+                <div class="ar-empty" x-show="matchCount() === 0" x-cloak>
+                  <p class="text-gray-500 text-theme-sm dark:text-gray-400">No payment matches your search.</p>
+                </div>
+                {% endif %}
               </div>
             </div>
 
@@ -1508,22 +1631,36 @@
       return match ? decodeURIComponent(match[1]) : '';
     }
 
+    // A search that matches exactly one booking opens it (matches() is the same rule the list itself filters by).
+    function pvSetupBookings(state, watch) {
+      function openTheOnlyMatch() {
+        if (String(state.search || '') === '') { state.autoOpen = []; return; }
+        var hits = Array.prototype.filter.call(document.querySelectorAll('.ar-booking[data-booking-id]'), function (el) { return state.matches(el); });
+        state.autoOpen = hits.length === 1 ? [Number(hits[0].getAttribute('data-booking-id'))] : [];
+      }
+      watch('search', openTheOnlyMatch);
+      watch('statusFilter', openTheOnlyMatch);
+      watch('monthFilter', openTheOnlyMatch);
+      watch('yearFilter', openTheOnlyMatch);
+      openTheOnlyMatch();
+    }
+
     function reviewPayment(btn) {
       var url = btn.dataset.url;
       var isVerify = btn.dataset.action === 'verify';
       var customer = btn.dataset.customer || 'this customer';
       var reservation = btn.dataset.reservation || '';
       adminConfirm({
-        title: isVerify ? 'Verify payment' : 'Reject payment',
+        title: isVerify ? 'Approve payment' : 'Reject payment',
         message: isVerify
           ? customer + ' · ' + reservation + '\n\nMake sure you have reviewed the proof of payment. This approves the reservation and adds it to the Rental Schedule.'
           : customer + ' · ' + reservation + '\n\nThis will mark the reservation as rejected.',
-        confirmText: isVerify ? 'Verify payment' : 'Reject payment',
+        confirmText: isVerify ? 'Approve payment' : 'Reject payment',
         danger: !isVerify,
       }).then(function (ok) {
         if (!ok) return;
 
-        var row = btn.closest('tr');
+        var row = btn.closest('tr, .ar-booking');
         var buttons = row ? row.querySelectorAll('button[data-url]') : [btn];
         buttons.forEach(function (b) { b.disabled = true; });
 

@@ -22,15 +22,20 @@ still matches the panel exactly, in light and dark.
     width: 0.75rem; height: 0.75rem;
     flex: 0 0 auto;
     border-radius: 9999px;
-    border: 2px solid #d0d5dd;
-    background: #ffffff;
+    /* An event that already happened is a FADED circle (a soft tint of the success green); only the latest one is solid (see .is-latest). */
+    border: 2px solid rgba(18, 183, 106, 0.3);
+    background: rgba(18, 183, 106, 0.16);
     box-sizing: border-box;
   }
   .arb-tl-line { width: 1px; flex: 1 1 auto; margin: 0.3rem 0; background: #eaecf0; }
 
-  .arb-tl-dot.is-latest { border-color: var(--color-success-500, #12b76a); background: var(--color-success-500, #12b76a); }
-  .arb-tl-dot.is-negative { border-color: #fda29b; }
-  .arb-tl-dot.is-latest.is-negative { border-color: var(--color-error-500, #f04438); background: var(--color-error-500, #f04438); }
+  .arb-tl-dot.is-latest { border-color: var(--color-success-500, #12b76a); background: var(--color-success-500, #12b76a); animation: arb-tl-pulse 2.2s ease-out 3; }
+  .arb-tl-dot.is-negative { border-color: rgba(240, 68, 56, 0.32); background: rgba(240, 68, 56, 0.14); }
+  .arb-tl-dot.is-latest.is-negative { border-color: var(--color-error-500, #f04438); background: var(--color-error-500, #f04438); animation-name: arb-tl-pulse-bad; }
+  /* The latest event gives three soft pulses when its history opens, then rests (nothing keeps moving). */
+  @keyframes arb-tl-pulse { 0% { box-shadow: 0 0 0 0 rgba(18, 183, 106, 0.45); } 70%, 100% { box-shadow: 0 0 0 7px rgba(18, 183, 106, 0); } }
+  @keyframes arb-tl-pulse-bad { 0% { box-shadow: 0 0 0 0 rgba(240, 68, 56, 0.45); } 70%, 100% { box-shadow: 0 0 0 7px rgba(240, 68, 56, 0); } }
+  @media (prefers-reduced-motion: reduce) { .arb-tl-dot.is-latest { animation: none; } }
 
   .arb-tl-body { min-width: 0; flex: 1 1 auto; padding-bottom: 1.125rem; }
   .arb-tl-row:last-child .arb-tl-body { padding-bottom: 0; }
@@ -74,10 +79,10 @@ still matches the panel exactly, in light and dark.
     color: var(--color-gray-400, #98a2b3);
   }
 
-  .dark .arb-tl-dot { border-color: #344054; background: #101828; }
+  .dark .arb-tl-dot { border-color: rgba(50, 213, 131, 0.32); background: rgba(18, 183, 106, 0.16); }
   .dark .arb-tl-line { background: #1d2939; }
   .dark .arb-tl-dot.is-latest { border-color: var(--color-success-500, #12b76a); background: var(--color-success-500, #12b76a); }
-  .dark .arb-tl-dot.is-negative { border-color: #912018; }
+  .dark .arb-tl-dot.is-negative { border-color: rgba(240, 68, 56, 0.4); background: rgba(240, 68, 56, 0.16); }
   .dark .arb-tl-dot.is-latest.is-negative { border-color: var(--color-error-500, #f04438); background: var(--color-error-500, #f04438); }
   .dark .arb-tl-label { color: #98a2b3; }
   .dark .arb-tl-row:first-child .arb-tl-label { color: rgba(255, 255, 255, 0.9); }

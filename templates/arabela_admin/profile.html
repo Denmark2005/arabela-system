@@ -1849,8 +1849,7 @@
                 class="p-5 border border-gray-200 rounded-2xl dark:border-gray-800 lg:p-6"
                 style="margin-top: 1.5rem;"
               >
-                <h4 class="text-lg font-semibold text-gray-800 dark:text-white/90">GCash Payment</h4>
-                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Shown to customers when they pay the security deposit. The QR is always shown whole, never cropped.</p>
+                <h4 class="flex items-center text-lg font-semibold text-gray-800 dark:text-white/90">GCash Payment<details class="ht-tip"><summary aria-label="About the GCash QR" title="About the GCash QR">?</summary><div class="ht-tip-pop">Shown to customers when they pay the security deposit. The QR is always shown whole, never cropped.</div></details></h4>
 
                 <div style="display: flex; flex-wrap: wrap; gap: 2rem; margin-top: 1.25rem;">
                   <div style="width: 208px;">
@@ -1906,8 +1905,7 @@
               </div>
               <!-- Customer emails: preview every email, check delivery, send a test to the owner (owner-only page). -->
               <div class="p-5 border border-gray-200 rounded-2xl dark:border-gray-800 lg:p-6" style="margin-top: 1.5rem;">
-                <h4 class="text-lg font-semibold text-gray-800 dark:text-white/90">Customer emails</h4>
-                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Customers can be emailed when a reservation is received, approved or rejected, for pick-up and return reminders, overdue notices and account notices. See how each email looks and send a test to yourself first.</p>
+                <h4 class="flex items-center text-lg font-semibold text-gray-800 dark:text-white/90">Customer emails<details class="ht-tip"><summary aria-label="About customer emails" title="About customer emails">?</summary><div class="ht-tip-pop">Customers can be emailed when a reservation is received, approved or rejected, for pick-up and return reminders, overdue notices and account notices. See how each email looks and send a test to yourself first.</div></details></h4>
                 <div style="margin-top: 1rem;">
                   <a href="{% url 'arabela_admin:email_preview' %}" class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">Preview and test emails</a>
                 </div>
@@ -1976,19 +1974,16 @@
 
           <div class="grid grid-cols-1 gap-y-5">
             <div>
-              <label
-                class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400"
+              <div class="mb-1.5 flex items-center"><label
+                class="block text-sm font-medium text-gray-700 dark:text-gray-400"
               >
                 Facebook
-              </label>
+              </label><details class="ht-tip"><summary aria-label="About the Facebook link" title="About the Facebook link">?</summary><div class="ht-tip-pop">This is ARABELA's public Facebook page, shown in the site footer and Contact page.</div></details></div>
               <input
                 type="text"
                 x-model="facebook"
                 class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
               />
-              <p class="mt-1.5 text-xs text-gray-400 dark:text-gray-400">
-                This is ARABELA's public Facebook page — shown in the site footer and Contact page.
-              </p>
             </div>
           </div>
         </div>

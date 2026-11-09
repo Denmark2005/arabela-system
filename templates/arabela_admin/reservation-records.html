@@ -13,22 +13,128 @@
   <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet">
   {% include "arabela_admin/partials/photo_viewer_styles.html" %}
     {% include "arabela_admin/partials/timeline_styles.html" %}
+    {% include "arabela_admin/partials/ar_list_styles.html" %}
     <style>
       /* Reservation Records -- page-scoped (rr-) styles for the few layout needs the
          precompiled admin CSS doesn't ship (it only has the classes the template pack
          itself used). Colours are the admin theme's own gray/brand values. */
       [x-cloak] { display: none !important; }
-      .rr-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
-      .rr-stat { display: block; width: 100%; text-align: left; border-radius: 1rem; border: 1px solid #e4e7ec; background: #fff; padding: 1.25rem; transition: background-color .15s, border-color .15s; }
-      .rr-stat:hover { background: #f9fafb; }
-      .rr-stat.is-on { border-color: #465fff; box-shadow: 0 0 0 1px #465fff inset; }
-      .dark .rr-stat { border-color: #1d2939; background: rgba(255,255,255,.03); }
-      .dark .rr-stat:hover { background: rgba(255,255,255,.06); }
-      .dark .rr-stat.is-on { border-color: #7592ff; box-shadow: 0 0 0 1px #7592ff inset; }
-      .rr-stat-hint { margin-top: .25rem; font-size: .75rem; color: #98a2b3; }
+      /* ===== The list: the same look as the other admin lists (partials/ar_list_styles.html), in ONE card. Its own box class is `rr-card`, not
+         `ar-card`: partials/attach_receipt.html already uses `ar-card` for its window. ===== */
+      .rr-card { margin-bottom: 1.25rem; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; }
+      .dark .rr-card { background: rgba(255,255,255,.03); border-color: #1d2939; }
+
+      /* The five quick views: one strip like the Gown Catalog's. Each is a filter button; the chosen one is highlighted. */
+      .rr-strip { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1px; margin-bottom: 1.25rem; background: #e4e7ec; border: 1px solid #e4e7ec; border-radius: 1rem; overflow: hidden; }
+      .dark .rr-strip { background: #1d2939; border-color: #1d2939; }
+      .rr-tile { margin: 0; padding: .85rem 1.1rem; text-align: left; background: #fff; border: 0; min-width: 0; font: inherit; cursor: pointer; transition: background-color .15s, box-shadow .15s; }
+      .dark .rr-tile { background: #171f2f; }
+      .rr-tile:hover { background: #f9fafb; }
+      .dark .rr-tile:hover { background: #1c2536; }
+      .rr-tile:focus-visible { outline: 2px solid #465fff; outline-offset: -2px; }
+      .rr-tile.is-on { background: #f5f7ff; box-shadow: inset 0 -3px 0 #465fff; }
+      .dark .rr-tile.is-on { background: rgba(70,95,255,.14); }
+      .rr-tile-l { display: block; font-size: .8125rem; color: #667085; }
+      .dark .rr-tile-l { color: #98a2b3; }
+      .rr-tile-n { display: block; margin-top: .25rem; font-size: 1.5rem; font-weight: 700; line-height: 1.2; color: #101828; font-variant-numeric: tabular-nums; }
+      .dark .rr-tile-n { color: rgba(255,255,255,.92); }
+
+      /* The search and the filters. */
+      .ar-search-input.rr-select { flex: 0 0 9.5rem; width: 9.5rem; padding-left: .8rem; }
+      .ar-search-input.rr-year { flex: none; width: 5.75rem; padding-left: .8rem; }
+      .ar-search-input.rr-date { flex: none; width: 9.5rem; padding-left: .7rem; color-scheme: light; }
+      .dark .ar-search-input.rr-date { color-scheme: dark; }
+      .ar-search-input:disabled { opacity: .5; cursor: not-allowed; }
+      .rr-toolbar2 { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem .9rem; padding: 0 1.25rem .85rem; }
+      .rr-lbl { font-size: .8125rem; color: #667085; }
+      .dark .rr-lbl { color: #98a2b3; }
+      .rr-fine { font-size: .75rem; color: #667085; }
+      .dark .rr-fine { color: #98a2b3; }
+      .rr-pickup { gap: .5rem; }
+      .rr-countrow { display: flex; flex-wrap: wrap; align-items: center; gap: .1rem .75rem; }
+
+      /* The key to the circles: a small button on the right of the count line, so it takes no height of its own. */
+      .rr-key { margin-left: auto; }
+      .rr-key > summary { width: auto; height: 1.75rem; padding: 0 .7rem; gap: .45rem; border-color: #d0d5dd; font-size: .75rem; font-weight: 500; color: #475467; }
+      .rr-key > summary:hover, .rr-key[open] > summary { background: rgba(70,95,255,.1); border-color: #9bb0ff; color: #3641f5; }
+      .dark .rr-key > summary { border-color: #344054; color: #98a2b3; }
+      .dark .rr-key > summary:hover, .dark .rr-key[open] > summary { background: rgba(70,95,255,.18); border-color: #6172f3; color: #c7d2fe; }
+      .rr-keydots { display: inline-flex; gap: .15rem; }
+      .rr-keydots i { display: block; width: .5rem; height: .5rem; border-radius: 999px; }
+      .ar-leg li > span:last-child { min-width: 0; }
+
+      /* The status circles. Every status has its own colour: no two of the eight are alike. The words are on hover and in the key. */
+      .rr-dot--pending { background: #f79009; }
+      .rr-dot--pickup { background: #039855; }
+      .rr-dot--out { background: #1570ef; }
+      .rr-dot--partly { background: #7a5af8; }
+      .rr-dot--overdue { background: #d92d20; }
+      .rr-dot--done { background: #667085; }
+      .rr-dot--rejected { background: #dd2590; }
+      .rr-dot--cancelled { background: transparent; border: 2px solid #98a2b3; box-sizing: border-box; box-shadow: none; }
+      .rr-dot--other { background: #98a2b3; }
+
+      /* customer | rental dates | arrow. Every column is fixed or has a minimum, never "auto" (an auto column is sized per row and the column titles
+         would stop lining up). */
+      .ar-head.rr-grid, .ar-line.rr-grid { grid-template-columns: minmax(12rem, 1.8fr) minmax(11rem, 1fr) 2.25rem; }
+      .rr-cust, .rr-dates { min-width: 0; }
+      .rr-sub { margin: .3rem 0 0 1.4rem; }
+      .rr-sub b { white-space: nowrap; }
+      .rr-dates { font-size: .875rem; color: #475467; font-variant-numeric: tabular-nums; }
+      .dark .rr-dates { color: #98a2b3; }
+      .ar-booking.is-highlight > .ar-line { background: #ecf3ff; }
+      .dark .ar-booking.is-highlight > .ar-line { background: rgba(70,95,255,.12); }
+      .rr-warn { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 1.1rem; height: 1.1rem; border-radius: 999px; background: #fffaeb; border: 1px solid #fec84b; color: #b54708; font-size: .7rem; font-weight: 700; line-height: 1; cursor: help; }
+      .dark .rr-warn { background: rgba(247,144,9,.16); border-color: rgba(247,144,9,.5); color: #fdb022; }
+
+      /* The opened booking: the facts (status in words, deposit, receipts, booked) with the two icon buttons, then one short line per gown. */
+      .rr-pbar { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: .75rem 1.5rem; padding: .8rem 1.25rem; }
+      .rr-facts { display: flex; flex-wrap: wrap; gap: .65rem 2.25rem; margin: 0; min-width: 0; }
+      .rr-facts dt { margin: 0; font-size: .6875rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #98a2b3; }
+      .rr-facts dd { margin: .25rem 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .5rem; font-size: .875rem; color: #344054; }
+      .dark .rr-facts dd { color: #d0d5dd; }
+      .rr-facts .rr-channel { margin: 0; }
+      .rr-need { color: #b54708; font-weight: 500; }
+      .dark .rr-need { color: #fdb022; }
+      .rr-iconbtns { display: flex; gap: .5rem; }
+      .ar-gl.rr-gl { grid-template-columns: minmax(0, 1fr) auto 10.5rem; }
+      .rr-gstate { font-size: .8125rem; color: #667085; text-align: right; }
+      .dark .rr-gstate { color: #98a2b3; }
+      .rr-gstate.is-ok { color: #039855; }
+      .rr-gstate.is-info { color: #1570ef; }
+      .rr-gstate.is-bad { color: #d92d20; }
+      .dark .rr-gstate.is-ok { color: #32d583; }
+      .dark .rr-gstate.is-info { color: #84caff; }
+      .dark .rr-gstate.is-bad { color: #fda29b; }
+      .rr-nogown { padding: .8rem 1.25rem; font-size: .8125rem; color: #98a2b3; }
+
+      /* A small laptop: the five counts stay in one row, and the search shares its row with the three boxes instead of leaving one alone below. */
+      @media (max-width: 1180px) {
+        .rr-tile { padding: .8rem .9rem; }
+        .rr-tile-l { font-size: .75rem; }
+        .ar-search-input.rr-select { flex-basis: 8rem; width: 8rem; }
+        .rr-card .ar-search { flex-basis: 12rem; }
+      }
+      /* A phone: the counts are two to a row, one column for the line, the facts two to a row. */
+      @media (max-width: 760px) {
+        .rr-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .rr-tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
+        .rr-tile-n { font-size: 1.25rem; }
+        .ar-search-input.rr-select { flex: 1 1 8rem; width: auto; }
+        .rr-toolbar2 { padding: 0 1rem .75rem; }
+        .rr-key { margin-left: 0; }
+        .ar-line.rr-grid { grid-template-columns: minmax(0, 1fr) 2.25rem; grid-template-areas: "cust chev" "dates dates"; row-gap: .35rem; }
+        .ar-line.rr-grid > .rr-cust { grid-area: cust; }
+        .ar-line.rr-grid > .rr-dates { grid-area: dates; margin-left: 1.4rem; }
+        .ar-line.rr-grid > .ar-chev { grid-area: chev; }
+        .rr-pbar { padding: .7rem 1rem; }
+        .rr-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; gap: .65rem 1rem; }
+        .ar-gl.rr-gl { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name name" "dates state"; row-gap: .3rem; }
+        .ar-gl.rr-gl > .ar-gname { grid-area: name; }
+        .ar-gl.rr-gl > .ar-gdates { grid-area: dates; }
+        .ar-gl.rr-gl > .rr-gstate { grid-area: state; }
+      }
       .rr-filters { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
-      .rr-grow { flex: 1 1 260px; min-width: 0; }
-      .rr-fixed { flex: 0 0 auto; }
       .rr-seg { display: inline-flex; flex-wrap: wrap; gap: .25rem; padding: .25rem; border-radius: .75rem; background: #f2f4f7; }
       .dark .rr-seg { background: rgba(255,255,255,.05); }
       .rr-seg button { padding: .45rem .8rem; border-radius: .55rem; font-size: .8125rem; font-weight: 500; color: #667085; white-space: nowrap; }
@@ -37,8 +143,6 @@
       .dark .rr-seg button.is-on { background: #1d2939; color: #fff; }
       .rr-date { color-scheme: light; }
       .dark .rr-date { color-scheme: dark; }
-      .rr-nowrap { white-space: nowrap; }
-      .rr-clip { display: block; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .rr-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: .125rem .625rem; font-size: .75rem; font-weight: 500; white-space: nowrap; }
       /* How a staff-recorded booking came in (Walk-in / Facebook / Phone call), and its payment warning. */
       .rr-channel { display: inline-flex; align-items: center; margin-top: .25rem; margin-right: .25rem; border-radius: 999px; padding: .0625rem .5rem; font-size: .6875rem; font-weight: 600; white-space: nowrap; background: #eef4ff; color: #3538cd; }
@@ -49,11 +153,6 @@
       .dark .rr-pay-warn { background: rgba(247, 144, 9, .16); color: #fdb022; }
       .rr-upload-note { margin-top: 1rem; padding: .6rem .9rem; border-radius: .6rem; background: #f2f4f7; color: #344054; font-size: .875rem; line-height: 1.45; }
       .dark .rr-upload-note { background: rgba(255, 255, 255, .05); color: #d0d5dd; }
-      .rr-row { cursor: pointer; transition: background-color .15s; }
-      .rr-row:hover { background: #f9fafb; }
-      .dark .rr-row:hover { background: rgba(255,255,255,.03); }
-      .rr-row.is-highlight { background: #ecf3ff; }
-      .dark .rr-row.is-highlight { background: rgba(70,95,255,.12); }
       .rr-link { color: #465fff; font-weight: 500; }
       .rr-link:hover { text-decoration: underline; }
       .dark .rr-link { color: #7592ff; }
@@ -77,21 +176,6 @@
       .rr-mini-table td { padding: .625rem .75rem; color: #344054; white-space: nowrap; border-bottom: 1px solid #f2f4f7; vertical-align: top; }
       .dark .rr-mini-table th { color: #98a2b3; border-bottom-color: #1d2939; }
       .dark .rr-mini-table td { color: #d0d5dd; border-bottom-color: #1d2939; }
-      .rr-scroll-x { overflow-x: auto; }
-      /* Laptop screens (about 1024-1599px wide): the five tiles sit in ONE row, the search gets its own row with the filters evenly under it,
-         and the table is tightened (dates and buttons may wrap) so Actions is not hidden off to the right. Wider screens and phones are untouched. */
-      @media (min-width: 1024px) and (max-width: 1599px) {
-        .rr-stats { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .75rem; }
-        .rr-stat { display: flex; flex-direction: column; justify-content: flex-start; align-items: flex-start; padding: 1rem; }
-        .rr-filters--main > .rr-grow { flex: 1 1 100%; }
-        .rr-filters--main > .rr-fixed { flex: 1 1 8rem; }
-        .rr-filters--main > .rr-fixed select { min-width: 9.5rem !important; }
-        .rr-filters--main > .rr-fixed:has(input) { flex: 0 0 auto; }
-        .rr-scroll-x th, .rr-scroll-x td { padding-left: .5rem; padding-right: .5rem; }
-        .rr-scroll-x .rr-dates { white-space: normal; max-width: 7.5rem; }
-        .rr-scroll-x .rr-actions { flex-wrap: wrap; }
-        .rr-clip { max-width: 170px; }
-      }
       .rr-receipt { display: flex; align-items: center; gap: .875rem; padding: .75rem; border: 1px solid #e4e7ec; border-radius: .75rem; }
       .dark .rr-receipt { border-color: #1d2939; }
       .rr-receipt + .rr-receipt { margin-top: .5rem; }
@@ -106,7 +190,9 @@
       .rr-overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 1.25rem; overflow-y: auto; }
       .rr-overlay.rr-z1 { z-index: 99999; }
       .rr-overlay.rr-z2 { z-index: 100000; }
-      .rr-backdrop { position: fixed; inset: 0; background: rgba(152,162,179,.5); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); }
+      /* The dim behind the pop-ups: a plain tint, NO blur (same as every other admin pop-up). */
+      .rr-backdrop { position: fixed; inset: 0; background: rgba(16, 24, 40, 0.5); }
+      .dark .rr-backdrop { background: rgba(0, 0, 0, 0.6); }
       .rr-spinner { display: inline-block; width: .875rem; height: .875rem; border: 2px solid currentColor; border-top-color: transparent; border-radius: 999px; animation: rr-spin .8s linear infinite; }
       @keyframes rr-spin { to { transform: rotate(360deg); } }
       @media (prefers-reduced-motion: reduce) { .rr-spinner { animation-duration: 2s; } }
@@ -370,8 +456,9 @@
           pickupYear: '',
           pickupYearInput: '',
           pickupMonthNum: '',
-          filtering: false,
-          filterTimeout: null,
+          // Which lines are opened (see isRowOpen). Display only.
+          openRows: [],
+          autoDismissed: [],
 
           openDetail: false,
           viewing: null,
@@ -429,7 +516,7 @@
             this.pickupYearInput = this.pickupYear;
 
             // Keep the address bar matching what's on screen, so a reload lands back here.
-            this.$watch('search', () => this.syncUrl());
+            this.$watch('search', () => { this.syncUrl(); this.autoDismissed = []; });
             this.$watch('customerFilter', () => this.syncUrl());
             this.$watch('pickupYear', () => this.syncUrl());
             this.$watch('pickupYear', value => { this.pickupYearInput = value; });
@@ -454,10 +541,69 @@
             history.replaceState(null, '', window.location.pathname + (query ? '?' + query : ''));
           },
 
-          flash() {
-            this.filtering = true;
-            clearTimeout(this.filterTimeout);
-            this.filterTimeout = setTimeout(() => this.filtering = false, 300);
+          // ---- The list's lines (display only: none of these change a record or a filter) ----
+          // A line opens when it is clicked. A search that matches exactly ONE booking opens it too: that is how a link such as ?search=RSV-2026-0017
+          // (from Payment Verification or the bell) lands with the buttons in reach. Closing it keeps it closed until the search changes.
+          get autoOpenId() {
+            if (String(this.search || '').trim() === '') { return null; }
+            const rows = this.visibleRecords;
+            return rows.length === 1 ? rows[0].id : null;
+          },
+
+          isRowOpen(id) {
+            return this.openRows.includes(id) || (this.autoOpenId === id && !this.autoDismissed.includes(id));
+          },
+
+          toggleRow(id) {
+            if (this.isRowOpen(id)) {
+              this.openRows = this.openRows.filter(x => x !== id);
+              if (this.autoOpenId === id) { this.autoDismissed = this.autoDismissed.concat([id]); }
+            } else {
+              this.openRows = this.openRows.concat([id]);
+              this.autoDismissed = this.autoDismissed.filter(x => x !== id);
+            }
+          },
+
+          // The colour of a booking's status circle, and its words for the hover. One colour for each of the eight (see progressOptions).
+          statusKind(progress) {
+            return ({
+              'Pending approval': 'pending', 'Awaiting pickup': 'pickup', 'With customer': 'out', 'Partly returned': 'partly',
+              'Overdue': 'overdue', 'Completed': 'done', 'Rejected': 'rejected', 'Cancelled': 'cancelled',
+            })[progress] || 'other';
+          },
+          statusTip(progress) {
+            return ({
+              'Pending approval': 'Pending approval: the payment is waiting to be checked',
+              'Awaiting pickup': 'Awaiting pickup: approved, the gown has not been picked up yet',
+              'With customer': 'With customer: a gown is out with the customer',
+              'Partly returned': 'Partly returned: some gowns are back, some are still out',
+              'Overdue': 'Overdue: a gown is past its return date',
+              'Completed': 'Completed: every gown is back',
+              'Rejected': 'Rejected: the payment was not accepted',
+              'Cancelled': 'Cancelled: the booking was cancelled',
+            })[progress] || progress;
+          },
+
+          // How many gowns a booking really has: a gown the shop cancelled never went out, so it is not counted.
+          liveGownCount(r) {
+            return (r.items || []).filter(i => i.stage !== 'Cancelled').length;
+          },
+
+          // "Nov 8 -> Nov 12, 2026": the year once when both ends are in the same year.
+          shortRange(a, b) {
+            const yearOf = text => { const m = String(text || '').match(/(\d{4})$/); return m ? m[1] : ''; };
+            const dropYear = text => String(text || '').replace(/,\s*\d{4}$/, '');
+            if (yearOf(a) !== '' && yearOf(a) === yearOf(b)) { return dropYear(a) + ' \u2192 ' + b; }
+            return a + ' \u2192 ' + b;
+          },
+          datesLine(r) {
+            if (!r.items || !r.items.length) { return '\u2014'; }
+            return this.shortRange(r.startDisplay, r.endDisplay);
+          },
+
+          receiptsText(r) {
+            if (r.receipts.length) { return r.receipts.length + (r.receipts.length === 1 ? ' receipt' : ' receipts'); }
+            return this.needsReceipt(r) ? 'None yet' : '\u2014';
           },
 
           getCsrfToken() {
@@ -611,7 +757,6 @@
               this.customFrom = '';
               this.customTo = '';
             }
-            this.flash();
           },
 
           // Card counts follow the customer filter too, so arriving from Client List
@@ -644,7 +789,6 @@
               this.dateFilter = mode;
               this.receiptFilter = 'All';
             }
-            this.flash();
           },
 
           cardActive(mode) {
@@ -664,13 +808,11 @@
             this.dateFilter = mode;
             this.pickupYear = '';
             this.pickupMonthNum = '';
-            this.flash();
           },
 
           clearCustomerFilter() {
             this.customerFilter = null;
             this.customerFilterName = '';
-            this.flash();
           },
 
           resetFilters() {
@@ -683,7 +825,6 @@
             this.receiptFilter = 'All';
             this.pickupYear = '';
             this.pickupMonthNum = '';
-            this.flash();
           },
 
           progressClass(progress) {
@@ -2059,91 +2200,81 @@
 </div>
 </div>
             <!-- Breadcrumb End -->
-            <!-- Quick views. Each card is a filter: clicking it shows exactly those rows. -->
-            <div class="rr-stats">
-              <button type="button" @click="applyCard('all')" class="rr-stat" :class="cardActive('all') && 'is-on'">
-                <p class="text-sm text-gray-500 dark:text-gray-400">All Reservations</p>
-                <h4 class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90" x-text="countFor('all')"></h4>
-                <p class="rr-stat-hint">Every booking on record</p>
+            <!-- The five quick views, one strip like the Gown Catalog's. Each is still a filter: clicking it shows exactly those rows (applyCard), and the
+                 chosen one is highlighted. The words that only repeated the label are gone; the two that explain a rule are a hover tooltip. -->
+            <div class="rr-strip">
+              <button type="button" @click="applyCard('all')" class="rr-tile" :class="cardActive('all') && 'is-on'" :aria-pressed="cardActive('all') ? 'true' : 'false'">
+                <span class="rr-tile-l">All Reservations</span>
+                <span class="rr-tile-n" x-text="countFor('all')"></span>
               </button>
-              <button type="button" @click="applyCard('week')" class="rr-stat" :class="cardActive('week') && 'is-on'">
-                <p class="text-sm text-gray-500 dark:text-gray-400">This Week</p>
-                <h4 class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90" x-text="countFor('week')"></h4>
-                <p class="rr-stat-hint">Rentals out any day this week</p>
+              <button type="button" @click="applyCard('week')" class="rr-tile" :class="cardActive('week') && 'is-on'" :aria-pressed="cardActive('week') ? 'true' : 'false'" title="Rentals out on any day this week">
+                <span class="rr-tile-l">This Week</span>
+                <span class="rr-tile-n" x-text="countFor('week')"></span>
               </button>
-              <button type="button" @click="applyCard('month')" class="rr-stat" :class="cardActive('month') && 'is-on'">
-                <p class="text-sm text-gray-500 dark:text-gray-400">This Month</p>
-                <h4 class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90" x-text="countFor('month')"></h4>
-                <p class="rr-stat-hint">Rentals out any day this month</p>
+              <button type="button" @click="applyCard('month')" class="rr-tile" :class="cardActive('month') && 'is-on'" :aria-pressed="cardActive('month') ? 'true' : 'false'" title="Rentals out on any day this month">
+                <span class="rr-tile-l">This Month</span>
+                <span class="rr-tile-n" x-text="countFor('month')"></span>
               </button>
-              <button type="button" @click="applyCard('cancelled')" class="rr-stat" :class="cardActive('cancelled') && 'is-on'">
-                <p class="text-sm text-gray-500 dark:text-gray-400">Cancelled</p>
-                <h4 class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90" x-text="countFor('cancelled')"></h4>
-                <p class="rr-stat-hint">Cancelled bookings and what was paid</p>
+              <button type="button" @click="applyCard('cancelled')" class="rr-tile" :class="cardActive('cancelled') && 'is-on'" :aria-pressed="cardActive('cancelled') ? 'true' : 'false'">
+                <span class="rr-tile-l">Cancelled</span>
+                <span class="rr-tile-n" x-text="countFor('cancelled')"></span>
               </button>
-              <button type="button" @click="applyCard('needs')" class="rr-stat" :class="cardActive('needs') && 'is-on'">
-                <p class="text-sm text-gray-500 dark:text-gray-400">Needs a Receipt</p>
-                <h4 class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90" x-text="countFor('needs')"></h4>
-                <p class="rr-stat-hint">Confirmed, no manual receipt yet</p>
+              <button type="button" @click="applyCard('needs')" class="rr-tile" :class="cardActive('needs') && 'is-on'" :aria-pressed="cardActive('needs') ? 'true' : 'false'" title="Confirmed bookings that have no receipt from the shop yet">
+                <span class="rr-tile-l">Needs a Receipt</span>
+                <span class="rr-tile-n" x-text="countFor('needs')"></span>
               </button>
             </div>
 
-            <!-- Filters -->
-            <div class="mt-5 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03] sm:p-5">
-              <div class="rr-filters rr-filters--main">
-                <div class="rr-grow">
-                  <input
-                    type="text"
-                    x-model="search"
-                    @input="flash()"
-                    placeholder="Search customer, email, reference, or gown..."
-                    class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-                  />
+            <!-- ONE card, the same look as the other admin lists: the search and the filters, the count with the colour key, and one short line per
+                 booking. The circle before the name is the booking's status; everything else about a booking (deposit, receipts, who recorded it, each gown
+                 and the buttons) is inside the line's dropdown. -->
+            <div class="rr-card">
+              <div class="ar-toolbar">
+                <div class="ar-search">
+                  <svg class="ar-search-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                  <input type="text" class="ar-search-input" x-model="search" placeholder="Search customer, email, reference, or gown..." aria-label="Search reservations">
                 </div>
-                <div class="rr-fixed">
-                  <select
-                    x-model="statusFilter"
-                    @change="flash()"
-                    style="min-width: 11rem;" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
-                  >
-                    <option value="All">All statuses</option>
-                    <template x-for="option in progressOptions" :key="option">
-                      <option :value="option" x-text="option"></option>
-                    </template>
-                  </select>
-                </div>
-                <div class="rr-fixed">
-                  <select
-                    x-model="receiptFilter"
-                    @change="flash()"
-                    style="min-width: 11rem;" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
-                  >
-                    <option value="All">All receipts</option>
-                    <option value="has">Has a receipt</option>
-                    <option value="needs">Needs a receipt</option>
-                  </select>
-                </div>
+                <select x-model="statusFilter" class="ar-search-input rr-select" aria-label="Show one status">
+                  <option value="All">All statuses</option>
+                  <template x-for="option in progressOptions" :key="option">
+                    <option :value="option" x-text="option"></option>
+                  </template>
+                </select>
+                <select x-model="receiptFilter" class="ar-search-input rr-select" aria-label="Show bookings by receipt">
+                  <option value="All">All receipts</option>
+                  <option value="has">Has a receipt</option>
+                  <option value="needs">Needs a receipt</option>
+                </select>
                 <!-- How the booking came in: online, or recorded by staff in New Booking (a walk-in). -->
-                <div class="rr-fixed">
-                  <select
-                    x-model="channelFilter"
-                    @change="flash()"
-                    aria-label="How the booking came in"
-                    style="min-width: 11rem;" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
-                  >
-                    <option value="All">All channels</option>
-                    <option value="Online">Online</option>
-                    <option value="Walk-in">Walk-in</option>
-                  </select>
+                <select x-model="channelFilter" class="ar-search-input rr-select" aria-label="How the booking came in">
+                  <option value="All">All channels</option>
+                  <option value="Online">Online</option>
+                  <option value="Walk-in">Walk-in</option>
+                </select>
+              </div>
+
+              <!-- Two ways to pick dates (choosing one switches the other off): the quick "Rental dates" buttons, or a pick-up year and month. Cascading
+                   like a country / state pair: the month is empty and disabled until a year is typed, since a month alone does not say which year's
+                   September it means. Each count uses the same rule as the dashboard tile (see pickupYearTotal / pickupMonthOptions). -->
+              <div class="rr-toolbar2">
+                <span class="rr-lbl">Rental dates:</span>
+                <div class="rr-seg" role="group" aria-label="Rental date range">
+                  <button type="button" :class="dateFilter === 'all' && !pickupYear && 'is-on'" @click="setDateFilter('all')">All time</button>
+                  <button type="button" :class="dateFilter === 'today' && 'is-on'" @click="setDateFilter('today')">Today</button>
+                  <button type="button" :class="dateFilter === 'week' && 'is-on'" @click="setDateFilter('week')">This week</button>
+                  <button type="button" :class="dateFilter === 'month' && 'is-on'" @click="setDateFilter('month')">This month</button>
+                  <button type="button" :class="dateFilter === 'custom' && 'is-on'" @click="setDateFilter('custom')">Pick dates</button>
                 </div>
-                <!-- Pick-up year/month: replaces the dashboard's old Monthly Rentals chart, and
-                     is where its Reservations This Month tile lands (?month=). Cascading like a
-                     country/state pair -- Month is empty and disabled until a Year is chosen,
-                     since a month number alone doesn't say which year's September it means.
-                     Year is a typed field, not a list -- see pickupYearChanged() -- so any year
-                     is reachable, not just ones already in a fixed range. Each count uses the
-                     same rule as the dashboard tile -- see pickupYearTotal / pickupMonthOptions. -->
-                <div class="rr-fixed" style="display: flex; align-items: center; gap: .5rem;">
+                <template x-if="dateFilter === 'custom'">
+                  <div class="rr-filters">
+                    <input type="date" x-model="customFrom" aria-label="From date" class="ar-search-input rr-date">
+                    <span class="rr-lbl">to</span>
+                    <input type="date" x-model="customTo" aria-label="To date" class="ar-search-input rr-date">
+                    <span x-show="!customFrom && !customTo" class="rr-fine">Pick one day, or a from/to range</span>
+                  </div>
+                </template>
+                <div class="rr-filters rr-pickup">
+                  <span class="rr-lbl">Pick-up:</span>
                   <input
                     type="text"
                     inputmode="numeric"
@@ -2153,18 +2284,15 @@
                     @change="pickupYearChanged()"
                     placeholder="Any year"
                     aria-label="Pick-up year"
-                    style="width: 6.5rem;" class="dark:bg-dark-900 h-11 appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-                  />
-                  <span x-show="pickupYear" x-cloak class="text-theme-xs whitespace-nowrap text-gray-400" x-text="pickupYearTotal === 1 ? '1 reservation' : pickupYearTotal + ' reservations'"></span>
-                </div>
-                <div class="rr-fixed">
+                    class="ar-search-input rr-year"
+                  >
                   <select
                     x-model="pickupMonthNum"
                     @change="pickupPeriodChanged()"
                     :disabled="!pickupYear"
                     :title="!pickupYear ? 'Choose a year first' : ''"
                     aria-label="Pick-up month"
-                    style="min-width: 11rem;" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
+                    class="ar-search-input rr-select"
                   >
                     <option value="">All months</option>
                     <template x-for="m in pickupMonthOptions" :key="m.key">
@@ -2175,31 +2303,11 @@
                       ></option>
                     </template>
                   </select>
+                  <span x-show="pickupYear" x-cloak class="rr-fine" x-text="pickupYearTotal === 1 ? '1 reservation' : pickupYearTotal + ' reservations'"></span>
                 </div>
               </div>
 
-              <div class="mt-3 rr-filters">
-                <p class="text-sm font-medium text-gray-700 dark:text-gray-400">Rental dates:</p>
-                <div class="rr-seg" role="group" aria-label="Rental date range">
-                  <button type="button" :class="dateFilter === 'all' && !pickupYear && 'is-on'" @click="setDateFilter('all')">All time</button>
-                  <button type="button" :class="dateFilter === 'today' && 'is-on'" @click="setDateFilter('today')">Today</button>
-                  <button type="button" :class="dateFilter === 'week' && 'is-on'" @click="setDateFilter('week')">This week</button>
-                  <button type="button" :class="dateFilter === 'month' && 'is-on'" @click="setDateFilter('month')">This month</button>
-                  <button type="button" :class="dateFilter === 'custom' && 'is-on'" @click="setDateFilter('custom')">Pick dates</button>
-                </div>
-                <template x-if="dateFilter === 'custom'">
-                  <div class="rr-filters">
-                    <input type="date" x-model="customFrom" @change="flash()" aria-label="From date"
-                      class="rr-date dark:bg-dark-900 h-11 rounded-lg border border-gray-300 bg-transparent px-3 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:bg-gray-900 dark:text-white/90" />
-                    <span class="text-sm text-gray-500 dark:text-gray-400">to</span>
-                    <input type="date" x-model="customTo" @change="flash()" aria-label="To date"
-                      class="rr-date dark:bg-dark-900 h-11 rounded-lg border border-gray-300 bg-transparent px-3 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden dark:border-gray-700 dark:bg-gray-900 dark:text-white/90" />
-                    <span x-show="!customFrom && !customTo" class="text-theme-xs text-gray-400">Pick one day, or a from/to range</span>
-                  </div>
-                </template>
-              </div>
-
-              <div class="mt-3 rr-filters" x-show="customerFilter !== null" x-cloak>
+              <div class="rr-toolbar2" x-show="customerFilter !== null" x-cloak>
                 <span class="rr-chip">
                   <span x-text="'Showing ' + customerFilterName + '\'s reservations'"></span>
                   <button type="button" @click="clearCustomerFilter()" aria-label="Show every customer">
@@ -2207,98 +2315,123 @@
                   </button>
                 </span>
               </div>
-            </div>
 
-            <!-- Records table -->
-            <div class="mt-5 overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
-              <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-6">
-                <h3 class="text-base font-medium text-gray-800 dark:text-white/90">Reservations</h3>
-                <p class="text-theme-sm text-gray-500 dark:text-gray-400">
-                  Showing <span class="font-medium text-gray-800 dark:text-white/90" x-text="visibleRecords.length"></span>
-                  of <span x-text="scopedRecords.length"></span>
-                  <button type="button" x-show="visibleRecords.length !== scopedRecords.length" x-cloak @click="resetFilters()" class="rr-link" style="margin-left: .5rem;">Clear filters</button>
-                </p>
+              <!-- The count (written by the pager) and "Clear filters" once something narrows the list, and the key to the circles on the right. -->
+              <div class="ar-count rr-countrow">
+                <span id="rr-count" aria-live="polite"></span>
+                <button type="button" x-show="visibleRecords.length !== scopedRecords.length" x-cloak @click="resetFilters()" class="rr-link">Clear filters</button>
+                <details class="ar-tip rr-key" @click.outside="$el.removeAttribute('open')" @keydown.escape.stop="$el.removeAttribute('open')">
+                  <summary aria-label="What the status circles mean" title="What the status circles mean"><span class="rr-keydots" aria-hidden="true"><i class="rr-dot--pending"></i><i class="rr-dot--pickup"></i><i class="rr-dot--out"></i></span>Colour key</summary>
+                  <div class="ar-tip-pop">
+                    <p class="ar-leg-title">What the circles mean</p>
+                    <ul class="ar-leg">
+                      <li><span class="ar-dot rr-dot--pending"></span><span><b>Pending approval:</b> the payment is waiting to be checked.</span></li>
+                      <li><span class="ar-dot rr-dot--pickup"></span><span><b>Awaiting pickup:</b> approved, the gown has not been picked up yet.</span></li>
+                      <li><span class="ar-dot rr-dot--out"></span><span><b>With customer:</b> a gown is out with the customer.</span></li>
+                      <li><span class="ar-dot rr-dot--partly"></span><span><b>Partly returned:</b> some gowns are back, some are still out.</span></li>
+                      <li><span class="ar-dot rr-dot--overdue"></span><span><b>Overdue:</b> a gown is past its return date.</span></li>
+                      <li><span class="ar-dot rr-dot--done"></span><span><b>Completed:</b> every gown is back.</span></li>
+                      <li><span class="ar-dot rr-dot--rejected"></span><span><b>Rejected:</b> the payment was not accepted.</span></li>
+                      <li><span class="ar-dot rr-dot--cancelled"></span><span><b>Cancelled:</b> the booking was cancelled (empty ring).</span></li>
+                    </ul>
+                  </div>
+                </details>
               </div>
-              <div x-show="filtering" x-cloak class="flex items-center justify-center" style="height: 240px;">
-                <div class="h-10 w-10 animate-spin rounded-full border-4 border-solid border-gray-300 border-t-transparent dark:border-gray-600"></div>
-              </div>
-              <div x-show="!filtering" class="custom-scrollbar rr-scroll-x" style="max-height: 760px; overflow-y: auto;" data-arpg="tbody" data-arpg-noun="reservations">
-                <table class="min-w-full">
-                  <thead class="sticky top-0 z-10 bg-white dark:bg-gray-900">
-                    <tr class="border-t border-gray-100 dark:border-gray-800">
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="rr-nowrap font-medium text-gray-500 text-theme-xs dark:text-gray-400">Customer</p></th>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="rr-nowrap font-medium text-gray-500 text-theme-xs dark:text-gray-400">Reference</p></th>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="rr-nowrap font-medium text-gray-500 text-theme-xs dark:text-gray-400">Rental Dates</p></th>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="rr-nowrap font-medium text-gray-500 text-theme-xs dark:text-gray-400">Status</p></th>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="rr-nowrap font-medium text-gray-500 text-theme-xs dark:text-gray-400">Deposit</p></th>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="rr-nowrap font-medium text-gray-500 text-theme-xs dark:text-gray-400">Receipts</p></th>
-                      <th class="px-5 py-3 sm:px-6 text-left"><p class="rr-nowrap font-medium text-gray-500 text-theme-xs dark:text-gray-400">Actions</p></th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-                    <template x-for="r in visibleRecords" :key="r.id">
-                      <tr class="rr-row" :class="isHighlighted(r) && 'is-highlight'" @click="openRecord(r)">
-                        <td class="px-5 py-4 sm:px-6">
-                          <span class="rr-clip font-medium text-gray-800 text-theme-sm dark:text-white/90" x-text="r.customer"></span>
-                          <span class="rr-clip text-theme-xs text-gray-500 dark:text-gray-400" x-text="r.email || r.phone"></span>
-                        </td>
-                        <td class="px-5 py-4 sm:px-6">
-                          <p class="rr-nowrap text-theme-sm font-medium text-gray-800 dark:text-white/90" x-text="r.reference"></p>
-                          <p class="rr-nowrap text-theme-xs text-gray-500 dark:text-gray-400" x-text="'Booked ' + r.booked"></p>
-                          <template x-if="r.staffRecorded">
-                            <span class="rr-channel" x-text="r.channelLabel"></span>
-                          </template>
-                          <template x-if="r.awaitingPayment">
-                            <span class="rr-channel rr-channel--warn">Not paid yet</span>
-                          </template>
-                          <template x-if="r.paymentIncomplete">
-                            <span class="rr-channel rr-channel--warn" title="The shop's receipts don't cover both the rental and the deposit">Payment incomplete</span>
-                          </template>
-                        </td>
-                        <td class="px-5 py-4 sm:px-6">
-                          <p class="rr-nowrap rr-dates text-theme-sm text-gray-800 dark:text-white/90" x-text="r.startDisplay + ' → ' + r.endDisplay"></p>
-                          <span class="rr-clip text-theme-xs text-gray-500 dark:text-gray-400" x-text="r.gownSummary"></span>
-                        </td>
-                        <td class="px-5 py-4 sm:px-6">
-                          <span class="rr-badge" :class="progressClass(r.progress)" x-text="r.progress"></span>
-                          <template x-if="r.cancel">
-                            <p class="rr-clip mt-1 text-theme-xs text-gray-500 dark:text-gray-400" x-text="r.cancel.by + (r.cancel.when ? ' · ' + r.cancel.when : '')"></p>
-                          </template>
-                        </td>
-                        <td class="px-5 py-4 sm:px-6">
-                          <span class="rr-badge" :class="depositClass(r.depositStatus)" x-text="r.depositStatus"></span>
-                          <p class="rr-nowrap mt-1 text-theme-xs text-gray-500 dark:text-gray-400" x-text="r.deposit"></p>
-                        </td>
-                        <td class="px-5 py-4 sm:px-6">
-                          <template x-if="r.receipts.length">
-                            <p class="rr-nowrap text-theme-sm font-medium text-success-600 dark:text-success-500" x-text="r.receipts.length + (r.receipts.length === 1 ? ' receipt' : ' receipts')"></p>
-                          </template>
-                          <template x-if="!r.receipts.length">
-                            <p class="rr-nowrap text-theme-sm text-gray-400" x-text="needsReceipt(r) ? 'None yet' : '—'"></p>
-                          </template>
-                        </td>
-                        <td class="px-5 py-4 sm:px-6">
-                          <div class="rr-actions flex items-center gap-2">
-                            <button type="button" @click.stop="openRecord(r)"
-                              class="rr-nowrap inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-theme-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">
-                              View
-                            </button>
-                            <button type="button" @click.stop="startUpload(r)"
-                              class="rr-nowrap inline-flex items-center rounded-lg bg-brand-500 px-3 py-1.5 text-theme-xs font-medium text-white shadow-theme-xs hover:bg-brand-600">
-                              Upload Receipt
-                            </button>
+
+              <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg=".ar-booking" data-arpg-noun="reservations" data-arpg-top="off" data-arpg-count="#rr-count">
+                <div class="ar-head rr-grid">
+                  <span>Customer</span>
+                  <span>Rental dates</span>
+                  <span></span>
+                </div>
+                <template x-for="r in visibleRecords" :key="r.id">
+                  <!-- One booking: a closed line (status circle, name, booking number, how many gowns, the rental dates) and, hidden until it is opened,
+                       its status in words, deposit, receipts, booked date, each gown and the two icon buttons. A click on the line opens it. -->
+                  <div class="ar-booking" :class="isHighlighted(r) && 'is-highlight'" :data-booking-id="r.id">
+                    <div class="ar-line rr-grid" :class="isRowOpen(r.id) ? 'is-open' : ''" @click="toggleRow(r.id)">
+                      <div class="rr-cust">
+                        <div class="ar-who">
+                          <span class="ar-dot" :class="'rr-dot--' + statusKind(r.progress)" role="img" :aria-label="r.progress" :title="statusTip(r.progress)"></span>
+                          <span class="ar-name" x-text="r.customer"></span>
+                          <span class="rr-warn" x-show="r.awaitingPayment || r.paymentIncomplete" role="img" :aria-label="r.awaitingPayment ? 'Not paid yet' : 'Payment incomplete'"
+                            :title="r.awaitingPayment ? 'Not paid yet: the booking is waiting for the payment' : 'Payment incomplete: the shop\'s receipts do not cover both the rental and the deposit'">!</span>
+                        </div>
+                        <div class="ar-ref rr-sub">
+                          <b x-text="r.reference"></b>
+                          <span class="ar-count-pill" x-show="liveGownCount(r) > 1" :title="liveGownCount(r) + ' gowns in this booking'">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0"/></svg>
+                            <span x-text="liveGownCount(r) + ' gowns'"></span>
+                          </span>
+                        </div>
+                      </div>
+                      <div class="rr-dates" x-text="datesLine(r)"></div>
+                      <button type="button" class="ar-chev" @click.stop="toggleRow(r.id)" aria-expanded="false" :aria-expanded="isRowOpen(r.id) ? 'true' : 'false'" :aria-controls="'rr-panel-' + r.id"
+                        :aria-label="'Show or hide the details of ' + r.customer + ', ' + r.reference">
+                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7.5l5 5 5-5" /></svg>
+                      </button>
+                    </div>
+                    <div class="ar-panel" :id="'rr-panel-' + r.id" x-show="isRowOpen(r.id)" x-cloak>
+                      <div class="rr-pbar">
+                        <dl class="rr-facts">
+                          <div>
+                            <dt>Status</dt>
+                            <dd>
+                              <span class="rr-badge" :class="progressClass(r.progress)" x-text="r.progress"></span>
+                              <span class="rr-fine" x-show="r.cancel" x-text="r.cancel ? r.cancel.by + (r.cancel.when ? ' · ' + r.cancel.when : '') : ''"></span>
+                            </dd>
                           </div>
-                        </td>
-                      </tr>
-                    </template>
-                    <tr x-show="visibleRecords.length === 0" x-cloak>
-                      <td colspan="7" class="px-5 text-center sm:px-6" style="padding-top: 2.5rem; padding-bottom: 2.5rem;">
-                        <p class="text-sm text-gray-500 dark:text-gray-400">No reservations match these filters.</p>
-                        <button type="button" @click="resetFilters()" class="rr-link text-sm" style="margin-top: .5rem;">Clear filters</button>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                          <div>
+                            <dt>Deposit</dt>
+                            <dd>
+                              <span class="rr-badge" :class="depositClass(r.depositStatus)" x-text="r.depositStatus"></span>
+                              <span class="rr-fine" x-text="r.deposit"></span>
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Receipts</dt>
+                            <dd><span :class="!r.receipts.length && needsReceipt(r) ? 'rr-need' : ''" x-text="receiptsText(r)"></span></dd>
+                          </div>
+                          <div>
+                            <dt>Booked</dt>
+                            <dd>
+                              <span x-text="r.booked"></span>
+                              <span class="rr-channel" x-show="r.staffRecorded" x-text="r.channelLabel"></span>
+                              <span class="rr-channel rr-channel--warn" x-show="r.awaitingPayment">Not paid yet</span>
+                              <span class="rr-channel rr-channel--warn" x-show="r.paymentIncomplete" title="The shop's receipts don't cover both the rental and the deposit">Payment incomplete</span>
+                            </dd>
+                          </div>
+                        </dl>
+                        <div class="rr-iconbtns">
+                          <button type="button" class="ar-ib" @click.stop="openRecord(r)" title="View details" :aria-label="'View the details of ' + r.customer + ', ' + r.reference">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                          </button>
+                          <button type="button" class="ar-ib" @click.stop="startUpload(r)" title="Upload receipt" :aria-label="'Upload a receipt for ' + r.customer + ', ' + r.reference">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                          </button>
+                        </div>
+                      </div>
+                      <div class="ar-gowns">
+                        <template x-for="(item, n) in r.items" :key="n">
+                          <div class="ar-gown">
+                            <div class="ar-gl rr-gl">
+                              <div class="ar-gname">
+                                <span class="ar-gtitle" :style="item.stage === 'Cancelled' ? 'text-decoration: line-through; opacity: .65;' : ''" x-text="item.gown"></span>
+                                <span class="ar-of" x-show="r.items.length > 1" x-text="(n + 1) + ' of ' + r.items.length"></span>
+                              </div>
+                              <div class="ar-gdates"><span x-text="shortRange(item.pickup, item.ret)"></span></div>
+                              <div class="rr-gstate" :class="stageTone(item.stage)" x-text="stageLabel(item.stage)"></div>
+                            </div>
+                          </div>
+                        </template>
+                        <div class="rr-nogown" x-show="!r.items.length">No gowns on this booking.</div>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+                <div class="ar-empty" x-show="visibleRecords.length === 0" x-cloak>
+                  <p class="text-gray-500 text-theme-sm dark:text-gray-400">No reservations match these filters.</p>
+                  <button type="button" @click="resetFilters()" class="rr-link text-sm" style="margin-top: .5rem;">Clear filters</button>
+                </div>
               </div>
             </div>
             </div>
@@ -2468,7 +2601,7 @@
                   </button>
                 </h3>
                 <template x-if="viewing.receipts.length === 0">
-                  <p class="rrd-none">No manual receipt attached yet. Upload a photo of the shop's paper receipt for this booking.</p>
+                  <p class="rrd-none">No receipt attached yet.</p>
                 </template>
                 <template x-for="receipt in viewing.receipts" :key="receipt.id">
                   <div class="rrd-receipt">
@@ -2527,13 +2660,14 @@
               <input type="file" x-ref="rrReplaceFileInput" class="hidden" accept="image/png,image/jpeg,image/webp" @change="replacePhoto($event.target.files[0]); $refs.rrReplaceFileInput.value = ''" />
               <input type="file" x-ref="rrReplaceCameraInput" class="hidden" accept="image/png,image/jpeg,image/webp" capture="environment" @change="replacePhoto($event.target.files[0]); $refs.rrReplaceCameraInput.value = ''" />
               <button type="button" @click="$refs.rrReplaceCameraInput.click()" :class="photoReplaceBusy && 'pointer-events-none opacity-60'"
-                class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">
+                class="touch-only inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">
                 Take Photo
               </button>
               <button type="button" @click="$refs.rrReplaceFileInput.click()" :class="photoReplaceBusy && 'pointer-events-none opacity-60'"
                 class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">
                 <span x-show="photoReplaceBusy" x-cloak class="animate-spin rounded-full" style="width: 0.875rem; height: 0.875rem; border: 2px solid currentColor; border-top-color: transparent;"></span>
-                <span x-text="photoReplaceBusy ? 'Uploading...' : 'Choose from Gallery'"></span>
+                <span class="touch-only" x-text="photoReplaceBusy ? 'Uploading...' : 'Choose from Gallery'"></span>
+                <span class="pc-only" x-text="photoReplaceBusy ? 'Uploading...' : 'Choose Photo'"></span>
               </button>
             </div>
 
@@ -2591,16 +2725,15 @@
               </template>
               <template x-if="!uploadPreparing && !uploadFile">
                 <div>
-                  <p class="mb-1 text-base font-semibold text-gray-800 dark:text-white/90">Drop the receipt photo here</p>
-                  <p class="mb-4 text-sm text-gray-500 dark:text-gray-400">PNG, JPG, or WebP &middot; large phone photos are resized automatically</p>
+                  <p class="mb-4 flex items-center justify-center text-base font-semibold text-gray-800 dark:text-white/90">Drop the receipt photo here<details class="ht-tip"><summary aria-label="About the receipt photo" title="About the receipt photo">?</summary><div class="ht-tip-pop">PNG, JPG or WebP. Large phone photos are resized automatically.</div></details></p>
                   <div class="flex flex-wrap items-center justify-center gap-3">
                     <button type="button" @click="$refs.rrCameraInput.click()"
-                      class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">
+                      class="touch-only inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">
                       Take Photo
                     </button>
                     <button type="button" @click="$refs.rrFileInput.click()"
                       class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">
-                      Choose from Gallery
+                      <span class="touch-only">Choose from Gallery</span><span class="pc-only">Choose Photo</span>
                     </button>
                   </div>
                 </div>
