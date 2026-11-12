@@ -10,6 +10,10 @@ class AccountsConfig(AppConfig):
         from accounts import customer_emails
         customer_emails.connect_signals()
 
+        # The owner's Audit Log: sign-ins, sign-outs and failed sign-ins of admin accounts (accounts/audit.py).
+        from accounts import audit
+        audit.connect_signals()
+
         # After every `migrate`, lock any table that is still open to Supabase's public web API
         # (see arabela_system/table_lock.py). sender=self so it runs once per migrate, not once per app.
         from django.db.models.signals import post_migrate

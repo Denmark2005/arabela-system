@@ -150,7 +150,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -588,6 +588,15 @@
                     :class="page === 'staff-management' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
                     Staff Accounts
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:audit_log' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'audit-log' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Audit Log
                   </a>
                 </li>
               </ul>
@@ -1280,8 +1289,9 @@
                         onclick="reviewReservation(this)">Reject</button>
                       {% if r.is_staff_recorded and not r.payment_proof_url %}
                       <!-- Recorded at the shop and not paid yet: there is no online proof to view. When the customer pays,
-                           attach the shop's receipt (partials/attach_receipt.html), then Approve. -->
-                      <button type="button" class="ar-open-btn" data-ref="{{ r.reference_code }}" data-customer="{{ r.display_customer_name }}">Attach receipt</button>
+                           attach the shop's receipt (partials/attach_receipt.html), then Approve. Gone once the booking has all its receipts
+                           (the server refuses a further one; a wrong photo is replaced in Reservation Records). -->
+                      {% if not r.receipts_are_complete %}<button type="button" class="ar-open-btn" data-ref="{{ r.reference_code }}" data-customer="{{ r.display_customer_name }}">Attach receipt</button>{% endif %}
                       {% else %}
                       <!-- Opens the payment proof right here (partials/payment_proof_window.html), with Approve / Reject inside it too. -->
                       <button type="button"

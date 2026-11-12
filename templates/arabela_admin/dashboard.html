@@ -23,6 +23,8 @@
     .ov-strip { display: grid; overflow: hidden; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; color: inherit; text-decoration: none; }
     .dark .ov-strip { background: rgba(255,255,255,.03); border-color: #1d2939; }
     .ov-strip--top { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .ov-strip--staff { grid-template-columns: minmax(11rem, 1.25fr) repeat(3, minmax(0, 1fr)); transition: background-color .15s; }
+    .ov-dot--important { background: #f79009; }
     .ov-strip--gowns { grid-template-columns: minmax(11rem, 1.25fr) repeat(4, minmax(0, 1fr)); transition: background-color .15s; }
     a.ov-strip:hover, a.ov-cell:hover { background: rgba(152,162,179,.08); }
     a.ov-strip:focus-visible, a.ov-cell:focus-visible { outline: 2px solid #465fff; outline-offset: -2px; }
@@ -95,6 +97,10 @@
       .ov-strip--gowns > .ov-head { grid-column: 1 / -1; padding-bottom: .7rem; border-bottom: 1px solid #f2f4f7; }
       .dark .ov-strip--gowns > .ov-head { border-color: #1d2939; }
       .ov-strip--gowns > .ov-head + .ov-cell { border-left: 0; }
+      .ov-strip--staff { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .ov-strip--staff > .ov-head { grid-column: 1 / -1; padding-bottom: .7rem; border-bottom: 1px solid #f2f4f7; }
+      .dark .ov-strip--staff > .ov-head { border-color: #1d2939; }
+      .ov-strip--staff > .ov-head + .ov-cell { border-left: 0; }
     }
     /* A phone: the strips stack, the gown figures sit two by two, and each payment is two short lines. */
     @media (max-width: 760px) {
@@ -169,7 +175,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -607,6 +613,15 @@
                     :class="page === 'staff-management' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
                     Staff Accounts
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:audit_log' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'audit-log' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Audit Log
                   </a>
                 </li>
               </ul>
@@ -1244,6 +1259,15 @@
                   <div class="ov-cell ov-cell--stat"{% if not gown_blocked %} title="None blocked today"{% endif %}><span class="ov-lbl"><span class="ar-dot ov-dot--blocked" aria-hidden="true"></span>Blocked Gowns</span><span class="ov-num{% if not gown_blocked %} ov-num--zero{% endif %}">{{ gown_blocked }}</span></div>
                 </a>
 {% endif %}
+                {# Owner only: what staff did today, as one slim strip. It opens the Audit Log. #}
+                {% if staff_today %}
+                <a href="{% url 'arabela_admin:audit_log' %}" title="Open the Audit Log" class="ov-strip ov-strip--staff">
+                  <div class="ov-head"><span class="ov-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11a3 3 0 100-6 3 3 0 000 6zM8 11a3 3 0 100-6 3 3 0 000 6zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg></span><span class="ov-lbl">Staff activity today</span></div>
+                  <div class="ov-cell ov-cell--stat"><span class="ov-lbl">Actions</span><span class="ov-num">{{ staff_today.actions }}</span></div>
+                  <div class="ov-cell ov-cell--stat"><span class="ov-lbl">Staff working</span><span class="ov-num">{{ staff_today.people }}</span></div>
+                  <div class="ov-cell ov-cell--stat"><span class="ov-lbl"><span class="ar-dot ov-dot--important" aria-hidden="true"></span>Important</span><span class="ov-num">{{ staff_today.important }}</span></div>
+                </a>
+                {% endif %}
               </div>
 
               <div class="col-span-12">

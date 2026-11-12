@@ -26,11 +26,12 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import UserProfile
+from accounts.models import AuditLog, UserProfile
 from arabela_admin.views import _SCHEDULED_STATUSES, _staff_display_name
 from gowns.models import Gown
+from reservations import cancel_requests as reservation_cancel_requests
 from reservations import owner_check as reservation_owner_check
-from reservations.models import Reservation, ReservationItem
+from reservations.models import CancelRequest, Reservation, ReservationItem
 
 # What each part of the bell is drawn from. The page includes these templates; the live feed
 # renders the same ones and hands the HTML to the script to swap in.
@@ -222,6 +223,41 @@ def build_items(user):
                 when=r.created_at,
                 sort=r.created_at,
             ))
+
+    # --- Cancellation requests: a staff member who may not cancel asks the owner to (reservations/cancel_requests.py) ---------------
+    # The owner sees every waiting request (same owner test the approve/decline endpoints make); it turns critical after 48 hours.
+    # A staff member sees the answer when the owner DECLINED theirs (with her note), for three days.
+    if user.is_superuser or (profile is not None and profile.role == UserProfile.Role.OWNER):
+        for w in reservation_cancel_requests.pending()[:10]:
+            items.append(_item(
+                key=f"cancelreq:{w.id}",
+                kind="reservation",
+                level="critical" if reservation_cancel_requests.is_overdue(w) else "warning",
+                actor=w.requested_by_name,
+                text="asked you to cancel",
+                subject=f"{w.reservation.reference_code} ({reservation_cancel_requests.what_text(w)})",
+                module="Reservations",
+                url=_searchable("arabela_admin:active_reservations", w.reservation.reference_code),
+                when=w.created_at,
+                sort=w.created_at,
+            ))
+    for w in (
+        CancelRequest.objects.filter(
+            requested_by=user, status=CancelRequest.Status.DECLINED, decided_at__gte=timezone.now() - timedelta(days=3))
+        .select_related("reservation").order_by("-decided_at")[:5]
+    ):
+        items.append(_item(
+            key=f"cancelreq-declined:{w.id}",
+            kind="reservation",
+            level="info",
+            actor=w.decided_by_name or "The owner",
+            text=f"declined your request to cancel {w.reservation.reference_code}: \u201c{w.decision_note}\u201d",
+            subject="",
+            module="Reservations",
+            url=_searchable("arabela_admin:active_reservations", w.reservation.reference_code),
+            when=w.decided_at,
+            sort=w.decided_at,
+        ))
 
     # --- Overdue returns (the most time-critical queue) ----------------------------
     # A gown still at Pick-up never left the shop, so it cannot be overdue for return -- that is a missed pick-up, below.
@@ -431,6 +467,28 @@ def build_items(user):
                 url=_searchable("arabela_admin:staff_management", p.user.username),
                 when=None,
                 sort=None,
+            ))
+
+    # --- Owner-only: important things STAFF did in the last 24 hours (the Audit Log's orange and red lines) ------------------------------
+    # At most five, newest first; the owner's own actions are never announced back to her. Silent (no chime): the Audit Log is the record.
+    if user.is_superuser or (profile is not None and profile.role == UserProfile.Role.OWNER):
+        for row in (
+            AuditLog.objects.filter(created_at__gte=timezone.now() - timedelta(hours=24), actor_role="Staff")
+            .filter(Q(sensitive=True) | ~Q(outcome="ok")).exclude(category=AuditLog.Category.SIGN_IN)
+            .exclude(action__startswith="cancel_request.")      # those already have their own bell entry above
+            .order_by("-created_at", "-id")[:5]
+        ):
+            items.append(_item(
+                key=f"audit:{row.id}",
+                kind="staff",
+                level="warning" if row.outcome != "ok" else "info",
+                actor=row.actor_name or "Staff",
+                text="did something important: " + (row.summary[len(row.actor_name) + 1:] if row.actor_name and row.summary.startswith(row.actor_name + " ") else row.summary),
+                subject="",
+                module="Staff",
+                url=reverse("arabela_admin:audit_log") + "?important=1",
+                when=row.created_at,
+                sort=row.created_at,
             ))
 
     # Critical first, then newest -- an overdue gown should never sit below a routine

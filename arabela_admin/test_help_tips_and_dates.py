@@ -75,7 +75,7 @@ class _Tips(HTMLParser):
                 self.errors.append(f"summary text is not '?' near line {self.getpos()[0]}")
             self._in_summary = False
         if tag == "div" and self._pop is not None:
-            if len(self._pop.strip()) < 15:
+            if len(self._pop.strip()) < 15 and "{{" not in self._pop:           # a bubble filled from server data ({{ c.help }}) is checked by rendering it
                 self.errors.append(f"an empty bubble near line {self.getpos()[0]}")
             self._pop = None
         if tag == "details":
@@ -104,8 +104,8 @@ class EveryTipIsBuiltTheSameWayTests(SimpleTestCase):
             counts[name] = len(re.findall(r'<details class="ht-tip"', (ADMIN / name).read_text(encoding="utf8")))
         self.assertGreaterEqual(counts["gown-catalog.html"], 12)
         self.assertEqual({k: v for k, v in counts.items() if k != "gown-catalog.html"}, {
-            "calendar.html": 2, "profile.html": 4, "account-settings.html": 2, "email-preview.html": 3, "payment-verification.html": 1, "categories.html": 1,
-            "staff-management.html": 1, "reservation-records.html": 1})
+            "calendar.html": 2, "profile.html": 5, "account-settings.html": 2, "email-preview.html": 3, "payment-verification.html": 1, "categories.html": 1,
+            "staff-management.html": 4, "reservation-records.html": 1})        # profile: + "Your access"; staff management: the choices tip and the per-permission tip, in Add and in Edit
 
 
 class SharedPiecesAreOnEveryPageTests(SimpleTestCase):
@@ -245,7 +245,7 @@ class LongTextIsOnlyInsideAQuestionMarkTests(ActiveDropdownBase):
 
     def test_categories_staff_management_and_the_two_profile_pages(self):
         self.check(self.get("arabela_admin:categories"), ["One tall photo of the whole gown on a plain white background."])
-        self.check(self.get("arabela_admin:staff_management"), ["Staff do the daily work. A Manager can also delete gowns, cancel bookings, flag customers, and delete receipt photos."])
+        self.check(self.get("arabela_admin:staff_management"), ["Every staff account can do the daily work: gowns, new bookings, approving and rejecting, pick-ups and returns, receipts and reminders. Tick anything more this person may do. Staff who cannot cancel a booking can send you a cancellation request instead."])
         staff = self.get("arabela_admin:staff_management")
         self.assertIn("Leave the password blank to keep it unchanged.", staff)
         self.assertNotIn("Update the account details.", staff)

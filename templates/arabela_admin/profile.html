@@ -333,7 +333,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -771,6 +771,15 @@
                     :class="page === 'staff-management' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
                     Staff Accounts
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:audit_log' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'audit-log' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Audit Log
                   </a>
                 </li>
               </ul>
@@ -1593,6 +1602,15 @@
                           x-text="email"
                         ></p>
                       </div>
+
+                      {% if not can_edit_shop_settings %}
+                      <div class="lg:col-span-2">
+                        <div class="mb-2 flex items-center text-xs leading-normal text-gray-500 dark:text-gray-400">Your access<details class="ht-tip"><summary aria-label="About your access" title="About your access">?</summary><div class="ht-tip-pop">You can do the daily work: gowns, new bookings, approving and rejecting, pick-ups and returns, receipts and reminders. The owner can allow more. If you cannot cancel a booking, you can ask the owner to.</div></details></div>
+                        <div class="flex flex-wrap gap-1">
+                          {% for label in your_access %}<span class="inline-flex rounded-full bg-brand-50 px-2 py-0.5 text-theme-xs font-medium text-brand-500 dark:bg-brand-500/15 dark:text-brand-400">{{ label }}</span>{% empty %}<span class="text-sm font-medium text-gray-800 dark:text-white/90">Daily work only</span>{% endfor %}
+                        </div>
+                      </div>
+                      {% endif %}
 
                       {% if can_edit_shop_settings %}
                       <div>

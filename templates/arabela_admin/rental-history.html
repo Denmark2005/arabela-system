@@ -147,7 +147,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -585,6 +585,15 @@
                     :class="page === 'staff-management' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
                     Staff Accounts
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:audit_log' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'audit-log' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Audit Log
                   </a>
                 </li>
               </ul>

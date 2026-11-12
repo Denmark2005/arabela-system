@@ -992,7 +992,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -1430,6 +1430,15 @@
                     :class="page === 'staff-management' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
                     Staff Accounts
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:audit_log' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'audit-log' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Audit Log
                   </a>
                 </li>
               </ul>
@@ -3093,7 +3102,7 @@
         >Mark as checked now</button>
       </div>
     </div>
-    {% if admin_can_manage %}
+    {% if admin_perms.delete_gowns %}
     <div class="mt-6 flex items-center border-t border-gray-100 px-2 pt-6 dark:border-gray-800">
       <!-- Opens the Remove modal, which asks WHY before anything is deleted. Manager or owner only (a Staff account does not get it;
            the server refuses the request too). -->
@@ -3216,7 +3225,7 @@
   <button type="button" @click="bulkStatus('Available')" :disabled="bulkBusy" :style="bulkBusy ? 'opacity:0.6; cursor:not-allowed;' : ''" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">Mark Available</button>
   <button type="button" @click="bulkStatus('Out-of-Stock')" :disabled="bulkBusy" :style="bulkBusy ? 'opacity:0.6; cursor:not-allowed;' : ''" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">Mark Out-of-Stock</button>
   <button type="button" @click="markChecked(selectedGownIds)" :disabled="bulkBusy" :style="bulkBusy ? 'opacity:0.6; cursor:not-allowed;' : ''" title="Confirm you can see these gowns in the shop right now" class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">Mark Checked</button>
-  {% if admin_can_manage %}
+  {% if admin_perms.delete_gowns %}
   <button type="button" @click="bulkDelete()" :disabled="bulkBusy" :style="bulkBusy ? 'color:#F04438; opacity:0.6; cursor:not-allowed;' : 'color:#F04438;'" class="rounded-lg border border-error-300 bg-error-50 px-3 py-2 text-xs font-medium shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-white/[0.03]">Remove Selected</button>
   {% endif %}
   <button type="button" @click="clearGownSelection()" class="rounded-lg px-3 py-2 text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">Clear</button>

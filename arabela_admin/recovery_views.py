@@ -15,6 +15,11 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods
 
 from accounts import login_throttle, owner_recovery, rate_limit
+from accounts import audit
+from accounts.audit import audited
+from accounts.roles import staff_display_name
+
+from . import audit_describe
 
 from .views import OWNER_PASSWORD_MAX_LENGTH, OWNER_PASSWORD_MIN_LENGTH, _require_owner
 
@@ -62,6 +67,7 @@ def recovery_send_code_view(request):
 
 
 @require_http_methods(["POST"])
+@audited("account.recovery_email", "Staff", audit_describe.recovery_email, sensitive=True)
 @_require_owner
 def recovery_verify_code_view(request):
     """Check the code the owner typed; the recovery email is saved only when it is right."""
@@ -137,5 +143,8 @@ def reset_password_view(request, uidb64, token):
         user.save(update_fields=["password"])        # a new password also signs out every device that was signed in
         login_throttle.clear(login_throttle.username_key(user.username))   # and lifts any "too many tries" lock, so she can sign in now
         owner_recovery.notify_password_changed(user)
+        audit.record(user, category="Staff", action="account.password_reset", sensitive=True, request=request, network=True,
+                     summary=f"{staff_display_name(user)} reset their password with the recovery email",
+                     target_type="staff", target_id=user.pk, target_label=staff_display_name(user))
         return redirect(reverse("arabela_admin:admin_login") + f"?{LOGIN_NOTICE_PARAM}={LOGIN_NOTICE_VALUE}")
     return _page(request, {})

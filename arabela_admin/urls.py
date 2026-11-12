@@ -6,6 +6,13 @@ from .recovery_views import (
     recovery_verify_code_view,
     reset_password_view,
 )
+from .audit_views import audit_log_export_view, audit_log_view
+from .cancel_request_views import (
+    cancel_request_approve_view,
+    cancel_request_create_view,
+    cancel_request_decline_view,
+    cancel_request_withdraw_view,
+)
 from .new_booking import (
     availability_calendar_view,
     availability_check_view,
@@ -136,6 +143,10 @@ urlpatterns = [
     path("api/reservations/<int:pk>/approve/", reservation_approve_view, name="reservation_approve"),
     path("api/reservations/<int:pk>/cancel/", reservation_cancel_view, name="reservation_cancel"),
     path("api/reservations/<int:pk>/cancel-gowns/", reservation_cancel_gowns_view, name="reservation_cancel_gowns"),
+    path("api/reservations/<int:pk>/cancel-request/", cancel_request_create_view, name="cancel_request_create"),
+    path("api/cancel-requests/<int:request_id>/approve/", cancel_request_approve_view, name="cancel_request_approve"),
+    path("api/cancel-requests/<int:request_id>/decline/", cancel_request_decline_view, name="cancel_request_decline"),
+    path("api/cancel-requests/<int:request_id>/withdraw/", cancel_request_withdraw_view, name="cancel_request_withdraw"),
     path("api/reservations/<int:pk>/reject/", reservation_reject_view, name="reservation_reject"),
     path("api/reservation-items/<int:item_id>/mark-returned/", reservation_item_mark_returned_view, name="reservation_item_mark_returned"),
     path("api/reservation-items/<int:item_id>/mark-picked-up/", reservation_item_mark_picked_up_view, name="reservation_item_mark_picked_up"),
@@ -150,6 +161,8 @@ urlpatterns = [
     path("email-preview/<str:kind>/", email_preview_render_view, name="email_preview_render"),
     path("api/email-test/", email_test_send_view, name="email_test_send"),
     path("staff-management/", staff_management_view, name="staff_management"),
+    path("audit-log/", audit_log_view, name="audit_log"),
+    path("audit-log/export/", audit_log_export_view, name="audit_log_export"),
     path("api/staff/", staff_create_view, name="staff_create"),
     path("api/staff/<int:user_id>/update/", staff_update_view, name="staff_update"),
     path("api/account/change-password/", change_own_password_view, name="change_own_password"),

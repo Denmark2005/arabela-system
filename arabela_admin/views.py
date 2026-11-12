@@ -31,10 +31,16 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 import json
 
+from accounts import audit as audit_log
 from accounts import login_throttle, owner_recovery
+from accounts.audit import audited
 from accounts.models import CustomerMessage, UserProfile
-from accounts.roles import MANAGER_ONLY_MESSAGE, can_manage, staff_display_name
+from accounts.roles import (
+    PERMISSIONS, PERMISSION_KEYS, PRESETS, RECEIPT_UNDO_MINUTES, can, granted_permissions, join_permissions,
+    parse_permissions, permission_message, staff_display_name,
+)
 from accounts.services import CANCELLATION_FLAG_THRESHOLD, clear_proof_block, record_rejected_proof
+from arabela_admin import audit_describe
 from gowns import availability, deposit, gcash_numbers
 from gowns.models import (
     COOLDOWN_DAYS,
@@ -56,6 +62,7 @@ from gowns.models import (
     resolve_tag_colors,
     visible_builtin_names,
 )
+from reservations import cancel_requests as reservation_cancel_requests
 from reservations import cancellation as reservation_cancellation
 from reservations import owner_check as reservation_owner_check
 from reservations import reminders as reservation_reminders
@@ -96,22 +103,31 @@ def _is_owner(request):
     return bool(profile and profile.role == UserProfile.Role.OWNER)
 
 
-def _can_manage(request):
-    """Manager or owner: the tiers allowed the sensitive actions (delete gowns, cancel a confirmed booking, flag customers and
-    remove a cancellation lock, delete receipt photos). A Staff account is not. The rule lives in accounts.roles, which the
-    templates' hidden buttons use too, so the two can never disagree."""
-    return can_manage(request.user)
+def _can(request, key):
+    """True when the signed-in account may do the sensitive action `key` (accounts.roles.PERMISSIONS): the owner always, a Staff
+    account only when the owner allowed it. The rule lives in accounts.roles, which the templates' hidden buttons use too
+    (`admin_perms`), so the two can never disagree."""
+    return can(request.user, key)
 
 
-def _manager_error(request):
-    """None when this request may do a Manager-only action; else the JSON refusal to return -- 401 when nobody admin is signed in,
-    403 "Only a Manager or the owner can do that." for a Staff account (the buttons are hidden for them, so this is only
-    reached by a forced request)."""
+def _permission_error(request, key):
+    """None when this request may do the sensitive action `key`; else the JSON refusal to return -- 401 when nobody admin is signed
+    in, 403 "You don't have permission to ..." for a Staff account the owner has not allowed (the button is hidden for them, so this
+    is only reached by a forced request). A refusal is written to the Audit Log by the @audited decorator on the view."""
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
-    if not _can_manage(request):
-        return JsonResponse({"error": MANAGER_ONLY_MESSAGE}, status=403)
+    if not _can(request, key):
+        return JsonResponse({"error": permission_message(key)}, status=403)
     return None
+
+
+RECEIPTS_COMPLETE_MESSAGE = (
+    "This booking already has all its receipts. To fix a wrong photo, open the booking in Reservation Records, open the photo and use Replace."
+)
+RECEIPT_DELETE_REFUSED_MESSAGE = (
+    "You can delete a receipt photo you attached in the last 15 minutes. After that, ask the owner to delete it "
+    "or to allow you to delete receipt photos. To fix a wrong picture, use Replace."
+)
 
 
 def _receipts_prefetch(path="receipt_records"):
@@ -193,10 +209,19 @@ def dashboard_view(request):
         .count()
     )
 
+    # The owner's one-line summary of what staff did today (the Audit Log has the detail); nobody else sees it.
+    staff_today = None
+    if _is_owner(request):
+        from accounts import audit
+        from arabela_admin.audit_views import today_strip
+        audit.maybe_purge()
+        staff_today = today_strip()
+
     return render(
         request,
         "arabela_admin/dashboard.html",
         {
+            "staff_today": staff_today,
             "quick_verify_reservations": quick_verify_reservations,
             "quick_verify_count": len(quick_verify_reservations),
             "pending_total": pending_total,
@@ -899,6 +924,7 @@ def security_deposits_view(request):
 
 
 @require_http_methods(["POST"])
+@audited('receipt.upload', 'Payments', audit_describe.receipt_upload)
 @_require_admin_staff
 def receipt_upload_view(request):
     """Attach a photo of a manually-issued receipt to a real reservation.
@@ -920,6 +946,8 @@ def receipt_upload_view(request):
         return JsonResponse(
             {"error": f"No reservation found with reference code {reference_code}."}, status=404
         )
+    if reservation.receipts_complete():
+        return JsonResponse({"error": RECEIPTS_COMPLETE_MESSAGE}, status=409)
 
     photo_file = request.FILES.get("photo")
     error = _validate_receipt_photo(photo_file)
@@ -938,14 +966,21 @@ def receipt_upload_view(request):
             status=502,
         )
 
-    receipt = ReceiptRecord.objects.create(
-        reservation=reservation, photo_url=photo_url, uploaded_by=request.user,
-        covers=_receipt_label_for_upload(reservation, request.POST.get("covers")), file_hash=file_hash,
-    )
-    return JsonResponse({"success": True, "receipt": _receipt_row(receipt)})
+    with transaction.atomic():
+        # Two photos sent at the same moment (two staff, or a double tap) must not both pass the "is the booking complete" check:
+        # the booking row is locked, so the second one sees the first one's receipt and is refused.
+        locked = Reservation.objects.select_for_update().get(pk=reservation.pk)
+        if locked.receipts_complete():
+            return JsonResponse({"error": RECEIPTS_COMPLETE_MESSAGE}, status=409)
+        receipt = ReceiptRecord.objects.create(
+            reservation=locked, photo_url=photo_url, uploaded_by=request.user,
+            covers=_receipt_label_for_upload(locked, request.POST.get("covers")), file_hash=file_hash,
+        )
+    return JsonResponse({"success": True, "receipt": _receipt_row(receipt, user=request.user)})
 
 
 @require_http_methods(["POST"])
+@audited('receipt.replace', 'Payments', audit_describe.receipt_replace, before=audit_describe.before_receipt)
 @_require_admin_staff
 def receipt_replace_view(request, receipt_id):
     """Correct a mistake on an already-attached receipt photo -- the wrong file, a bad
@@ -978,25 +1013,33 @@ def receipt_replace_view(request, receipt_id):
     receipt.photo_url = photo_url
     receipt.file_hash = file_hash
     receipt.save(update_fields=["photo_url", "file_hash"])
-    return JsonResponse({"success": True, "receipt": _receipt_row(receipt)})
+    return JsonResponse({"success": True, "receipt": _receipt_row(receipt, user=request.user)})
 
 
 @require_http_methods(["POST"])
+@audited('receipt.delete', 'Payments', audit_describe.receipt_delete, sensitive=True, before=audit_describe.before_receipt)
 def receipt_delete_view(request, receipt_id):
     """Delete a manual receipt photo -- the wrong booking, a duplicate, a bad scan nobody wants.
-    Removes the record and its stored file, and leaves a STAFF-ONLY line on the booking's timeline
-    saying who deleted it and when, so a financial record never vanishes without a trace. The
-    booking itself is untouched. Manager or owner only: a deleted receipt photo can't be brought back."""
-    refused = _manager_error(request)
-    if refused:
-        return refused
+    Removes the record and leaves a STAFF-ONLY line on the booking's timeline saying who deleted it and when, so a financial record
+    never vanishes without a trace; the Audit Log keeps the photo's link, and the stored picture itself is kept so the owner can still
+    open it from there. The booking itself is untouched.
+
+    Who may: the owner, a staff account the owner allowed ("Delete receipt photos") -- and the staff member who attached this very
+    photo, for the first 15 minutes (the undo: a photo put on the wrong booking comes off at once). Anyone else is refused. Replacing a
+    wrong picture is open to every staff account and does not need this."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
     try:
         receipt = ReceiptRecord.objects.select_related("reservation").get(id=receipt_id)
     except ReceiptRecord.DoesNotExist:
         return JsonResponse({"error": "That receipt was already deleted. Please refresh the page."}, status=404)
+    undo = False
+    if not _can(request, "delete_receipts"):
+        if not receipt.undo_window_open(request.user):
+            return JsonResponse({"error": RECEIPT_DELETE_REFUSED_MESSAGE}, status=403)
+        undo = True
 
     reservation = receipt.reservation
-    photo_url = receipt.photo_url
     with transaction.atomic():
         receipt.delete()
         ReservationStatusEvent.record(
@@ -1004,19 +1047,7 @@ def receipt_delete_view(request, receipt_id):
             detail=f"Deleted by {_staff_display_name(request.user)}.",
             actor=ReservationStatusEvent.Actor.STAFF, staff_only=True,
         )
-
-    # Best effort, only for files this feature saved itself: a leftover file is harmless, a
-    # failed delete must never undo the (already committed) removal of the record.
-    marker = "receipt_photos/"
-    idx = (photo_url or "").find(marker)
-    if idx != -1:
-        try:
-            rel = photo_url[idx:]
-            if default_storage.exists(rel):
-                default_storage.delete(rel)
-        except Exception:
-            pass
-    return JsonResponse({"success": True, "reference": reservation.reference_code})
+    return JsonResponse({"success": True, "reference": reservation.reference_code, "undo": undo})
 
 
 # --- Reservation Records -------------------------------------------------------------
@@ -1206,7 +1237,9 @@ def reservation_records_view(request):
                 reservation_cancellation.cancellation_facts(r, cancel_events[r.id])
                 if r.status == Reservation.Status.CANCELLED else None
             ),
-            "receipts": [_receipt_row(rec, today) for rec in r.receipt_records.all()],
+            "receipts": [_receipt_row(rec, today, request.user) for rec in r.receipt_records.all()],
+            # The booking already has every receipt it needs: no further photo can be added (the server refuses it); a wrong one is replaced.
+            "receiptsComplete": r.receipts_complete(list(r.receipt_records.all())),
             # How the booking came in, and -- for one staff recorded (walk-in, Facebook, phone) -- who recorded it, its
             # paper number, and whether the shop's own receipts cover the rental and the deposit.
             "channel": r.channel,
@@ -1423,6 +1456,15 @@ def active_reservations_view(request):
                 "no_show" if any(i.rental_date < today for i in waiting) else "customer_asked"
             )
 
+    # A cancellation request a staff member sent for a booking is shown on it until the owner answers (reservations/cancel_requests.py).
+    from arabela_admin.cancel_request_views import request_row
+    waiting_requests = {
+        w.reservation_id: request_row(w, user=request.user)
+        for w in reservation_cancel_requests.pending().filter(reservation__in=[r.id for r in reservations])
+    }
+    for reservation in reservations:
+        reservation.cancel_request = waiting_requests.get(reservation.id)
+
     # This page is for rentals that are still running. A booking whose every gown is back is finished: it lives on in Reservation Records and
     # Rental History, so it leaves this list. Late ones go first (the most days late on top); the rest keep their order (the sort is stable).
     running = [r for r in reservations if not r.is_completed]
@@ -1439,6 +1481,8 @@ def active_reservations_view(request):
             # The shop's own "today" (Asia/Manila), so the calendars grey out past days by
             # the same clock the server enforces -- not the browser's.
             "today_iso": today.isoformat(),
+            # Only the owner answers a cancellation request (the server makes the same test).
+            "can_answer_cancel_requests": _is_owner(request),
         },
     )
 
@@ -1488,6 +1532,7 @@ def pending_approval_view(request):
         # A booking staff recorded but not paid yet (walk-in, Facebook, phone): no online proof to check -- staff attach the
         # shop's receipt when the customer pays, then Approve.
         reservation.receipt_count = len(reservation.receipt_records.all())
+        reservation.receipts_are_complete = reservation.receipts_complete(list(reservation.receipt_records.all()))
         items = list(reservation.items.all())
         for item in items:
             item.gown_code, item.tag_color, item.tag_hex = _item_gown_tag(item, tag_colors)
@@ -1806,6 +1851,7 @@ RESERVED_IS_AUTOMATIC_MESSAGE = (
 
 
 @require_http_methods(["POST"])
+@audited('gown.status', 'Gowns', audit_describe.gown_status, before=audit_describe.before_gown)
 def gown_status_update_view(request, gown_id):
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
@@ -1893,9 +1939,10 @@ def _remove_gown(gown, reason, note, user):
 
 
 @require_http_methods(["POST"])
+@audited('gown.delete', 'Gowns', audit_describe.gown_delete, sensitive=True, before=audit_describe.before_gown_delete)
 def gown_delete_view(request, gown_id):
-    # Manager or owner only (see accounts.roles): deleting a gown retires its number for good.
-    refused = _manager_error(request)
+    # Needs the "Delete gowns" permission (see accounts.roles): deleting a gown retires its number for good.
+    refused = _permission_error(request, "delete_gowns")
     if refused:
         return refused
     try:
@@ -1938,6 +1985,7 @@ _BULK_MAX_IDS = 200
 
 
 @require_http_methods(["POST"])
+@audited('gown.bulk', 'Gowns', audit_describe.gown_bulk, before=audit_describe.before_gown_bulk)
 def gown_bulk_action_view(request):
     """One request, many gowns -- the catalog's multi-select toolbar. action='status'
     flips every selected gown's status; action='checked' stamps them as physically
@@ -1958,9 +2006,9 @@ def gown_bulk_action_view(request):
     action = data.get("action")
     if action not in ("status", "delete", "checked"):
         return JsonResponse({"error": "Unknown bulk action."}, status=400)
-    # Changing a status or marking gowns as checked stays everyday work; only deleting needs a Manager or the owner.
-    if action == "delete" and not _can_manage(request):
-        return JsonResponse({"error": MANAGER_ONLY_MESSAGE}, status=403)
+    # Changing a status or marking gowns as checked stays everyday work; only deleting needs the "Delete gowns" permission.
+    if action == "delete" and not _can(request, "delete_gowns"):
+        return JsonResponse({"error": permission_message("delete_gowns")}, status=403)
 
     raw_ids = data.get("ids")
     if not isinstance(raw_ids, list) or not raw_ids:
@@ -2047,6 +2095,7 @@ def gown_bulk_action_view(request):
 
 
 @require_http_methods(["POST"])
+@audited('gown.tag_colors', 'Gowns', audit_describe.tag_colors)
 def gown_tag_colors_update_view(request):
     """Saves which physical-tag color each category uses. OWNER ONLY, enforced here on
     the server: the Tag Colors section hides its edit controls from staff, but hiding a
@@ -2214,7 +2263,7 @@ def _receipt_label_for_upload(reservation, requested) -> str:
     return reservation.next_receipt_covers()
 
 
-def _receipt_row(receipt, today=None):
+def _receipt_row(receipt, today=None, user=None):
     """Serialize one ReceiptRecord for the Alpine table -- shape matches exactly what
     the page's existing client-side search/filter code already expects
     (customer/reservation/uploaded/photoUrl), plus year/isThisWeek so that filtering
@@ -2244,6 +2293,9 @@ def _receipt_row(receipt, today=None):
         "photoUrl": receipt.photo_url,
         "year": str(local_uploaded.year),
         "isThisWeek": local_uploaded.date() >= week_start,
+        # Whether THIS person may delete it: the "Delete receipt photos" permission, or the 15-minute undo of their own photo.
+        # The same two tests receipt_delete_view makes, so a button is never shown that the server would refuse.
+        "canDelete": bool(user is not None and (can(user, "delete_receipts") or receipt.undo_window_open(user))),
     }
 
 
@@ -2375,6 +2427,7 @@ def _next_free_gown_name(category, name):
 
 
 @require_http_methods(["POST"])
+@audited('gown.create', 'Gowns', audit_describe.gown_create)
 def gown_create_view(request):
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
@@ -2516,6 +2569,7 @@ def gown_create_view(request):
 
 
 @require_http_methods(["POST"])
+@audited('gown.update', 'Gowns', audit_describe.gown_update, before=audit_describe.before_gown)
 def gown_update_view(request, gown_id):
     """Edits an existing gown's descriptive/business details.
 
@@ -2604,6 +2658,7 @@ def gown_update_view(request, gown_id):
 
 
 @require_http_methods(["POST"])
+@audited('gown.photo', 'Gowns', audit_describe.gown_photo)
 def gown_photo_update_view(request, gown_id):
     """Lets staff attach/replace a photo on a gown that already exists -- without this,
     a gown created with no photo (or a bad one) could never get a real customer-facing
@@ -2641,6 +2696,7 @@ def _parse_iso_date(raw):
 
 
 @require_http_methods(["POST"])
+@audited('gown.block', 'Gowns', audit_describe.gown_block_create)
 def gown_block_create_view(request, gown_id):
     """Take one gown unit off the rental pool for a date range -- the post-return
     cleaning/repair gap. The customer product calendar subtracts these from that
@@ -2796,6 +2852,7 @@ def gown_block_release_preview_view(request, block_id):
 
 
 @require_http_methods(["POST"])
+@audited('gown.unblock', 'Gowns', audit_describe.gown_block_delete)
 def gown_block_delete_view(request, block_id):
     """Hand the blocked days back -- the gown is available again from this moment on."""
     if not _is_admin_staff(request):
@@ -2830,6 +2887,7 @@ def _gown_names_text(reservation):
 
 
 @require_http_methods(["POST"])
+@audited('booking.approve', 'Bookings', audit_describe.booking_approve)
 def reservation_approve_view(request, pk):
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
@@ -2869,6 +2927,7 @@ def reservation_approve_view(request, pk):
 
 
 @require_http_methods(["POST"])
+@audited('booking.reject', 'Bookings', audit_describe.booking_reject)
 def reservation_reject_view(request, pk):
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
@@ -2917,6 +2976,7 @@ def reservation_reject_view(request, pk):
 
 
 @require_http_methods(["POST"])
+@audited('payment.owner_check', 'Payments', audit_describe.booking_owner_check)
 def reservation_owner_check_view(request, pk):
     """The owner's answer after looking in her own GCash: {"result": "received"} or {"result": "not_found"}. OWNER ONLY, enforced here (the
     staff cannot see the GCash account, so they cannot answer for her). Everything it does is in reservations/owner_check.py."""
@@ -2950,13 +3010,15 @@ def reservation_owner_check_view(request, pk):
 
 
 @require_http_methods(["POST"])
+@audited('booking.cancel', 'Bookings', audit_describe.booking_cancel, sensitive=True)
 def reservation_cancel_view(request, pk):
     """Cancel an approved booking that nobody has picked up (a no-show, or the customer phoned to cancel).
 
     The deposit is not refunded; the booking stays on record as Cancelled. Everything it does -- and every refusal -- is in
     reservations.cancellation.cancel_by_staff, so this is only the web wrapper. Manager or owner only: cancelling decides whether the
-    customer keeps the security deposit."""
-    refused = _manager_error(request)
+    customer keeps the security deposit. Needs the "Cancel bookings" permission; a staff account without it sends a cancellation request
+    for the owner to decide (cancel_request_create_view)."""
+    refused = _permission_error(request, "cancel_bookings")
     if refused:
         return refused
     try:
@@ -2979,13 +3041,14 @@ def reservation_cancel_view(request, pk):
 
 
 @require_http_methods(["POST"])
+@audited('booking.cancel_gowns', 'Bookings', audit_describe.booking_cancel_gowns, sensitive=True)
 def reservation_cancel_gowns_view(request, pk):
     """Cancel one or more gowns of an approved booking -- the ones nobody picked up -- and leave the rest of the booking alone.
 
     Sends the exact gowns ("items": [ids]) the staff member saw in the confirm window, so a gown that changed in the meantime is
     refused instead of being cancelled by surprise. Everything it does -- and every refusal -- is in
-    reservations.cancellation.cancel_gowns_by_staff, so this is only the web wrapper. Manager or owner only, like cancelling a booking."""
-    refused = _manager_error(request)
+    reservations.cancellation.cancel_gowns_by_staff, so this is only the web wrapper. Needs the "Cancel bookings" permission, like cancelling a booking."""
+    refused = _permission_error(request, "cancel_bookings")
     if refused:
         return refused
     try:
@@ -3019,6 +3082,7 @@ def reservation_cancel_gowns_view(request, pk):
 
 
 @require_http_methods(["POST"])
+@audited('item.return', 'Bookings', audit_describe.item_return)
 def reservation_item_mark_returned_view(request, item_id):
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
@@ -3109,6 +3173,7 @@ def reservation_item_mark_returned_view(request, item_id):
 
 
 @require_http_methods(["POST"])
+@audited('item.reminder', 'Bookings', audit_describe.item_reminder)
 def reservation_item_send_reminder_view(request, item_id):
     """Send a reminder a staff member wrote, to the customer holding this gown.
 
@@ -3192,6 +3257,7 @@ def _load_open_item(request, item_id):
 
 
 @require_http_methods(["POST"])
+@audited('item.pickup', 'Bookings', audit_describe.item_pickup)
 @transaction.atomic  # the availability check locks the gown row until the save commits
 def reservation_item_mark_picked_up_view(request, item_id):
     """The gown leaves the shop. Only on or after the booking's CURRENT pick-up date (the
@@ -3236,6 +3302,7 @@ def reservation_item_mark_picked_up_view(request, item_id):
 
 
 @require_http_methods(["POST"])
+@audited('item.change_pickup', 'Bookings', audit_describe.item_change_pickup, before=audit_describe.before_item)
 @transaction.atomic
 def reservation_item_change_pickup_view(request, item_id):
     """The customer wants a different pick-up day. It may go EARLIER, and -- after it was moved earlier -- BACK up to the day the customer
@@ -3301,6 +3368,7 @@ def reservation_item_change_pickup_view(request, item_id):
 
 
 @require_http_methods(["POST"])
+@audited('item.change_return', 'Bookings', audit_describe.item_change_return, before=audit_describe.before_item)
 @transaction.atomic
 def reservation_item_change_return_view(request, item_id):
     """The customer needs the gown LONGER: move the return date later. Only later (there
@@ -3360,6 +3428,7 @@ def reservation_item_change_return_view(request, item_id):
 
 
 @require_http_methods(["POST"])
+@audited('item.undo_pickup', 'Bookings', audit_describe.item_undo_pickup)
 def reservation_item_undo_pickup_view(request, item_id):
     """Reverses an accidental "Mark Picked Up" click: clears picked_up_on and puts
     the item back at the Pick-up stage, exactly as if it was never clicked. Not
@@ -3507,9 +3576,10 @@ def clients_view(request):
 
 
 @require_http_methods(["POST"])
+@audited('customer.flag', 'Customers', audit_describe.customer_flag, sensitive=True)
 def customer_flag_view(request, user_id):
-    # Flagging and unflagging: Manager or owner only (see accounts.roles).
-    refused = _manager_error(request)
+    # Flagging and unflagging: needs the "Flag customers" permission (see accounts.roles).
+    refused = _permission_error(request, "flag_customers")
     if refused:
         return refused
     try:
@@ -3546,13 +3616,14 @@ def customer_flag_view(request, user_id):
 
 
 @require_http_methods(["POST"])
+@audited('customer.unlock', 'Customers', audit_describe.customer_unlock, sensitive=True)
 def customer_unlock_view(request, user_id):
     """Lift a customer's temporary cancellation lockout early (Client List's "Remove lock").
 
     For a lock that came from a site problem rather than real cancelling. Only the lock goes: the
     attempt count stays, and since each lock step fires once, the next one is still the 2-hour lock at 10
-    attempts. Same permission as flagging -- a Manager or the owner -- and only ever this one account's row."""
-    refused = _manager_error(request)
+    attempts. Same permission as flagging ("Flag customers") and only ever this one account's row."""
+    refused = _permission_error(request, "flag_customers")
     if refused:
         return refused
     try:
@@ -3679,6 +3750,7 @@ def email_preview_render_view(request, kind):
 
 
 @require_http_methods(["POST"])
+@audited('email.test', 'Settings', audit_describe.email_test)
 @_require_owner
 def email_test_send_view(request):
     """Send a sample of one email right now and say what happened: to the signed-in owner's own address, or -- when "to"
@@ -3736,14 +3808,29 @@ def _staff_row(user):
         "id": user.id,
         "name": _staff_display_name(user),
         "username": user.username,
-        "role": (profile.role if profile else UserProfile.Role.STAFF),
+        # There is no Manager role any more: every account here is Staff, and what each may do beyond the daily work is `permissions`
+        # (the effective list -- an old Manager row that has not been converted yet reads as having all four).
+        "role": "Staff",
+        "permissions": [key for key in PERMISSION_KEYS if key in granted_permissions(user, profile)],
         "is_active": user.is_active,
         "date_added": user.date_joined.strftime("%b %d, %Y"),
     }
 
 
+def _permissions_from_request(data):
+    """(list of permission keys, error) from the `permissions` the Staff Management form sent. Unknown keys are refused rather than
+    ignored, so a typo can never silently leave an account with less (or more) than the owner meant."""
+    raw = data.get("permissions", [])
+    if not isinstance(raw, list):
+        return None, "Choose what this staff account can do."
+    unknown = [item for item in raw if str(item) not in PERMISSION_KEYS]
+    if unknown:
+        return None, "That permission does not exist."
+    return parse_permissions(raw), None
+
+
 def _staff_queryset():
-    """The Manager & Staff roster: admin-capable accounts that are NOT owners."""
+    """The staff roster: admin-capable accounts that are NOT owners."""
     return (
         User.objects.filter(is_staff=True, is_superuser=False)
         .exclude(profile__role=UserProfile.Role.OWNER)
@@ -3755,7 +3842,7 @@ def _staff_queryset():
 @_require_owner
 def staff_management_view(request):
     staff_accounts = [_staff_row(u) for u in _staff_queryset()]
-    # The stat cards + table count only the Manager/Staff roster (the accounts this page
+    # The stat cards + table count only the staff roster (the accounts this page
     # manages), NOT owner/superuser logins -- so a shop with no staff yet correctly reads 0.
     return render(
         request,
@@ -3764,11 +3851,13 @@ def staff_management_view(request):
             "page": "staff-management",
             "staff_accounts": staff_accounts,
             "staff_count": len(staff_accounts),
+            # The checkboxes in Add / Edit Account, and the two quick settings above them.
+            "permission_choices": [
+                {"key": key, "label": info["label"], "help": info["help"]} for key, info in PERMISSIONS.items()
+            ],
+            "permission_presets": [{"id": pid, "label": label, "keys": list(keys)} for pid, label, keys in PRESETS],
         },
     )
-
-
-_STAFF_ROLES = {UserProfile.Role.MANAGER, UserProfile.Role.STAFF}
 
 
 def _split_name(full_name):
@@ -3794,10 +3883,11 @@ def _get_manageable_staff(user_id, request):
 
 
 @require_http_methods(["POST"])
+@audited('staff.create', 'Staff', audit_describe.staff_create, sensitive=True)
 @_require_owner
 def staff_create_view(request):
-    """Create a Manager/Staff admin account. is_staff=True so it can log in at the admin
-    login page; is_superuser=False so it never gains owner powers."""
+    """Create a Staff admin account. is_staff=True so it can log in at the admin
+    login page; is_superuser=False so it never gains owner powers. `permissions` = the sensitive actions the owner allows it."""
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
@@ -3806,14 +3896,14 @@ def staff_create_view(request):
     full_name = (data.get("name") or "").strip()
     username = (data.get("username") or "").strip()
     password = data.get("password") or ""
-    role = (data.get("role") or "").strip()
+    permissions, permission_error = _permissions_from_request(data)
 
     if not full_name:
         return JsonResponse({"error": "Full name is required."}, status=400)
     if not username:
         return JsonResponse({"error": "Username is required."}, status=400)
-    if role not in _STAFF_ROLES:
-        return JsonResponse({"error": "Choose a role of Manager or Staff."}, status=400)
+    if permission_error:
+        return JsonResponse({"error": permission_error}, status=400)
     first, last = _split_name(full_name)
     problem = _admin_password_problem(password, User(username=username, first_name=first, last_name=last))
     if problem:
@@ -3831,15 +3921,17 @@ def staff_create_view(request):
         is_active=True,
     )
     UserProfile.objects.update_or_create(
-        user=user, defaults={"role": role, "display_name": full_name}
+        user=user, defaults={"role": UserProfile.Role.STAFF, "display_name": full_name, "permissions": join_permissions(permissions)}
     )
+    user = User.objects.select_related("profile").get(pk=user.pk)
     return JsonResponse({"success": True, "account": _staff_row(user)})
 
 
 @require_http_methods(["POST"])
+@audited('staff.update', 'Staff', audit_describe.staff_update, sensitive=True, before=audit_describe.before_staff)
 @_require_owner
 def staff_update_view(request, user_id):
-    """Edit a staff account's name/role, and optionally reset the password."""
+    """Edit a staff account's name and what it may do, and optionally reset the password."""
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
@@ -3850,13 +3942,13 @@ def staff_update_view(request, user_id):
         return error
 
     full_name = (data.get("name") or "").strip()
-    role = (data.get("role") or "").strip()
     password = data.get("password") or ""
+    permissions, permission_error = _permissions_from_request(data)
 
     if not full_name:
         return JsonResponse({"error": "Full name is required."}, status=400)
-    if role not in _STAFF_ROLES:
-        return JsonResponse({"error": "Choose a role of Manager or Staff."}, status=400)
+    if permission_error:
+        return JsonResponse({"error": permission_error}, status=400)
     if password:
         problem = _admin_password_problem(password, target)
         if problem:
@@ -3869,11 +3961,13 @@ def staff_update_view(request, user_id):
         target.set_password(password)
     target.save()
     profile, _ = UserProfile.objects.get_or_create(user=target)
-    profile.role = role
+    # Saving converts an old Manager row to Staff on the spot: what it may do is exactly the boxes ticked now.
+    profile.role = UserProfile.Role.STAFF
     profile.display_name = full_name
-    profile.save(update_fields=["role", "display_name"])
+    profile.permissions = join_permissions(permissions)
+    profile.save(update_fields=["role", "display_name", "permissions"])
     # target.profile was cached (stale) by the select_related in _get_manageable_staff;
-    # point it at the freshly-saved profile so the serialized row reflects the new role.
+    # point it at the freshly-saved profile so the serialized row reflects the new access.
     target.profile = profile
     return JsonResponse({"success": True, "account": _staff_row(target)})
 
@@ -3900,6 +3994,7 @@ def _admin_password_problem(password, user):
 
 
 @require_http_methods(["POST"])
+@audited('account.password', 'Staff', audit_describe.change_password, sensitive=True)
 @_require_owner
 def change_own_password_view(request):
     """Let the currently signed-in OWNER change their own login password.
@@ -3962,6 +4057,7 @@ _USERNAME_PATTERN = re.compile(r"[A-Za-z0-9._-]{4,30}")
 
 
 @require_http_methods(["POST"])
+@audited('account.username', 'Staff', audit_describe.change_username, sensitive=True)
 @_require_owner
 def change_own_username_view(request):
     """Let the signed-in OWNER change their own login username.
@@ -4003,6 +4099,7 @@ def change_own_username_view(request):
 
 
 @require_http_methods(["POST"])
+@audited('staff.status', 'Staff', audit_describe.staff_status, sensitive=True)
 @_require_owner
 def staff_toggle_status_view(request, user_id):
     """Activate / deactivate a staff account -- deactivating blocks their login without
@@ -4016,6 +4113,7 @@ def staff_toggle_status_view(request, user_id):
 
 
 @require_http_methods(["POST"])
+@audited('staff.delete', 'Staff', audit_describe.staff_delete, sensitive=True, before=audit_describe.before_staff)
 @_require_owner
 def staff_delete_view(request, user_id):
     """Permanently remove a staff account."""
@@ -4081,6 +4179,12 @@ def admin_login_view(request):
             remaining = login_throttle.record_failure(throttle_key)
             if remaining <= 0:
                 error_message = login_throttle.lockout_message(login_throttle.LOCKOUT_SECONDS)
+                # The Audit Log marks the moment an ADMIN account got locked (a wrong guess for any other username is not written).
+                locked_account = User.objects.filter(username__iexact=username).first()
+                if locked_account is not None and (locked_account.is_staff or locked_account.is_superuser):
+                    audit_log.record(
+                        locked_account, category="Sign-in", action="signin.locked", outcome="failed", sensitive=True, request=request, network=True,
+                        summary=f"{_staff_display_name(locked_account)}'s account was locked for 15 minutes after too many wrong passwords")
             else:
                 error_message = (
                     f"Invalid username or password. {remaining} attempt"
@@ -4156,6 +4260,10 @@ def page_view(request, page: str):
             # The shop's public phone, Facebook link and address are the OWNER's to change. This is the very check save_profile_view
             # makes before it writes them, so the page can never show a box the server would quietly throw away.
             "can_edit_shop_settings": _is_owner(request),
+            # A staff account sees what the owner allowed it to do besides the daily work ("Your access"); the owner has no such box.
+            "your_access": [
+                PERMISSIONS[key]["label"] for key in PERMISSION_KEYS if key in granted_permissions(request.user, profile)
+            ],
         })
 
     # page == "account-settings"
@@ -4186,6 +4294,7 @@ def _facebook_url_error(value):
 
 
 @require_http_methods(["POST"])
+@audited('profile.save', 'Staff', audit_describe.save_profile)
 def save_profile_view(request):
     """Save admin staff profile information (name/email/bio, personal to the
     logged-in user) plus the site-wide contact info (Facebook/phone/shop
@@ -4281,6 +4390,7 @@ def _delete_old_avatar(profile):
 
 
 @require_http_methods(["POST"])
+@audited('profile.picture', 'Staff', audit_describe.profile_picture)
 def upload_profile_picture_view(request):
     """Store a new avatar for the signed-in staff member and return its URL so the
     page can swap the image in without a reload."""
@@ -4333,6 +4443,7 @@ def upload_profile_picture_view(request):
 
 
 @require_http_methods(["POST"])
+@audited('profile.picture_remove', 'Staff', audit_describe.profile_picture_remove)
 def remove_profile_picture_view(request):
     """Clear the avatar, falling back to the default person icon."""
     if not _is_admin_staff(request):
@@ -4366,6 +4477,7 @@ def _category_owner_error(request):
 
 
 @require_http_methods(["POST"])
+@audited('category.create', 'Gowns', audit_describe.category_create)
 def gown_category_create_view(request):
     """Add a category. Name: 2-20 letters, numbers, spaces or hyphens (20 = the size of
     Gown.category), different from every existing category -- compared ignoring capitals -- and
@@ -4426,6 +4538,7 @@ def gown_category_create_view(request):
 
 
 @require_http_methods(["POST"])
+@audited('category.audience', 'Gowns', audit_describe.category_audience)
 def gown_category_audience_view(request, category_id):
     """Move a category the owner added to the Women's or Men's collection page."""
     refused = _category_owner_error(request)
@@ -4445,6 +4558,7 @@ def gown_category_audience_view(request, category_id):
 
 
 @require_http_methods(["POST"])
+@audited('category.hide', 'Gowns', audit_describe.category_remove_builtin, sensitive=True)
 def gown_builtin_category_remove_view(request):
     """Remove (hide) one of the 13 original categories -- only while no gown is filed under it,
     and only the owner. It leaves Add Gown, the catalog, Tag Colors, the customer menu, search, the
@@ -4478,6 +4592,7 @@ def gown_builtin_category_remove_view(request):
 
 
 @require_http_methods(["POST"])
+@audited('category.delete', 'Gowns', audit_describe.category_delete, sensitive=True)
 def gown_category_delete_view(request, category_id):
     """Remove a category the owner added -- only while no gown is filed under it, so nothing is
     ever left pointing at a category that no longer exists. Built-in categories can't be removed."""
@@ -4641,6 +4756,7 @@ def category_cover_preview_view(request):
 
 
 @require_http_methods(["POST"])
+@audited('category.cover', 'Gowns', audit_describe.category_cover_upload)
 def category_cover_upload_view(request):
     """Set (or replace) one category's picture. The photo must follow the picture rules and is turned into the exact
     tile picture (see gowns.cover_images), then stored like every other admin upload."""
@@ -4668,6 +4784,7 @@ def category_cover_upload_view(request):
 
 
 @require_http_methods(["POST"])
+@audited('category.cover_reset', 'Gowns', audit_describe.category_cover_reset)
 def category_cover_reset_view(request):
     """Take the owner's picture away from one category; it goes back to the picture the site came with (or the
     plain placeholder when it never had one)."""
@@ -4740,6 +4857,7 @@ def _delete_old_gcash_qr(url):
 
 
 @require_http_methods(["POST"])
+@audited('settings.gcash', 'Settings', audit_describe.gcash_details, sensitive=True, before=audit_describe.before_settings)
 def gcash_details_update_view(request):
     """Save the GCash account name and number shown at checkout. Blank clears either one."""
     refused = _gcash_owner_error(request)
@@ -4774,6 +4892,7 @@ def gcash_details_update_view(request):
 
 
 @require_http_methods(["POST"])
+@audited('settings.deposit', 'Settings', audit_describe.deposit_setting, sensitive=True, before=audit_describe.before_settings)
 def deposit_setting_update_view(request):
     """Save the security deposit asked for each gown (whole pesos, 1 to 10,000). Owner only. It applies to NEW bookings: every booking keeps the
     deposit it was made with."""
@@ -4799,6 +4918,7 @@ def deposit_setting_update_view(request):
 
 
 @require_http_methods(["POST"])
+@audited('settings.gcash_qr', 'Settings', audit_describe.gcash_qr_upload, sensitive=True)
 def gcash_qr_upload_view(request):
     """Store the shop's GCash QR picture (kept whole -- never cropped, a QR has to scan)."""
     refused = _gcash_owner_error(request)
@@ -4834,6 +4954,7 @@ def gcash_qr_upload_view(request):
 
 
 @require_http_methods(["POST"])
+@audited('settings.gcash_qr_remove', 'Settings', audit_describe.gcash_qr_remove, sensitive=True)
 def gcash_qr_remove_view(request):
     """Remove the QR picture; checkout goes back to its 'QR coming soon' message."""
     refused = _gcash_owner_error(request)
@@ -4848,6 +4969,7 @@ def gcash_qr_remove_view(request):
 
 
 @require_http_methods(["POST"])
+@audited('profile.avatar_position', 'Staff', audit_describe.avatar_position)
 def update_avatar_position_view(request):
     """Reposition the currently saved photo (no new file) -- used by 'Adjust position'
     on an avatar that's already uploaded."""

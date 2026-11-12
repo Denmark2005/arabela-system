@@ -3,7 +3,7 @@ import os
 from django.conf import settings
 
 from accounts.models import UserProfile
-from accounts.roles import can_manage
+from accounts.roles import PERMISSION_KEYS, granted_permissions
 from arabela_admin import notifications
 
 
@@ -70,7 +70,7 @@ def admin_user(request):
         "admin_avatar_position_x": 50,
         "admin_avatar_position_y": 50,
         "admin_is_owner": False,
-        "admin_can_manage": False,
+        "admin_perms": {key: False for key in PERMISSION_KEYS},
         "admin_role": "",
     }
 
@@ -89,6 +89,8 @@ def admin_user(request):
     role = profile.role if profile else UserProfile.Role.OWNER
     is_owner = bool(user.is_superuser or role == UserProfile.Role.OWNER)
 
+    granted = granted_permissions(user, profile)
+
     return {
         # Short label next to the avatar; falls back to the username when no name is set.
         "admin_display_name": user.first_name or user.get_username(),
@@ -100,9 +102,10 @@ def admin_user(request):
         "admin_avatar_position_x": pos_x,
         "admin_avatar_position_y": pos_y,
         "admin_is_owner": is_owner,
-        # Manager or owner: shows the Delete / Cancel booking / Flag / Delete receipt buttons that a Staff account does not get.
-        # The SAME rule the server enforces (accounts.roles.can_manage), so a button is never shown that the server would refuse.
-        "admin_can_manage": can_manage(user, profile),
+        # Which of the four sensitive actions this account may do (delete gowns, cancel bookings, flag customers, delete receipt
+        # photos): the buttons are shown only for the ones allowed. The SAME rule the server enforces (accounts.roles), so a button
+        # is never shown that the server would refuse.
+        "admin_perms": {key: key in granted for key in PERMISSION_KEYS},
         "admin_role": role,
     }
 

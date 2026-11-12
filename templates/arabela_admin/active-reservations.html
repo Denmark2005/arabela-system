@@ -108,7 +108,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -546,6 +546,15 @@
                     :class="page === 'staff-management' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
                     Staff Accounts
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:audit_log' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'audit-log' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Audit Log
                   </a>
                 </li>
               </ul>
@@ -1209,6 +1218,7 @@
                       </div>
                       <div class="ar-ref">
                         <b>{{ r.reference_code }}</b>
+                        {% if r.cancel_request %}<span class="cr-chip{% if r.cancel_request.overdue %} is-late{% endif %}" title="{{ r.cancel_request.by }} asked to cancel {{ r.cancel_request.what }}. Open the booking to answer.">Cancel requested</span>{% endif %}
                         {% if r.gown_count > 1 %}<span class="ar-count-pill" title="{{ r.gown_count }} gowns in this booking" aria-label="{{ r.gown_count }} gowns in this booking"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0"/></svg>{{ r.gown_count }}</span>{% endif %}
                         {% if r.state == 'overdue' %}<span class="ar-num ar-num--overdue" title="{{ r.overdue_days }} day{{ r.overdue_days|pluralize }} late" aria-label="{{ r.overdue_days }} day{{ r.overdue_days|pluralize }} late">{{ r.overdue_days }}</span>{% endif %}
                       </div>
@@ -1231,6 +1241,21 @@
                       </div>
                       {% endif %}
 
+                      {% if r.cancel_request %}
+                      <!-- A staff member who may not cancel asked the owner to. The booking stays as it is until she answers (reservations/cancel_requests.py). -->
+                      <div class="cr-note{% if r.cancel_request.overdue %} is-late{% endif %}" data-cr-id="{{ r.cancel_request.id }}">
+                        <span class="cr-text"><b>Cancel requested</b> by {{ r.cancel_request.by }} for {{ r.cancel_request.what }}: {{ r.cancel_request.reason }} <span class="cr-age">&middot; {{ r.cancel_request.age }}</span></span>
+                        <span class="cr-btns">
+                          {% if can_answer_cancel_requests %}
+                          <button type="button" class="cb-btn cb-btn--danger cr-act" data-cr-action="approve" data-url="{{ r.cancel_request.approve_url }}" data-who="{{ r.cancel_request.by }}" data-what="{{ r.cancel_request.what }}" data-ref="{{ r.reference_code }}">Approve</button>
+                          <button type="button" class="cb-btn cb-btn--keep cr-act" data-cr-action="decline" data-url="{{ r.cancel_request.decline_url }}" data-who="{{ r.cancel_request.by }}" data-what="{{ r.cancel_request.what }}" data-ref="{{ r.reference_code }}">Decline</button>
+                          {% elif r.cancel_request.mine %}
+                          <button type="button" class="cb-btn cb-btn--keep cr-act" data-cr-action="withdraw" data-url="{{ r.cancel_request.withdraw_url }}" data-ref="{{ r.reference_code }}">Withdraw</button>
+                          {% endif %}
+                        </span>
+                      </div>
+                      {% endif %}
+
                       <!-- The booking's own actions: three icon buttons, then (managers and the owner only) the cancel buttons, still with their words. -->
                       <div class="ar-acts">
                         <a href="{% url 'arabela_admin:payment_verification' %}?search={{ r.display_customer_name|urlencode }}" class="ar-ib"
@@ -1247,32 +1272,32 @@
                           :title="openTimeline === {{ r.id }} ? 'Hide timeline' : 'Show timeline'" title="Show timeline" aria-label="Timeline">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
                         </button>
-                            {% if r.can_cancel and admin_can_manage %}
+                            {% if r.can_cancel and not r.cancel_request or r.can_cancel and admin_perms.cancel_bookings %}
                             <!-- Only while nothing in the booking has been picked up. Opens the confirm window
                                  (partials/cancel_booking.html); nothing happens until the booking code is typed. -->
                             <button type="button" class="cb-open-btn{% if r.cancel_urgent %} cb-open-btn--urgent{% endif %}"
                               title="{% if r.cancel_urgent %}The event date has passed and nothing was picked up{% else %}Cancel this booking{% endif %}"
-                              data-url="{% url 'arabela_admin:reservation_cancel' r.id %}"
+                              {% if admin_perms.cancel_bookings %}data-url="{% url 'arabela_admin:reservation_cancel' r.id %}"{% else %}data-request="1" data-url="{% url 'arabela_admin:cancel_request_create' r.id %}"{% endif %}
                               data-ref="{{ r.reference_code }}"
                               data-customer="{{ r.display_customer_name }}"
                               data-gowns="{{ r.cancel_gowns }}"
                               data-event="{{ r.cancel_event_text }}"
                               data-deposit="&#8369;{{ r.security_deposit|floatformat:'2g' }}"
-                              data-reason="{{ r.cancel_default_reason }}">Cancel booking</button>
+                              data-reason="{{ r.cancel_default_reason }}">{% if admin_perms.cancel_bookings %}Cancel booking{% else %}Request cancellation{% endif %}</button>
                             {% endif %}
-                            {% if r.show_cancel_unpicked and admin_can_manage %}
+                            {% if r.show_cancel_unpicked and not r.cancel_request or r.show_cancel_unpicked and admin_perms.cancel_bookings %}
                             <!-- A booking where some gowns went out or came back, so it can't be cancelled whole: one button
                                  cancels every gown nobody picked up. The exact gowns are sent, so one that changed since this
                                  page loaded is refused instead of cancelled by surprise. -->
                             <button type="button" class="cb-open-btn{% if r.unpicked_urgent %} cb-open-btn--urgent{% endif %}"
                               title="Cancel the {{ r.unpicked_count }} gowns nobody picked up. Gowns that went out or came back are not touched."
                               data-mode="gowns" data-ids="{{ r.unpicked_ids }}"
-                              data-url="{% url 'arabela_admin:reservation_cancel_gowns' r.id %}"
+                              {% if admin_perms.cancel_bookings %}data-url="{% url 'arabela_admin:reservation_cancel_gowns' r.id %}"{% else %}data-request="1" data-url="{% url 'arabela_admin:cancel_request_create' r.id %}"{% endif %}
                               data-ref="{{ r.reference_code }}"
                               data-customer="{{ r.display_customer_name }}"
                               data-gowns="{{ r.unpicked_names }}"
                               data-event="{{ r.unpicked_event_text }}"
-                              data-reason="{{ r.unpicked_default_reason }}">Cancel all not picked up ({{ r.unpicked_count }})</button>
+                              data-reason="{{ r.unpicked_default_reason }}">{% if admin_perms.cancel_bookings %}Cancel all not picked up ({{ r.unpicked_count }}){% else %}Request cancellation ({{ r.unpicked_count }}){% endif %}</button>
                             {% endif %}
                       </div>
 
@@ -1362,18 +1387,18 @@
                                 data-rental="{{ item.rental_date|date:'Y-m-d' }}"
                                 data-return="{{ item.return_date|date:'Y-m-d' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M10.5 14l2.5 2-2.5 2"/></svg></button>
                               {% endif %}
-                            {% if item.can_cancel_gown and admin_can_manage %}
+                            {% if item.can_cancel_gown and not r.cancel_request or item.can_cancel_gown and admin_perms.cancel_bookings %}
                             <!-- Cancels just this gown (nobody picked it up); the rest of the booking carries on.
                                  Opens the small confirm window in partials/cancel_booking.html. -->
                             <button type="button" class="cb-open-btn cb-open-btn--small{% if item.cancel_urgent %} cb-open-btn--urgent{% endif %}"
                               title="{% if item.cancel_urgent %}The event date has passed and this gown was never picked up{% else %}Cancel just this gown{% endif %}"
                               data-mode="gown" data-ids="{{ item.id }}"
-                              data-url="{% url 'arabela_admin:reservation_cancel_gowns' r.id %}"
+                              {% if admin_perms.cancel_bookings %}data-url="{% url 'arabela_admin:reservation_cancel_gowns' r.id %}"{% else %}data-request="1" data-url="{% url 'arabela_admin:cancel_request_create' r.id %}"{% endif %}
                               data-ref="{{ r.reference_code }}"
                               data-customer="{{ r.display_customer_name }}"
                               data-gowns="{{ item.gown_name }}"
                               data-event="{{ item.cancel_event_text }}"
-                              data-reason="{{ item.cancel_default_reason }}">Cancel gown</button>
+                              data-reason="{{ item.cancel_default_reason }}">{% if admin_perms.cancel_bookings %}Cancel gown{% else %}Request cancellation{% endif %}</button>
                             {% endif %}
                             </div>
                             {% endif %}

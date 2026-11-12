@@ -966,11 +966,12 @@ class StaffManagementCRUDTests(TestCase):
         UserProfile.objects.create(user=target, role=UserProfile.Role.STAFF)
         response = self.client.post(
             reverse("arabela_admin:staff_update", args=[target.id]),
-            data=json.dumps({"name": "Renamed Person", "role": "Manager"}),
+            data=json.dumps({"name": "Renamed Person", "permissions": ["cancel_bookings"]}),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(UserProfile.objects.get(user=target).role, "Manager")
+        profile = UserProfile.objects.get(user=target)
+        self.assertEqual((profile.role, profile.permissions), ("Staff", "cancel_bookings"))      # there is no Manager role: what the account may do is ticked
 
     def test_owner_can_toggle_staff_active_status(self):
         target = User.objects.create_user(username="toggle_target", password="x", is_staff=True, is_active=True)
@@ -2836,16 +2837,16 @@ class ReceiptUploadAndReplaceTests(TestCase):
         self.assertIn(response.status_code, (302, 401))
         self.assertEqual(ReceiptRecord.objects.count(), 0)
 
-    def test_a_second_receipt_on_the_same_reservation_is_allowed(self):
-        """No one-per-booking constraint -- a redo or a second physical receipt for a
-        partial payment must not be blocked."""
-        for name in ("first.jpg", "second.jpg"):
-            response = self.client.post(reverse("arabela_admin:receipt_upload"), data={
-                "reference_code": self.reservation.reference_code, "photo": _make_jpeg(name),
-            })
-            self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(
-            ReceiptRecord.objects.filter(reservation=self.reservation).count(), 2)
+    def test_a_second_receipt_is_refused_once_the_booking_has_all_its_receipts(self):
+        """An online booking needs one receipt (the full one); a further photo is refused (a wrong one is fixed with Replace). The walk-in
+        cases -- deposit then rental, then no more -- are in arabela_admin/test_receipt_rules.py."""
+        first = self.client.post(reverse("arabela_admin:receipt_upload"), data={
+            "reference_code": self.reservation.reference_code, "photo": _make_jpeg("first.jpg")})
+        self.assertEqual(first.status_code, 200, first.content)
+        second = self.client.post(reverse("arabela_admin:receipt_upload"), data={
+            "reference_code": self.reservation.reference_code, "photo": _make_jpeg("second.jpg")})
+        self.assertEqual(second.status_code, 409, second.content)
+        self.assertEqual(ReceiptRecord.objects.filter(reservation=self.reservation).count(), 1)
 
 
 class ReservationRecordsTests(TestCase):
@@ -5138,11 +5139,12 @@ class ReceiptDeleteTests(TestCase):
     def _delete(self, receipt_id=None):
         return self.client.post(reverse("arabela_admin:receipt_delete", args=[receipt_id or self.receipt.id]))
 
-    def test_deleting_removes_the_record_and_the_stored_file(self):
+    def test_deleting_removes_the_record_and_keeps_the_stored_file(self):
+        """The picture stays in storage: the Audit Log keeps its link, so the owner can still open what was deleted."""
         with patch("arabela_admin.views.default_storage") as storage:
             storage.exists.return_value = True
             response = self._delete()
-            storage.delete.assert_called_once_with("receipt_photos/abc_receipt.jpg")
+            storage.delete.assert_not_called()
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.json()["reference"], self.reservation.reference_code)
         self.assertFalse(ReceiptRecord.objects.filter(id=self.receipt.id).exists())

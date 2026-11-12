@@ -36,7 +36,8 @@ class Base(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff = User.objects.create_user("cancel_staff", password="x", is_staff=True, first_name="Maria", last_name="Cruz")
-        # cancelling a confirmed booking is for a Manager or the owner (a Staff account is refused: arabela_admin/test_role_permissions.py)
+        # An old Manager row: counts as Staff with all four permissions, so these tests can cancel, delete and flag. (A Staff account the owner has
+        # not allowed is refused: arabela_admin/test_role_permissions.py; it sends a request instead: arabela_admin/test_cancel_requests.py.)
         UserProfile.objects.update_or_create(user=cls.staff, defaults={"role": UserProfile.Role.MANAGER})
         cls.owner = User.objects.create_superuser("cancel_owner", "owner@gmail.com", "x")
         cls.customer = User.objects.create_user("cancel_customer", email="denmark@gmail.com", password="x")

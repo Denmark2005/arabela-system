@@ -21,7 +21,7 @@ from django.utils import timezone
 from accounts.models import CustomerMessage
 from gowns.models import GownUnavailability
 
-from . import owner_check
+from . import cancel_requests, owner_check
 from .models import Reservation, ReservationStatusEvent
 
 logger = logging.getLogger(__name__)
@@ -120,4 +120,5 @@ class PendingReleaseMiddleware:
         ):
             maybe_release()
             owner_check.maybe_send_reminders()
+            cancel_requests.maybe_send_reminders()
         return self.get_response(request)

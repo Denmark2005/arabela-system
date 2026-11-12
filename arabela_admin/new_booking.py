@@ -18,6 +18,9 @@ from django.urls import reverse
 from django.utils.http import urlencode
 from django.views.decorators.http import require_http_methods
 
+from accounts.audit import audited
+from arabela_admin import audit_describe
+
 from arabela_admin.views import (
     _is_admin_staff,
     _is_owner,
@@ -312,6 +315,7 @@ def booking_account_search_view(request):
 
 # ---------------------------------------------------------------- saving
 @require_http_methods(["POST"])
+@audited("booking.create", "Bookings", audit_describe.booking_create)
 def booking_create_view(request):
     """Save the booking (multipart: the form's fields, `lines` as JSON, and up to two receipt photos)."""
     if not _is_admin_staff(request):

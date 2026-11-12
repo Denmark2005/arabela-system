@@ -206,6 +206,17 @@ class Reservation(models.Model):
             return covers.DEPOSIT
         return covers.BOTH
 
+    def receipts_complete(self, receipts=None):
+        """True when this booking already has ALL the shop receipts it needs, so no further photo can be attached (a wrong photo is fixed
+        with Replace instead). An online booking needs one (the full receipt); a walk-in needs one full receipt, or the deposit receipt
+        plus the rental receipt. A receipt nobody labelled completes nothing for a walk-in (see next_receipt_covers)."""
+        covers = ReceiptRecord.Covers
+        rows = list(self.receipt_records.all() if receipts is None else receipts)
+        if not self.is_staff_recorded:
+            return bool(rows)
+        labels = {r.covers for r in rows}
+        return covers.BOTH in labels or {covers.RENTAL, covers.DEPOSIT} <= labels
+
     def receipt_proofs(self, deposit_only=False):
         """The shop's own receipt photos (ReceiptRecord) as plain dicts for the admin's proof popups. A booking recorded at the
         counter has no GCash screenshot from the customer, so these photos ARE its proof of payment. `deposit_only` keeps the
@@ -801,6 +812,15 @@ class ReceiptRecord(models.Model):
     class Meta:
         ordering = ['-uploaded_at']
 
+    def undo_window_open(self, user, now=None):
+        """True when `user` attached this photo themselves and did so less than RECEIPT_UNDO_MINUTES (15) ago: they may take it back
+        without the "Delete receipt photos" permission -- a photo put on the wrong booking is removed at once. Replacing the picture
+        later does not extend the window (uploaded_at stays the moment the record was created)."""
+        from accounts.roles import RECEIPT_UNDO_MINUTES
+        if user is None or not getattr(user, 'pk', None) or self.uploaded_by_id != user.pk:
+            return False
+        return (now or timezone.now()) - self.uploaded_at <= timedelta(minutes=RECEIPT_UNDO_MINUTES)
+
     def __str__(self):
         return f'Receipt for {self.reservation.reference_code} ({self.uploaded_at:%Y-%m-%d})'
 
@@ -825,3 +845,50 @@ class ProofRejection(models.Model):
     class Meta:
         ordering = ['-created_at']
 
+
+
+class CancelRequest(models.Model):
+    """A staff member's request that the OWNER cancel a booking (or some of its gowns): the way a staff account without the "Cancel
+    bookings" permission handles a no-show or a customer who phoned to cancel. The booking stays exactly as it is until the owner
+    answers; approving runs the normal cancellation (reservations/cancellation.py), declining leaves the booking alone and tells
+    staff why. Rules and the steps: reservations/cancel_requests.py."""
+
+    class Status(models.TextChoices):
+        PENDING = 'Pending', 'Waiting'
+        APPROVED = 'Approved', 'Approved'
+        DECLINED = 'Declined', 'Declined'
+        WITHDRAWN = 'Withdrawn', 'Withdrawn'
+        CLOSED = 'Closed', 'No longer possible'      # the booking changed before the owner answered (picked up, already cancelled, ...)
+
+    reservation = models.ForeignKey(Reservation, on_delete=models.CASCADE, related_name='cancel_requests')
+    # The booking lines to cancel, as ids joined by commas. Empty = the whole booking.
+    item_ids = models.CharField(max_length=400, blank=True, default='')
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+    requested_by_name = models.CharField(max_length=150)
+    reason_key = models.CharField(max_length=20)            # a key of reservations.cancellation.REASONS
+    note = models.CharField(max_length=150, blank=True, default='')
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING, db_index=True)
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+    decided_by_name = models.CharField(max_length=150, blank=True, default='')
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.CharField(max_length=200, blank=True, default='')
+    reminder_sent_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['created_at', 'id']
+        constraints = [
+            # One open request per booking: two staff (or a double tap) can never leave two waiting.
+            models.UniqueConstraint(fields=['reservation'], condition=models.Q(status='Pending'), name='one_pending_cancel_request_per_booking'),
+        ]
+
+    @property
+    def item_id_list(self):
+        return [int(part) for part in self.item_ids.split(',') if part.strip().isdigit()]
+
+    @property
+    def is_whole_booking(self):
+        return not self.item_ids
+
+    def __str__(self):
+        return f'Cancel request for {self.reservation.reference_code} ({self.status})'

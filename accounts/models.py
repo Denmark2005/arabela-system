@@ -4,10 +4,12 @@ from django.db import models
 
 class UserProfile(models.Model):
     class Role(models.TextChoices):
-        # Admin-panel access tier. Owner = full access (the shop owner / superuser).
-        # Manager = the daily work plus the sensitive actions (delete gowns, cancel a confirmed booking,
-        # flag customers, delete receipt photos); Staff = the daily work only. Neither can open Staff
-        # Management, Categories or the shop settings. The rule lives in accounts/roles.py (can_manage).
+        # Admin-panel access tier. Owner = full access (the shop owner / superuser). Staff = the daily work,
+        # plus whichever of the four sensitive actions the owner allowed this account (see `permissions`).
+        # Neither Staff nor anyone else but the owner can open Staff Management, the Audit Log, Categories or the
+        # shop settings. The rule lives in accounts/roles.py (can).
+        # MANAGER is no longer offered anywhere: it only exists so an old row that has not been converted yet keeps
+        # working (it counts as Staff with all four permissions), until the data migration turns it into Staff.
         # Irrelevant for ordinary customers (they never reach the admin panel), who keep
         # the default STAFF value harmlessly since they have no is_staff flag.
         OWNER = 'Owner', 'Owner'
@@ -16,6 +18,10 @@ class UserProfile(models.Model):
 
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='profile')
     role = models.CharField(max_length=10, choices=Role.choices, default=Role.STAFF)
+    # The sensitive actions the owner allowed this STAFF account, as the keys in accounts.roles.PERMISSIONS joined by commas
+    # ("delete_gowns,cancel_bookings"). Empty = the daily work only. db_default: the site that is still running while the
+    # database is migrated inserts profiles without this column.
+    permissions = models.CharField(max_length=200, blank=True, default='', db_default='')
     profile_picture_url = models.URLField(blank=True)
     # Where the circular avatar crop is centered within the uploaded photo, as a
     # CSS object-position percentage pair -- lets someone drag an off-center photo
@@ -195,3 +201,88 @@ class SavedAddress(models.Model):
 
     def __str__(self):
         return f'{self.address_line}, {self.city} ({"default" if self.is_default else "saved"})'
+
+
+class AuditLogImmutable(Exception):
+    """Raised when something tries to change or delete an Audit Log row. The log is append-only."""
+
+
+class AuditLogQuerySet(models.QuerySet):
+    """update() and delete() are refused, so no view, shell snippet or admin action can rewrite what staff did. The one way rows
+    leave is purge_older_than(), the 12-month clean-up."""
+
+    def update(self, **kwargs):
+        raise AuditLogImmutable('The Audit Log cannot be changed.')
+
+    def delete(self):
+        raise AuditLogImmutable('The Audit Log cannot be deleted.')
+
+    def bulk_update(self, objs, fields, batch_size=None):
+        raise AuditLogImmutable('The Audit Log cannot be changed.')
+
+    def purge_older_than(self, cutoff):
+        """Delete every row written before `cutoff` (a datetime). Returns how many went."""
+        old = self.filter(created_at__lt=cutoff)
+        count = old.count()
+        if count:
+            super(AuditLogQuerySet, old).delete()
+        return count
+
+
+class AuditLog(models.Model):
+    """One line for everything a signed-in admin account did (and every sign-in, failed sign-in and refused attempt): the owner's Audit Log page.
+
+    Append-only: nothing edits or deletes a row except the 12-month clean-up. Never holds a password, a token or a picture. The actor is
+    kept twice -- the account link (cleared if the account is deleted) and the name/role as they were that day -- so the line still reads
+    right after the account is renamed or removed. IP address and device are kept only for sign-in events and refused sensitive attempts."""
+
+    class Category(models.TextChoices):
+        BOOKINGS = 'Bookings', 'Bookings'
+        PAYMENTS = 'Payments', 'Payments'
+        GOWNS = 'Gowns', 'Gowns'
+        CUSTOMERS = 'Customers', 'Customers'
+        STAFF = 'Staff', 'Staff'
+        SETTINGS = 'Settings', 'Settings'
+        SIGN_IN = 'Sign-in', 'Sign-in'
+
+    class Outcome(models.TextChoices):
+        OK = 'ok', 'Done'
+        REFUSED = 'refused', 'Refused'
+        FAILED = 'failed', 'Failed'
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+    actor_name = models.CharField(max_length=150, blank=True)
+    actor_role = models.CharField(max_length=20, blank=True)           # 'Owner' / 'Staff' as it was then
+    category = models.CharField(max_length=20, choices=Category.choices)
+    action = models.CharField(max_length=60)                           # a code such as 'booking.approve'
+    summary = models.CharField(max_length=300)                         # the readable sentence
+    target_type = models.CharField(max_length=30, blank=True)          # 'booking', 'gown', 'customer', 'staff', 'receipt', ...
+    target_id = models.CharField(max_length=40, blank=True)
+    target_label = models.CharField(max_length=160, blank=True)
+    details = models.JSONField(default=dict, blank=True)               # before -> after, the reason, counts
+    sensitive = models.BooleanField(default=False)
+    outcome = models.CharField(max_length=10, choices=Outcome.choices, default=Outcome.OK)
+    ip_address = models.CharField(max_length=45, blank=True)
+    device = models.CharField(max_length=120, blank=True)
+
+    objects = AuditLogQuerySet.as_manager()
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+        indexes = [
+            models.Index(fields=['created_at'], name='auditlog_created_idx'),
+            models.Index(fields=['actor', 'created_at'], name='auditlog_actor_created_idx'),
+            models.Index(fields=['category', 'created_at'], name='auditlog_cat_created_idx'),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise AuditLogImmutable('The Audit Log cannot be changed.')
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise AuditLogImmutable('The Audit Log cannot be deleted.')
+
+    def __str__(self):
+        return f'{self.created_at:%Y-%m-%d %H:%M} {self.actor_name}: {self.summary}'

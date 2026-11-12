@@ -1,18 +1,22 @@
-"""The three admin roles -- Staff, Manager, Owner (accounts/roles.py).
+"""Owner and Staff, with four sensitive actions the owner can allow one staff account at a time (accounts/roles.py).
 
-A Staff account does the daily work. A Manager or the owner can also do the sensitive actions: delete gowns (one or in bulk), cancel a
-confirmed booking or some of its gowns, flag/unflag a customer and remove a cancellation lock, and delete a receipt photo. This file checks,
-for each of those actions: a Staff account is refused (403, "Only a Manager or the owner can do that.") and NOTHING changes; a Manager, an
-owner (by role) and a superuser can do it; nobody signed in is still refused with 401. It also checks that the buttons are hidden for Staff
-and shown to a Manager/owner, that everyday work still works for Staff, that the owner-only pages stay owner-only, and that the proof
-windows show who uploaded each shop receipt."""
+Every staff account does the daily work. Four actions need a permission the owner ticks in Staff Management: delete gowns (one or in bulk),
+cancel a booking or some of its gowns, flag/unflag a customer and remove a cancellation lock, and delete a receipt photo. This file checks,
+for each of those actions: an account without THAT permission is refused (403) and NOTHING changes -- including an account that has the
+other three; an account with it, an owner (by role) and a superuser can do it; nobody signed in is still refused with 401. It also checks
+that the buttons follow the permissions, that everyday work still works for every staff account, that the owner-only pages stay owner-only,
+that Staff Management saves permissions (and only the owner can), that an old Manager row still works until it is converted, and that the
+migration converts it."""
+import importlib
 import json
 from datetime import timedelta
 from decimal import Decimal
 from itertools import count
 from unittest.mock import patch
 
+from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
@@ -20,7 +24,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import CustomerMessage, UserProfile
-from accounts.roles import MANAGER_ONLY_MESSAGE, can_manage, staff_display_name
+from accounts.roles import PERMISSION_KEYS, can, granted_permissions, join_permissions, parse_permissions, permission_message, staff_display_name
 from arabela_admin.test_cancel_booking import Base, make_gown
 from gowns.models import Gown, GownRemoval
 from reservations.models import ReceiptRecord, Reservation, ReservationItem
@@ -29,26 +33,34 @@ User = get_user_model()
 _JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00" + b"role-test" + b"\xff\xd9"
 
 
+def make_staff(username, permissions=(), first="Sam", last="Staff", role=UserProfile.Role.STAFF):
+    user = User.objects.create_user(username, password="x", is_staff=True, first_name=first, last_name=last)
+    UserProfile.objects.update_or_create(user=user, defaults={"role": role, "permissions": join_permissions(permissions)})
+    return user
+
+
 class RoleBase(Base):
-    """Base (arabela_admin/test_cancel_booking.py) already has a Manager (`staff`), a superuser owner and a customer."""
+    """Base (arabela_admin/test_cancel_booking.py) already has an old-style Manager row (`staff`), a superuser owner and a customer."""
 
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
-        cls.manager = cls.staff
-        cls.plain_staff = User.objects.create_user("rp_staff", password="x", is_staff=True, first_name="Sam", last_name="Staff")
-        UserProfile.objects.update_or_create(user=cls.plain_staff, defaults={"role": UserProfile.Role.STAFF})
+        cls.legacy_manager = cls.staff
+        cls.plain_staff = make_staff("rp_staff")
+        cls.only = {key: make_staff(f"rp_only_{key}", [key]) for key in PERMISSION_KEYS}                 # exactly one permission each
+        cls.all_four = make_staff("rp_all", PERMISSION_KEYS, first="Ada", last="Senior")
         cls.owner_by_role = User.objects.create_user("rp_owner_role", password="x", is_staff=True, first_name="Olga", last_name="Owner")
         UserProfile.objects.update_or_create(user=cls.owner_by_role, defaults={"role": UserProfile.Role.OWNER})
         cls.bare = User.objects.create_user("rp_bare", password="x", is_staff=True)      # an admin account with no profile at all
-        cls.refused_accounts = {"Staff": cls.plain_staff, "admin account with no profile": cls.bare}
-        cls.allowed_accounts = {"Manager": cls.manager, "owner by role": cls.owner_by_role, "superuser owner": cls.owner}
+        cls.refused_accounts = {"Staff with no permission": cls.plain_staff, "admin account with no profile": cls.bare}
+        cls.allowed_accounts = {"old Manager row": cls.legacy_manager, "owner by role": cls.owner_by_role, "superuser owner": cls.owner,
+                                "staff with all four": cls.all_four}
 
     def setUp(self):
         super().setUp()
         self.serial = count(1, 10)           # a fresh block of gown numbers for every scenario
 
-    # ---------------------------------------------------------------- the eight Manager-only actions, each with fresh data
+    # ---------------------------------------------------------------- the eight guarded actions, each with fresh data
     def post(self, url, body=None):
         return self.client.post(url, data=json.dumps(body or {}), content_type="application/json")
 
@@ -93,22 +105,29 @@ class RoleBase(Base):
 
     def scenario_delete_a_receipt(self):
         reservation, _items = self.booking(number_from=next(self.serial))
+        # attached long ago by someone else: only the permission can delete it (the 15-minute undo is tested in test_receipt_rules.py)
         receipt = ReceiptRecord.objects.create(reservation=reservation, photo_url="https://files.example/receipt_photos/role_test.jpg",
-                                               uploaded_by=self.plain_staff)
-
-        def send():
-            with patch("arabela_admin.views.default_storage"):          # never touch real photo storage
-                return self.client.post(reverse("arabela_admin:receipt_delete", args=[receipt.id]))
+                                               uploaded_by=self.legacy_manager, uploaded_at=timezone.now() - timedelta(days=2))
+        send = lambda: self.client.post(reverse("arabela_admin:receipt_delete", args=[receipt.id]))
         return send, lambda: not ReceiptRecord.objects.filter(id=receipt.id).exists()
 
-    SCENARIOS = ("delete_a_gown", "bulk_delete_gowns", "cancel_a_booking", "cancel_some_gowns", "flag_a_customer", "unflag_a_customer",
-                 "remove_a_lock", "delete_a_receipt")
+    # name -> the permission it needs
+    NEEDS = {"delete_a_gown": "delete_gowns", "bulk_delete_gowns": "delete_gowns", "cancel_a_booking": "cancel_bookings",
+             "cancel_some_gowns": "cancel_bookings", "flag_a_customer": "flag_customers", "unflag_a_customer": "flag_customers",
+             "remove_a_lock": "flag_customers", "delete_a_receipt": "delete_receipts"}
+    SCENARIOS = tuple(NEEDS)
 
     def scenario(self, name):
         return getattr(self, "scenario_" + name)()
 
-    # ---------------------------------------------------------------- Staff is refused, and nothing changes
-    def test_a_staff_account_is_refused_every_manager_only_action_and_nothing_changes(self):
+    def refusal_for(self, name):
+        """What the server says to an account that may not do `name` (the receipt delete has its own wording: it also explains the 15-minute undo)."""
+        from arabela_admin.views import RECEIPT_DELETE_REFUSED_MESSAGE
+        return RECEIPT_DELETE_REFUSED_MESSAGE if name == "delete_a_receipt" else permission_message(self.NEEDS[name])
+
+
+class PermissionMatrixTests(RoleBase):
+    def test_an_account_without_the_permission_is_refused_and_nothing_changes(self):
         for who, account in self.refused_accounts.items():
             for name in self.SCENARIOS:
                 with self.subTest(account=who, action=name):
@@ -116,8 +135,24 @@ class RoleBase(Base):
                     self.client.force_login(account)
                     response = send()
                     self.assertEqual(response.status_code, 403, response.content)
-                    self.assertEqual(response.json()["error"], MANAGER_ONLY_MESSAGE)
+                    self.assertEqual(response.json()["error"], self.refusal_for(name))
                     self.assertFalse(changed())
+
+    def test_having_a_different_permission_does_not_help(self):
+        """Staff with one permission can do exactly that one's actions and are refused the rest."""
+        for owned, account in self.only.items():
+            for name in self.SCENARIOS:
+                with self.subTest(owned=owned, action=name):
+                    send, changed = self.scenario(name)
+                    self.client.force_login(account)
+                    response = send()
+                    if self.NEEDS[name] == owned:
+                        self.assertEqual(response.status_code, 200, response.content)
+                        self.assertTrue(changed())
+                    else:
+                        self.assertEqual(response.status_code, 403, response.content)
+                        self.assertEqual(response.json()["error"], self.refusal_for(name))
+                        self.assertFalse(changed())
 
     def test_a_refused_request_writes_nothing_at_all(self):
         sends = [self.scenario(name)[0] for name in self.SCENARIOS]
@@ -133,8 +168,7 @@ class RoleBase(Base):
             self.assertEqual(send().status_code, 403)
         self.assertEqual(snapshot(), before)
 
-    # ---------------------------------------------------------------- Manager and owner can do all of them
-    def test_a_manager_an_owner_and_a_superuser_can_do_each_of_them(self):
+    def test_an_allowed_account_an_owner_and_a_superuser_can_do_each_of_them(self):
         for who, account in self.allowed_accounts.items():
             for name in self.SCENARIOS:
                 with self.subTest(account=who, action=name):
@@ -155,35 +189,47 @@ class RoleBase(Base):
                 self.assertEqual(send().status_code, 401)
                 self.assertFalse(changed())
 
-    def test_a_manager_who_deletes_a_gown_is_the_name_in_the_removal_log(self):
-        gown = make_gown(next(self.serial))
-        self.client.force_login(self.manager)
-        self.assertEqual(self.post(reverse("arabela_admin:gown_delete", args=[gown.id]), {"reason": "Damaged"}).status_code, 200)
-        self.assertEqual(GownRemoval.objects.get().removed_by_name, "Maria Cruz")
+    def test_a_deactivated_account_with_every_permission_can_do_nothing(self):
+        User.objects.filter(pk=self.all_four.pk).update(is_active=False)
+        self.all_four.refresh_from_db()
+        self.assertEqual(granted_permissions(self.all_four), frozenset())
 
-    # ---------------------------------------------------------------- everyday work is still Staff's
-    def test_staff_still_do_the_daily_work(self):
+    def test_the_staff_member_who_deletes_a_gown_is_the_name_in_the_removal_log(self):
+        gown = make_gown(next(self.serial))
+        self.client.force_login(self.only["delete_gowns"])
+        self.assertEqual(self.post(reverse("arabela_admin:gown_delete", args=[gown.id]), {"reason": "Damaged"}).status_code, 200)
+        self.assertEqual(GownRemoval.objects.get().removed_by_name, "Sam Staff")
+
+    def test_changing_the_permissions_changes_the_access_straight_away(self):
+        gown = make_gown(next(self.serial))
+        self.client.force_login(self.plain_staff)
+        self.assertEqual(self.post(reverse("arabela_admin:gown_delete", args=[gown.id]), {"reason": "Damaged"}).status_code, 403)
+        UserProfile.objects.filter(user=self.plain_staff).update(permissions="delete_gowns")
+        self.assertEqual(self.post(reverse("arabela_admin:gown_delete", args=[gown.id]), {"reason": "Damaged"}).status_code, 200)
+        UserProfile.objects.filter(user=self.plain_staff).update(permissions="")
+        again = make_gown(next(self.serial))
+        self.assertEqual(self.post(reverse("arabela_admin:gown_delete", args=[again.id]), {"reason": "Damaged"}).status_code, 403)
+
+
+class DailyWorkTests(RoleBase):
+    def test_every_staff_account_still_does_the_daily_work(self):
         self.client.force_login(self.plain_staff)
         gown = make_gown(next(self.serial))
         other = make_gown(next(self.serial))
-        # change a gown's status, and the bulk status / "mark as checked" actions (only the bulk DELETE is Manager-only)
         self.assertEqual(self.post(reverse("arabela_admin:gown_status_update", args=[gown.id]), {"status": "Out-of-Stock"}).status_code, 200)
         bulk = reverse("arabela_admin:gown_bulk_action")
         self.assertEqual(self.post(bulk, {"action": "status", "ids": [gown.id, other.id], "status": "Available"}).status_code, 200)
         self.assertEqual(self.post(bulk, {"action": "checked", "ids": [gown.id, other.id]}).status_code, 200)
         self.assertEqual(Gown.objects.filter(id__in=[gown.id, other.id]).count(), 2)
-        # approve and reject new bookings in Pending Approval
         pending, _ = self.booking(status=Reservation.Status.PENDING, verified=False, days_late=-5, number_from=next(self.serial))
         to_reject, _ = self.booking(status=Reservation.Status.PENDING, verified=False, days_late=-5, number_from=next(self.serial))
         self.assertEqual(self.post(reverse("arabela_admin:reservation_approve", args=[pending.pk])).status_code, 200)
         self.assertEqual(self.post(reverse("arabela_admin:reservation_reject", args=[to_reject.pk]), {"reason": "Payment unclear"}).status_code, 200)
         self.assertEqual(Reservation.objects.get(pk=pending.pk).status, Reservation.Status.CONFIRMED)
         self.assertEqual(Reservation.objects.get(pk=to_reject.pk).status, Reservation.Status.REJECTED)
-        # mark a gown picked up
         confirmed, [item] = self.booking(number_from=next(self.serial))
         self.assertEqual(self.client.post(reverse("arabela_admin:reservation_item_mark_picked_up", args=[item.id])).status_code, 200)
         self.assertEqual(ReservationItem.objects.get(pk=item.pk).stage, ReservationItem.Stage.RESERVED)
-        # upload a receipt
         photo = SimpleUploadedFile("receipt.jpg", _JPEG, content_type="image/jpeg")
         with patch("arabela_admin.views._save_receipt_photo", return_value="https://files.example/receipt_photos/staff_upload.jpg"):
             response = self.client.post(reverse("arabela_admin:receipt_upload"), data={"reference_code": confirmed.reference_code, "photo": photo})
@@ -197,11 +243,10 @@ class RoleBase(Base):
             with self.subTest(page=name):
                 self.assertEqual(self.client.get(reverse(f"arabela_admin:{name}")).status_code, 200)
 
-    # ---------------------------------------------------------------- the owner-only things stay owner-only (a Manager can't either)
-    def test_staff_management_categories_and_tag_colors_stay_owner_only(self):
-        for who, account in (("Manager", self.manager), ("Staff", self.plain_staff)):
+    def test_staff_management_categories_and_the_audit_log_stay_owner_only_even_with_every_permission(self):
+        for who, account in (("staff with all four", self.all_four), ("plain staff", self.plain_staff)):
             self.client.force_login(account)
-            for page in ("staff_management", "categories"):
+            for page in ("staff_management", "categories", "audit_log"):
                 with self.subTest(account=who, page=page):
                     self.assertEqual(self.client.get(reverse(f"arabela_admin:{page}")).status_code, 302)
             with self.subTest(account=who, action="add a category"):
@@ -210,51 +255,71 @@ class RoleBase(Base):
             with self.subTest(account=who, action="tag colors"):
                 self.assertEqual(self.post(reverse("arabela_admin:gown_tag_colors_update"), {"colors": {}}).status_code, 403)
         self.client.force_login(self.owner)
-        for page in ("staff_management", "categories"):
+        for page in ("staff_management", "categories", "audit_log"):
             self.assertEqual(self.client.get(reverse(f"arabela_admin:{page}")).status_code, 200)
 
-    # ---------------------------------------------------------------- the buttons
+
+class ButtonTests(RoleBase):
     def pages(self, account):
-        """The HTML of the five pages where a Manager-only button lives, as `account` sees them."""
+        """The HTML of the four pages where a guarded button lives, as `account` sees them."""
         self.client.force_login(account)
         reservation, [item, _second] = self.booking(gowns=2, number_from=next(self.serial))      # two gowns: only then is there a per-gown "Cancel gown"
-        ReceiptRecord.objects.create(reservation=reservation, photo_url="https://files.example/receipt_photos/btn.jpg", uploaded_by=self.manager)
+        ReceiptRecord.objects.create(reservation=reservation, photo_url="https://files.example/receipt_photos/btn.jpg", uploaded_by=self.legacy_manager,
+                                     uploaded_at=timezone.now() - timedelta(days=3))
         get = lambda name: self.client.get(reverse(f"arabela_admin:{name}")).content.decode()
-        return {
-            "catalog": get("gown_catalog"), "active": get("active_reservations"), "clients": get("clients"), "records": get("reservation_records"),
-            "reservation": reservation, "item": item,
-        }
+        return {"catalog": get("gown_catalog"), "active": get("active_reservations"), "clients": get("clients"),
+                "records": get("reservation_records"), "reservation": reservation, "item": item}
 
     def buttons_in(self, pages):
         reservation = pages["reservation"]
         return {
-            "Remove Gown": '@click="deleteGown()"' in pages["catalog"],
-            "bulk Remove": '@click="bulkDelete()"' in pages["catalog"],
-            "Cancel booking": f'data-url="{reverse("arabela_admin:reservation_cancel", args=[reservation.id])}"' in pages["active"],
-            "Cancel gown": f'data-url="{reverse("arabela_admin:reservation_cancel_gowns", args=[reservation.id])}"' in pages["active"],
-            "Flag Account": "pendingFlagAction = 'flag'" in pages["clients"],
-            "Unflag Account": "pendingFlagAction = 'unflag'" in pages["clients"],
-            "Remove lock": "unlockCustomer(viewingCustomer.userId, viewingCustomer.name)" in pages["clients"],
-            "Delete Receipt": "confirmingReceiptDelete = true" in pages["records"],
+            "delete_gowns": [('@click="deleteGown()"' in pages["catalog"]), ('@click="bulkDelete()"' in pages["catalog"])],
+            "cancel_bookings": [f'data-url="{reverse("arabela_admin:reservation_cancel", args=[reservation.id])}"' in pages["active"],
+                                f'data-url="{reverse("arabela_admin:reservation_cancel_gowns", args=[reservation.id])}"' in pages["active"]],
+            "flag_customers": ["pendingFlagAction = 'flag'" in pages["clients"], "pendingFlagAction = 'unflag'" in pages["clients"],
+                               "unlockCustomer(viewingCustomer.userId, viewingCustomer.name)" in pages["clients"]],
+            # the delete-receipt confirm is always in the page, and shown per photo from its `canDelete` flag
+            "delete_receipts": [any(f'"canDelete": {flag}' in pages["records"] or f'"canDelete":{flag}' in pages["records"] for flag in ("true",))],
         }
 
-    def test_a_staff_account_does_not_see_the_manager_only_buttons(self):
+    def test_a_staff_account_without_permissions_sees_none_of_the_guarded_buttons(self):
         for who, account in self.refused_accounts.items():
             with self.subTest(account=who):
-                shown = self.buttons_in(self.pages(account))
-                self.assertEqual([name for name, visible in shown.items() if visible], [])
+                shown = {key: flags for key, flags in self.buttons_in(self.pages(account)).items() if any(flags)}
+                self.assertEqual(shown, {})
 
-    def test_a_manager_and_the_owner_see_every_one_of_them(self):
-        for who, account in self.allowed_accounts.items():
-            with self.subTest(account=who):
+    def test_each_permission_shows_exactly_its_own_buttons(self):
+        for owned, account in self.only.items():
+            with self.subTest(owned=owned):
                 shown = self.buttons_in(self.pages(account))
-                self.assertEqual([name for name, visible in shown.items() if not visible], [])
+                for key, flags in shown.items():
+                    if key == "delete_receipts":
+                        continue            # per photo: see the next test
+                    self.assertEqual(all(flags), key == owned, (key, flags))
+                    self.assertEqual(any(flags), key == owned, (key, flags))
+
+    def test_the_owner_and_an_all_permissions_staff_see_every_button(self):
+        for who in ("owner by role", "superuser owner", "staff with all four", "old Manager row"):
+            with self.subTest(account=who):
+                shown = self.buttons_in(self.pages(self.allowed_accounts[who]))
+                self.assertEqual([key for key, flags in shown.items() if not all(flags)], [])
+
+    def test_the_receipt_photos_carry_a_can_delete_flag_for_this_person(self):
+        for who, account, expected in (("plain staff", self.plain_staff, False), ("receipt permission", self.only["delete_receipts"], True),
+                                       ("owner", self.owner, True)):
+            with self.subTest(account=who):
+                self.client.force_login(account)
+                reservation, _ = self.booking(number_from=next(self.serial))
+                ReceiptRecord.objects.create(reservation=reservation, photo_url="https://files.example/receipt_photos/flag.jpg",
+                                             uploaded_by=self.legacy_manager, uploaded_at=timezone.now() - timedelta(days=3))
+                html = self.client.get(reverse("arabela_admin:reservation_records")).content.decode()
+                self.assertEqual('"canDelete": true' in html or '"canDelete":true' in html, expected)
 
     def test_a_staff_account_still_sees_the_everyday_buttons(self):
         pages = self.pages(self.plain_staff)
         self.assertIn("Mark Picked Up", pages["active"])
         self.assertIn("Remind", pages["active"])
-        self.assertIn("Upload Receipt", pages["records"])
+        self.assertIn("Upload receipt", pages["records"])
         self.assertIn("Mark as checked now", pages["catalog"])
         self.assertIn("bulkStatus('Available')", pages["catalog"])
         self.assertIn("markChecked(selectedGownIds)", pages["catalog"])
@@ -262,63 +327,181 @@ class RoleBase(Base):
         self.assertIn("Change pick-up date", pages["active"])
 
     def test_the_single_gown_window_has_no_empty_footer_when_the_remove_button_is_hidden(self):
-        """The single-gown window closes with its X only. Its footer now holds just Remove (Manager / owner): a Staff account must not be left
-        with an empty bordered strip where the footer used to be."""
         footer = '<div class="mt-6 flex items-center border-t border-gray-100 px-2 pt-6 dark:border-gray-800">'
         self.client.force_login(self.plain_staff)
         html = self.client.get(reverse("arabela_admin:gown_catalog")).content.decode()
         self.assertNotIn(footer, html)
         self.assertNotIn("Remove Gown&hellip;", html)
-        self.client.force_login(self.manager)
+        self.client.force_login(self.only["delete_gowns"])
         html = self.client.get(reverse("arabela_admin:gown_catalog")).content.decode()
         at = html.index(footer)
         self.assertIn("Remove Gown&hellip;", html[at:at + 1200])
         self.assertNotIn(">Close</button>", html[at:at + 1200])
 
-    def test_the_template_flag_is_the_same_rule_the_server_uses(self):
-        for who, account in {**self.refused_accounts, **self.allowed_accounts}.items():
-            with self.subTest(account=who):
+    def test_the_template_flags_are_the_same_rule_the_server_uses(self):
+        everyone = {**self.refused_accounts, **self.allowed_accounts, **{f"only {k}": v for k, v in self.only.items()}}
+        for who, account in everyone.items():
+            self.client.force_login(account)
+            flags = self.client.get(reverse("arabela_admin:dashboard")).context["admin_perms"]
+            self.assertEqual(set(flags), set(PERMISSION_KEYS))
+            for key in PERMISSION_KEYS:
+                with self.subTest(account=who, permission=key):
+                    self.assertEqual(flags[key], can(account, key))
+        # and the server really does what the flag says, for the delete-gown action
+        for who, account in everyone.items():
+            with self.subTest(account=who, action="delete a gown"):
                 self.client.force_login(account)
-                flag = self.client.get(reverse("arabela_admin:dashboard")).context["admin_can_manage"]
+                flag = self.client.get(reverse("arabela_admin:dashboard")).context["admin_perms"]["delete_gowns"]
                 send, _changed = self.scenario("delete_a_gown")
                 self.assertEqual(flag, send().status_code == 200)
 
-    def test_the_add_account_note_says_what_each_role_does(self):
-        self.client.force_login(self.owner)
-        html = self.client.get(reverse("arabela_admin:staff_management")).content.decode()
-        self.assertIn("Staff do the daily work. A Manager can also delete gowns, cancel bookings, flag customers, and delete receipt photos.", html)
-        self.assertIn("Neither can open Staff Management.", html)
-        self.assertNotIn("Manager and Staff have the same access", html)
-        self.assertIn('<option value="Manager">Manager</option>', html)         # the owner still just picks the role
-        self.assertIn('<option value="Staff">Staff</option>', html)
 
-    # ---------------------------------------------------------------- the rule itself
-    def test_can_manage_for_every_kind_of_account(self):
-        self.assertTrue(can_manage(self.owner))
-        self.assertTrue(can_manage(self.owner_by_role))
-        self.assertTrue(can_manage(self.manager))
-        self.assertFalse(can_manage(self.plain_staff))
-        self.assertFalse(can_manage(self.bare))
-        self.assertFalse(can_manage(self.customer))
-        self.assertFalse(can_manage(None))
-        from django.contrib.auth.models import AnonymousUser
-        self.assertFalse(can_manage(AnonymousUser()))
+class RuleTests(RoleBase):
+    def test_the_rule_for_every_kind_of_account(self):
+        for key in PERMISSION_KEYS:
+            with self.subTest(permission=key):
+                self.assertTrue(can(self.owner, key))
+                self.assertTrue(can(self.owner_by_role, key))
+                self.assertTrue(can(self.legacy_manager, key))
+                self.assertTrue(can(self.all_four, key))
+                self.assertFalse(can(self.plain_staff, key))
+                self.assertFalse(can(self.bare, key))
+                self.assertFalse(can(self.customer, key))
+                self.assertFalse(can(None, key))
+                self.assertFalse(can(AnonymousUser(), key))
+        self.assertTrue(can(self.only["flag_customers"], "flag_customers"))
+        self.assertFalse(can(self.only["flag_customers"], "delete_gowns"))
 
-    def test_changing_a_role_changes_the_access_straight_away(self):
-        gown = make_gown(next(self.serial))
-        self.client.force_login(self.plain_staff)
-        self.assertEqual(self.post(reverse("arabela_admin:gown_delete", args=[gown.id]), {"reason": "Damaged"}).status_code, 403)
-        UserProfile.objects.filter(user=self.plain_staff).update(role=UserProfile.Role.MANAGER)
-        self.assertEqual(self.post(reverse("arabela_admin:gown_delete", args=[gown.id]), {"reason": "Damaged"}).status_code, 200)
-        UserProfile.objects.filter(user=self.plain_staff).update(role=UserProfile.Role.STAFF)
-        again = make_gown(next(self.serial))
-        self.assertEqual(self.post(reverse("arabela_admin:gown_delete", args=[again.id]), {"reason": "Damaged"}).status_code, 403)
+    def test_parsing_and_joining_permissions(self):
+        self.assertEqual(parse_permissions("cancel_bookings, delete_gowns,nonsense"), ["delete_gowns", "cancel_bookings"])      # registry order, junk dropped
+        self.assertEqual(parse_permissions(["flag_customers", "flag_customers"]), ["flag_customers"])
+        self.assertEqual(parse_permissions(None), [])
+        self.assertEqual(parse_permissions(""), [])
+        self.assertEqual(join_permissions(["delete_receipts", "delete_gowns"]), "delete_gowns,delete_receipts")
 
     def test_the_staff_name_rule_is_shared(self):
-        self.assertEqual(staff_display_name(self.manager), "Maria Cruz")
+        self.assertEqual(staff_display_name(self.legacy_manager), "Maria Cruz")
         self.assertEqual(staff_display_name(self.bare), "rp_bare")          # no name entered: the username
         from arabela_admin.views import _staff_display_name
-        self.assertEqual(_staff_display_name(self.manager), staff_display_name(self.manager))
+        self.assertEqual(_staff_display_name(self.legacy_manager), staff_display_name(self.legacy_manager))
+
+    def test_the_migration_turns_every_old_manager_into_staff_with_all_four(self):
+        module = importlib.import_module("accounts.migrations.0019_managers_become_staff")
+        old = make_staff("rp_old_manager", role=UserProfile.Role.MANAGER)
+        UserProfile.objects.filter(user=self.legacy_manager).update(role=UserProfile.Role.MANAGER)
+        module.managers_become_staff(django_apps, None)
+        for account in (old, self.legacy_manager):
+            profile = UserProfile.objects.get(user=account)
+            self.assertEqual(profile.role, UserProfile.Role.STAFF)
+            self.assertEqual(parse_permissions(profile.permissions), list(PERMISSION_KEYS))
+        self.assertEqual(UserProfile.objects.get(user=self.plain_staff).permissions, "")                 # nobody else is touched
+        self.assertEqual(UserProfile.objects.get(user=self.owner_by_role).role, UserProfile.Role.OWNER)
+        module.managers_become_staff(django_apps, None)                                                  # running it twice changes nothing more
+        self.assertEqual(UserProfile.objects.filter(role=UserProfile.Role.MANAGER).count(), 0)
+
+
+class StaffManagementTests(RoleBase):
+    def create(self, **extra):
+        body = {"name": "Nina Newhire", "username": "nina.newhire", "password": "a-very-long-pass-1", "permissions": []}
+        body.update(extra)
+        return self.post(reverse("arabela_admin:staff_create"), body)
+
+    def test_the_page_has_checkboxes_not_a_role_dropdown(self):
+        self.client.force_login(self.owner)
+        html = self.client.get(reverse("arabela_admin:staff_management")).content.decode()
+        self.assertNotIn('<option value="Manager">', html)
+        self.assertNotIn("Manager", html)
+        self.assertIn("What this staff can do", html)
+        for key in PERMISSION_KEYS:
+            self.assertIn(f'"key": "{key}"', html)
+        self.assertIn("Daily work only", html)
+        self.assertIn("Senior staff", html)
+        from django.utils.html import escape
+        from accounts.roles import PERMISSIONS
+        for key, info in PERMISSIONS.items():                                   # each box is a plain server-rendered row with its own "?" bubble, in Add and in Edit
+            self.assertEqual(html.count(f'<div class="ht-tip-pop">{escape(info["help"])}</div>'), 2, key)
+            self.assertIn(f'id="permnew-{key}"', html)
+            self.assertIn(f'id="permedit-{key}"', html)
+
+    def test_the_owner_creates_an_account_with_exactly_the_ticked_permissions(self):
+        self.client.force_login(self.owner)
+        response = self.create(permissions=["cancel_bookings", "flag_customers"])
+        self.assertEqual(response.status_code, 200, response.content)
+        account = response.json()["account"]
+        self.assertEqual(account["role"], "Staff")
+        self.assertEqual(account["permissions"], ["cancel_bookings", "flag_customers"])
+        profile = UserProfile.objects.get(user__username="nina.newhire")
+        self.assertEqual((profile.role, profile.permissions), (UserProfile.Role.STAFF, "cancel_bookings,flag_customers"))
+        self.assertTrue(can(profile.user, "cancel_bookings"))
+        self.assertFalse(can(profile.user, "delete_gowns"))
+
+    def test_an_account_with_no_boxes_ticked_does_the_daily_work_only(self):
+        self.client.force_login(self.owner)
+        self.assertEqual(self.create().json()["account"]["permissions"], [])
+        self.assertEqual(granted_permissions(User.objects.get(username="nina.newhire")), frozenset())
+
+    def test_a_role_in_the_request_is_ignored_and_nobody_can_become_a_manager(self):
+        self.client.force_login(self.owner)
+        response = self.create(role="Manager")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(UserProfile.objects.get(user__username="nina.newhire").role, UserProfile.Role.STAFF)
+        self.assertFalse(can(User.objects.get(username="nina.newhire"), "delete_gowns"))
+
+    def test_an_unknown_permission_is_refused_not_ignored(self):
+        self.client.force_login(self.owner)
+        self.assertEqual(self.create(permissions=["delete_gowns", "become_owner"]).status_code, 400)
+        self.assertEqual(self.create(permissions="delete_gowns").status_code, 400)
+        self.assertFalse(User.objects.filter(username="nina.newhire").exists())
+
+    def test_the_owner_edits_the_permissions_and_it_takes_effect_at_once(self):
+        self.client.force_login(self.owner)
+        url = reverse("arabela_admin:staff_update", args=[self.plain_staff.pk])
+        response = self.post(url, {"name": "Sam Staff", "permissions": ["delete_gowns", "delete_receipts"], "password": ""})
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["account"]["permissions"], ["delete_gowns", "delete_receipts"])
+        self.assertTrue(can(User.objects.get(pk=self.plain_staff.pk), "delete_gowns"))
+        response = self.post(url, {"name": "Sam Staff", "permissions": [], "password": ""})
+        self.assertEqual(response.json()["account"]["permissions"], [])
+        self.assertFalse(can(User.objects.get(pk=self.plain_staff.pk), "delete_gowns"))
+
+    def test_only_the_owner_can_change_permissions_even_a_staff_with_all_four(self):
+        before = UserProfile.objects.get(user=self.plain_staff).permissions
+        for who in (self.all_four, self.plain_staff, self.legacy_manager):
+            self.client.force_login(who)
+            for url, body in ((reverse("arabela_admin:staff_update", args=[self.plain_staff.pk]),
+                               {"name": "Sam Staff", "permissions": list(PERMISSION_KEYS), "password": ""}),
+                              (reverse("arabela_admin:staff_create"), {"name": "X Y", "username": "x.yz.1", "password": "a-very-long-pass-1", "permissions": []})):
+                with self.subTest(account=who.username, url=url):
+                    self.assertEqual(self.post(url, body).status_code, 403)
+        self.assertEqual(UserProfile.objects.get(user=self.plain_staff).permissions, before)
+        self.assertFalse(User.objects.filter(username="x.yz.1").exists())
+
+    def test_saving_an_old_manager_row_converts_it_to_staff_with_the_ticked_boxes(self):
+        self.client.force_login(self.owner)
+        self.assertEqual(UserProfile.objects.get(user=self.legacy_manager).role, UserProfile.Role.MANAGER)
+        listed = [row for row in self.client.get(reverse("arabela_admin:staff_management")).context["staff_accounts"]
+                  if row["id"] == self.legacy_manager.pk][0]
+        self.assertEqual((listed["role"], listed["permissions"]), ("Staff", list(PERMISSION_KEYS)))        # reads as Staff with all four until saved
+        response = self.post(reverse("arabela_admin:staff_update", args=[self.legacy_manager.pk]),
+                             {"name": "Maria Cruz", "permissions": ["flag_customers"], "password": ""})
+        self.assertEqual(response.status_code, 200, response.content)
+        profile = UserProfile.objects.get(user=self.legacy_manager)
+        self.assertEqual((profile.role, profile.permissions), (UserProfile.Role.STAFF, "flag_customers"))
+        self.assertFalse(can(self.legacy_manager, "delete_gowns"))
+
+    def test_the_list_shows_what_each_account_can_do(self):
+        self.client.force_login(self.owner)
+        rows = {row["username"]: row for row in self.client.get(reverse("arabela_admin:staff_management")).context["staff_accounts"]}
+        self.assertEqual(rows["rp_staff"]["permissions"], [])
+        self.assertEqual(rows["rp_only_flag_customers"]["permissions"], ["flag_customers"])
+        self.assertEqual(rows["rp_all"]["permissions"], list(PERMISSION_KEYS))
+        self.assertTrue(all(row["role"] == "Staff" for row in rows.values()))
+
+    def test_deactivating_and_deleting_still_work(self):
+        self.client.force_login(self.owner)
+        self.assertEqual(self.post(reverse("arabela_admin:staff_toggle_status", args=[self.all_four.pk])).json()["is_active"], False)
+        self.assertEqual(self.post(reverse("arabela_admin:staff_delete", args=[self.plain_staff.pk])).status_code, 200)
+        self.assertFalse(User.objects.filter(pk=self.plain_staff.pk).exists())
 
 
 class ReceiptUploaderInProofWindowsTests(Base):

@@ -6,6 +6,10 @@
       is one gown, the rest of the booking is untouched, and "Keep gown" is the first thing the eye lands on.
     * gowns  -- "Cancel all not picked up": every gown of a booking that nobody collected, in one go (same endpoint).
 
+  The same window also sends a CANCELLATION REQUEST (data-request="1") for a staff account that may not cancel: no booking code to type,
+  the button says "Send request", and the booking stays as it is until the owner answers (reservations/cancel_requests.py). The
+  owner's Approve / Decline and a staff member's Withdraw, on a booking that has a waiting request, are the .cr-act buttons below.
+
   One small, self-contained piece: its own styles (the admin's compiled CSS only has the classes the pack itself uses), its own
   markup and its own script. Every button with class cb-open-btn opens it and hands it the details through data- attributes.
 {% endcomment %}
@@ -29,8 +33,13 @@
   .cb-summary dt { color: #667085; }
   .dark .cb-summary dt { color: #98a2b3; }
   .cb-summary dd { margin: 0; font-weight: 500; word-break: break-word; }
+  .cb-btn--primary { background: #101828; color: #fff; }
+  .cb-btn--primary:hover:not(:disabled) { background: #000; }
+  .dark .cb-btn--primary { background: #fff; color: #101828; }
   .cb-warn { margin: 0 0 1rem; padding: .75rem 1rem; border-radius: .75rem; background: #fef3f2; color: #912018; font-size: .875rem; line-height: 1.45; }
   .dark .cb-warn { background: rgba(240, 68, 56, .16); color: #fda29b; }
+  .cb-warn--soft { background: #f9fafb; color: #475467; border: 1px solid #e4e7ec; }
+  .dark .cb-warn--soft { background: rgba(255, 255, 255, .04); color: #98a2b3; border-color: #1d2939; }
   .cb-label { display: block; margin: 0 0 .35rem; font-size: .8125rem; font-weight: 500; }
   .cb-field { display: block; width: 100%; box-sizing: border-box; margin: 0 0 .9rem; padding: .6rem .75rem; border: 1px solid #d0d5dd; border-radius: .6rem; background: #fff; color: inherit; font: inherit; font-size: .875rem; }
   .dark .cb-field { background: #0c111d; border-color: #344054; }
@@ -48,6 +57,21 @@
   .cb-btn:disabled { opacity: .45; cursor: not-allowed; }
   .cb-open-btn:focus-visible, .cb-btn:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
   .cb-hidden { display: none !important; }
+
+  /* a waiting cancellation request: a small chip on the booking's line, and a note at the top of the opened booking */
+  .cr-chip { display: inline-flex; align-items: center; padding: .1rem .55rem; border-radius: 999px; background: #fffaeb; color: #b54708; font-size: .6875rem; font-weight: 600; white-space: nowrap; }
+  .cr-chip.is-late { background: #fef3f2; color: #b42318; }
+  .dark .cr-chip { background: rgba(247, 144, 9, .16); color: #fec84b; }
+  .dark .cr-chip.is-late { background: rgba(240, 68, 56, .18); color: #fda29b; }
+  .cr-note { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem 1rem; margin: .8rem 1.25rem 0; padding: .7rem .9rem; border: 1px solid #fedf89; border-radius: .75rem; background: #fffaeb; color: #7a2e0e; font-size: .8125rem; }
+  .cr-note.is-late { border-color: #fda29b; background: #fef3f2; color: #912018; }
+  .dark .cr-note { border-color: rgba(247, 144, 9, .4); background: rgba(247, 144, 9, .1); color: #fedf89; }
+  .dark .cr-note.is-late { border-color: rgba(240, 68, 56, .5); background: rgba(240, 68, 56, .12); color: #fda29b; }
+  .cr-text { min-width: 0; overflow-wrap: anywhere; }
+  .cr-age { opacity: .8; }
+  .cr-btns { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .cb-btn.cr-act { padding: .4rem .85rem; font-size: .8125rem; }
+  @media (max-width: 760px) { .cr-note { margin: .8rem 1rem 0; } }
 </style>
 
 <div class="cb-overlay" id="cb-overlay" aria-hidden="true">
@@ -100,6 +124,7 @@
 
     var WARN_BOOKING = 'The deposit is <strong>not refunded</strong> — the booking stays on record as Cancelled with that written on it. The gown is released, the customer is told by message and email, and this can’t be undone.';
     var WARN_GOWN = 'Only this gown is cancelled — the rest of the booking carries on. The gown is released, the customer is told by message and email, and <strong>no refund is given</strong>. This can’t be undone.';
+    var WARN_REQUEST = 'Nothing is cancelled yet. The owner will see your request and decide. Until then the booking stays exactly as it is.';
     var WARN_GOWNS = 'Only these gowns are cancelled — the rest of the booking carries on. The gowns are released, the customer is told by message and email, and <strong>no refund is given</strong>. This can’t be undone.';
 
     function csrf() {
@@ -112,7 +137,7 @@
     // The confirm button stays off until the booking code is typed exactly (whole-booking cancel only) and, for "Another
     // reason", a reason is written.
     function refresh() {
-      var typedOk = !!current && (current.mode !== 'booking' || code.value.trim().toUpperCase() === current.ref.toUpperCase());
+      var typedOk = !!current && (current.mode !== 'booking' || current.request || code.value.trim().toUpperCase() === current.ref.toUpperCase());
       var needsNote = reason.value === 'other' && note.value.trim() === '';
       confirmBtn.disabled = busy || !typedOk || needsNote;
     }
@@ -121,7 +146,7 @@
       var other = reason.value === 'other';
       $('cb-note-label').textContent = other
         ? 'What should the customer be told? (required)'
-        : "Note for the shop's records (optional — the customer does not see it)";
+        : (current && current.request ? 'Note for the owner (optional)' : "Note for the shop's records (optional — the customer does not see it)");
       note.placeholder = other ? 'e.g. The gown is no longer available' : 'e.g. Called twice, no answer';
     }
 
@@ -132,6 +157,7 @@
 
     function confirmLabel() {
       if (!current) { return 'Cancel booking'; }
+      if (current.request) { return 'Send request'; }
       if (current.mode === 'booking') { return 'Cancel booking'; }
       return current.ids.length === 1 ? 'Cancel gown' : 'Cancel ' + current.ids.length + ' gowns';
     }
@@ -145,6 +171,7 @@
         ref: btn.getAttribute('data-ref') || '',
         mode: mode,
         ids: ids,
+        request: btn.getAttribute('data-request') === '1',
       };
       var single = mode === 'gown' || (mode === 'gowns' && ids.length === 1);
       var wholeBooking = mode === 'booking';
@@ -156,17 +183,24 @@
       $('cb-gowns').textContent = btn.getAttribute('data-gowns') || '';
       $('cb-event').textContent = btn.getAttribute('data-event') || '';
       $('cb-deposit').textContent = btn.getAttribute('data-deposit') || '';
-      $('cb-warn').innerHTML = wholeBooking ? WARN_BOOKING : (single ? WARN_GOWN : WARN_GOWNS);
+      $('cb-warn').classList.toggle('cb-warn--soft', current.request);
+      confirmBtn.classList.toggle('cb-btn--danger', !current.request);
+      confirmBtn.classList.toggle('cb-btn--primary', current.request);
+      $('cb-warn').innerHTML = current.request ? WARN_REQUEST : (wholeBooking ? WARN_BOOKING : (single ? WARN_GOWN : WARN_GOWNS));
+      if (current.request) {
+        $('cb-title').textContent = wholeBooking ? 'Ask the owner to cancel this booking?' : (single ? 'Ask the owner to cancel this gown?' : 'Ask the owner to cancel these gowns?');
+        $('cb-lead').textContent = 'Check the details below, then send your request.';
+      }
       // Deposit and booking code belong to the whole-booking cancel only.
       $('cb-deposit-label').classList.toggle('cb-hidden', !wholeBooking);
       $('cb-deposit').classList.toggle('cb-hidden', !wholeBooking);
-      $('cb-code-wrap').classList.toggle('cb-hidden', !wholeBooking);
+      $('cb-code-wrap').classList.toggle('cb-hidden', !wholeBooking || current.request);
       $('cb-code-hint').textContent = current.ref;
       reason.value = btn.getAttribute('data-reason') === 'no_show' ? 'no_show' : 'customer_asked';
       note.value = '';
       code.value = '';
       busy = false;
-      keepBtn.textContent = wholeBooking ? 'Keep booking' : (single ? 'Keep gown' : 'Keep gowns');
+      keepBtn.textContent = current.request ? 'Go back' : (wholeBooking ? 'Keep booking' : (single ? 'Keep gown' : 'Keep gowns'));
       confirmBtn.textContent = confirmLabel();
       keepBtn.disabled = false;
       showError('');
@@ -176,7 +210,7 @@
       overlay.classList.add('is-open');
       overlay.setAttribute('aria-hidden', 'false');
       document.body.style.overflow = 'hidden';
-      window.setTimeout(function () { (wholeBooking ? code : keepBtn).focus(); }, 30);
+      window.setTimeout(function () { (wholeBooking && !current.request ? code : keepBtn).focus(); }, 30);
     }
 
     function close() {
@@ -190,6 +224,7 @@
 
     function done(data, fallbackRef) {
       var mode = current ? current.mode : 'booking';
+      var wasRequest = !!(current && current.request);
       busy = false;
       overlay.classList.remove('is-open');
       overlay.setAttribute('aria-hidden', 'true');
@@ -207,6 +242,10 @@
           if (data.booking_complete) { message += ' Every other gown is already back, so this booking is now complete.'; }
         }
         if (data.booking_cancelled) { title = 'Booking cancelled'; }
+      }
+      if (wasRequest) {
+        title = 'Request sent';
+        message = 'The owner has been told. ' + (data.reference || fallbackRef) + ' stays exactly as it is until she answers. You can take the request back from the booking.';
       }
       if (typeof window.adminAlert === 'function') {
         Promise.resolve(window.adminAlert({ title: title, message: message })).then(reload, reload);
@@ -227,11 +266,11 @@
       if (confirmBtn.disabled || !current) { return; }
       busy = true;
       showError('');
-      confirmBtn.textContent = 'Cancelling...';
+      confirmBtn.textContent = current.request ? 'Sending...' : 'Cancelling...';
       confirmBtn.disabled = true;
       keepBtn.disabled = true;
       var body = { reason: reason.value, note: note.value.trim() };
-      if (current.mode === 'booking') { body.confirm = code.value.trim(); } else { body.items = current.ids; }
+      if (current.mode === 'booking') { if (!current.request) { body.confirm = code.value.trim(); } } else { body.items = current.ids; }
       fetch(current.url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
@@ -248,9 +287,67 @@
         });
     }
 
+    // The owner's Approve / Decline and a staff member's Withdraw on a booking that has a waiting request.
+    function answerRequest(btn) {
+      var action = btn.getAttribute('data-cr-action');
+      var url = btn.getAttribute('data-url');
+      var who = btn.getAttribute('data-who') || 'Staff';
+      var what = btn.getAttribute('data-what') || 'this booking';
+      var ref = btn.getAttribute('data-ref') || '';
+      var reload = function () { window.location.reload(); };
+      var alertBox = function (opts) { return Promise.resolve(typeof window.adminAlert === 'function' ? window.adminAlert(opts) : true); };
+      function post(body) {
+        btn.disabled = true;
+        return fetch(url, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() }, credentials: 'same-origin',
+          body: JSON.stringify(body || {}),
+        }).then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+          .then(function (result) {
+            if (result.ok && result.data.success) { return result.data; }
+            btn.disabled = false;
+            return alertBox({ title: 'Something went wrong', message: result.data.error || 'Please refresh the page and try again.', danger: true }).then(function () { return null; });
+          })
+          .catch(function () {
+            btn.disabled = false;
+            return alertBox({ title: 'Something went wrong', message: 'Could not reach the server. Nothing was changed.', danger: true }).then(function () { return null; });
+          });
+      }
+      if (action === 'approve') {
+        window.adminConfirm({
+          title: 'Approve this cancellation?',
+          message: who + ' asked to cancel ' + what + ' on ' + ref + '. Approving cancels it now, the customer is told by message and email, and the deposit is not refunded.',
+          confirmText: 'Approve and cancel', danger: true,
+        }).then(function (ok) {
+          if (!ok) { return; }
+          post({}).then(function (data) {
+            if (!data) { return; }
+            if (data.outcome === 'closed') {
+              alertBox({ title: 'No longer possible', message: data.message + ' Nothing was cancelled, and the request is closed.' }).then(reload);
+            } else { reload(); }
+          });
+        });
+      } else if (action === 'decline') {
+        window.adminPrompt({
+          title: 'Decline this request?', message: 'Write a short note. ' + who + ' will read it.',
+          placeholder: 'e.g. The customer is coming on Saturday', confirmText: 'Decline request',
+        }).then(function (note) {
+          if (note === null) { return; }
+          post({ note: note }).then(function (data) { if (data) { reload(); } });
+        });
+      } else if (action === 'withdraw') {
+        window.adminConfirm({
+          title: 'Take back this request?', message: 'The booking was not changed, so nothing else happens.', confirmText: 'Withdraw request',
+        }).then(function (ok) {
+          if (ok) { post({}).then(function (data) { if (data) { reload(); } }); }
+        });
+      }
+    }
+
     document.addEventListener('click', function (e) {
       var btn = e.target.closest ? e.target.closest('.cb-open-btn') : null;
-      if (btn) { e.preventDefault(); open(btn); }
+      if (btn) { e.preventDefault(); open(btn); return; }
+      var answer = e.target.closest ? e.target.closest('.cr-act') : null;
+      if (answer) { e.preventDefault(); answerRequest(answer); }
     });
     overlay.addEventListener('mousedown', function (e) { if (e.target === overlay) { close(); } });
     keepBtn.addEventListener('click', close);

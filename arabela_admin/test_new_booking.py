@@ -516,8 +516,9 @@ class EverywhereElseTests(Base):
         self.assertEqual(upload.status_code, 200, upload.content)
         self.assertEqual((upload.json()["receipt"]["covers"], upload.json()["receipt"]["coversName"]), ("Rental", "Rental"))
         self.assertFalse(record()["paymentIncomplete"])                     # Deposit + Rental = paid in full
-        extra = self.upload(reservation, b"another-copy")                    # anything after that is another copy of the full payment
-        self.assertEqual(extra.json()["receipt"]["covers"], ReceiptRecord.Covers.BOTH)
+        extra = self.upload(reservation, b"another-copy")                    # nothing more can be added once Deposit + Rental are both there:
+        self.assertEqual(extra.status_code, 409)                             # a wrong photo is fixed with Replace (2026-11-12 receipt rules)
+        self.assertEqual(reservation.receipt_records.count(), 2)
         self.assertFalse(record()["paymentIncomplete"])
 
     def test_pick_up_return_and_the_deposit_with_no_account(self):
@@ -942,13 +943,14 @@ class PaymentChoiceAndReceiptLabelTests(Base):
         self.assertEqual(html.count("name=\"nb-payment\""), 2)
 
     def test_an_online_bookings_receipt_is_always_the_full_one_whatever_is_sent(self):
-        online, _ = self.online_booking(make_gown(400), self.event - timedelta(days=2), self.event + timedelta(days=2))
-        for salt, sent in ((b"o1", None), (b"o2", "Rental"), (b"o3", "Deposit"), (b"o4", "")):
+        for number, (salt, sent) in zip((400, 410, 411, 412), ((b"o1", None), (b"o2", "Rental"), (b"o3", "Deposit"), (b"o4", ""))):
+            # one booking each: an online booking takes ONE receipt (a further photo is refused), and whatever is sent it is the full one
+            online, _ = self.online_booking(make_gown(number), self.event - timedelta(days=2), self.event + timedelta(days=2))
             response = self.upload(online, salt, covers=sent)
             self.assertEqual(response.status_code, 200, response.content)
             receipt = response.json()["receipt"]
             self.assertEqual((receipt["covers"], receipt["coversName"]), (ReceiptRecord.Covers.BOTH, "Paid in full"), sent)
-        self.assertEqual(set(online.receipt_records.values_list("covers", flat=True)), {ReceiptRecord.Covers.BOTH})
+            self.assertEqual(set(online.receipt_records.values_list("covers", flat=True)), {ReceiptRecord.Covers.BOTH})
 
     def test_a_walk_ins_receipt_is_what_its_payment_is_missing_whatever_is_sent(self):
         deposit = Reservation.objects.get(reference_code=self.post_booking(
@@ -958,7 +960,8 @@ class PaymentChoiceAndReceiptLabelTests(Base):
         full = Reservation.objects.get(reference_code=self.post_booking(
             [self.line(make_gown(402))], payment="full", receipt=b"f402").json()["reference_code"])
         again = self.upload(full, b"x402", covers="Rental")
-        self.assertEqual(again.json()["receipt"]["covers"], ReceiptRecord.Covers.BOTH)
+        self.assertEqual(again.status_code, 409)                           # paid in full already has its receipt: a further photo is refused
+        self.assertEqual(full.receipt_records.count(), 1)
 
     def test_next_receipt_covers_for_every_state(self):
         covers = ReceiptRecord.Covers

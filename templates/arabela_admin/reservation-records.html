@@ -1098,6 +1098,7 @@
               reference: record ? record.reference : receipt.reservation,
               uploaded: receipt.uploaded,
               uploadedBy: receipt.uploadedBy || '',
+              canDelete: !!receipt.canDelete,
               record: record || null,
             };
             this.photoReplaceError = '';
@@ -1177,6 +1178,16 @@
           // A staff-recorded booking (walk-in, Facebook, phone) that is confirmed is "Payment incomplete" while the shop's own
           // receipts don't cover both the rental and the deposit -- the same rule the server uses
           // (Reservation.receipts_cover_payment), worked out again after a receipt is added or deleted here.
+          // The booking already has every receipt it needs, so no more photos can be added (a wrong one is replaced). The server
+          // makes the same test (Reservation.receipts_complete) and refuses a further upload.
+          receiptsComplete(record) {
+            if (!record) { return false; }
+            const rows = record.receipts || [];
+            if (!record.staffRecorded) { return rows.length > 0; }
+            const labels = new Set(rows.map(x => x.covers));
+            return labels.has('Rental + deposit') || (labels.has('Rental') && labels.has('Deposit'));
+          },
+
           refreshPaymentFlag(record) {
             if (!record || !record.staffRecorded || record.awaitingPayment || record.progress === 'Cancelled') { return; }
             const labels = new Set(record.receipts.map(x => x.covers));
@@ -1320,7 +1331,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -1758,6 +1769,15 @@
                     :class="page === 'staff-management' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
                     Staff Accounts
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:audit_log' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'audit-log' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Audit Log
                   </a>
                 </li>
               </ul>
@@ -2567,7 +2587,7 @@
                           <button type="button" class="ar-ib" @click.stop="openRecord(r)" title="View details" :aria-label="'View the details of ' + r.customer + ', ' + r.reference">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                           </button>
-                          <button type="button" class="ar-ib" @click.stop="startUpload(r)" title="Upload receipt" :aria-label="'Upload a receipt for ' + r.customer + ', ' + r.reference">
+                          <button type="button" class="ar-ib" x-show="!receiptsComplete(r)" @click.stop="startUpload(r)" title="Upload receipt" :aria-label="'Upload a receipt for ' + r.customer + ', ' + r.reference">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
                           </button>
                         </div>
@@ -2775,7 +2795,7 @@
                 <div class="rrd-rech">
                   <h3 class="rrd-h">Manual Receipts <small x-text="'(' + viewing.receipts.length + ')'"></small></h3>
                   <p class="rrd-recnone" x-show="viewing.receipts.length === 0">No receipt attached yet.</p>
-                  <button type="button" @click="startUpload(viewing)" class="rrd-ib" :class="(viewing.paymentIncomplete || viewing.awaitingPayment) ? 'is-primary' : ''" title="Upload Receipt" aria-label="Upload Receipt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+                  <button type="button" x-show="!receiptsComplete(viewing)" @click="startUpload(viewing)" class="rrd-ib" :class="(viewing.paymentIncomplete || viewing.awaitingPayment) ? 'is-primary' : ''" title="Upload Receipt" aria-label="Upload Receipt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
                 </div>
                 <div class="rrd-reclist" x-show="viewing.receipts.length">
                   <template x-for="receipt in viewing.receipts" :key="receipt.id">
@@ -2857,9 +2877,9 @@
               </button>
             </div>
 
-            {% if admin_can_manage %}
-            <!-- Delete: two clicks (Delete Receipt, then Yes, delete) so it can't happen by accident. Manager or owner only. -->
-            <div class="mt-5 border-t border-gray-100 pt-4 dark:border-gray-800">
+            <!-- Delete: two clicks (Delete Receipt, then Yes, delete) so it can't happen by accident. Only with the "Delete receipt photos" permission,
+                 or for the staff member who attached this photo in the last 15 minutes (the server makes the same test). -->
+            <div x-show="photo.canDelete" x-cloak class="mt-5 border-t border-gray-100 pt-4 dark:border-gray-800">
               <template x-if="!confirmingReceiptDelete">
                 <button type="button" @click="confirmingReceiptDelete = true" style="color: #F04438;"
                   class="inline-flex items-center gap-2 rounded-lg border border-error-300 bg-error-50 px-4 py-2.5 text-sm font-medium shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-white/[0.03]">
@@ -2880,7 +2900,6 @@
                 </div>
               </template>
             </div>
-            {% endif %}
           </div>
         </template>
       </div>
