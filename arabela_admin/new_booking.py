@@ -28,7 +28,7 @@ from arabela_admin.views import (
     _staff_display_name,
     _validate_receipt_photo,
 )
-from gowns import availability
+from gowns import availability, deposit
 from gowns.models import TAG_COLOR_HEX, Gown, SiteSettings
 from gowns.photos import sized
 from reservations import staff_booking
@@ -83,7 +83,7 @@ def new_booking_view(request):
         "today_iso": today.isoformat(),
         "is_owner": _is_owner(request),
         "owner_backdate_days": availability.OWNER_BACKDATE_DAYS,
-        "deposit_per_gown": int(staff_booking.DEPOSIT_PER_GOWN),
+        "deposit_per_gown": deposit.per_gown(),
         "max_gowns": staff_booking.MAX_GOWNS,
         "max_receipts": staff_booking.MAX_RECEIPTS,
         "note_max": staff_booking.NOTE_MAX,

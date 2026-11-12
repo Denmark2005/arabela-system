@@ -104,7 +104,7 @@ class EveryTipIsBuiltTheSameWayTests(SimpleTestCase):
             counts[name] = len(re.findall(r'<details class="ht-tip"', (ADMIN / name).read_text(encoding="utf8")))
         self.assertGreaterEqual(counts["gown-catalog.html"], 12)
         self.assertEqual({k: v for k, v in counts.items() if k != "gown-catalog.html"}, {
-            "calendar.html": 2, "profile.html": 3, "account-settings.html": 2, "email-preview.html": 3, "payment-verification.html": 1, "categories.html": 1,
+            "calendar.html": 2, "profile.html": 4, "account-settings.html": 2, "email-preview.html": 3, "payment-verification.html": 1, "categories.html": 1,
             "staff-management.html": 1, "reservation-records.html": 1})
 
 

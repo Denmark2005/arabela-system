@@ -9,6 +9,7 @@ from django.utils.dateparse import parse_datetime
 from django.utils.functional import SimpleLazyObject
 
 from accounts import terms
+from gowns import deposit
 from accounts.models import CustomerMessage, UserProfile
 from gowns.models import (
     CustomCategory, Gown, SiteSettings, custom_categories, group_gowns_by_name, hidden_category_names, pick_representative_gown,
@@ -309,6 +310,7 @@ def site_settings(request):
     """Business contact info shown on the public site (footer, Contact page) and
     edited from the admin Edit Profile page -- one row, one source of truth."""
     s = SiteSettings.load()
+    deposit_per_gown = deposit.clean(s.security_deposit_per_gown) or deposit.DEFAULT_PER_GOWN
     address_line = " ".join(
         p for p in [s.shop_street, s.shop_city, s.shop_country, s.shop_postal_code] if p
     )
@@ -325,6 +327,11 @@ def site_settings(request):
         "site_gcash_number": s.gcash_number,
         "site_gcash_qr_url": s.gcash_qr_url,
         "site_shop_address_line": address_line,
+        # The security deposit per gown the owner set (gowns/deposit.py): the pages' scripts and the FAQ / How It Works / Terms wording
+        # all read these, so changing the setting changes every place at once.
+        "site_deposit_per_gown": deposit_per_gown,
+        "site_deposit_php": deposit.php_text(deposit_per_gown),
+        "site_deposit_php_short": deposit.php_short(deposit_per_gown),
     }
 
 

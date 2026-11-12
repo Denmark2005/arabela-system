@@ -3,13 +3,14 @@ import json
 import re
 from collections import defaultdict
 from datetime import datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
 from django.core.files.storage import default_storage
 from django.core.paginator import Paginator
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.http import Http404, JsonResponse
@@ -21,7 +22,9 @@ from accounts import rate_limit, terms
 from accounts.models import CustomerMessage, SavedAddress, UserProfile
 from accounts.services import (
     cancel_lockout_notice,
+    proof_block_notice,
     record_abandoned_hold,
+    record_rejected_proof,
     sync_cancellation_flag,
 )
 from gowns.context_processors import (
@@ -30,6 +33,7 @@ from gowns.context_processors import (
     category_url,
     _FALLBACK_IMG,
     clear_reservation_hold,
+    RESERVATION_HOLD_MINUTES,
     get_reservation_hold_deadline,
     reservations_with_news_count,
     start_reservation_hold,
@@ -38,11 +42,11 @@ from gowns.context_processors import (
 from gowns.models import (
     COOLDOWN_DAYS, EXTRA_SMALL_CATEGORY, SIZE_CODES, Gown, GownUnavailability, group_gowns_by_name, pick_representative_gown, size_codes_of,
 )
-from gowns import availability, proof_image
+from gowns import availability, deposit, proof_image, receipt_check, reservation_limits
 from gowns.photos import GRID_WIDTH, PAGE_WIDTH, sized
 from gowns.size_guides import size_guide_for
 from reservations import reminders, timeline
-from reservations.models import Reservation, ReservationItem, ReservationStatusEvent
+from reservations.models import ProofRejection, Reservation, ReservationItem, ReservationStatusEvent
 
 
 
@@ -980,6 +984,58 @@ def _recently_submitted(request, fingerprint):
     )
 
 
+def _hold_started_at(request):
+    """When this checkout's 20-minute hold began (the booking "started"), or None when no hold is running -- the receipt's payment time is
+    compared with it."""
+    deadline = get_reservation_hold_deadline(request)
+    if deadline is None:
+        return None
+    return deadline - timedelta(minutes=RESERVATION_HOLD_MINUTES)
+
+
+def _verdict_fields(verdict):
+    """The Reservation columns that remember what the receipt check found (only the picture's fingerprint and the facts read from it)."""
+    reading_json = verdict.reading.to_json() if verdict.reading is not None else ""
+    return {
+        "proof_hash": verdict.image_hash,
+        "proof_fingerprint": (verdict.fingerprint or "")[:120],
+        "proof_check": verdict.status,
+        "proof_notes": "\n".join(verdict.notes),
+        "proof_reading": reading_json,
+        "proof_amount": verdict.amount,
+        "proof_paid_at": verdict.paid_at,
+        "proof_recipient": (verdict.recipient or "")[:40],
+        "proof_old_number": verdict.old_number,
+        "gcash_reference": (verdict.reference or "")[:20],
+        # Online GCash proofs wait for the owner to look in her own GCash (the account is hers alone).
+        "owner_check": Reservation.OwnerCheck.PENDING,
+    }
+
+
+def _check_proof_or_refuse(request, clean_proof, *, expected_amount, started_at, reservation=None):
+    """Runs the receipt check on the cleaned picture. Returns (verdict, None) when the picture may go on, or (None, the refusal response)
+    when it was refused: nothing is booked, no dates are held, the refusal is counted against the account, and the customer is told why."""
+    image_bytes = clean_proof.read()
+    clean_proof.seek(0)
+    verdict = receipt_check.check_receipt(
+        image_bytes, getattr(clean_proof, "name", ""), expected_amount=expected_amount, started_at=started_at,
+        exclude_reservation_id=getattr(reservation, "pk", None),
+    )
+    if not verdict.rejected:
+        return verdict, None
+    code = verdict.codes[0] if verdict.codes else "rejected"
+    paused = record_rejected_proof(
+        request.user, source=ProofRejection.Source.UPLOAD, reason=receipt_check.reject_reason_text(code), reservation=reservation,
+    )
+    message = verdict.message
+    if paused:
+        message += (
+            " Your account is now paused because several of your payment proofs were rejected. "
+            "Please message the shop on Facebook so the owner can review it."
+        )
+    return None, JsonResponse({"success": False, "proof_rejected": True, "account_blocked": bool(paused), "error": message}, status=400)
+
+
 @login_required(login_url='accounts:login')
 def gcash_qr(request):
     """The shop's GCash QR on a page of its own: the checkout's "View QR" window opens it in a new tab so the whole picture can be
@@ -1034,6 +1090,11 @@ def reservation_submit(request):
         clear_reservation_hold(request)
         return JsonResponse({"success": False, "locked": True, "error": lockout_message}, status=403)
 
+    # An account paused for refused payment proofs cannot start a booking; the owner lifts it from the Client List.
+    paused_message = proof_block_notice(request.user)
+    if paused_message:
+        return JsonResponse({"success": False, "account_blocked": True, "error": paused_message}, status=403)
+
     if not isinstance(raw_items, list) or not raw_items:
         return JsonResponse({"success": False, "error": "Your bag is empty."}, status=400)
 
@@ -1057,6 +1118,30 @@ def reservation_submit(request):
             "rental_date": rental_date,
             "return_date": return_date,
         })
+
+    # One booking may hold only a few gowns, and one account only a few bookings waiting for the shop (gowns/reservation_limits.py).
+    # Said BEFORE the receipt is read, so a customer over the limit is not kept waiting for nothing.
+    limit_message = reservation_limits.gown_count_message(len(parsed_items)) or reservation_limits.open_bookings_message(request.user)
+    if limit_message:
+        return JsonResponse({"success": False, "limit_reached": True, "error": limit_message}, status=400)
+
+    # The deposit the checkout page showed. When the owner changed the amount meanwhile, say so instead of charging another one.
+    current_deposit = deposit.for_gowns(len(parsed_items))
+    expected_raw = (request.POST.get("expected_deposit") or "").strip()
+    if expected_raw:
+        try:
+            expected_deposit = Decimal(expected_raw)
+        except InvalidOperation:
+            expected_deposit = None
+        if expected_deposit is not None and expected_deposit != current_deposit:
+            per_gown = deposit.per_gown()
+            return JsonResponse({
+                "success": False, "deposit_changed": True, "deposit_per_gown": per_gown,
+                "error": (
+                    f"The security deposit changed to ₱{per_gown:,} per gown, so your deposit is now ₱{int(current_deposit):,}. "
+                    "Please check the amount and try again."
+                ),
+            }, status=409)
 
     profile, _ = UserProfile.objects.get_or_create(user=request.user)
     typed_first_name = (request.POST.get("first_name") or "").strip()
@@ -1112,7 +1197,20 @@ def reservation_submit(request):
         clear_reservation_hold(request)
         return JsonResponse({"success": True, "reference_code": already_saved.reference_code, "already_submitted": True})
 
+    # The receipt check: BEFORE anything is booked (and before any database lock is taken, because reading the picture takes a few seconds).
+    # A refused receipt books nothing and holds no dates.
+    verdict, refusal_response = _check_proof_or_refuse(
+        request, clean_proof, expected_amount=current_deposit, started_at=_hold_started_at(request),
+    )
+    if refusal_response is not None:
+        return refusal_response
+
     with transaction.atomic():
+        # One account's submissions are serialised here, so two quick taps cannot both slip under the open-bookings limit.
+        get_user_model().objects.select_for_update().filter(pk=request.user.pk).first()
+        limit_message = reservation_limits.open_bookings_message(request.user)
+        if limit_message:
+            return JsonResponse({"success": False, "limit_reached": True, "error": limit_message}, status=400)
         # Availability pass FIRST -- every item is resolved to a specific free unit
         # (see _find_available_unit) before anything is written and before the
         # proof-of-payment file is uploaded, so a rejection leaves no half-made
@@ -1237,7 +1335,7 @@ def reservation_submit(request):
             item["rental_price"] = price
 
         rental_subtotal = sum((item["rental_price"] for item in parsed_items), Decimal("0"))
-        security_deposit = Decimal(len(parsed_items)) * Decimal("2000")
+        security_deposit = current_deposit
         total_amount = rental_subtotal + security_deposit
 
         try:
@@ -1257,10 +1355,10 @@ def reservation_submit(request):
             postal_code=postal_code,
             payment_method=payment_method,
             payment_proof_url=payment_proof_url,
-            gcash_reference=gcash_reference,
             rental_subtotal=rental_subtotal,
             security_deposit=security_deposit,
             total_amount=total_amount,
+            **{**_verdict_fields(verdict), "gcash_reference": (verdict.reference or gcash_reference)[:20]},
         )
         for item in parsed_items:
             created_item = ReservationItem.objects.create(
@@ -1303,6 +1401,14 @@ def reservation_submit(request):
             reservation_obj, "Reservation submitted",
             detail="Waiting for the shop to verify your payment.",
             actor=ReservationStatusEvent.Actor.CUSTOMER,
+        )
+        ReservationStatusEvent.record(
+            reservation_obj, "Payment receipt checked",
+            detail=(
+                "Pre-checked: nothing odd was found." if verdict.status == receipt_check.STATUS_PASS
+                else "Needs check: " + " ".join(verdict.notes)
+            ),
+            actor=ReservationStatusEvent.Actor.SYSTEM, staff_only=True,
         )
         ReservationStatusEvent.record(
             reservation_obj, "Terms and Conditions accepted",
@@ -1469,6 +1575,13 @@ def reservation_upload_proof(request, item_id):
     if error:
         return JsonResponse({"success": False, "error": error}, status=400)
 
+    # The same receipt check as at checkout; here the booking already exists, so "when the booking started" is when it was made.
+    verdict, refusal_response = _check_proof_or_refuse(
+        request, clean_proof, expected_amount=reservation.security_deposit, started_at=reservation.created_at, reservation=reservation,
+    )
+    if refusal_response is not None:
+        return refusal_response
+
     try:
         reservation.payment_proof_url = _save_proof_file(clean_proof)
     except Exception:
@@ -1476,11 +1589,23 @@ def reservation_upload_proof(request, item_id):
             {"success": False, "error": "The payment proof couldn't be uploaded just now. Please try again."},
             status=502,
         )
-    reservation.save(update_fields=["payment_proof_url", "updated_at"])
+    checked = _verdict_fields(verdict)
+    checked["gcash_reference"] = checked["gcash_reference"] or reservation.gcash_reference
+    for name, value in checked.items():
+        setattr(reservation, name, value)
+    reservation.save(update_fields=["payment_proof_url", "updated_at", *checked])
     ReservationStatusEvent.record(
         reservation, "Proof of payment uploaded",
         detail="Waiting for the shop to verify your payment.",
         actor=ReservationStatusEvent.Actor.CUSTOMER,
+    )
+    ReservationStatusEvent.record(
+        reservation, "Payment receipt checked",
+        detail=(
+            "Pre-checked: nothing odd was found." if verdict.status == receipt_check.STATUS_PASS
+            else "Needs check: " + " ".join(verdict.notes)
+        ),
+        actor=ReservationStatusEvent.Actor.SYSTEM, staff_only=True,
     )
 
     return JsonResponse({"success": True, "payment_state": reservation.payment_state})
@@ -1511,6 +1636,14 @@ def reservation_hold_start(request):
     lockout_seconds, lockout_message = cancel_lockout_notice(request.user)
     if lockout_seconds:
         return JsonResponse({"success": False, "locked": True, "error": lockout_message}, status=403)
+
+    # A paused account, or one that already has the most bookings waiting for the shop, is told now -- not after filling in the form.
+    paused_message = proof_block_notice(request.user)
+    if paused_message:
+        return JsonResponse({"success": False, "account_blocked": True, "error": paused_message}, status=403)
+    waiting_message = reservation_limits.open_bookings_message(request.user)
+    if waiting_message:
+        return JsonResponse({"success": False, "limit_reached": True, "error": waiting_message}, status=403)
 
     was_already_active = get_reservation_hold_deadline(request) is not None
     deadline = start_reservation_hold(request)

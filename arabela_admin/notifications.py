@@ -29,6 +29,7 @@ from django.utils import timezone
 from accounts.models import UserProfile
 from arabela_admin.views import _SCHEDULED_STATUSES, _staff_display_name
 from gowns.models import Gown
+from reservations import owner_check as reservation_owner_check
 from reservations.models import Reservation, ReservationItem
 
 # What each part of the bell is drawn from. The page includes these templates; the live feed
@@ -201,6 +202,26 @@ def build_items(user):
             when=r.created_at,
             sort=r.created_at,
         ))
+
+    # --- The owner's GCash check: customer payments only she can confirm (the GCash account is hers alone) ---------------------------
+    # One entry per booking, oldest first (it stays until she answers Received or Not found, whether or not staff already approved).
+    # Clicking it opens the payment window with the receipt picture, so she can look for it in her GCash.
+    # Only a real owner, by the SAME test the endpoint enforces (a superuser, or the OWNER role): an admin with no profile row counts as an owner for
+    # the other items here, but the server would refuse her answer, so she must not be shown a task she cannot do.
+    if user.is_superuser or (profile is not None and profile.role == UserProfile.Role.OWNER):
+        for r in reservation_owner_check.awaiting().select_related("customer__profile")[:10]:
+            items.append(_item(
+                key=f"gcashcheck:{r.reference_code}",
+                kind="payment",
+                level="warning",
+                actor=r.display_customer_name,
+                text="has a payment for you to check in your GCash:",
+                subject=r.reference_code,
+                module="Payments",
+                url=f"{reverse('arabela_admin:payment_verification')}?{urlencode({'search': r.reference_code, 'check': 'owner'})}",
+                when=r.created_at,
+                sort=r.created_at,
+            ))
 
     # --- Overdue returns (the most time-critical queue) ----------------------------
     # A gown still at Pick-up never left the shop, so it cannot be overdue for return -- that is a missed pick-up, below.

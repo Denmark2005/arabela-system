@@ -47,6 +47,10 @@
     .pv-dot--verified { background: #039855; }
     .pv-dot--rejected { background: #d92d20; }
     .pv-dot--cancelled { background: #98a2b3; }
+    .pv-dot--owner { background: #465fff; }
+    /* The owner sees a 4th count: the payments she still has to look for in her GCash. */
+    .pv-strip--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    @media (max-width: 720px) { .pv-strip--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
     /* Verified Today: a calm, slim card -- one balanced line per booking. It scrolls inside a capped height instead of growing the page with every
        verification. */
@@ -148,11 +152,13 @@
       .pv-vt-more { padding: .1rem 1rem .6rem 1rem; }
     }
   </style>
+{% include "arabela_admin/partials/proof_badges_styles.html" %}
 </head>
   <body
-    x-data="{ page: 'payment-verification', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', statusFilter: 'All', monthFilter: 'All', yearFilter: '', showYearToast: false, yearToastTimeout: null, openReceiptModal: false, viewingPayment: {}, openBookings: [], autoOpen: [],
+    x-data="{ page: 'payment-verification', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', statusFilter: 'All', monthFilter: 'All', yearFilter: '', showYearToast: false, yearToastTimeout: null, openReceiptModal: false, viewingPayment: {}, openBookings: [], autoOpen: [], ownerOnly: false,
       matches(el) {
-        return (this.statusFilter === 'All' || el.getAttribute('data-status') === this.statusFilter)
+        return (!this.ownerOnly || el.getAttribute('data-owner') === 'pending')
+          && (this.statusFilter === 'All' || el.getAttribute('data-status') === this.statusFilter)
           && (this.yearFilter === '' || el.getAttribute('data-year') === this.yearFilter)
           && (this.monthFilter === 'All' || el.getAttribute('data-month') === this.monthFilter)
           && (this.search === '' || (el.getAttribute('data-search') || '').indexOf(String(this.search).toLowerCase()) !== -1);
@@ -178,6 +184,14 @@
          if (presetSearch) { search = presetSearch; }
          const presetStatus = presetSearchParams.get('status');
          if (presetStatus) { statusFilter = presetStatus; }
+         if (presetSearchParams.get('check') === 'owner') {
+           ownerOnly = !presetSearch;
+           $nextTick(() => {
+             const hits = Array.from(document.querySelectorAll('.ar-booking[data-booking-id]')).filter(el => matches(el));
+             const eye = hits.length === 1 ? hits[0].querySelector('.pv-acts .ar-ib') : null;
+             if (eye) { eye.click(); }
+           });
+         }
          const presetMonth = presetSearchParams.get('month');
          if (presetMonth) { monthFilter = presetMonth; }
          // Keeps the address bar in sync with whatever is actually on screen, so a
@@ -1289,7 +1303,7 @@
 </div>
             <!-- Breadcrumb End -->
             <!-- The three counts are still buttons that filter the list (the same filter the Status box below sets); the selected one is highlighted. -->
-            <div class="pv-strip">
+            <div class="pv-strip{% if can_answer_owner_check %} pv-strip--4{% endif %}">
               <button type="button" class="pv-stat" :class="statusFilter === 'Pending' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Pending' ? 'true' : 'false'" @click="statusFilter = 'Pending'">
                 <span class="pv-stat-l"><i class="ar-dot pv-dot--pending"></i>Pending Review</span>
                 <span class="pv-stat-n">{{ pending_review_count }}</span>
@@ -1302,6 +1316,13 @@
                 <span class="pv-stat-l"><i class="ar-dot pv-dot--rejected"></i>Rejected</span>
                 <span class="pv-stat-n">{{ rejected_count }}</span>
               </button>
+              {% if can_answer_owner_check %}
+              <button type="button" class="pv-stat" :class="ownerOnly ? 'is-on' : ''" :aria-pressed="ownerOnly ? 'true' : 'false'"
+                      @click="ownerOnly = !ownerOnly; if (ownerOnly) { statusFilter = 'All'; }" title="Customer payments you have not yet looked for in your own GCash">
+                <span class="pv-stat-l"><i class="ar-dot pv-dot--owner"></i>To check in my GCash</span>
+                <span class="pv-stat-n">{{ owner_check_count }}</span>
+              </button>
+              {% endif %}
             </div>
 
             {% if verified_today %}
@@ -1418,7 +1439,7 @@
                 {% for r in reservations %}
                 <!-- One booking: a closed line (status circle + name, booking number, the payment, when it was submitted, the actions) and, hidden until it is
                      opened, who it was booked as, the amount breakdown and one short line per gown. -->
-                <div class="ar-booking" data-booking-id="{{ r.id }}" data-status="{{ r.pv_status }}" data-year="{{ r.created_at|date:'Y' }}" data-month="{{ r.created_at|date:'M' }}" data-search="{{ r.display_customer_name|lower }} {{ r.reference_code|lower }}{% for gi in r.items.all %} {{ gi.gown_name|lower }}{% endfor %}" x-show="matches($el)">
+                <div class="ar-booking" data-booking-id="{{ r.id }}" data-owner="{% if r.owner_check_open %}pending{% endif %}" data-status="{{ r.pv_status }}" data-year="{{ r.created_at|date:'Y' }}" data-month="{{ r.created_at|date:'M' }}" data-search="{{ r.display_customer_name|lower }} {{ r.reference_code|lower }}{% for gi in r.items.all %} {{ gi.gown_name|lower }}{% endfor %}" x-show="matches($el)">
                   <!-- A click on the line opens the booking, except a click on the name (it opens Reservation Records) or on an action. The actions do NOT stop the click. -->
                   <div class="ar-line pv-grid" :class="isBookingOpen({{ r.id }}) ? 'is-open' : ''" @click="if (!$event.target.closest('.pv-acts, a')) { toggleBooking({{ r.id }}) }">
                     <div class="pv-cust">
@@ -1443,6 +1464,7 @@
                       {% endif %}
                       {% endif %}
                       {% if r.gcash_dups %}<div class="pv-note pv-note--bad" title="The same GCash reference number is also on {{ r.gcash_dups }}">Same GCash ref as {{ r.gcash_dups }}</div>{% endif %}
+                      {% include "arabela_admin/partials/proof_badges.html" with r=r %}
                     </div>
                     <div class="pv-sub-at">
                       <div class="pv-day">{{ r.created_at|date:"M j, Y" }}</div>
@@ -1450,7 +1472,7 @@
                     </div>
                     <div class="pv-acts">
                       <button type="button"
-                        @click="viewingPayment = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"&mdash;"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:'-2g' }}', date: '{{ r.created_at|date:"M j, Y" }}', status: '{{ r.pv_status }}', proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}'), breakdown: JSON.parse('{{ r.payment_breakdown_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', gcashDup: '{{ r.gcash_dups|escapejs }}' }; openReceiptModal = true"
+                        @click="viewingPayment = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"&mdash;"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:'-2g' }}', date: '{{ r.created_at|date:"M j, Y" }}', status: '{{ r.pv_status }}', proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}'), breakdown: JSON.parse('{{ r.payment_breakdown_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', gcashDup: '{{ r.gcash_dups|escapejs }}', proof: JSON.parse('{{ r.proof_window_json|escapejs }}'), ownerUrl: '{% url 'arabela_admin:reservation_owner_check' r.id %}' }; openReceiptModal = true"
                         class="ar-ib" title="View payment proof" aria-label="View the payment proof of {{ r.display_customer_name }}, {{ r.reference_code }}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                       </button>
@@ -1598,6 +1620,38 @@
                     </div>
                   </div>
                   {% include "arabela_admin/partials/payment_breakdown.html" with var="viewingPayment" %}
+                  <!-- What the receipt check read from the picture, and -- for the owner -- the two buttons after she looked in her GCash. -->
+                  <div class="pvk-box" x-show="viewingPayment.proof" x-cloak>
+                    <div class="pvk-head">
+                      <span>Receipt check</span>
+                      <span class="pb-chip pb-chip--ok" x-show="viewingPayment.proof && viewingPayment.proof.check === 'pass'">Pre-checked</span>
+                      <span class="pb-chip pb-chip--warn" x-show="viewingPayment.proof && viewingPayment.proof.check === 'needs_check'">Needs check</span>
+                      <span class="pb-chip pb-chip--warn" x-show="viewingPayment.proof && viewingPayment.proof.oldNumber">Old GCash number</span>
+                    </div>
+                    <div class="pvk-grid" x-show="viewingPayment.proof && (viewingPayment.proof.amount || viewingPayment.proof.paidAt || viewingPayment.proof.recipient || viewingPayment.gcashRef)">
+                      <div x-show="viewingPayment.proof && viewingPayment.proof.amount"><p class="pvk-l">Amount on the receipt</p><p class="pvk-v" x-text="(viewingPayment.proof || {}).amount"></p></div>
+                      <div x-show="viewingPayment.proof && viewingPayment.proof.paidAt"><p class="pvk-l">Paid on</p><p class="pvk-v" x-text="(viewingPayment.proof || {}).paidAt"></p></div>
+                      <div x-show="viewingPayment.proof && viewingPayment.proof.recipient"><p class="pvk-l">Sent to</p><p class="pvk-v" x-text="(viewingPayment.proof || {}).recipient"></p></div>
+                      <div x-show="viewingPayment.gcashRef"><p class="pvk-l">Reference No.</p><p class="pvk-v" x-text="viewingPayment.gcashRef"></p></div>
+                    </div>
+                    <ul class="pvk-notes" x-show="viewingPayment.proof && viewingPayment.proof.notes && viewingPayment.proof.notes.length">
+                      <template x-for="(note, noteIndex) in ((viewingPayment.proof && viewingPayment.proof.notes) || [])" :key="noteIndex"><li x-text="note"></li></template>
+                    </ul>
+                    <div class="pvk-owner" x-show="viewingPayment.proof && viewingPayment.proof.ownerCheck">
+                      <p x-show="viewingPayment.proof && viewingPayment.proof.ownerCheck === 'received'"><span class="pb-chip pb-chip--ok">Payment confirmed by the owner &#10003;</span></p>
+                      <p x-show="viewingPayment.proof && viewingPayment.proof.ownerCheck === 'not_found'"><span class="pb-chip pb-chip--bad">Owner: payment not found &#10007;</span></p>
+                      <p x-show="viewingPayment.proof && viewingPayment.proof.ownerOpen && !{{ can_answer_owner_check|yesno:'true,false' }}"><span class="pb-chip pb-chip--muted">Not checked by the owner yet</span> The GCash account is the owner's, so only she can confirm that the money arrived.</p>
+                      {% if can_answer_owner_check %}
+                      <div x-show="viewingPayment.proof && viewingPayment.proof.ownerOpen">
+                        <p>Look for this payment in your own GCash (the reference above, or the amount and time), then answer:</p>
+                        <div class="pvk-btns">
+                          <button type="button" class="pvk-btn pvk-btn--ok" @click="ownerCheckPayment(viewingPayment, 'received', $event.target)">Received &#10003;</button>
+                          <button type="button" class="pvk-btn pvk-btn--bad" @click="ownerCheckPayment(viewingPayment, 'not_found', $event.target)">Not found &#10007;</button>
+                        </div>
+                      </div>
+                      {% endif %}
+                    </div>
+                  </div>
                   <p x-show="viewingPayment.gcashDup" x-cloak style="margin-top: 1rem;" class="rounded-lg bg-error-50 px-4 py-3 text-xs font-medium text-error-700 dark:bg-error-500/15 dark:text-error-500"
                      x-text="'This GCash reference number is also on ' + viewingPayment.gcashDup + '. Check the receipt before approving.'"></p>
                 </div>
@@ -1643,6 +1697,32 @@
       watch('monthFilter', openTheOnlyMatch);
       watch('yearFilter', openTheOnlyMatch);
       openTheOnlyMatch();
+    }
+
+    // The owner looked in her GCash: Received or Not found (owner-only on the server too). Not found cancels the booking, so it asks first.
+    function ownerCheckPayment(payment, result, button) {
+      var ask = result === 'received'
+        ? { title: 'Payment received', message: payment.name + ' \u00b7 ' + payment.reservation + '\n\nYou found this payment in your GCash.', confirmText: 'Yes, received', danger: false }
+        : { title: 'Payment not found', message: payment.name + ' \u00b7 ' + payment.reservation + '\n\nYou could not find this payment in your GCash. The booking will be cancelled, its gowns released, and the customer told.', confirmText: 'Not found', danger: true };
+      adminConfirm(ask).then(function (ok) {
+        if (!ok) return;
+        var buttons = button && button.parentElement ? button.parentElement.querySelectorAll('button') : [];
+        buttons.forEach(function (b) { b.disabled = true; });
+        fetch(payment.ownerUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+          body: JSON.stringify({ result: result })
+        })
+          .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+          .then(function (answer) {
+            if (!answer.ok || !answer.data.success) { throw new Error(answer.data.error || 'Could not save your answer.'); }
+            window.location.reload();
+          })
+          .catch(function (err) {
+            buttons.forEach(function (b) { b.disabled = false; });
+            adminAlert({ title: 'Something went wrong', message: err.message || 'Could not save your answer.', danger: true });
+          });
+      });
     }
 
     function reviewPayment(btn) {

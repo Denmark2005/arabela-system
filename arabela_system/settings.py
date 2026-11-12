@@ -110,6 +110,8 @@ MIDDLEWARE = [
     'allauth.account.middleware.AccountMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # Frees the dates of a booking the shop has not verified within 2 days (throttled to once a minute; reservations/pending_release.py).
+    'reservations.pending_release.PendingReleaseMiddleware',
 ]
 
 ROOT_URLCONF = 'arabela_system.urls'
@@ -431,6 +433,18 @@ GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '').strip()
 GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite')
 # Tried when the main model keeps answering 'high demand' (503) or is refused/retired. Empty = no backup model.
 GEMINI_FALLBACK_MODEL = os.getenv('GEMINI_FALLBACK_MODEL', 'gemini-flash-lite-latest').strip()
+
+# True while `manage.py test` runs: nothing in the test suite may reach the network, and the sweeps that normally run on page visits stay quiet
+# (tests call them directly).
+TESTING = len(sys.argv) > 1 and sys.argv[1] == 'test'
+
+# The receipt check (gowns/receipt_check.py) lets Gemini READ the GCash screenshot a customer uploads as proof of the deposit. Needs
+# GEMINI_API_KEY; with the reader off or unreachable every receipt simply goes to the staff as "Needs check". Set RECEIPT_READER_ENABLED=false
+# on Render to switch it off.
+RECEIPT_READER_ENABLED = (not TESTING) and os.getenv('RECEIPT_READER_ENABLED', 'true').strip().lower() not in ('0', 'false', 'no', 'off')
+
+# A booking the shop has not verified within 2 days frees its dates (reservations/pending_release.py), swept on page visits.
+PENDING_RELEASE_ON_REQUEST = not TESTING
 
 
 # Error alerts (Sentry, free plan): off unless SENTRY_DSN is set -- on Render's Environment page, never in .env on a laptop that shares the

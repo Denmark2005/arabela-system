@@ -34,8 +34,8 @@ import json
 from accounts import login_throttle, owner_recovery
 from accounts.models import CustomerMessage, UserProfile
 from accounts.roles import MANAGER_ONLY_MESSAGE, can_manage, staff_display_name
-from accounts.services import CANCELLATION_FLAG_THRESHOLD
-from gowns import availability
+from accounts.services import CANCELLATION_FLAG_THRESHOLD, clear_proof_block, record_rejected_proof
+from gowns import availability, deposit, gcash_numbers
 from gowns.models import (
     COOLDOWN_DAYS,
     EXTRA_SMALL_CATEGORY,
@@ -57,9 +57,10 @@ from gowns.models import (
     visible_builtin_names,
 )
 from reservations import cancellation as reservation_cancellation
+from reservations import owner_check as reservation_owner_check
 from reservations import reminders as reservation_reminders
 from reservations import timeline as reservation_timeline
-from reservations.models import Reservation, ReceiptRecord, ReservationItem, ReservationStatusEvent
+from reservations.models import ProofRejection, Reservation, ReceiptRecord, ReservationItem, ReservationStatusEvent
 
 User = get_user_model()
 
@@ -746,6 +747,10 @@ def payment_verification_view(request):
             "reservations": rows,
             "verified_today": verified_today,
             "pending_review_count": reservations.filter(status=Reservation.Status.PENDING).count(),
+            # Only the owner sees this count (the template shows it to her alone): customer GCash payments she has not looked for yet.
+            "owner_check_count": reservation_owner_check.awaiting().count(),
+            # The same function the answer endpoint enforces (the template's admin_is_owner flag disagrees for an admin with no profile row).
+            "can_answer_owner_check": _is_owner(request),
             "verified_this_month_count": reservations.filter(
                 status__in=verified_statuses,
                 reviewed_at__year=now.year, reviewed_at__month=now.month,
@@ -2903,7 +2908,45 @@ def reservation_reject_view(request, pk):
                     + "Please contact the shop if you have any questions about your payment."
                 ),
             )
+    # A booking the staff turned down because of its payment proof counts as a refused proof for that account (4 in a week pause it).
+    if reservation.has_account and reservation.payment_proof_url and reservation.channel == Reservation.Channel.ONLINE:
+        record_rejected_proof(
+            reservation.customer, source=ProofRejection.Source.STAFF, reason=(reason or "rejected by staff")[:200], reservation=reservation,
+        )
     return JsonResponse({"success": True, "status": reservation.status})
+
+
+@require_http_methods(["POST"])
+def reservation_owner_check_view(request, pk):
+    """The owner's answer after looking in her own GCash: {"result": "received"} or {"result": "not_found"}. OWNER ONLY, enforced here (the
+    staff cannot see the GCash account, so they cannot answer for her). Everything it does is in reservations/owner_check.py."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    if not _is_owner(request):
+        return JsonResponse({"error": "Only the owner can confirm a payment in the GCash account."}, status=403)
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    result = data.get("result") if isinstance(data, dict) else None
+    if result not in ("received", "not_found"):
+        return JsonResponse({"error": "Choose Received or Not found."}, status=400)
+    with transaction.atomic():
+        reservation = Reservation.objects.select_for_update().select_related("customer").filter(pk=pk).first()
+        if reservation is None:
+            return JsonResponse({"error": "Reservation not found"}, status=404)
+        if reservation.owner_check != Reservation.OwnerCheck.PENDING:
+            if reservation.owner_check in (Reservation.OwnerCheck.RECEIVED, Reservation.OwnerCheck.NOT_FOUND):
+                return JsonResponse({"error": "This payment was already checked. Please refresh the page."}, status=409)
+            return JsonResponse({"error": "This booking has no GCash payment to check."}, status=400)
+        if result == "received":
+            reservation_owner_check.confirm_received(reservation, request.user)
+            outcome = "confirmed"
+        else:
+            outcome = reservation_owner_check.mark_not_found(reservation, request.user)
+    return JsonResponse({
+        "success": True, "result": result, "outcome": outcome, "status": reservation.status, "owner_check": reservation.owner_check,
+    })
 
 
 @require_http_methods(["POST"])
@@ -3488,6 +3531,8 @@ def customer_flag_view(request, user_id):
     profile, _ = UserProfile.objects.get_or_create(user=customer)
     profile.is_flagged = flagged
     profile.save(update_fields=["is_flagged"])
+    if not flagged and profile.proof_blocked:
+        clear_proof_block(profile)      # the account may reserve again, and the refused-proof count starts again from now
 
     if flagged:
         body = reason
@@ -4717,10 +4762,40 @@ def gcash_details_update_view(request):
         )
 
     settings_obj = SiteSettings.load()
+    old_number = settings_obj.gcash_number
     settings_obj.gcash_account_name = name
     settings_obj.gcash_number = number
-    settings_obj.save(update_fields=["gcash_account_name", "gcash_number", "updated_at"])
+    with transaction.atomic():
+        settings_obj.save(update_fields=["gcash_account_name", "gcash_number", "updated_at"])
+        # The old number is remembered, with how long receipts to it are still accepted, so a customer who paid it just before the change
+        # is not turned away (gowns/gcash_numbers.py).
+        gcash_numbers.record_change(old_number, number, data.get("old_number_grace_hours"))
     return JsonResponse({"success": True, "name": name, "number": number})
+
+
+@require_http_methods(["POST"])
+def deposit_setting_update_view(request):
+    """Save the security deposit asked for each gown (whole pesos, 1 to 10,000). Owner only. It applies to NEW bookings: every booking keeps the
+    deposit it was made with."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    if not _is_owner(request):
+        return JsonResponse({"error": "Only the owner can change the security deposit."}, status=403)
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    if not isinstance(data, dict):
+        return JsonResponse({"error": "Invalid request."}, status=400)
+    amount = deposit.clean(data.get("amount"))
+    if amount is None:
+        return JsonResponse(
+            {"error": f"Enter a whole number of pesos from {deposit.MIN_PER_GOWN} to {deposit.MAX_PER_GOWN:,}, like 2000."}, status=400,
+        )
+    settings_obj = SiteSettings.load()
+    settings_obj.security_deposit_per_gown = amount
+    settings_obj.save(update_fields=["security_deposit_per_gown", "updated_at"])
+    return JsonResponse({"success": True, "amount": amount, "is_default": amount == deposit.DEFAULT_PER_GOWN})
 
 
 @require_http_methods(["POST"])

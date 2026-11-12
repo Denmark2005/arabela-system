@@ -4,7 +4,11 @@
     var STORAGE_KEY = 'arabela_reservation_cart_' + userKey;
     var GUEST_RESERVATION_KEY = 'arabela_reservation_cart_guest';
     var GUEST_CART_KEY = 'arabela_cart_guest';
-    var DEPOSIT_PER_ITEM = 2000;
+    // The owner's deposit per gown (Edit Profile), written on the page by base.html -- never a fixed number here.
+    var DEPOSIT_PER_ITEM = (function () {
+        var n = Number(body && body.dataset && body.dataset.depositPerGown);
+        return n > 0 ? n : 2000;
+    })();
 
     // ---- the held selection (the checkout snapshot) ---------------------------------------------------------
     // The 20-minute hold lives in the SERVER session; the selection it holds lives in this TAB's
@@ -371,7 +375,10 @@
 
     // Proceed refused because the account is temporarily locked: the server's message says why and until when.
     function holdRefusedTitle(result) {
-        return result && result.locked ? 'Your account is temporarily locked' : 'Please wait before trying again';
+        if (result && result.locked) return 'Your account is temporarily locked';
+        if (result && result.account_blocked) return 'Your account is paused';
+        if (result && result.limit_reached) return 'Too many bookings waiting';
+        return 'Please wait before trying again';
     }
 
     function alertMessage(title, message) {
@@ -773,7 +780,9 @@
         }
         root.innerHTML = html;
 
-        setTotals(data.subtotal, data.deposit, data.total, data.itemCount);
+        // The saved selection remembers the deposit it was made with; the checkout always shows what the owner asks NOW.
+        var liveDeposit = (Number(data.itemCount) || 0) * DEPOSIT_PER_ITEM;
+        setTotals(data.subtotal, liveDeposit, (Number(data.subtotal) || 0) + liveDeposit, data.itemCount);
 
         // Tell the page which gowns still block checkout (no dates, or a size still to choose), so Confirm Rental can be
         // held back up front instead of failing after the form and the upload.

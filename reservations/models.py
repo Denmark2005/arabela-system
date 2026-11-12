@@ -86,6 +86,42 @@ class Reservation(models.Model):
     # same on two bookings (see Meta.constraints), so one paper record can't be reused for a second booking.
     notebook_number = models.CharField(max_length=30, blank=True, default='', db_default='')
 
+    # ---- What the receipt check found (gowns/receipt_check.py) and the owner's own look at her GCash ----------------------------
+    # Every one of these has a database default, so an older deployment that doesn't know the columns yet can still create bookings
+    # while the database is already migrated.
+    #
+    # A fingerprint of the cleaned picture, so the same screenshot can never be used for two bookings.
+    proof_hash = models.CharField(max_length=64, blank=True, default='', db_default='', db_index=True)
+    # amount | minute | recipient number of the receipt: two bookings with the same one are suspicious (but not refused, because two
+    # real customers can pay the same amount in the same minute).
+    proof_fingerprint = models.CharField(max_length=120, blank=True, default='', db_default='', db_index=True)
+    # '' = not read (a walk-in, or a booking made before the check existed), 'pass' = every check was fine, 'needs_check' = staff
+    # decide (the reasons are in proof_notes).
+    proof_check = models.CharField(max_length=12, blank=True, default='', db_default='')
+    proof_notes = models.TextField(blank=True, default='', db_default='')        # one line per thing the check noticed
+    proof_reading = models.TextField(blank=True, default='', db_default='')      # what the reader found, as JSON text
+    proof_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    proof_paid_at = models.DateTimeField(null=True, blank=True)
+    proof_recipient = models.CharField(max_length=40, blank=True, default='', db_default='')
+    proof_old_number = models.BooleanField(default=False, db_default=False)     # paid to the shop's PREVIOUS GCash number
+    # The owner's own check in her GCash app. The GCash account is hers alone, so staff cannot see whether the money arrived.
+    # '' = nothing to check (a walk-in), 'pending' = waiting for her, 'received' / 'not_found' = her answer.
+    owner_check = models.CharField(max_length=12, blank=True, default='', db_default='', db_index=True)
+    owner_checked_at = models.DateTimeField(null=True, blank=True)
+    owner_checked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+    )
+    owner_reminder_sent_at = models.DateTimeField(null=True, blank=True)
+
+    class ProofCheck(models.TextChoices):
+        PASS = 'pass', 'Pre-checked'
+        NEEDS_CHECK = 'needs_check', 'Needs check'
+
+    class OwnerCheck(models.TextChoices):
+        PENDING = 'pending', 'Not checked by the owner yet'
+        RECEIVED = 'received', 'Payment confirmed by the owner'
+        NOT_FOUND = 'not_found', 'Owner: payment not found'
+
     @property
     def gcash_duplicate_codes(self):
         """Reference codes of OTHER bookings that carry the same GCash reference number, as a
@@ -290,6 +326,60 @@ class Reservation(models.Model):
         if self.status == self.Status.PENDING:
             return 'Payment Under Review' if self.payment_proof_url else 'Not Paid'
         return 'Payment Verified'
+
+    @property
+    def owner_check_open(self):
+        """True while this booking waits for the owner to look in her GCash (a rejected, released or cancelled booking no longer does)."""
+        return self.owner_check == self.OwnerCheck.PENDING and self.status not in (self.Status.REJECTED, self.Status.CANCELLED)
+
+    @property
+    def proof_badges(self):
+        """Small chips for the staff lists: what the receipt check found and what the owner found in her GCash. [(kind, text), ...] where kind is
+        ok / warn / bad / muted. Empty for a booking with no online GCash proof (a walk-in, or one made before the check existed)."""
+        badges = []
+        if self.proof_check == self.ProofCheck.PASS:
+            badges.append(('ok', 'Pre-checked'))
+        elif self.proof_check == self.ProofCheck.NEEDS_CHECK:
+            badges.append(('warn', 'Needs check'))
+        if self.proof_old_number:
+            badges.append(('warn', 'Old GCash number'))
+        if self.owner_check == self.OwnerCheck.RECEIVED:
+            badges.append(('ok', 'Payment confirmed by owner \u2713'))
+        elif self.owner_check == self.OwnerCheck.NOT_FOUND:
+            badges.append(('bad', 'Owner: payment not found \u2717'))
+        elif self.owner_check_open:
+            badges.append(('muted', 'Not checked by owner yet'))
+        return badges
+
+    @property
+    def proof_window(self):
+        """What the proof window shows about the receipt check and the owner's check (None for a booking that has neither)."""
+        if not (self.proof_check or self.owner_check):
+            return None
+        paid = ''
+        if self.proof_paid_at:
+            local = timezone.localtime(self.proof_paid_at)
+            paid = f"{local:%b} {local.day}, {local:%Y}, {local.hour % 12 or 12}:{local:%M} {'AM' if local.hour < 12 else 'PM'}"
+        number = self.proof_recipient
+        if len(number) == 11:
+            number = f"{number[:4]} {number[4:7]} {number[7:]}"
+        return {
+            'check': self.proof_check,
+            'checkLabel': dict(self.ProofCheck.choices).get(self.proof_check, ''),
+            'notes': [line for line in (self.proof_notes or '').split('\n') if line.strip()],
+            'ownerCheck': self.owner_check,
+            'ownerOpen': self.owner_check_open,
+            'ownerLabel': dict(self.OwnerCheck.choices).get(self.owner_check, ''),
+            'amount': _peso_text(self.proof_amount) if self.proof_amount is not None else '',
+            'paidAt': paid,
+            'recipient': number,
+            'oldNumber': self.proof_old_number,
+        }
+
+    @property
+    def proof_window_json(self):
+        """proof_window as JSON text for a page's script ('null' when there is none); escape it with escapejs."""
+        return json.dumps(self.proof_window)
 
     @property
     def can_upload_proof(self):
@@ -713,3 +803,25 @@ class ReceiptRecord(models.Model):
 
     def __str__(self):
         return f'Receipt for {self.reservation.reference_code} ({self.uploaded_at:%Y-%m-%d})'
+
+
+class ProofRejection(models.Model):
+    """One refused payment proof, kept so an account that keeps sending bad proofs can be flagged (accounts.services.record_rejected_proof).
+
+    Written for every way a proof gets refused: the receipt check at upload (no booking is made then, so `reservation` is empty), the
+    staff rejecting a booking, and the owner finding no such payment in her GCash."""
+
+    class Source(models.TextChoices):
+        UPLOAD = 'upload', 'Receipt check'
+        STAFF = 'staff', 'Staff'
+        OWNER = 'owner', 'Owner'
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='proof_rejections')
+    reservation = models.ForeignKey(Reservation, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    source = models.CharField(max_length=10, choices=Source.choices)
+    reason = models.CharField(max_length=200, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-created_at']
+

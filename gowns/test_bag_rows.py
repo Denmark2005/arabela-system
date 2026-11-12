@@ -24,7 +24,7 @@ from gowns.models import Gown
 from reservations.models import Reservation, ReservationItem
 
 User = get_user_model()
-from gowns.sample_images import TINY_JPEG as _JPEG      # a real picture: the proof upload now opens what it is given
+from gowns.sample_images import unique_jpeg      # a real picture: the proof upload now opens what it is given
 from accounts.test_support import agreed
 CART_LINES_JS = Path(settings.BASE_DIR) / "static" / "js" / "cart-lines.js"
 
@@ -187,7 +187,7 @@ class SubmitOneItemPerGownTests(TestCase):
         return self.client.post(reverse("gowns:reservation_submit"), data={
             "items": json.dumps([dict(item) for _ in range(copies)]), "first_name": "Test", "last_name": "Buyer", "phone": "09171234567",
             "address": "1 St", "city": "City", "postal_code": "1000", "payment_method": "GCash",
-            "proof_of_payment": SimpleUploadedFile("proof.jpg", _JPEG, content_type="image/jpeg")})
+            "proof_of_payment": SimpleUploadedFile("proof.jpg", unique_jpeg(), content_type="image/jpeg")})
 
     def test_the_same_one_off_gown_twice_is_refused_in_plain_words_and_nothing_is_booked(self):
         gown = self.gown(1)

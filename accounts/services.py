@@ -215,3 +215,78 @@ def cancel_lockout_notice(user):
         f"the gowns in the meantime."
     )
     return seconds, message
+
+
+# ---- Refused payment proofs ------------------------------------------------------------------------------------------------------
+# A customer whose payment proofs keep being refused (by the receipt check at upload, by the staff, or by the owner finding no such payment
+# in her GCash) is paused after PROOF_REJECTION_LIMIT of them inside PROOF_REJECTION_WINDOW: the account is flagged for the owner's review
+# (the Client List shows it, the customer gets the usual notice) AND cannot start a new reservation until the owner or a manager lifts it
+# (customer_flag_view, which also restarts the count). This is separate from the cancellation tiers above: that flag keeps the account
+# able to reserve; this one pauses it, because the point is to stop someone who keeps sending fake proofs.
+PROOF_REJECTION_LIMIT = 4
+PROOF_REJECTION_WINDOW = timedelta(days=7)
+PROOF_BLOCK_MESSAGE = (
+    "Your account is paused because several of your payment proofs were rejected. Please message the shop on Facebook "
+    "so the owner can review it."
+)
+
+
+def count_recent_rejected_proofs(user, now=None) -> int:
+    """Proofs refused for this account inside the last PROOF_REJECTION_WINDOW (and after the owner last lifted a pause)."""
+    from reservations.models import ProofRejection
+
+    now = now or timezone.now()
+    since = now - PROOF_REJECTION_WINDOW
+    reset_at = (
+        UserProfile.objects.filter(user=user).values_list('proof_block_reset_at', flat=True).first()
+    )
+    if reset_at and reset_at > since:
+        since = reset_at
+    return ProofRejection.objects.filter(user=user, created_at__gte=since).count()
+
+
+def record_rejected_proof(user, *, source, reason='', reservation=None) -> bool:
+    """Write one refused proof and pause the account when it reaches the limit. Returns True when the account is NOW paused (or already was).
+
+    A booking staff recorded for a customer with no website account (user is None) has no account to count against."""
+    if user is None:
+        return False
+    from reservations.models import ProofRejection
+
+    ProofRejection.objects.create(user=user, reservation=reservation, source=source, reason=(reason or '')[:200])
+    return sync_proof_block(user)
+
+
+def sync_proof_block(user) -> bool:
+    profile, _ = UserProfile.objects.get_or_create(user=user)
+    if profile.proof_blocked:
+        return True
+    count = count_recent_rejected_proofs(user)
+    if count < PROOF_REJECTION_LIMIT:
+        return False
+    profile.proof_blocked = True
+    profile.is_flagged = True
+    profile.save(update_fields=["proof_blocked", "is_flagged"])
+    CustomerMessage.objects.create(
+        recipient=user,
+        category=CustomerMessage.Category.ACCOUNT_FLAGGED,
+        body=(
+            f"Your account has been flagged and paused after {count} of your payment proofs were rejected. "
+            "You can still browse the collection, but you cannot start a new reservation until the owner reviews your account. "
+            "Please message the shop on Facebook. If you think this is a mistake, please contact us."
+        ),
+    )
+    return True
+
+
+def proof_block_notice(user) -> str:
+    """The message for an account that is paused because of refused proofs, or '' when it is not."""
+    paused = UserProfile.objects.filter(user=user).values_list('proof_blocked', flat=True).first()
+    return PROOF_BLOCK_MESSAGE if paused else ''
+
+
+def clear_proof_block(profile) -> None:
+    """Lift the pause (the owner or a manager un-flagged the account) and start the count again from now."""
+    profile.proof_blocked = False
+    profile.proof_block_reset_at = timezone.now()
+    profile.save(update_fields=["proof_blocked", "proof_block_reset_at"])

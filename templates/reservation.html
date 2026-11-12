@@ -773,6 +773,23 @@
                 arabelaAlert({ title: LOCKED_TITLE, message: err.data.error, danger: true }).then(reload, reload);
                 return;
             }
+            if (err && err.data && err.data.deposit_changed) {
+                var redo = function () { window.location.reload(); };
+                arabelaAlert({ title: 'The deposit changed', message: err.data.error, danger: true }).then(redo, redo);
+                return;
+            }
+            if (err && err.data && err.data.proof_rejected) {
+                // The receipt check refused the picture: nothing was booked and nothing is held. Say why right under the upload box and let
+                // the customer choose another picture.
+                var proofInputEl = document.getElementById('proof_of_payment');
+                if (proofInputEl) proofInputEl.value = '';
+                clearProofPreview();
+                proofUploadFilePromise = Promise.resolve(null);
+                setProofError(err.data.error);
+                var zone = document.getElementById('proof-payment-dropzone');
+                if (zone && zone.scrollIntoView) zone.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return;
+            }
             if (err && err.data && err.data.account_changed) {
                 var refresh = function () { window.location.reload(); };
                 arabelaAlert({ title: 'Your account changed', message: err.data.error, danger: true }).then(refresh, refresh);
@@ -911,6 +928,8 @@
                     formData.append('payment_method', 'GCash');
                     formData.append('rental_subtotal', payload.subtotal || 0);
                     formData.append('security_deposit', payload.deposit || 0);
+                    // The deposit the customer saw on this page: when the owner changed it meanwhile the server says so instead of charging another amount.
+                    formData.append('expected_deposit', String((Number(payload.itemCount) || 0) * (Number(document.body.dataset.depositPerGown) || 2000)));
                     formData.append('total_amount', payload.total || 0);
                     formData.append('first_name', document.getElementById('first_name').value.trim());
                     formData.append('last_name', document.getElementById('last_name').value.trim());

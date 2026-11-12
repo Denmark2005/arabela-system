@@ -31,12 +31,14 @@ User = get_user_model()
 
 # A real (tiny) JPEG: the proof upload opens what it is given and rebuilds the picture (gowns/proof_image.py),
 # so fake bytes with a JPEG header are refused exactly like a renamed PDF.
-from gowns.sample_images import TINY_JPEG as _TINY_JPEG      # a real picture: the proof upload now opens what it is given
+from gowns.sample_images import unique_jpeg      # a real picture: the proof upload now opens what it is given
 from accounts.test_support import agreed
 
 
-def _make_proof():
-    return SimpleUploadedFile("proof.jpg", _TINY_JPEG, content_type="image/jpeg")
+def _make_proof(picture=None):
+    """A proof upload. A new picture each time, because the receipt check refuses one picture used for two bookings; pass the same
+    `picture` bytes twice to send the exact same receipt again."""
+    return SimpleUploadedFile("proof.jpg", picture or unique_jpeg(), content_type="image/jpeg")
 
 
 class ReservationSubmitPriceTrustTests(TestCase):
@@ -2051,9 +2053,10 @@ class CheckoutLockoutAndRetryTests(TestCase):
     def test_pressing_confirm_again_after_a_lost_answer_does_not_book_twice(self):
         self.client.force_login(self.other)
         agreed(self.other)
-        first = self._submit()
+        picture = unique_jpeg()
+        first = self._submit(proof=_make_proof(picture))
         self.assertEqual(first.status_code, 200, first.content)
-        again = self._submit()  # same gowns, dates and receipt: the phone never saw the first answer
+        again = self._submit(proof=_make_proof(picture))  # same gowns, dates and receipt: the phone never saw the first answer
         self.assertEqual(again.status_code, 200, again.content)
         self.assertEqual(again.json()["reference_code"], first.json()["reference_code"])
         self.assertTrue(again.json()["already_submitted"])
@@ -2067,7 +2070,7 @@ class CheckoutLockoutAndRetryTests(TestCase):
         self.assertEqual(self._submit(start="2027-04-10", end="2027-04-13").status_code, 200)
         # Same dates but its own new receipt: a real second attempt, so it goes through the normal checks
         # (this single gown is now taken for those dates).
-        second_receipt = SimpleUploadedFile("second-receipt.jpg", _TINY_JPEG, content_type="image/jpeg")
+        second_receipt = SimpleUploadedFile("second-receipt.jpg", unique_jpeg(), content_type="image/jpeg")
         response = self._submit(proof=second_receipt)
         self.assertEqual(response.status_code, 400)
         self.assertIn("no longer available", response.json()["error"])
@@ -2087,12 +2090,21 @@ class CheckoutLockoutAndRetryTests(TestCase):
     def test_a_cancelled_first_booking_is_not_handed_back_as_the_repeat(self):
         self.client.force_login(self.other)
         agreed(self.other)
-        first = self._submit()
+        picture = unique_jpeg()
+        first = self._submit(proof=_make_proof(picture))
         Reservation.objects.filter(reference_code=first.json()["reference_code"]).update(status=Reservation.Status.CANCELLED)
-        again = self._submit()
-        self.assertEqual(again.status_code, 200, again.content)
-        self.assertNotEqual(again.json()["reference_code"], first.json()["reference_code"])
+        # The same receipt again is NOT handed back as the cancelled booking ("already_submitted") ...
+        again = self._submit(proof=_make_proof(picture))
         self.assertNotIn("already_submitted", again.json())
+        self.assertEqual(again.status_code, 400)
+        # ... it is judged like any new upload, and a receipt that was already used for a booking cannot pay for another one.
+        self.assertTrue(again.json()["proof_rejected"])
+        self.assertIn("already used for another booking", again.json()["error"])
+        # A new receipt makes a brand-new booking.
+        fresh = self._submit(proof=_make_proof())
+        self.assertEqual(fresh.status_code, 200, fresh.content)
+        self.assertNotEqual(fresh.json()["reference_code"], first.json()["reference_code"])
+        self.assertNotIn("already_submitted", fresh.json())
 
     # ---- the phone upload fix is loaded wherever a photo can be picked ----------------------------------------
     def test_every_page_with_a_photo_upload_loads_the_phone_upload_fix(self):

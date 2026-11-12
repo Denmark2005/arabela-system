@@ -1,0 +1,1 @@
+{% comment %}The chips of one booking: what the receipt check found and what the owner found in her GCash. Used with `r` = the Reservation.{% endcomment %}{% with badges=r.proof_badges %}{% if badges %}<div class="pb-row">{% for kind, text in badges %}<span class="pb-chip pb-chip--{{ kind }}">{{ text }}</span>{% endfor %}</div>{% endif %}{% endwith %}

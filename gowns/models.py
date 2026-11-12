@@ -631,6 +631,11 @@ class SiteSettings(models.Model):
     gcash_account_name = models.CharField(max_length=100, blank=True, default='', db_default='')
     gcash_number = models.CharField(max_length=20, blank=True, default='', db_default='')
     gcash_qr_url = models.URLField(max_length=500, blank=True, default='', db_default='')
+    # What the owner asks as the security deposit for EACH gown (whole pesos, 1 to 10,000). One setting that the checkout, the walk-in
+    # booking, the page scripts, the Terms/FAQ wording and the AI chat all read. A booking keeps the deposit it was made with
+    # (Reservation.security_deposit), so changing this only affects NEW bookings. db_default: an older deployment sharing this
+    # database can still insert a row.
+    security_deposit_per_gown = models.PositiveIntegerField(default=2000, db_default=2000)
     # Only the tag colors the owner has CHANGED from the defaults, keyed by category --
     # see resolve_tag_colors(), which layers these over DEFAULT_CATEGORY_TAG_COLORS.
     # Storing overrides (not a full copy) means a category added later just picks up
@@ -659,3 +664,25 @@ class SiteSettings(models.Model):
     def save(self, *args, **kwargs):
         self.pk = 1
         super().save(*args, **kwargs)
+
+
+class GcashNumberHistory(models.Model):
+    """Every GCash number the shop has used, with the moment each one started and stopped being the shop's.
+
+    A customer's receipt is judged against the number that was the shop's AT THE TIME PRINTED ON THE RECEIPT, plus the grace the owner
+    chose when the number changed (receipts for a payment made to the old number a little later, from a QR page that was still open, are
+    still fair). `valid_from` is None for the first number (it was the shop's since before this record existed); `valid_until` is None
+    while the number is still in use."""
+
+    number = models.CharField(max_length=20)
+    valid_from = models.DateTimeField(null=True, blank=True)
+    valid_until = models.DateTimeField(null=True, blank=True)
+    grace_hours = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-id']
+
+    def __str__(self):
+        return f'GCash {self.number} ({self.valid_from or "start"} - {self.valid_until or "now"})'
+

@@ -105,6 +105,7 @@
         .ar-gl.pa-gl > .ar-gprice { grid-area: price; }
       }
     </style>
+    {% include "arabela_admin/partials/proof_badges_styles.html" %}
     <!-- ===== Preloader Start ===== -->
     <script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('admin-dark-boot');}catch(e){}</script>
     <div
@@ -1261,6 +1262,7 @@
                       {% if r.receipt_count %}<div class="pa-note">Shop receipt attached</div>{% else %}<div class="pa-note pa-note--bad">No proof uploaded</div>{% endif %}
                       {% endif %}
                       {% if r.gcash_dups %}<div class="pa-note pa-note--bad" title="The same GCash reference number is also on {{ r.gcash_dups }}">Same GCash no. as {{ r.gcash_dups }}</div>{% endif %}
+                      {% include "arabela_admin/partials/proof_badges.html" with r=r %}
                     </div>
                     <div class="pa-acts">
                       <button type="button"

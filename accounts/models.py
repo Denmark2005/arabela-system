@@ -42,6 +42,10 @@ class UserProfile(models.Model):
     cancel_lockout_until = models.DateTimeField(null=True, blank=True)
     cancel_tier1_lockout_sent = models.BooleanField(default=False)
     cancel_tier2_lockout_sent = models.BooleanField(default=False)
+    # Set when too many payment proofs were refused in a short time (accounts.services.record_rejected_proof). While it is on, the account
+    # cannot start a new reservation; the owner or a manager lifts it from the Client List (which also restarts the count).
+    proof_blocked = models.BooleanField(default=False, db_default=False)
+    proof_block_reset_at = models.DateTimeField(null=True, blank=True)
     # A mirror of the customer's shopping cart, so it survives switching devices
     # or clearing browser data -- the cart itself still lives in localStorage for
     # instant reads/writes (see base.html's setDrawerCart); this is a best-effort

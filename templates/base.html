@@ -414,7 +414,8 @@
       data-hold-release-url="{% url 'gowns:reservation_hold_release' %}"
       data-home-url="{% url 'gowns:homepage' %}"
       data-cart-fetch-url="{% url 'gowns:cart_fetch' %}"
-      data-cart-save-url="{% url 'gowns:cart_save' %}"{% if terms_needed %}
+      data-cart-save-url="{% url 'gowns:cart_save' %}"
+      data-deposit-per-gown="{{ site_deposit_per_gown|default:2000 }}"{% if terms_needed %}
       data-terms-needed="true"{% endif %}>
 
 {% csrf_token %}
@@ -730,7 +731,7 @@
   <script src="{% static 'js/collection-reveal.js' %}?v={{ site_asset_version }}"></script>
   {% endif %}
   <script>
-    const SECURITY_DEPOSIT_PESOS = 2000;
+    const SECURITY_DEPOSIT_PESOS = {{ site_deposit_per_gown|default:2000 }};   // the owner's setting (Edit Profile), not a fixed number
     const USER_STORAGE_KEY = document.body?.dataset?.userKey || 'guest';
     const DRAWER_STORAGE_KEY = `arabela_cart_${USER_STORAGE_KEY}`;
     const CART_SAVE_URL = document.body?.dataset?.cartSaveUrl || '';

@@ -20,7 +20,7 @@ from reservations.models import Reservation, ReservationItem
 User = get_user_model()
 CAT = Gown.Category.BRIDESMAID_DRESSES
 NAME = "Black Bridesmaid Dress 4"
-from gowns.sample_images import TINY_JPEG as _JPEG      # a real picture: the proof upload now opens what it is given
+from gowns.sample_images import unique_jpeg      # a real picture: the proof upload now opens what it is given
 from accounts.test_support import agreed
 
 
@@ -49,7 +49,7 @@ class TwoSmallsAndALargeTests(TestCase):
         agreed(self.users[who])
         return client.post(reverse("gowns:reservation_submit"), data={
             "items": json.dumps(items), "first_name": "T", "last_name": who.upper(), "phone": "09171234567", "address": "1 St", "city": "C",
-            "postal_code": "1000", "payment_method": "GCash", "proof_of_payment": SimpleUploadedFile("p.jpg", _JPEG, content_type="image/jpeg")})
+            "postal_code": "1000", "payment_method": "GCash", "proof_of_payment": SimpleUploadedFile("p.jpg", unique_jpeg(), content_type="image/jpeg")})
 
     def page(self):
         return self.client.get(reverse("gowns:product_detail", kwargs={"collection": "bridesmaid-dresses", "slug": self.large.slug}))
@@ -118,7 +118,7 @@ class TwoSmallsAndALargeTests(TestCase):
             agreed(self.users[who])
             response = client.post(reverse("gowns:reservation_submit"), data={
                 "items": json.dumps(items(event)), "first_name": "T", "last_name": who, "phone": "09171234567", "address": "1 St", "city": "C",
-                "postal_code": "1000", "payment_method": "GCash", "proof_of_payment": SimpleUploadedFile("p.jpg", _JPEG, content_type="image/jpeg")})
+                "postal_code": "1000", "payment_method": "GCash", "proof_of_payment": SimpleUploadedFile("p.jpg", unique_jpeg(), content_type="image/jpeg")})
             self.assertEqual(response.status_code, 200, response.content)
         # both dates still have a Small free (each customer used one unit on a different date)
         plans = self.plans()

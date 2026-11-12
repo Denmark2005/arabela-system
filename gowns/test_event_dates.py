@@ -19,7 +19,7 @@ from gowns.views import _UNIT_ASSIGNED, _UNIT_DATE_PASSED, _UNIT_TODAY_CLOSED, _
 from reservations.models import Reservation, ReservationItem
 
 User = get_user_model()
-from gowns.sample_images import TINY_JPEG as _TINY_JPEG      # a real picture: the proof upload now opens what it is given
+from gowns.sample_images import unique_jpeg      # a real picture: the proof upload now opens what it is given
 from accounts.test_support import agreed
 D = timedelta
 
@@ -184,7 +184,7 @@ class CheckoutPlanTests(TestCase):
         return self.client.post(reverse("gowns:reservation_submit"), data={
             "items": json.dumps(items), "first_name": "Event", "last_name": "Buyer", "phone": "09171234567",
             "address": "1 Test St", "city": "Test City", "postal_code": "1000", "payment_method": "GCash",
-            "proof_of_payment": SimpleUploadedFile("proof.jpg", _TINY_JPEG, content_type="image/jpeg")})
+            "proof_of_payment": SimpleUploadedFile("proof.jpg", unique_jpeg(), content_type="image/jpeg")})
 
     def saved(self, response):
         self.assertEqual(response.status_code, 200, response.content)

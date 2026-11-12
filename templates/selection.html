@@ -69,7 +69,7 @@
 // USER_STORAGE_KEY is defined in base.html; do not redeclare (would throw and break this page).
 const CART_STORAGE_KEY = 'arabela_cart_' + USER_STORAGE_KEY;
 const RESERVATION_STORAGE_KEY = 'arabela_reservation_cart_' + USER_STORAGE_KEY;
-const DEPOSIT_PER_ITEM = 2000;
+const DEPOSIT_PER_ITEM = {{ site_deposit_per_gown|default:2000 }};   // the owner's setting (Edit Profile), not a fixed number
 const IS_AUTHENTICATED = {% if request.user.is_authenticated %}true{% else %}false{% endif %};
 const LOGIN_URL = "{% url 'accounts:login' %}";
 const RESERVATION_URL = "{% url 'gowns:reservation' %}";

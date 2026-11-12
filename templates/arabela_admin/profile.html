@@ -1767,12 +1767,13 @@
               <script>
                 window.gcashCard = function () {
                   return {
-                    name: '', number: '', qrUrl: '',
+                    name: '', number: '', qrUrl: '', savedNumber: '', graceHours: '48',
                     busy: false, qrError: '', detailsBusy: false, detailsMsg: '', detailsOk: false, showFull: false,
                     init() {
                       var d = this.$el.dataset;
                       this.name = d.name || '';
                       this.number = d.number || '';
+                      this.savedNumber = this.number;
                       this.qrUrl = d.qr || '';
                     },
                     csrf() {
@@ -1831,11 +1832,11 @@
                       this.detailsBusy = true; this.detailsMsg = '';
                       this.post('{% url "arabela_admin:gcash_details_update" %}', {
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name: this.name, number: this.number })
+                        body: JSON.stringify({ name: this.name, number: this.number, old_number_grace_hours: Number(this.graceHours) })
                       }).then((r) => {
                         this.detailsBusy = false;
                         this.detailsOk = !!(r.ok && r.data.success);
-                        if (this.detailsOk) { this.name = r.data.name; this.number = r.data.number; this.detailsMsg = 'Saved. Customers now see these details.'; }
+                        if (this.detailsOk) { this.name = r.data.name; this.number = r.data.number; this.savedNumber = r.data.number; this.detailsMsg = 'Saved. Customers now see these details.'; }
                         else { this.detailsMsg = r.data.error || 'Could not save.'; }
                       }).catch(() => { this.detailsBusy = false; this.detailsOk = false; this.detailsMsg = 'Network error. Please try again.'; });
                     }
@@ -1878,6 +1879,18 @@
                       <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">GCash number</label>
                       <input type="tel" inputmode="tel" x-model="number" maxlength="20" placeholder="0917 123 4567" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800" />
                     </div>
+                    <!-- Only when the number is being CHANGED: receipts a customer paid to the old number a little before (or while a QR page was still open)
+                         are still fair, so the owner says how long they keep counting. -->
+                    <div x-show="savedNumber && number.replace(/\D/g, '') !== savedNumber.replace(/\D/g, '')" x-cloak
+                         style="margin-top: 1rem; padding: .75rem 1rem; border: 1px solid #fedf89; border-radius: .75rem; background: #fffaeb;">
+                      <label class="block text-sm font-medium text-gray-700" style="color: #7a2e0e;">Keep accepting receipts paid to the old number</label>
+                      <select x-model="graceHours" class="dark:bg-dark-900 mt-1.5 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-800">
+                        <option value="48">for 48 hours (recommended)</option>
+                        <option value="24">for 24 hours</option>
+                        <option value="0">not at all (the old account is closed or lost)</option>
+                      </select>
+                      <p class="mt-1.5 text-xs" style="color: #93370d;">Receipts to the old number are judged by the time on the receipt. Choose "not at all" only if you can no longer see money sent to it.</p>
+                    </div>
                     <div style="display: flex; align-items: center; gap: 0.75rem; margin-top: 1.25rem;">
                       <button type="button" @click="saveDetails()" :disabled="detailsBusy" :style="detailsBusy ? 'opacity: 0.6; cursor: not-allowed;' : ''"
                               class="flex justify-center rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs hover:bg-black dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
@@ -1903,6 +1916,56 @@
                   </div>
                 </div>
               </div>
+              {% if can_edit_shop_settings %}
+              <!-- Security deposit per gown: ONE setting the checkout, the walk-in booking, the page scripts, the FAQ / Terms wording and the AI chat all read.
+                   Owner-only; the endpoint enforces that too. Applies to NEW bookings only. -->
+              <script>
+                window.depositCard = function () {
+                  return {
+                    amount: '', saved: '', busy: false, msg: '', ok: false,
+                    init() { this.saved = String(this.$el.dataset.amount || '2000'); this.amount = this.saved; },
+                    csrf() {
+                      var m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+                      return m ? decodeURIComponent(m[1]) : '';
+                    },
+                    get isTest() { return String(this.saved) !== '2000'; },
+                    get perGown() { return Number(this.amount) > 0 ? Number(this.amount) : 0; },
+                    peso(n) { return '\u20b1' + Number(n).toLocaleString('en-US'); },
+                    save() {
+                      this.busy = true; this.msg = '';
+                      fetch('{% url "arabela_admin:deposit_setting_update" %}', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.csrf() },
+                        body: JSON.stringify({ amount: this.amount })
+                      }).then((res) => res.json().then((data) => ({ ok: res.ok, data: data }))).then((r) => {
+                        this.busy = false;
+                        this.ok = !!(r.ok && r.data.success);
+                        if (this.ok) { this.saved = String(r.data.amount); this.amount = this.saved; this.msg = 'Saved. New bookings now ask ' + this.peso(r.data.amount) + ' per gown.'; }
+                        else { this.msg = r.data.error || 'Could not save.'; }
+                      }).catch(() => { this.busy = false; this.ok = false; this.msg = 'Network error. Please try again.'; });
+                    }
+                  };
+                };
+              </script>
+              <div x-data="depositCard()" data-amount="{{ site_deposit_per_gown }}" class="p-5 border border-gray-200 rounded-2xl dark:border-gray-800 lg:p-6" style="margin-top: 1.5rem;">
+                <h4 class="flex items-center text-lg font-semibold text-gray-800 dark:text-white/90">Security deposit<details class="ht-tip"><summary aria-label="About the security deposit" title="About the security deposit">?</summary><div class="ht-tip-pop">What customers pay by GCash for each gown they book. It is the same everywhere: the bag, the checkout, the payment page, the Terms and FAQ wording, the AI chat and the walk-in New Booking. A booking keeps the deposit it was made with, so changing this only affects new bookings.</div></details></h4>
+                <div style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 1rem; margin-top: 1.1rem;">
+                  <div style="min-width: 220px; flex: 1; max-width: 340px;">
+                    <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Deposit for each gown (pesos)</label>
+                    <input type="text" inputmode="numeric" x-model="amount" @input="amount = amount.replace(/[^0-9]/g, '').slice(0, 5)" maxlength="5" placeholder="2000" aria-label="Security deposit per gown in pesos, from 1 to 10,000"
+                           class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90" />
+                  </div>
+                  <div style="display: flex; align-items: center; gap: .75rem;">
+                    <button type="button" @click="save()" :disabled="busy || !amount" :style="(busy || !amount) ? 'opacity: 0.6; cursor: not-allowed;' : ''"
+                            class="flex justify-center rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs hover:bg-black dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
+                            x-text="busy ? 'Saving...' : 'Save Deposit'"></button>
+                    <p x-show="msg" x-cloak x-text="msg" class="text-xs font-medium" :class="ok ? 'text-success-700 dark:text-success-500' : 'text-error-600 dark:text-error-500'"></p>
+                  </div>
+                </div>
+                <p class="mt-2 text-xs text-gray-400 dark:text-gray-400">Whole pesos, from 1 to 10,000. For example, 5 gowns at <span x-text="peso(perGown || 0)"></span> each is <span x-text="peso(perGown * 5)"></span>.</p>
+                <p x-show="isTest" x-cloak class="mt-3 rounded-lg px-4 py-3 text-xs font-medium" style="background: #fffaeb; color: #93370d;">Test amount. The normal deposit is &#8369;2,000, so set it back before real customers book.</p>
+              </div>
+              {% endif %}
               <!-- Customer emails: preview every email, check delivery, send a test to the owner (owner-only page). -->
               <div class="p-5 border border-gray-200 rounded-2xl dark:border-gray-800 lg:p-6" style="margin-top: 1.5rem;">
                 <h4 class="flex items-center text-lg font-semibold text-gray-800 dark:text-white/90">Customer emails<details class="ht-tip"><summary aria-label="About customer emails" title="About customer emails">?</summary><div class="ht-tip-pop">Customers can be emailed when a reservation is received, approved or rejected, for pick-up and return reminders, overdue notices and account notices. See how each email looks and send a test to yourself first.</div></details></h4>

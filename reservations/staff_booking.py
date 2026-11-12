@@ -20,11 +20,11 @@ from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from gowns import availability
+from gowns import availability, deposit
 from gowns.models import COOLDOWN_DAYS, Gown, GownUnavailability
 from reservations.models import ReceiptRecord, Reservation, ReservationItem, ReservationStatusEvent
 
-DEPOSIT_PER_GOWN = Decimal("2000")
+DEPOSIT_PER_GOWN = Decimal("2000")          # only the starting default: the amount really used is the owner's setting (gowns/deposit.py)
 MAX_GOWNS = 10
 MAX_RECEIPTS = 1                # one photo here; a second one (the rental receipt) is added later in Reservation Records
 NOTE_MAX = 200
@@ -237,7 +237,7 @@ def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, a
                 line["return_date"] = result["return_date"]
 
             rental_subtotal = sum((line["gown"].rental_price for line in lines), Decimal("0"))
-            security_deposit = DEPOSIT_PER_GOWN * len(lines)
+            security_deposit = deposit.for_gowns(len(lines))
             reservation = Reservation.objects.create(
                 customer=account,
                 customer_name=name,
