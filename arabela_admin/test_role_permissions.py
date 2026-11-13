@@ -402,7 +402,7 @@ class RuleTests(RoleBase):
 
 class StaffManagementTests(RoleBase):
     def create(self, **extra):
-        body = {"name": "Nina Newhire", "username": "nina.newhire", "password": "a-very-long-pass-1", "permissions": []}
+        body = {"name": "Nina Newhire", "email": "nina.newhire@gmail.com", "permissions": []}
         body.update(extra)
         return self.post(reverse("arabela_admin:staff_create"), body)
 
@@ -470,7 +470,7 @@ class StaffManagementTests(RoleBase):
             self.client.force_login(who)
             for url, body in ((reverse("arabela_admin:staff_update", args=[self.plain_staff.pk]),
                                {"name": "Sam Staff", "permissions": list(PERMISSION_KEYS), "password": ""}),
-                              (reverse("arabela_admin:staff_create"), {"name": "X Y", "username": "x.yz.1", "password": "a-very-long-pass-1", "permissions": []})):
+                              (reverse("arabela_admin:staff_create"), {"name": "X Y", "email": "x.yz.1@gmail.com", "permissions": []})):
                 with self.subTest(account=who.username, url=url):
                     self.assertEqual(self.post(url, body).status_code, 403)
         self.assertEqual(UserProfile.objects.get(user=self.plain_staff).permissions, before)

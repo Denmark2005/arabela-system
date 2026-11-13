@@ -69,6 +69,9 @@ from .views import (
     change_own_password_view,
     change_own_username_view,
     admin_login_view,
+    admin_password_login_view,
+    admin_google_finish_view,
+    owner_gmail_change_start_view,
     admin_logout_view,
     page_view,
     save_profile_view,
@@ -97,6 +100,11 @@ app_name = "arabela_admin"
 
 urlpatterns = [
     path("admin-login/", admin_login_view, name="admin_login"),
+    # Step 1 of the Google sign-in change: the old username + password page stays reachable ONLY at this unlinked address (a fallback
+    # while the Google sign-in is tested); it is removed in step 2.
+    path("admin-login/password/", admin_password_login_view, name="admin_password_login"),
+    path("google-finish/", admin_google_finish_view, name="google_finish"),
+    path("api/account/change-gmail/", owner_gmail_change_start_view, name="owner_gmail_change"),
     path("forgot-password/", forgot_password_view, name="forgot_password"),
     path("reset-password/<uidb64>/<token>/", reset_password_view, name="reset_password"),
     path("api/recovery-email/send-code/", recovery_send_code_view, name="recovery_send_code"),

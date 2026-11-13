@@ -243,6 +243,16 @@ Not emailed on purpose: the temporary-lock notice, the "lock removed" message, c
 
 ## 11. Owner account, passwords and recovery
 
+**NEW (2026-11-13, step 1 of the Google sign-in change): the admin panel opens with Google, not a username and password.**
+- The admin sign-in page (`/admin-panel/admin-login/`) is one "Continue with Google" button, in the same look as the customer sign-in page, with the Arabela logo. No username, no password, no "Forgot password?".
+- Who may enter: the owner, whose Gmail is `ADMIN_OWNER_GMAIL` (settings; default `arabelaantipolo@gmail.com`, an optional environment variable), and every staff account the owner added in **Staff Management** (Add Account asks for the staff member's Gmail, not a username/password; the account's password is unusable). Any other Google account is told it is not allowed. A Gmail that is already a *customer* account is refused for staff.
+- The owner can change her own sign-in Gmail in **Edit Profile > Change sign-in Gmail**: the new Gmail is saved only after she signs in to it with Google, so a typing mistake can never lock her out. The Email box in Edit Profile is read-only for everyone (it is the sign-in identity; the owner changes a staff Gmail in Staff Management).
+- How it works (`accounts/admin_google.py`, `accounts/adapters.py`, `arabela_admin/views.py`): the page uses the SAME Google sign-in as the customers with `next=/admin-panel/google-finish/`. `pre_social_login` sees that `next`, checks the Google-confirmed Gmail, and hands an allowed person to `/admin-panel/google-finish/` with a signed link (two minutes, works once), so the session is created in the admin area (its own cookie). The session ends when the browser closes; Sign out ends it at once. The first time, the owner's Gmail is attached to the one existing owner (superuser) account; it refuses if there is more than one superuser or a customer already uses that Gmail.
+- **Step 1 keeps a hidden fallback** while this is tested: the old username + password page is still reachable only at `/admin-panel/admin-login/password/` (not linked anywhere). Step 2 removes it, the Change Password / Change Username / recovery-email / forgot-password features, the sign-in lockout, and the old staff accounts.
+- If nobody can sign in with Google (wrong owner Gmail, Google outage): use the hidden password address above, or in `python manage.py shell` set the owner account's `email` to the Gmail that works.
+
+*(The password-based text below describes the OLD sign-in; it is removed in step 2.)*
+
 The shop has **one owner account** — the sign-in for this admin panel. Staff and managers sign in with accounts the owner creates in Staff Management.
 
 **Changing the owner's username or password** (owner only; staff cannot): Admin → Edit Profile → **Login & Security**, or the avatar menu → **Account settings**.

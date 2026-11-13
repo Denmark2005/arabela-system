@@ -122,7 +122,7 @@ class NoSecretsTests(AuditBase):
 
     def test_a_staff_password_set_in_staff_management_is_never_in_the_log(self):
         self.client.force_login(self.owner)
-        body = {"name": "Nina New", "username": "nina.new", "password": "a-very-secret-pass-9", "permissions": []}
+        body = {"name": "Nina New", "email": "nina.new@gmail.com", "password": "a-very-secret-pass-9", "permissions": []}
         self.assertEqual(self.client.post(reverse("arabela_admin:staff_create"), data=json.dumps(body), content_type="application/json").status_code, 200)
         target = User.objects.get(username="nina.new")
         self.client.post(reverse("arabela_admin:staff_update", args=[target.pk]), data=json.dumps(
@@ -245,7 +245,7 @@ class CoverageTests(TestCase):
     # Addresses that are pages, searches, previews or sign-in screens: they change nothing in the shop. Every OTHER address under the admin
     # panel must carry @audited -- adding a new action without it fails test_every_other_admin_address_writes_a_line.
     NOT_ACTIONS = {
-        "admin_login", "forgot_password", "reset_password", "recovery_send_code", "admin_logout", "dashboard", "rental_schedule", "calendar",
+        "admin_login", "admin_password_login", "google_finish", "forgot_password", "reset_password", "recovery_send_code", "admin_logout", "dashboard", "rental_schedule", "calendar",
         "new_booking", "payment_verification", "rental_history", "security_deposits", "reservation_records", "active_reservations",
         "pending_approval", "gown_catalog", "categories", "clients", "staff_management", "audit_log", "audit_log_export", "email_preview",
         "email_preview_render", "admin_notifications_feed", "admin_search", "page", "booking_gown_search", "availability_check",
@@ -384,7 +384,7 @@ class SignInTests(AuditBase):
     quiet_sign_ins = False
 
     def sign_in(self, username, password):
-        return self.client.post(reverse("arabela_admin:admin_login"), data={"username": username, "password": password})
+        return self.client.post(reverse("arabela_admin:admin_password_login"), data={"username": username, "password": password})
 
     def test_a_staff_sign_in_and_sign_out_are_written_with_the_address_and_device(self):
         self.assertEqual(self.sign_in("au_maria", "x").status_code, 302)
@@ -538,7 +538,7 @@ class PageTests(AuditBase):
     def test_staff_activity_summary(self):
         from django.test import Client
         audit.connect_signals()                  # this one needs the sign-in lines
-        Client().post(reverse("arabela_admin:admin_login"), data={"username": "au_pedro", "password": "x"})       # Pedro really signs in (own browser)
+        Client().post(reverse("arabela_admin:admin_password_login"), data={"username": "au_pedro", "password": "x"})       # Pedro really signs in (own browser)
         response = self.get()
         self.assertEqual(response.status_code, 200)
         people = {p["id"]: p for p in response.context["activity"]}          # by id: the legacy Manager account is also called Maria Cruz

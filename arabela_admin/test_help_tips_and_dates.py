@@ -247,7 +247,7 @@ class LongTextIsOnlyInsideAQuestionMarkTests(ActiveDropdownBase):
         self.check(self.get("arabela_admin:categories"), ["One tall photo of the whole gown on a plain white background."])
         self.check(self.get("arabela_admin:staff_management"), ["Every staff account can do the daily work: gowns, new bookings, approving and rejecting, pick-ups and returns, receipts and reminders. Tick anything more this person may do. Staff who cannot cancel a booking can send you a cancellation request instead."])
         staff = self.get("arabela_admin:staff_management")
-        self.assertIn("Leave the password blank to keep it unchanged.", staff)
+        self.assertIn("Change the name, the Gmail, or what this staff member can do.", staff)
         self.assertNotIn("Update the account details.", staff)
         self.check(self.client.get("/admin-panel/profile.html").content.decode(), [
             "Shown to customers when they pay the security deposit. The QR is always shown whole, never cropped.",

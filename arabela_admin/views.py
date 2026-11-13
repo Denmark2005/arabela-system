@@ -32,7 +32,7 @@ from django.views.decorators.http import require_http_methods
 import json
 
 from accounts import audit as audit_log
-from accounts import login_throttle, owner_recovery
+from accounts import admin_google, login_throttle, owner_recovery
 from accounts.audit import audited
 from accounts.models import CustomerMessage, UserProfile
 from accounts.roles import (
@@ -3807,6 +3807,7 @@ def _staff_row(user):
     return {
         "id": user.id,
         "name": _staff_display_name(user),
+        "email": user.email or "",          # the Gmail this person signs in with (Google); older accounts may have none yet
         "username": user.username,
         # There is no Manager role any more: every account here is Staff, and what each may do beyond the daily work is `permissions`
         # (the effective list -- an old Manager row that has not been converted yet reads as having all four).
@@ -3886,40 +3887,38 @@ def _get_manageable_staff(user_id, request):
 @audited('staff.create', 'Staff', audit_describe.staff_create, sensitive=True)
 @_require_owner
 def staff_create_view(request):
-    """Create a Staff admin account. is_staff=True so it can log in at the admin
-    login page; is_superuser=False so it never gains owner powers. `permissions` = the sensitive actions the owner allows it."""
+    """Create a Staff admin account from the Gmail the owner types. The person signs in to the admin panel with that Google account:
+    there is no username and no password (the account's password is unusable). is_staff=True so it can open the panel;
+    is_superuser=False so it never gains owner powers. `permissions` = the sensitive actions the owner allows it."""
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid request."}, status=400)
 
     full_name = (data.get("name") or "").strip()
-    username = (data.get("username") or "").strip()
-    password = data.get("password") or ""
+    email = admin_google.normalize_email(data.get("email"))
     permissions, permission_error = _permissions_from_request(data)
 
     if not full_name:
         return JsonResponse({"error": "Full name is required."}, status=400)
-    if not username:
-        return JsonResponse({"error": "Username is required."}, status=400)
+    problem = admin_google.gmail_problem(email)
+    if problem:
+        return JsonResponse({"error": problem}, status=400)
     if permission_error:
         return JsonResponse({"error": permission_error}, status=400)
     first, last = _split_name(full_name)
-    problem = _admin_password_problem(password, User(username=username, first_name=first, last_name=last))
-    if problem:
-        return JsonResponse({"error": problem}, status=400)
-    if User.objects.filter(username__iexact=username).exists():
-        return JsonResponse({"error": "That username is already taken."}, status=400)
 
-    user = User.objects.create_user(
-        username=username,
-        password=password,
+    user = User(
+        username=admin_google.unique_username(email),
+        email=email,
         first_name=first,
         last_name=last,
         is_staff=True,
         is_superuser=False,
         is_active=True,
     )
+    user.set_unusable_password()
+    user.save()
     UserProfile.objects.update_or_create(
         user=user, defaults={"role": UserProfile.Role.STAFF, "display_name": full_name, "permissions": join_permissions(permissions)}
     )
@@ -3931,7 +3930,7 @@ def staff_create_view(request):
 @audited('staff.update', 'Staff', audit_describe.staff_update, sensitive=True, before=audit_describe.before_staff)
 @_require_owner
 def staff_update_view(request, user_id):
-    """Edit a staff account's name and what it may do, and optionally reset the password."""
+    """Edit a staff account: its name, the Gmail it signs in with, and what it may do."""
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
@@ -3942,23 +3941,24 @@ def staff_update_view(request, user_id):
         return error
 
     full_name = (data.get("name") or "").strip()
-    password = data.get("password") or ""
     permissions, permission_error = _permissions_from_request(data)
 
     if not full_name:
         return JsonResponse({"error": "Full name is required."}, status=400)
     if permission_error:
         return JsonResponse({"error": permission_error}, status=400)
-    if password:
-        problem = _admin_password_problem(password, target)
+    # The Gmail is only changed when the request sends one (Staff Management always does); it must be a Gmail nobody else uses.
+    email = admin_google.normalize_email(data["email"]) if "email" in data else None
+    if email is not None:
+        problem = admin_google.gmail_problem(email, exclude_pk=target.pk)
         if problem:
             return JsonResponse({"error": problem}, status=400)
 
     first, last = _split_name(full_name)
     target.first_name = first
     target.last_name = last
-    if password:
-        target.set_password(password)
+    if email is not None:
+        target.email = email
     target.save()
     profile, _ = UserProfile.objects.get_or_create(user=target)
     # Saving converts an old Manager row to Staff on the spot: what it may do is exactly the boxes ticked now.
@@ -4145,8 +4145,71 @@ def _previous_login(request):
     return parse_datetime(raw) if raw else None
 
 
-@never_cache  # a copy of this page kept by the browser (back button, restored tab) would carry an out-of-date security secret
+@never_cache
 def admin_login_view(request):
+    """The admin sign-in page: ONE "Continue with Google" button (same look as the customer sign-in page). Only the owner's Gmail and the
+    Gmail accounts the owner added in Staff Management can open the admin panel (accounts.admin_google). No username, no password."""
+    if _is_admin_staff(request):
+        return redirect("arabela_admin:dashboard")
+    error = admin_google.SIGN_IN_PROBLEMS.get(request.GET.get("problem", ""), "")
+    response = render(request, "arabela_admin/admin-login.html", admin_google.sign_in_context(request, error))
+    # While this page is open, a Google answer that fails comes back here (accounts.adapters.on_authentication_error reads this).
+    response.set_cookie(admin_google.TRY_COOKIE, "1", max_age=600, httponly=True, samesite="Lax", secure=request.is_secure())
+    return response
+
+
+@never_cache
+def admin_google_finish_view(request):
+    """Where the Google sign-in lands for the admin panel. The link was made by accounts.adapters (only for an allowed Gmail, valid for two
+    minutes, usable once). It signs the person in HERE, inside the admin area, so the admin session cookie is the one that is created.
+    The session ends when the browser is closed (no 'keep me signed in'); the Sign out button ends it at once."""
+    user, change_to = admin_google.read_signin_token(request.GET.get("t", ""))
+    if user is None:
+        return render(request, "arabela_admin/admin-login.html", admin_google.sign_in_context(request, admin_google.MESSAGES["link_expired"]), status=400)
+    old_email = user.email
+    if change_to:
+        # The owner confirmed a new sign-in Gmail by signing in to it. Check it is still free, then save it.
+        problem = admin_google.gmail_problem(change_to, exclude_pk=user.pk)
+        if problem:
+            return render(request, "arabela_admin/admin-login.html", admin_google.sign_in_context(request, problem), status=400)
+        user.email = change_to
+        user.save(update_fields=["email"])
+    previous_login = user.last_login          # read BEFORE login() overwrites it
+    login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+    request.session[_PREVIOUS_LOGIN_SESSION_KEY] = previous_login.isoformat() if previous_login else ""
+    request.session.set_expiry(0)             # until the browser is closed
+    if change_to:
+        audit_log.record(user, category="Account", action="account.gmail", sensitive=True, request=request, network=True,
+                         summary=f"{_staff_display_name(user)} changed their sign-in Gmail to {change_to}", details={"from": old_email, "to": change_to})
+    response = redirect("arabela_admin:dashboard")
+    response.delete_cookie(admin_google.TRY_COOKIE)
+    return response
+
+
+@require_http_methods(["POST"])
+@audited('account.gmail_start', 'Staff', audit_describe.gmail_change_start, sensitive=True)
+@_require_owner
+def owner_gmail_change_start_view(request):
+    """Edit Profile > "Change sign-in Gmail": the owner types a new Gmail; the answer is the Google address she must open to prove the Gmail
+    is really hers. Nothing is saved yet: the new Gmail replaces the old one only after she signs in to it (admin_google_finish_view)."""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid request."}, status=400)
+    new_email = admin_google.normalize_email(data.get("email"))
+    if new_email == admin_google.normalize_email(request.user.email):
+        return JsonResponse({"error": "That is already your sign-in Gmail."}, status=400)
+    problem = admin_google.gmail_problem(new_email, exclude_pk=request.user.pk)
+    if problem:
+        return JsonResponse({"error": problem}, status=400)
+    url = admin_google.google_login_url(request, admin_google.make_change_token(request.user, new_email))
+    return JsonResponse({"success": True, "url": url, "email": new_email})
+
+
+@never_cache  # a copy of this page kept by the browser (back button, restored tab) would carry an out-of-date security secret
+# HIDDEN FALLBACK (step 1 of the Google sign-in change): the old username + password sign-in is no longer linked from anywhere. It stays at
+# /admin-panel/admin-login/password/ only so the shop is never locked out while the Google sign-in is being tested, and is removed in step 2.
+def admin_password_login_view(request):
     if request.method == "POST":
         username = request.POST.get("username", "").strip()
         password = request.POST.get("password", "")
@@ -4154,7 +4217,7 @@ def admin_login_view(request):
         if not username:
             return render(
                 request,
-                "arabela_admin/admin-login.html",
+                "arabela_admin/admin-login-password.html",
                 {"error": "Please enter your username.", "username": username},
             )
 
@@ -4163,14 +4226,14 @@ def admin_login_view(request):
         if locked_seconds:
             return render(
                 request,
-                "arabela_admin/admin-login.html",
+                "arabela_admin/admin-login-password.html",
                 {"error": login_throttle.lockout_message(locked_seconds), "username": username},
             )
 
         if not password:
             return render(
                 request,
-                "arabela_admin/admin-login.html",
+                "arabela_admin/admin-login-password.html",
                 {"error": "Please enter your password.", "username": username},
             )
 
@@ -4192,14 +4255,14 @@ def admin_login_view(request):
                 )
             return render(
                 request,
-                "arabela_admin/admin-login.html",
+                "arabela_admin/admin-login-password.html",
                 {"error": error_message, "username": username},
             )
 
         if not (authenticated_user.is_staff or authenticated_user.is_superuser):
             return render(
                 request,
-                "arabela_admin/admin-login.html",
+                "arabela_admin/admin-login-password.html",
                 {"error": "This account has no admin access.", "username": username},
             )
 
@@ -4220,7 +4283,7 @@ def admin_login_view(request):
     notice = ""
     if request.GET.get("reset") == "done":      # sent here by the Forgot password page after a new password was saved
         notice = "Your password was changed. Sign in with your new password."
-    return render(request, "arabela_admin/admin-login.html", {"notice": notice})
+    return render(request, "arabela_admin/admin-login-password.html", {"notice": notice})
 
 
 @require_http_methods(["POST"])
@@ -4318,8 +4381,9 @@ def save_profile_view(request):
             request.user.first_name = data['firstName']
         if 'lastName' in data:
             request.user.last_name = data['lastName']
-        if 'email' in data:
-            request.user.email = data['email']
+        # The email is NOT saved here: it is the Gmail this account signs in with (Google). The owner changes a staff Gmail in Staff
+        # Management, and her own through Edit Profile > Change sign-in Gmail (confirmed with Google), so a profile save can never hand
+        # the admin panel to somebody else's Gmail.
         request.user.save()
 
         # Update UserProfile fields

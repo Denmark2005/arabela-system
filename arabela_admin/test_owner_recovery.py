@@ -36,7 +36,7 @@ SETTINGS = dict(
 SEND = reverse("arabela_admin:recovery_send_code")
 VERIFY = reverse("arabela_admin:recovery_verify_code")
 FORGOT = reverse("arabela_admin:forgot_password")
-LOGIN = reverse("arabela_admin:admin_login")
+LOGIN = reverse("arabela_admin:admin_password_login")
 SENT_LOCATION = FORGOT + "?sent=1"
 
 
@@ -511,10 +511,11 @@ class ForgotPasswordTests(RecoveryBase):
 
     def test_changing_the_profile_email_does_not_change_where_the_link_goes(self):
         self.give_recovery()
+        before = self.owner.email
         self.client_owner.post(reverse("arabela_admin:save_profile"), data=json.dumps({"email": "attacker@gmail.com"}),
                                content_type="application/json")
         self.owner.refresh_from_db()
-        self.assertEqual(self.owner.email, "attacker@gmail.com")
+        self.assertEqual(self.owner.email, before)                                     # the profile can no longer change the sign-in Gmail at all
         self.ask("attacker@gmail.com")                                                 # the profile address finds nobody...
         self.assertEqual(len(mail.outbox), 0)
         self.ask(RECOVERY_EMAIL)                                                       # ...only the confirmed recovery address does
@@ -833,16 +834,16 @@ class PageTests(RecoveryBase):
         for needle in ('x-model="currentPassword"', 'x-model="newPassword"', "Change Username", "Show passwords", "Previous sign-in"):
             self.assertContains(response, needle)
 
-    def test_staff_management_password_boxes_have_a_working_eye(self):
+    def test_staff_management_has_no_password_boxes_only_a_gmail_box(self):
+        # Staff sign in with Google now: Add Account and Edit Account ask for the Gmail, there is no password to type or reset.
         response = self.client_owner.get(reverse("arabela_admin:staff_management"))
         self.assertEqual(response.status_code, 200)
         html = response.content.decode()
-        self.assertEqual(html.count(":type=\"showPw ? 'text' : 'password'\""), 2)         # Add Account and Edit Account
-        self.assertEqual(html.count('type="password"'), 0)                                # no password box is left without it
-        self.assertIn('x-model="newAccountPassword"', html)
-        self.assertIn('x-model="editPassword"', html)
-        self.assertIn("::-ms-reveal", html)
-        self.assertEqual(html.count(":aria-label=\"showPw ? 'Hide password' : 'Show password'\""), 2)
+        self.assertEqual(html.count('type="password"'), 0)
+        self.assertNotIn("newAccountPassword", html)
+        self.assertNotIn("editPassword", html)
+        self.assertIn('x-model="newAccountEmail"', html)
+        self.assertIn('x-model="editEmail"', html)
 
     def test_the_forgot_and_reset_pages_have_no_dependency_on_a_cdn(self):
         self.give_recovery()

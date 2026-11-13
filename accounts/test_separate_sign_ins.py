@@ -41,7 +41,7 @@ class SeparateSessionsTests(TestCase):
     def setUp(self):
         self.badges = reverse("gowns:notification_badges")
         self.dashboard = reverse("arabela_admin:dashboard")
-        self.admin_login = reverse("arabela_admin:admin_login")
+        self.admin_login = reverse("arabela_admin:admin_password_login")
 
     def sign_in_customer(self):
         self.client.force_login(self.customer)

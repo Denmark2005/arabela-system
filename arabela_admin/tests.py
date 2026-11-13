@@ -898,68 +898,75 @@ class StaffManagementCRUDTests(TestCase):
     def setUp(self):
         self.client.force_login(self.owner)
 
-    def test_owner_can_create_a_staff_account(self):
+    def test_owner_can_create_a_staff_account_from_a_gmail(self):
         response = self.client.post(
             reverse("arabela_admin:staff_create"),
-            data=json.dumps({"name": "New Staffer", "username": "new_staffer_1", "password": "Bridal-Gown-2026", "role": "Staff"}),
+            data=json.dumps({"name": "New Staffer", "email": "New.Staffer1@Gmail.com", "role": "Staff"}),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200, response.content)
-        self.assertTrue(User.objects.filter(username="new_staffer_1").exists())
+        user = User.objects.get(email="new.staffer1@gmail.com")                      # saved in lower case
+        self.assertTrue(user.is_staff)
+        self.assertFalse(user.is_superuser)
+        self.assertFalse(user.has_usable_password())                                  # nobody can sign in with a password: Google only
+        self.assertEqual(response.json()["account"]["email"], "new.staffer1@gmail.com")
 
-    def test_duplicate_username_is_rejected(self):
-        User.objects.create_user(username="taken_name", password="x", is_staff=True)
+    def test_a_gmail_that_already_belongs_to_an_admin_account_is_rejected(self):
+        User.objects.create_user(username="taken_name", password="x", is_staff=True, email="taken@gmail.com")
         response = self.client.post(
             reverse("arabela_admin:staff_create"),
-            data=json.dumps({"name": "Dup", "username": "taken_name", "password": "Bridal-Gown-2026", "role": "Staff"}),
+            data=json.dumps({"name": "Dup", "email": "TAKEN@gmail.com", "role": "Staff"}),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 400)
+        self.assertIn("already belongs to another admin account", response.json()["error"])
 
-    def test_short_password_is_rejected(self):
+    def test_a_gmail_that_is_already_a_customer_account_is_refused(self):
+        User.objects.create_user(username="a_customer", password="x", email="customer@gmail.com")
         response = self.client.post(
             reverse("arabela_admin:staff_create"),
-            data=json.dumps({"name": "Short PW", "username": "short_pw_1", "password": "short", "role": "Staff"}),
+            data=json.dumps({"name": "Cust Omer", "email": "customer@gmail.com"}),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 400)
+        self.assertIn("already used by a customer account", response.json()["error"])
+        self.assertEqual(User.objects.filter(email__iexact="customer@gmail.com", is_staff=True).count(), 0)
 
-    def test_staff_passwords_follow_the_same_rules_as_the_owners(self):
-        cases = {
-            "nine-char": "Use at least 10 characters",              # 9 characters
-            "password1234": "too common",                            # long enough but on Django's common list
-            "1234567890123": "entirely numeric",
-            "rules_staffer_9": "too similar",                        # the username itself
-        }
-        for password, message in cases.items():
-            with self.subTest(password=password):
+    def test_a_missing_or_invalid_gmail_is_rejected(self):
+        for email, fragment in (("", "Enter the Gmail"), ("not-an-email", "valid Gmail")):
+            with self.subTest(email=email):
                 response = self.client.post(
                     reverse("arabela_admin:staff_create"),
-                    data=json.dumps({"name": "Rules Person", "username": "rules_staffer_9", "password": password, "role": "Staff"}),
+                    data=json.dumps({"name": "No Mail", "email": email}),
                     content_type="application/json",
                 )
                 self.assertEqual(response.status_code, 400)
-                self.assertIn(message, response.json()["error"])
-        self.assertFalse(User.objects.filter(username="rules_staffer_9").exists())
+                self.assertIn(fragment, response.json()["error"])
+        self.assertFalse(User.objects.filter(first_name="No").exists())
 
-    def test_resetting_a_staff_password_uses_the_same_rules_and_blank_keeps_the_old_one(self):
-        target = User.objects.create_user(username="reset_target", password="Old-Password-77", is_staff=True)
+    def test_a_staff_account_never_gets_a_password_from_the_request(self):
+        response = self.client.post(
+            reverse("arabela_admin:staff_create"),
+            data=json.dumps({"name": "Pw Person", "email": "pw.person@gmail.com", "password": "Bridal-Gown-2026"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertFalse(User.objects.get(email="pw.person@gmail.com").has_usable_password())
+
+    def test_owner_can_change_a_staff_gmail_and_a_request_without_one_keeps_it(self):
+        target = User.objects.create_user(username="reset_target", password="x", is_staff=True, email="old.mail@gmail.com")
         UserProfile.objects.create(user=target, role=UserProfile.Role.STAFF)
         url = reverse("arabela_admin:staff_update", args=[target.id])
-        short = self.client.post(url, data=json.dumps({"name": "Reset Target", "role": "Staff", "password": "short123"}),
-                                 content_type="application/json")
-        self.assertEqual(short.status_code, 400)
-        self.assertIn("Use at least 10 characters", short.json()["error"])
-        blank = self.client.post(url, data=json.dumps({"name": "Reset Target", "role": "Staff", "password": ""}),
-                                 content_type="application/json")
-        self.assertEqual(blank.status_code, 200)
+        keep = self.client.post(url, data=json.dumps({"name": "Reset Target"}), content_type="application/json")
+        self.assertEqual(keep.status_code, 200)
         target.refresh_from_db()
-        self.assertTrue(target.check_password("Old-Password-77"))
-        good = self.client.post(url, data=json.dumps({"name": "Reset Target", "role": "Staff", "password": "Evening-Gown-2026"}),
-                                content_type="application/json")
-        self.assertEqual(good.status_code, 200)
+        self.assertEqual(target.email, "old.mail@gmail.com")
+        bad = self.client.post(url, data=json.dumps({"name": "Reset Target", "email": "nope"}), content_type="application/json")
+        self.assertEqual(bad.status_code, 400)
+        good = self.client.post(url, data=json.dumps({"name": "Reset Target", "email": "New.Mail@gmail.com"}), content_type="application/json")
+        self.assertEqual(good.status_code, 200, good.content)
         target.refresh_from_db()
-        self.assertTrue(target.check_password("Evening-Gown-2026"))
+        self.assertEqual(target.email, "new.mail@gmail.com")
 
     def test_owner_can_update_a_staff_account(self):
         target = User.objects.create_user(username="update_target", password="x", is_staff=True)
@@ -1012,7 +1019,7 @@ class AdminLoginLockoutTests(TestCase):
         cache.clear()
 
     def _attempt(self, username, password):
-        return self.client.post(reverse("arabela_admin:admin_login"), data={"username": username, "password": password})
+        return self.client.post(reverse("arabela_admin:admin_password_login"), data={"username": username, "password": password})
 
     def test_correct_password_logs_in(self):
         response = self._attempt("lockout_test_user", "correctpassword123")
@@ -5325,7 +5332,7 @@ class ChangeOwnUsernameTests(TestCase):
     def test_the_new_username_signs_in_through_the_real_sign_in_page_and_the_old_one_does_not(self):
         self.client.force_login(self.owner)
         self._post()
-        login_url = reverse("arabela_admin:admin_login")
+        login_url = reverse("arabela_admin:admin_password_login")
         ok = Client().post(login_url, {"username": "quiet.owner_42", "password": "OldPass123xyz"})
         self.assertRedirects(ok, reverse("arabela_admin:dashboard"), fetch_redirect_response=False)
         old = Client().post(login_url, {"username": "rename_owner", "password": "OldPass123xyz"})
@@ -5500,7 +5507,7 @@ class PreviousSignInTests(TestCase):
 
     def _sign_in(self, username="prev_owner", password="OldPass123xyz"):
         client = Client()
-        response = client.post(reverse("arabela_admin:admin_login"), {"username": username, "password": password})
+        response = client.post(reverse("arabela_admin:admin_password_login"), {"username": username, "password": password})
         self.assertEqual(response.status_code, 302, "the sign-in itself should have worked")
         return client
 

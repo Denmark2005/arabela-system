@@ -8,7 +8,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils.http import urlencode
 
-from . import login_next
+from . import admin_google, login_next
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,39 @@ def _refuse_staff(request):
     raise ImmediateHttpResponse(render(request, 'login.html', {'next': '', 'error': STAFF_GOOGLE_MESSAGE}, status=403))
 
 
+def _refuse_admin(request, message, status=403):
+    """Stop an ADMIN Google sign-in and show the admin sign-in page with the reason."""
+    raise ImmediateHttpResponse(render(request, "arabela_admin/admin-login.html", admin_google.sign_in_context(request, message), status=status))
+
+
+def _admin_google_sign_in(request, sociallogin, next_url):
+    """The Google answer belongs to the ADMIN sign-in page (it asked to come back to the admin hand-over page). Never signs anybody in
+    here: an allowed Gmail is handed over to /admin-panel/google-finish/ with a short-lived signed link, so the session is created
+    in the admin area (its own cookie), and everyone else is refused. Always raises ImmediateHttpResponse."""
+    email, verified = admin_google.google_identity(sociallogin)
+    if not email or not verified:
+        _refuse_admin(request, admin_google.MESSAGES["not_verified"])
+    change_to = ""
+    change_token = admin_google.change_token_from_next(next_url)
+    if change_token:
+        # The owner is switching her own sign-in Gmail: it only counts when the Google account that answered IS the new Gmail.
+        owner, new_email = admin_google.read_change_token(change_token)
+        if owner is None:
+            _refuse_admin(request, admin_google.MESSAGES["change_expired"], status=400)
+        if email != new_email:
+            _refuse_admin(request, f"You signed in with {email}, but you asked to switch to {new_email}. Nothing was changed.", status=400)
+        problem = admin_google.gmail_problem(new_email, exclude_pk=owner.pk)
+        if problem:
+            _refuse_admin(request, problem, status=400)
+        user, change_to = owner, new_email
+    else:
+        user, why = admin_google.resolve_admin_user(email)
+        if user is None:
+            _refuse_admin(request, admin_google.MESSAGES[why])
+    token = admin_google.make_signin_token(user, change_to=change_to)
+    raise ImmediateHttpResponse(redirect(f"{admin_google.finish_path()}?{urlencode({'t': token})}"))
+
+
 class ArabelaSocialAccountAdapter(DefaultSocialAccountAdapter):
     def on_authentication_error(self, request, provider, error=None, exception=None, extra_context=None):
         """Google's answer could not be used. Instead of allauth's bare "Third-Party Login Failure" page:
@@ -40,15 +73,27 @@ class ArabelaSocialAccountAdapter(DefaultSocialAccountAdapter):
             signed them in and only the repeat failed, so there is nothing to tell them and they must not lose their place;
           * anyone else goes back to the login page, which says what happened and to try once more (keeping where they were headed).
         The login page is a redirect (not the callback URL itself), so a refresh can never replay the failed answer."""
+        problem = "cancelled" if error in (AuthError.CANCELLED, AuthError.DENIED) else "incomplete"
+        if request.COOKIES.get(admin_google.TRY_COOKIE):
+            # The admin sign-in page was open a moment ago in this browser: send the person back to IT with the reason.
+            logger.warning("Admin Google sign-in did not finish: error=%s exception=%r", error, exception)
+            response = redirect(f"{reverse('arabela_admin:admin_login')}?{urlencode({'problem': problem})}")
+            response.delete_cookie(admin_google.TRY_COOKIE)
+            raise ImmediateHttpResponse(response)
         destination = login_next.recall(request)
         if request.user.is_authenticated:
             raise ImmediateHttpResponse(redirect(destination or reverse("gowns:homepage")))
         logger.warning("Google sign-in did not finish: error=%s exception=%r", error, exception)
-        problem = "cancelled" if error in (AuthError.CANCELLED, AuthError.DENIED) else "incomplete"
         query = {"problem": problem, **({"next": destination} if destination else {})}
         raise ImmediateHttpResponse(redirect(f"{reverse('accounts:login')}?{urlencode(query)}"))
 
     def pre_social_login(self, request, sociallogin):
+        # The ADMIN sign-in page asked Google to come back to the admin hand-over page: the owner / staff Gmail check, not a customer login.
+        next_url = (getattr(sociallogin, "state", None) or {}).get("next") or ""
+        if admin_google.is_admin_next(next_url):
+            _admin_google_sign_in(request, sociallogin, next_url)       # always raises
+            return
+
         # A Google sign-in that was already linked to a staff account (an older sign-in that matched by email).
         if sociallogin.is_existing:
             if _is_staff(sociallogin.user):

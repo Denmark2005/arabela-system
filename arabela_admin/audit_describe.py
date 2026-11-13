@@ -324,12 +324,12 @@ def before_staff(request, kwargs):
     user = _customer(kwargs.get("user_id"))
     if user is None:
         return {}
-    return {"name": staff_display_name(user), "active": user.is_active, "permissions": sorted(granted_permissions(user))}
+    return {"name": staff_display_name(user), "active": user.is_active, "permissions": sorted(granted_permissions(user)), "gmail": user.email or ""}
 
 
 def staff_create(ctx):
     account = ctx.data.get("account") or {}
-    return {"summary": f"created the staff account {account.get('name', '')} ({account.get('username', '')})".replace(" ()", ""),
+    return {"summary": f"created the staff account {account.get('name', '')} ({account.get('email', '')})".replace(" ()", ""),
             "target": ("staff", account.get("id", ""), account.get("name", "")), "sensitive": True,
             "details": {"allowed to": account.get("permissions", [])}}
 
@@ -343,8 +343,8 @@ def staff_update(ctx):
         changes["allowed to"] = [before.get("permissions", []), now]
     if before.get("name") and before.get("name") != account.get("name"):
         changes["name"] = [before.get("name"), account.get("name")]
-    if ctx.body.get("password"):
-        changes["sign-in"] = "password was reset"          # never the password itself (and the log drops any key that looks like one)
+    if before.get("gmail") is not None and before.get("gmail") != account.get("email"):
+        changes["sign-in Gmail"] = [before.get("gmail") or "none", account.get("email") or "none"]
     return {"summary": f"changed the staff account of {account.get('name') or before.get('name', '')}",
             "target": ("staff", account.get("id", ctx.kwargs.get("user_id", "")), account.get("name", "")), "sensitive": True,
             "details": changes}
@@ -360,6 +360,10 @@ def staff_status(ctx):
 def staff_delete(ctx):
     return {"summary": f"deleted the staff account of {ctx.before.get('name', '')}",
             "target": ("staff", ctx.kwargs.get("user_id", ""), ctx.before.get("name", "")), "sensitive": True}
+
+
+def gmail_change_start(ctx):
+    return {"summary": f"started changing their sign-in Gmail to {(ctx.body or {}).get('email', '')}", "sensitive": True}
 
 
 def change_password(ctx):

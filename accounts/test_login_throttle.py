@@ -14,7 +14,7 @@ from accounts import login_throttle
 from accounts.models import LoginThrottle
 
 User = get_user_model()
-LOGIN = reverse("arabela_admin:admin_login")
+LOGIN = reverse("arabela_admin:admin_password_login")
 
 
 class LoginLockoutTests(TestCase):
