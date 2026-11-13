@@ -70,12 +70,14 @@ class CsrfFailureTests(TestCase):
 
 class NormalSignInStillWorksTests(TestCase):
     def test_a_sign_in_page_loaded_normally_passes_the_check_with_it_switched_on(self):
+        # The Google sign-in page has no form; the password page (hidden fallback in step 1) is the one that posts a username and password.
+        fallback = reverse("arabela_admin:admin_password_login")
         browser = Client(enforce_csrf_checks=True)
-        page = browser.get(LOGIN)
+        page = browser.get(fallback)
         self.assertEqual(page.status_code, 200)
         self.assertIn("csrftoken", browser.cookies)                       # the page sets the cookie by itself
         token = re.search(r'name="csrfmiddlewaretoken" value="([^"]+)"', page.content.decode()).group(1)
-        answer = browser.post(LOGIN, {"csrfmiddlewaretoken": token, "username": "nobody", "password": "wrong"})
+        answer = browser.post(fallback, {"csrfmiddlewaretoken": token, "username": "nobody", "password": "wrong"})
         self.assertEqual(answer.status_code, 200)                         # the normal "invalid username or password" page, not a 403
         self.assertIn("Invalid username or password", answer.content.decode())
 

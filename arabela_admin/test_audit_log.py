@@ -130,8 +130,7 @@ class NoSecretsTests(AuditBase):
         blob = json.dumps(list(AuditLog.objects.values()), default=str)
         self.assertNotIn("a-very-secret-pass-9", blob)
         self.assertNotIn("another-secret-pass-7", blob)
-        update = AuditLog.objects.get(action="staff.update")
-        self.assertEqual(update.details["sign-in"], "password was reset")
+        self.assertFalse(User.objects.get(pk=target.pk).has_usable_password())          # the request's password was ignored: Google only
 
 
 # --------------------------------------------------------------------------------------------------------------------------------

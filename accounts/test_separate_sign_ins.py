@@ -71,7 +71,7 @@ class SeparateSessionsTests(TestCase):
     def test_the_admin_panel_never_uses_an_ordinary_customers_sign_in(self):
         self.sign_in_customer()
         response = self.client.get(self.dashboard)
-        self.assertRedirects(response, self.admin_login, fetch_redirect_response=False)
+        self.assertRedirects(response, reverse("arabela_admin:admin_login"), fetch_redirect_response=False)
         self.assertEqual(self.customer_now(), self.customer.pk)                 # and looking did not sign the customer out
 
     def test_the_admin_signing_out_leaves_the_customer_signed_in(self):

@@ -23,7 +23,7 @@ from . import audit_describe
 
 from .views import OWNER_PASSWORD_MAX_LENGTH, OWNER_PASSWORD_MIN_LENGTH, _require_owner
 
-LOGIN_NOTICE_PARAM = "reset"          # /admin-panel/admin-login/?reset=done shows "your password was changed"
+LOGIN_NOTICE_PARAM = "reset"          # /admin-panel/admin-login/password/?reset=done shows "your password was changed" (the hidden fallback page, step 1)
 LOGIN_NOTICE_VALUE = "done"
 
 
@@ -146,5 +146,5 @@ def reset_password_view(request, uidb64, token):
         audit.record(user, category="Staff", action="account.password_reset", sensitive=True, request=request, network=True,
                      summary=f"{staff_display_name(user)} reset their password with the recovery email",
                      target_type="staff", target_id=user.pk, target_label=staff_display_name(user))
-        return redirect(reverse("arabela_admin:admin_login") + f"?{LOGIN_NOTICE_PARAM}={LOGIN_NOTICE_VALUE}")
+        return redirect(reverse("arabela_admin:admin_password_login") + f"?{LOGIN_NOTICE_PARAM}={LOGIN_NOTICE_VALUE}")
     return _page(request, {})
