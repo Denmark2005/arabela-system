@@ -492,6 +492,7 @@
 
   // ------------------------------------------------------------------ polling
   var timer = null, inFlight = false, failures = 0, lastPoll = 0, stopped = false;
+  var restored = false, coverTimer = null;   // restored: this page just came back from the browser's history
 
   function nextDelay() {
     var base = document.hidden ? POLL_HIDDEN_MS : POLL_VISIBLE_MS;
@@ -503,8 +504,40 @@
     if (!stopped) { timer = setTimeout(poll, ms); }
   }
 
+  // ------------------------------------------------------------------ a page that comes back from the browser's history
+  // After "Sign out" the Back button can bring the old page back from the browser's own copy without asking the server, so the
+  // panel would sit there looking signed in until the first click. A page that comes back that way is covered until the server
+  // has confirmed that the sign-in still counts; if it does not, the browser goes straight to the sign-in page.
+  var COVER_MAX_MS = 6000;           // never leave a blank page behind if the check cannot finish (offline, slow server)
+
+  function coverPage() {
+    document.documentElement.style.visibility = 'hidden';
+    clearTimeout(coverTimer);
+    coverTimer = setTimeout(uncoverPage, COVER_MAX_MS);
+  }
+  function uncoverPage() {
+    clearTimeout(coverTimer);
+    document.documentElement.style.visibility = '';
+  }
+  function verifySignIn() {
+    restored = true;
+    coverPage();
+    stopped = false;
+    inFlight = false;
+    failures = 0;
+    poll(true);
+  }
+  function cameBackFromHistory() {
+    try {
+      var nav = window.performance && performance.getEntriesByType ? performance.getEntriesByType('navigation')[0] : null;
+      return !!(nav && nav.type === 'back_forward');
+    } catch (e) { return false; }
+  }
+  window.addEventListener('pageshow', function (e) { if (e.persisted) { verifySignIn(); } });
+
   function sessionEnded() {
     stopped = true;
+    if (restored) { window.location.replace(cfg.login); return; }   // came back from history while signed out: straight to sign-in
     toast({
       kicker: 'Signed out', text: 'Your session has ended. Sign in again to keep getting live alerts.',
       href: cfg.login, hrefLabel: 'Sign in', sticky: true
@@ -548,6 +581,7 @@
       return res.json();
     }).then(function (data) {
       if (!data) { return; }
+      if (restored) { restored = false; uncoverPage(); }   // the server confirmed the sign-in: show the page
       failures = 0;
       try { handle(data); } catch (err) { report('could not update the bell', err); }
     }).catch(function () {
@@ -649,4 +683,5 @@
   applyFilter();
   updateDot();
   schedule(FIRST_POLL_MS);
+  if (cameBackFromHistory()) { verifySignIn(); }
 })();

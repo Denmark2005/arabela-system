@@ -11,7 +11,7 @@ from django.db import close_old_connections
 from django.db.models import Q
 from django.db.utils import OperationalError
 from django.http import HttpResponse, JsonResponse
-from django.utils.cache import patch_vary_headers
+from django.utils.cache import add_never_cache_headers, patch_vary_headers
 from django.urls import Resolver404, resolve
 from django.utils.http import http_date
 
@@ -184,6 +184,25 @@ class SplitSessionMiddleware(SessionMiddleware):
                         httponly=settings.SESSION_COOKIE_HTTPONLY or None,
                         samesite=settings.SESSION_COOKIE_SAMESITE,
                     )
+        return response
+
+
+class AdminNoStoreMiddleware:
+    """Tells the browser never to keep a copy of anything in the admin area.
+
+    Every admin page already refuses a signed-out visitor, but only when the SERVER is asked. After Sign out, the Back button
+    did not ask: the browser put its own copy of the last page back (its back/forward cache), so the panel sat there looking
+    signed in until the first click. `no-store` makes the browser keep no copy, so Back asks the server and the server sends the
+    visitor to the sign-in page. One rule here covers every present and future admin page, so no page can be forgotten.
+    The customer site and the static files are not touched."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        if is_admin_area(request.path):
+            add_never_cache_headers(response)
         return response
 
 

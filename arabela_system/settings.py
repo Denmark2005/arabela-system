@@ -104,6 +104,8 @@ MIDDLEWARE = [
     # Django's SessionMiddleware with a separate sign-in cookie for the admin area, so signing in to the admin panel in one tab
     # can no longer swap the customer's account in another tab (see arabela_system/middleware.py).
     'arabela_system.middleware.SplitSessionMiddleware',
+    # Admin pages are never kept by the browser, so the Back button after Sign out cannot show the panel again (see the class).
+    'arabela_system.middleware.AdminNoStoreMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
