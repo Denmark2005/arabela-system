@@ -617,3 +617,90 @@ class DashboardAndBellTests(AuditBase):
         for n in range(8):
             write_line(self.maria, n + 1, summary=f"Maria Cruz deleted gown G{n}", sensitive=True)
         self.assertEqual(len([n for n in build_items(self.owner) if n["key"].startswith("audit:")]), 5)
+
+
+# --------------------------------------------------------------------------------------------------------------------------------
+class LayoutTests(PageTests):
+    """The page fits the screen: one card with two tabs, a dropdown instead of nine buttons, and a list that is only its 15 rows (no scroll box
+    of its own, so the page scrolls once and never twice)."""
+
+    def html(self, **params):
+        return self.get(**params).content.decode()
+
+    def test_the_list_has_no_scroll_box_of_its_own(self):
+        listing = self.html().split('data-arpg=".ar-booking"')[0].rsplit("<div", 1)[1]
+        self.assertNotIn("overflow-y-auto", listing)
+        self.assertNotIn("max-height", listing)
+        self.assertIn('data-arpg-noun="actions"', self.html())
+        self.assertIn('data-arpg-count="#ar-count"', self.html())
+
+    def test_the_count_line_always_exists_for_the_pager_even_when_nothing_is_listed(self):
+        self.assertIn('id="ar-count"', self.html())
+        AuditLog.objects.purge_older_than(timezone.now() + timedelta(days=1))
+        self.assertIn('id="ar-count"', self.html())
+
+    def test_one_dropdown_replaces_the_nine_buttons_and_each_option_shows_its_count(self):
+        html = self.html()
+        self.assertNotIn("ar-filters", html.split("</style>", 1)[1])                  # the row of kind-of-action buttons is gone
+        self.assertNotIn("au-keyrow\">", html.split("</style>", 1)[1])
+        select = html.split('aria-label="Show one kind of action"')[0].rsplit("<select", 1)[1]
+        self.assertIn('name="category"', select)
+        body = html.split('aria-label="Show one kind of action">')[1].split("</select>")[0]
+        self.assertIn("All kinds (5)", body)
+        self.assertIn("Gowns (3)", body)
+        self.assertIn("Payments (0)", body)
+        # the dropdown keeps the filter: the chosen kind is selected and the list follows it
+        chosen = self.html(category="Gowns")
+        self.assertIn('<option value="Gowns" selected>Gowns (3)</option>', chosen)
+        self.assertEqual(len(self.get(category="Gowns").context["rows"]), 3)
+
+    def test_there_is_one_important_only_button_and_it_toggles(self):
+        html = self.html()
+        self.assertEqual(html.count("Important only"), 1)
+        self.assertIn(self.get().context["important_link"], html.replace("&amp;", "&"))
+        on = self.html(important="1")
+        self.assertIn('aria-pressed="true"', on)
+        self.assertIn('<input type="hidden" name="important" value="1">', on)            # a change of dropdown keeps it
+        self.assertEqual(len(self.get(important="1").context["rows"]), 3)
+
+    def test_the_old_circles_legend_is_gone_and_the_button_explains_the_circles(self):
+        html = self.html()
+        self.assertNotIn("About the circles", html)
+        self.assertIn("Everyday work shows a grey circle", html)
+
+    def test_staff_activity_is_a_tab_in_the_same_card(self):
+        html = self.html()
+        self.assertIn('role="tablist"', html)
+        self.assertIn('id="au-tab-actions"', html)
+        self.assertIn('id="au-tab-staff"', html)
+        self.assertNotIn("<details", html.split("</style>", 1)[1].split("<main", 1)[1])        # no closed row under the list any more
+        self.assertEqual(self.get().context["tab"], "actions")
+        staff_first = self.get(tab="staff")
+        self.assertEqual(staff_first.context["tab"], "staff")
+        self.assertEqual(self.get(tab="<script>").context["tab"], "actions")                   # anything unknown opens the list
+        self.assertTrue(len(staff_first.context["activity"]) >= 3)
+        page = staff_first.content.decode()
+        self.assertIn("Last sign-in", page)
+        self.assertIn("Maria Cruz", page)
+
+    def test_the_tab_shows_how_many_actions_and_people(self):
+        html = self.html()
+        self.assertIn('Actions <span class="au-n">5</span>', html)
+        people = len(self.get().context["activity"])
+        self.assertIn(f'Staff activity <span class="au-n">{people}</span>', html)
+
+    def test_the_owner_tag_is_not_repeated_on_every_line_but_is_in_the_opened_line(self):
+        rows = self.html().split('data-arpg=".ar-booking"', 1)[1].split('<p class="au-note">', 1)[0]          # the lines only (the Staff activity tab keeps its tag)
+        self.assertNotIn('class="au-role"', rows)
+        self.assertIn('<span class="au-k">Role</span><span class="au-v">Owner</span>', rows)
+
+    def test_the_notes_and_the_cap_message_are_still_there(self):
+        html = self.html()
+        self.assertIn("The Audit Log starts on", html)
+        self.assertIn("cannot be changed or deleted", html)
+
+    def test_the_whole_page_still_works_for_every_filter_together(self):
+        for params in ({"category": "Gowns", "staff": self.maria.pk, "range": "all", "q": "AB", "important": "1"}, {"range": "custom", "from": "2000-01-01"},
+                       {"tab": "staff", "category": "Payments"}):
+            with self.subTest(params=params):
+                self.assertEqual(self.get(**params).status_code, 200)

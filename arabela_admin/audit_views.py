@@ -282,6 +282,7 @@ def audit_log_view(request):
         "staff_choices": [{"id": u.id, "name": staff_display_name(u)} for u in User.objects.filter(is_staff=True).order_by("first_name", "username")],
         "starts_on": date_format(timezone.localtime(first), "M j, Y") if first else "",
         "activity": staff_activity(),
+        "tab": "staff" if request.GET.get("tab") == "staff" else "actions",
     })
 
 

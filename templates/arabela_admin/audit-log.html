@@ -16,7 +16,7 @@
     /* Audit Log: the same look as Rental History, Security Deposits and Active Reservations (partials/ar_list_styles.html). Its own classes start with au-. */
     .au-card { margin-bottom: 1.25rem; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; }
     .dark .au-card { background: rgba(255,255,255,.03); border-color: #1d2939; }
-    .ar-search-input.au-select { flex: 0 0 11rem; width: 11rem; padding-left: .8rem; }
+    .ar-search-input.au-select { flex: 0 0 9.5rem; width: 9.5rem; padding-left: .8rem; }
     .ar-search-input.au-date { flex: 0 0 9.5rem; width: 9.5rem; padding-left: .8rem; }
     a.ar-filter { text-decoration: none; }
     .au-keyrow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; padding: 0 1.25rem .85rem; }
@@ -49,6 +49,25 @@
     .au-people summary::after { content: ""; margin-left: auto; width: .55rem; height: .55rem; border-right: 2px solid #98a2b3; border-bottom: 2px solid #98a2b3; transform: rotate(45deg); transition: transform .15s; }
     .au-people[open] summary::after { transform: rotate(-135deg); }
     .au-people-hint { font-size: .8125rem; font-weight: 400; color: #667085; }
+    /* ONE card with two tabs (Actions | Staff activity): the staff table no longer hides under the list, and the list is just its 15 rows --
+       no scroll box of its own, so the page scrolls once and never twice. */
+    .au-tabs { display: flex; flex-wrap: wrap; gap: .25rem; padding: .35rem 1.25rem 0; border-bottom: 1px solid #f2f4f7; }
+    .dark .au-tabs { border-color: #1d2939; }
+    .au-tab { display: inline-flex; align-items: center; gap: .5rem; margin-bottom: -1px; padding: .6rem .9rem; border: 0; border-bottom: 2px solid transparent; background: none; font-size: .875rem; font-weight: 600; color: #667085; cursor: pointer; }
+    .au-tab:hover { color: #344054; }
+    .dark .au-tab:hover { color: #d0d5dd; }
+    .au-tab[aria-selected="true"] { color: #465fff; border-bottom-color: #465fff; }
+    .dark .au-tab[aria-selected="true"] { color: #9db2ff; border-bottom-color: #9db2ff; }
+    .au-tab:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; border-radius: .4rem; }
+    .au-n { min-width: 1.25rem; padding: 0 .4rem; border-radius: 999px; background: rgba(152,162,179,.22); font-size: .75rem; font-weight: 600; text-align: center; }
+    .au-card .ar-head.au-grid, .au-card .ar-head.au-pgrid { position: static; }
+    .au-card .ar-line.au-grid { padding-top: .4rem; padding-bottom: .4rem; }
+    .au-card .ar-line .ar-chev { width: 1.75rem; height: 1.75rem; }
+    .au-card .ar-search { flex: 1 1 14rem; }
+    .au-card .au-toolbar-pill { white-space: nowrap; }
+    .au-note { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .5rem; }
+    .au-note #ar-count { font-weight: 600; color: #667085; font-variant-numeric: tabular-nums; }
+    .au-peoplehead { padding: .85rem 1.25rem .6rem; }
     .ar-head.au-pgrid, .au-prow.au-pgrid { display: grid; align-items: center; gap: .75rem; grid-template-columns: minmax(9rem, 1.5fr) minmax(8rem, 1fr) minmax(8rem, 1fr) 5rem 5rem 6rem; }
     .au-prow { padding: .7rem 1.25rem; border-top: 1px solid #f2f4f7; font-size: .875rem; color: #475467; }
     .au-prow .ar-name { display: flex; align-items: center; gap: .6rem; }
@@ -71,7 +90,7 @@
   </style>
 </head>
   <body
-    x-data="{ page: 'audit-log', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, openRows: [],
+    x-data="{ page: 'audit-log', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, openRows: [], tab: '{{ tab }}',
       isRowOpen(id) { return this.openRows.includes(id); },
       toggleRow(id) { this.openRows = this.isRowOpen(id) ? this.openRows.filter(x => x !== id) : this.openRows.concat([id]); }
     }"
@@ -1163,8 +1182,12 @@
                  number on each one is the count) with the "Showing 1-15 of 50 actions" line, then one short line per action. Opening a line shows what it
                  was before and after. Staff activity is a closed row underneath. The page's own name is not repeated here. -->
             <div class="au-card">
+              <div class="au-tabs" role="tablist" aria-label="Audit Log">
+                <button type="button" class="au-tab" role="tab" id="au-tab-actions" aria-controls="au-pane-actions" aria-selected="{% if tab == 'staff' %}false{% else %}true{% endif %}" :aria-selected="tab === 'actions' ? 'true' : 'false'" @click="tab = 'actions'">Actions <span class="au-n">{{ total }}</span></button>
+                <button type="button" class="au-tab" role="tab" id="au-tab-staff" aria-controls="au-pane-staff" aria-selected="{% if tab == 'staff' %}true{% else %}false{% endif %}" :aria-selected="tab === 'staff' ? 'true' : 'false'" @click="tab = 'staff'">Staff activity <span class="au-n">{{ activity|length }}</span></button>
+              </div>
+              <div id="au-pane-actions" role="tabpanel" aria-labelledby="au-tab-actions" x-show="tab === 'actions'"{% if tab == 'staff' %} x-cloak{% endif %}>
               <form method="get" class="ar-toolbar" id="au-form">
-                <input type="hidden" name="category" value="{{ filters.category }}">
                 {% if filters.important %}<input type="hidden" name="important" value="1">{% endif %}
                 <div class="ar-search">
                   <svg class="ar-search-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
@@ -1181,22 +1204,15 @@
                 <input type="date" name="from" value="{{ filters.from }}" class="ar-search-input au-date" onchange="this.form.submit()" aria-label="From this day">
                 <input type="date" name="to" value="{{ filters.to }}" class="ar-search-input au-date" onchange="this.form.submit()" aria-label="Up to this day">
                 {% endif %}
+                <select name="category" class="ar-search-input au-select" onchange="this.form.submit()" aria-label="Show one kind of action">
+                  {% for c in categories %}<option value="{{ c.key }}"{% if filters.category == c.key %} selected{% endif %}>{% if c.key == "all" %}All kinds{% else %}{{ c.label }}{% endif %} ({{ c.count }})</option>{% endfor %}
+                </select>
+                <a href="{{ important_link }}" class="ar-filter ar-filter--hot au-toolbar-pill{% if filters.important %} is-on{% endif %}" title="Important: something a staff member did that matters (deleting, cancelling, changing a setting) or an attempt that was refused. Everyday work shows a grey circle."{% if filters.important %} aria-pressed="true"{% endif %}><span class="ar-dot au-dot--sensitive"></span>Important only</a>
                 <a href="{{ export_link }}" class="ar-ib" title="Download this list as a spreadsheet (CSV)" aria-label="Download this list as a spreadsheet">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
                 </a>
               </form>
-              <div class="au-keyrow">
-                <div class="ar-filters" role="group" aria-label="Show one kind of action">
-                  {% for c in categories %}
-                  <a href="{{ c.link }}" class="ar-filter{% if filters.category == c.key %} is-on{% endif %}"{% if filters.category == c.key %} aria-current="true"{% endif %}>{{ c.label }} <span class="ar-n">{{ c.count }}</span></a>
-                  {% endfor %}
-                  <a href="{{ important_link }}" class="ar-filter ar-filter--hot{% if filters.important %} is-on{% endif %}"><span class="ar-dot au-dot--sensitive"></span>Important only</a>
-                  <details class="ht-tip"><summary aria-label="About the circles" title="About the circles">?</summary><div class="ht-tip-pop"><span class="ar-dot au-dot--normal"></span> Everyday work. <span class="ar-dot au-dot--sensitive"></span> Important: deleting, cancelling, flagging, settings, staff accounts. <span class="ar-dot au-dot--bad"></span> Refused or failed.</div></details>
-                </div>
-                <div class="ar-count"><span id="ar-count" aria-live="polite"></span></div>
-              </div>
-
-              <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg=".ar-booking" data-arpg-noun="actions" data-arpg-top="off" data-arpg-count="#ar-count">
+              <div data-arpg=".ar-booking" data-arpg-noun="actions" data-arpg-top="off" data-arpg-count="#ar-count">
                 <div class="ar-head au-grid">
                   <span>When</span>
                   <span>Who</span>
@@ -1208,7 +1224,7 @@
                 <div class="ar-booking" data-row-id="{{ r.id }}">
                   <div class="ar-line au-grid" :class="isRowOpen({{ r.id }}) ? 'is-open' : ''" @click="if (!$event.target.closest('a')) { toggleRow({{ r.id }}) }">
                     <div class="au-when">{{ r.when }}</div>
-                    <div class="au-who"><span class="ar-name">{{ r.who }}</span>{% if r.role == "Owner" %}<span class="au-role">Owner</span>{% endif %}</div>
+                    <div class="au-who"><span class="ar-name">{{ r.who }}</span></div>
                     <div class="au-what"><span class="ar-dot au-dot--{{ r.tone }}" role="img" aria-label="{% if r.tone == 'bad' %}{{ r.outcome }}{% elif r.tone == 'sensitive' %}Important{% else %}Everyday work{% endif %}" title="{% if r.tone == 'bad' %}{{ r.outcome }}{% elif r.tone == 'sensitive' %}Important{% else %}Everyday work{% endif %}"></span><span>{% if r.what_parts %}{{ r.what_parts.0 }}<a href="{{ r.target_link }}" class="au-link" title="Open it">{{ r.what_parts.1 }}</a>{{ r.what_parts.2 }}{% else %}{{ r.what }}{% endif %}</span></div>
                     <button type="button" class="ar-chev" @click.stop="toggleRow({{ r.id }})" aria-expanded="false"
                       :aria-expanded="isRowOpen({{ r.id }}) ? 'true' : 'false'" aria-controls="au-panel-{{ r.id }}"
@@ -1219,6 +1235,7 @@
                   <div class="ar-panel" id="au-panel-{{ r.id }}" x-show="isRowOpen({{ r.id }})" x-cloak>
                     <div class="au-facts">
                       <span class="au-fact"><span class="au-k">When</span><span class="au-v">{{ r.when_full }}</span></span>
+                      {% if r.role %}<span class="au-fact"><span class="au-k">Role</span><span class="au-v">{{ r.role }}</span></span>{% endif %}
                       {% if r.tone == 'bad' %}<span class="au-fact"><span class="au-k">Result</span><span class="au-v">{{ r.outcome }}</span></span>{% endif %}
                       {% if r.about_extra %}<span class="au-fact"><span class="au-k">About</span><span class="au-v">{% if r.target_link %}<a href="{{ r.target_link }}" class="au-link" title="Open it">{{ r.about_extra }}</a>{% else %}{{ r.about_extra }}{% endif %}</span></span>{% endif %}
                       {% for label, before, after in r.details %}
@@ -1234,14 +1251,12 @@
                 </div>
                 {% endfor %}
               </div>
-              {% if starts_on %}
-              <p class="au-note">The Audit Log starts on {{ starts_on }} and keeps the last 12 months. It cannot be changed or deleted.{% if capped %} Showing the newest {{ max_rows }} of {{ total }}: narrow the dates or search to see the rest.{% endif %}</p>
-              {% endif %}
-            </div>
+              <p class="au-note"><span id="ar-count" aria-live="polite"></span>{% if starts_on %}<span>The Audit Log starts on {{ starts_on }} and keeps the last 12 months. It cannot be changed or deleted.{% if capped %} Showing the newest {{ max_rows }} of {{ total }}: narrow the dates or search to see the rest.{% endif %}</span>{% endif %}</p>
+              </div>
 
-            <!-- Staff activity: one closed row, opened only when wanted. -->
-            <details class="au-card au-people">
-              <summary>Staff activity <span class="au-people-hint">last sign-in and what each person did</span></summary>
+              <!-- Staff activity: the second tab of the same card. -->
+              <div id="au-pane-staff" role="tabpanel" aria-labelledby="au-tab-staff" class="au-people" x-show="tab === 'staff'"{% if tab != 'staff' %} x-cloak{% endif %}>
+              <p class="au-people-hint au-peoplehead">Last sign-in and what each person did.</p>
               <div class="ar-head au-pgrid">
                 <span>Who</span>
                 <span>Last sign-in</span>
@@ -1260,7 +1275,8 @@
                 <span class="au-num">{{ person.important }}</span>
               </div>
               {% endfor %}
-            </details>
+              </div>
+            </div>
           </div>
         </main>
         <!-- ===== Main Content End ===== -->
