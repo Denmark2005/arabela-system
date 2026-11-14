@@ -7,7 +7,7 @@ from unittest import mock
 from allauth.account.models import EmailAddress
 from allauth.core.exceptions import ImmediateHttpResponse
 from allauth.socialaccount.providers.base import AuthError
-from django.contrib.auth import get_user_model
+from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import reverse
@@ -94,10 +94,10 @@ class SignInPageTests(Base):
         self.client.force_login(self.staff)
         self.assertRedirects(self.client.get(reverse("arabela_admin:admin_login")), reverse("arabela_admin:dashboard"), fetch_redirect_response=False)
 
-    def test_the_old_password_page_is_not_linked_from_the_new_page(self):
+    def test_the_old_password_page_is_gone(self):
         html = self.client.get(reverse("arabela_admin:admin_login")).content.decode()
-        self.assertNotIn(reverse("arabela_admin:admin_password_login"), html)
-        self.assertEqual(self.client.get(reverse("arabela_admin:admin_password_login")).status_code, 200)       # still reachable by its address (step 1 fallback)
+        self.assertNotIn("/admin-login/password/", html)
+        self.assertEqual(self.client.get("/admin-panel/admin-login/password/").status_code, 404)                 # removed: no password opens the admin panel
 
     def test_a_failed_google_answer_comes_back_to_the_admin_page_when_it_was_open(self):
         request = RequestFactory().get("/accounts/google/login/callback/")
@@ -235,14 +235,14 @@ class StaffFromAGmailTests(Base):
         self.assertEqual(run_adapter(google_answer("maria.staff@gmail.com")).status_code, 403)
         self.finish(Client(), run_adapter(google_answer("maria.new@gmail.com")))
 
-    def test_the_staff_account_has_no_password_so_the_old_page_cannot_open_it(self):
+    def test_the_staff_account_has_no_password_so_nothing_can_open_it_with_one(self):
         client = Client()
         client.force_login(self.owner)
         client.post(reverse("arabela_admin:staff_create"), data=json.dumps({"name": "Pat Pass", "email": "pat.pass@gmail.com"}), content_type="application/json")
         user = User.objects.get(email="pat.pass@gmail.com")
         self.assertFalse(user.has_usable_password())
-        response = Client().post(reverse("arabela_admin:admin_password_login"), {"username": user.username, "password": ""})
-        self.assertNotEqual(response.status_code, 302)
+        self.assertIsNone(authenticate(username=user.username, password=""))                  # an empty password never matches an unusable one
+        self.assertEqual(Client().post("/admin-panel/admin-login/password/", {"username": user.username, "password": ""}).status_code, 404)
 
     def test_the_profile_page_can_no_longer_change_the_sign_in_gmail(self):
         client = Client()

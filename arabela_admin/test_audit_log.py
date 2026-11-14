@@ -14,11 +14,12 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.http import JsonResponse
-from django.test import RequestFactory, TestCase
+from django.contrib.auth import authenticate
+from django.test import Client, RequestFactory, TestCase
 from django.urls import get_resolver, reverse
 from django.utils import timezone
 
-from accounts import audit
+from accounts import admin_google, audit
 from accounts.models import AuditLog, AuditLogImmutable, UserProfile
 from accounts.roles import PERMISSION_KEYS
 from arabela_admin import audit_views
@@ -29,6 +30,22 @@ from gowns.models import Gown, SiteSettings
 from reservations.models import Reservation
 
 User = get_user_model()
+
+
+def google_sign_in(user, client=None):
+    """The hand-over every admin sign-in ends with (accounts.admin_google): the signed link Google's answer produced, opened once, signs the
+    account in to the admin area. Returns the browser (a test Client) that is now signed in."""
+    client = client or Client()
+    response = client.get(admin_google.finish_path() + "?t=" + admin_google.make_signin_token(user))
+    assert response.status_code == 302, response.status_code
+    return client
+
+
+def wrong_password(username, password="wrong"):
+    """A refused password for `username`, the way Django reports it (the signal the Audit Log listens to). The admin panel has no password
+    page any more; this is what any other door that checked a password would do."""
+    request = RequestFactory().post("/some-sign-in/", REMOTE_ADDR="127.0.0.1")
+    return authenticate(request, username=username, password=password)
 
 
 def write_line(actor, minutes_ago=0, **overrides):
@@ -244,7 +261,7 @@ class CoverageTests(TestCase):
     # Addresses that are pages, searches, previews or sign-in screens: they change nothing in the shop. Every OTHER address under the admin
     # panel must carry @audited -- adding a new action without it fails test_every_other_admin_address_writes_a_line.
     NOT_ACTIONS = {
-        "admin_login", "admin_password_login", "google_finish", "forgot_password", "reset_password", "recovery_send_code", "admin_logout", "dashboard", "rental_schedule", "calendar",
+        "admin_login", "google_finish", "admin_logout", "dashboard", "rental_schedule", "calendar",
         "new_booking", "payment_verification", "rental_history", "security_deposits", "reservation_records", "active_reservations",
         "pending_approval", "gown_catalog", "categories", "clients", "staff_management", "audit_log", "audit_log_export", "email_preview",
         "email_preview_render", "admin_notifications_feed", "admin_search", "page", "booking_gown_search", "availability_check",
@@ -382,33 +399,30 @@ class EndpointLineTests(AuditBase):
 class SignInTests(AuditBase):
     quiet_sign_ins = False
 
-    def sign_in(self, username, password):
-        return self.client.post(reverse("arabela_admin:admin_password_login"), data={"username": username, "password": password})
-
     def test_a_staff_sign_in_and_sign_out_are_written_with_the_address_and_device(self):
-        self.assertEqual(self.sign_in("au_maria", "x").status_code, 302)
+        client = google_sign_in(self.maria)
         row = AuditLog.objects.get(action="signin.ok")
         self.assertEqual((row.actor, row.category, row.summary), (self.maria, "Sign-in", "Maria Cruz signed in"))
         self.assertEqual(row.ip_address, "127.0.0.1")
-        self.client.get(reverse("arabela_admin:admin_logout"))
-        self.client.post(reverse("arabela_admin:admin_logout"))
+        client.get(reverse("arabela_admin:admin_logout"))
+        client.post(reverse("arabela_admin:admin_logout"))
         self.assertTrue(AuditLog.objects.filter(action="signin.out", actor=self.maria).exists())
 
-    def test_a_wrong_password_for_an_admin_account_is_written_and_five_lock_it(self):
-        for _ in range(5):
-            self.sign_in("au_maria", "wrong")
-        self.assertEqual(AuditLog.objects.filter(action="signin.failed", actor=self.maria).count(), 5)
-        locked = AuditLog.objects.get(action="signin.locked")
-        self.assertEqual((locked.actor, locked.sensitive, locked.outcome), (self.maria, True, "failed"))
-        self.assertIn("locked for 15 minutes", locked.summary)
-        self.sign_in("au_maria", "wrong")                                # while locked: refused without a new line
-        self.assertEqual(AuditLog.objects.filter(action="signin.failed").count(), 5)
+    def test_a_refused_password_for_an_admin_account_is_still_written(self):
+        # Old lines ("Wrong password for ...'s account") stay readable, and any door that still checks a password is still watched.
+        for _ in range(3):
+            self.assertIsNone(wrong_password("au_maria"))
+        lines = AuditLog.objects.filter(action="signin.failed", actor=self.maria)
+        self.assertEqual(lines.count(), 3)
+        row = lines.first()
+        self.assertEqual((row.summary, row.outcome, row.sensitive), ("Wrong password for Maria Cruz's account", "failed", True))
+        self.assertFalse(AuditLog.objects.filter(action="signin.locked").exists())          # nothing locks an account any more: there is no password page
 
-    def test_wrong_guesses_for_a_name_that_is_not_an_admin_account_are_not_written(self):
-        self.sign_in("nobody_here", "wrong")
-        self.sign_in("au_cust_login", "wrong")
+    def test_refused_guesses_for_a_name_that_is_not_an_admin_account_are_not_written(self):
+        wrong_password("nobody_here")
+        wrong_password("au_cust_login")
         User.objects.create_user("au_cust_login", password="x")          # a customer: no admin access
-        self.sign_in("au_cust_login", "wrong")
+        wrong_password("au_cust_login")
         self.assertEqual(AuditLog.objects.count(), 0)
 
     def test_a_customer_signing_in_is_not_written(self):
@@ -416,7 +430,7 @@ class SignInTests(AuditBase):
         self.assertEqual(AuditLog.objects.count(), 0)
 
     def test_no_password_reaches_the_log(self):
-        self.sign_in("au_maria", "super-secret-wrong-guess")
+        wrong_password("au_maria", "super-secret-wrong-guess")
         self.assertNotIn("super-secret-wrong-guess", json.dumps(list(AuditLog.objects.values()), default=str))
 
 
@@ -535,9 +549,8 @@ class PageTests(AuditBase):
             self.assertIn(reverse("arabela_admin:audit_log"), self.client.get(reverse(f"arabela_admin:{name}")).content.decode(), name)
 
     def test_staff_activity_summary(self):
-        from django.test import Client
         audit.connect_signals()                  # this one needs the sign-in lines
-        Client().post(reverse("arabela_admin:admin_password_login"), data={"username": "au_pedro", "password": "x"})       # Pedro really signs in (own browser)
+        google_sign_in(self.pedro)                                                                                          # Pedro really signs in (own browser)
         response = self.get()
         self.assertEqual(response.status_code, 200)
         people = {p["id"]: p for p in response.context["activity"]}          # by id: the legacy Manager account is also called Maria Cruz

@@ -366,18 +366,6 @@ def gmail_change_start(ctx):
     return {"summary": f"started changing their sign-in Gmail to {(ctx.body or {}).get('email', '')}", "sensitive": True}
 
 
-def change_password(ctx):
-    return {"summary": "changed their own password", "sensitive": True}
-
-
-def change_username(ctx):
-    return {"summary": f"changed their own username to {ctx.data.get('username', '')}", "sensitive": True}
-
-
-def recovery_email(ctx):
-    return {"summary": "set the recovery email for password reset", "sensitive": True}
-
-
 def save_profile(ctx):
     return {"summary": "saved their profile", "details": _keep(ctx.body, "first_name", "last_name", "email")}
 

@@ -23,7 +23,7 @@ from django.contrib.auth import get_user_model
 from django.core import signing
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
-from django.db.models import Q
+from django.db.models import Case, IntegerField, Q, Value, When
 from django.urls import reverse
 
 logger = logging.getLogger(__name__)
@@ -52,6 +52,31 @@ SIGN_IN_PROBLEMS = {"cancelled": MESSAGES["cancelled"], "incomplete": MESSAGES["
 
 def normalize_email(value):
     return (value or "").strip().lower()
+
+
+GMAIL_DOMAINS = ("gmail.com", "googlemail.com")
+
+
+def canonical_email(value):
+    """The mailbox behind an address. Gmail ignores dots, "+tags" and googlemail.com, so rosa.staffer+shop@googlemail.com and
+    rosastaffer@gmail.com are ONE Google account; every other address is just itself in lower case."""
+    email = normalize_email(value)
+    local, _, domain = email.partition("@")
+    if domain in GMAIL_DOMAINS:
+        local = local.split("+", 1)[0].replace(".", "")
+        domain = "gmail.com"
+    return f"{local}@{domain}"
+
+
+def same_mailbox(email):
+    """A filter for every stored address that is the same mailbox as `email` (see canonical_email). The database does the matching, so it
+    stays cheap however many customers there are. A non-Gmail address matches only itself (any capitals)."""
+    email = normalize_email(email)
+    local, _, domain = email.partition("@")
+    base = local.split("+", 1)[0].replace(".", "") if domain in GMAIL_DOMAINS else ""
+    if not base:
+        return Q(email__iexact=email)
+    return Q(email__iregex=r"^" + r"\.*".join(re.escape(ch) for ch in base) + r"\.*(\+[^@]*)?@(gmail|googlemail)\.com$")
 
 
 def owner_gmail():
@@ -114,7 +139,7 @@ def _bind_owner(email):
     owners = User.objects.filter(is_superuser=True, is_active=True)
     if owners.count() != 1:
         return None, "owner_ambiguous"
-    if User.objects.filter(email__iexact=email, is_staff=False, is_superuser=False).exists():
+    if User.objects.filter(same_mailbox(email), is_staff=False, is_superuser=False).exists():
         return None, "owner_conflict"
     owner = owners.first()
     owner.email = email
@@ -128,18 +153,20 @@ def resolve_admin_user(email):
     if not email:
         return None, "not_allowed"
     User = get_user_model()
-    admins = User.objects.filter(email__iexact=email).filter(Q(is_staff=True) | Q(is_superuser=True))
-    active = admins.filter(is_active=True).order_by("-is_superuser", "pk").first()
+    admins = User.objects.filter(same_mailbox(email)).filter(Q(is_staff=True) | Q(is_superuser=True))
+    # The account whose address is exactly what Google sent comes first; a dotted / "+tag" spelling of the same mailbox still opens it.
+    exact_first = Case(When(email__iexact=email, then=Value(0)), default=Value(1), output_field=IntegerField())
+    active = admins.filter(is_active=True).annotate(exact=exact_first).order_by("exact", "-is_superuser", "pk").first()
     if active is not None:
         return active, ""
     if admins.exists():
         return None, "inactive"
-    if email == owner_gmail():
+    if owner_gmail() and canonical_email(email) == canonical_email(owner_gmail()):
         return _bind_owner(email)
     return None, "not_allowed"
 
 
-def gmail_problem(email, exclude_pk=None):
+def gmail_problem(email, exclude_pk=None, allow_owner_gmail=False):
     """Why this Gmail cannot be given to an admin/staff account, or "" when it can. A Gmail that is already a customer account is
     refused (the person must use a different Gmail), and so is one that already belongs to another admin account."""
     email = normalize_email(email)
@@ -151,7 +178,9 @@ def gmail_problem(email, exclude_pk=None):
         return "Enter a valid Gmail address, for example name@gmail.com."
     if len(email) > 254:
         return "That email address is too long."
-    clash = get_user_model().objects.filter(email__iexact=email)
+    if not allow_owner_gmail and owner_gmail() and canonical_email(email) == canonical_email(owner_gmail()):
+        return "That Gmail is the owner's own sign-in Gmail, so it cannot be given to a staff account."
+    clash = get_user_model().objects.filter(same_mailbox(email))
     if exclude_pk is not None:
         clash = clash.exclude(pk=exclude_pk)
     if clash.filter(Q(is_staff=True) | Q(is_superuser=True)).exists():

@@ -351,13 +351,10 @@ SOCIALACCOUNT_PROVIDERS = {
     }
 }
 
-# Session "remember me" duration (seconds)
-REMEMBER_ME_AGE = int(os.getenv('REMEMBER_ME_AGE', '1209600'))
-
 # The owner opens the admin panel with this Google account (accounts/admin_google.py). Staff use the Gmail the owner adds in Staff Management.
 ADMIN_OWNER_GMAIL = os.getenv('ADMIN_OWNER_GMAIL', 'arabelaantipolo@gmail.com')
 
-# Outgoing email (verification + password reset)
+# Outgoing email (the customers' booking messages and reminders)
 EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend')
 EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
 EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))

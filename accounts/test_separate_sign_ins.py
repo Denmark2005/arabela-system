@@ -11,7 +11,6 @@ from unittest.mock import patch
 
 from allauth.core.exceptions import ImmediateHttpResponse
 from allauth.socialaccount.models import SocialAccount, SocialLogin
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.sessions.backends.db import SessionStore
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -19,6 +18,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from accounts import admin_google
 from accounts import customer_emails as ce
 from accounts.adapters import STAFF_GOOGLE_MESSAGE, ArabelaSocialAccountAdapter
 from accounts.tests import _ensure_google_social_app
@@ -41,13 +41,15 @@ class SeparateSessionsTests(TestCase):
     def setUp(self):
         self.badges = reverse("gowns:notification_badges")
         self.dashboard = reverse("arabela_admin:dashboard")
-        self.admin_login = reverse("arabela_admin:admin_password_login")
 
     def sign_in_customer(self):
         self.client.force_login(self.customer)
 
-    def sign_in_admin(self, **extra):
-        response = self.client.post(self.admin_login, {"username": "split_staff", "password": STAFF_PASSWORD, **extra})
+    def sign_in_admin(self):
+        """The hand-over a Google sign-in ends with: the signed link (made by the adapter for an allowed Gmail), opened once, signs this browser in
+        to the admin area."""
+        self.staff.refresh_from_db()                                             # the link is stamped with the last sign-in time, so use the stored one
+        response = self.client.get(admin_google.finish_path() + "?t=" + admin_google.make_signin_token(self.staff))
         self.assertEqual(response.status_code, 302, "the admin sign-in itself should have worked")
 
     def customer_now(self):
@@ -88,13 +90,13 @@ class SeparateSessionsTests(TestCase):
         self.assertIsNone(self.customer_now())
         self.assertEqual(self.client.get(self.dashboard).status_code, 200)
 
-    def test_keep_me_signed_in_only_affects_the_admin_cookie(self):
+    def test_the_admin_sign_in_ends_with_the_browser_and_never_touches_the_customers_cookie(self):
         self.sign_in_customer()
-        self.sign_in_admin()                                                     # no "keep me signed in": ends with the browser
+        self.sign_in_admin()                                                     # no "keep me signed in" any more: it ends with the browser
         self.assertFalse(self.client.cookies[admin_cookie_name()]["max-age"])
         self.client.post(reverse("arabela_admin:admin_logout"))
-        self.sign_in_admin(remember_me="on")
-        self.assertEqual(int(self.client.cookies[admin_cookie_name()]["max-age"]), settings.REMEMBER_ME_AGE)
+        self.sign_in_admin()                                                     # and signing in again works the same way
+        self.assertFalse(self.client.cookies[admin_cookie_name()]["max-age"])
         self.assertFalse(self.client.cookies["sessionid"]["max-age"])            # the customer's own cookie was never touched
 
     def test_a_staff_sign_in_made_before_the_split_still_works_in_the_admin_panel(self):

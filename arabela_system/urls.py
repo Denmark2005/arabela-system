@@ -31,14 +31,14 @@ def not_found(request, *args, **kwargs):
 urlpatterns = [
     path('favicon.ico', RedirectView.as_view(url='/static/arabela_admin/images/logo/favicon-arabela.svg', permanent=False)),
     path('healthz/', healthz, name='healthz'),
-    # Django's built-in admin site is not used (the shop's panel is /admin-panel/). Its sign-in page was a SECOND door to the owner's
-    # password with no "5 wrong tries = locked" rule, so it is closed. Nothing links to it.
+    # Django's built-in admin site is not used (the shop's panel is /admin-panel/, which signs in with Google only). Its sign-in page
+    # would be a SECOND door with a username + password, so it is closed. Nothing links to it.
     re_path(r'^admin/', not_found),
     path('', include('gowns.urls')),
     path('accounts/', include('accounts.urls')),
     # Customers sign in with Google only. allauth's own password and email pages would otherwise answer here -- including a
     # "reset password" that mails a link to ANY account holding an address (owner, staff and customers alike) -- so they are
-    # closed. The owner's reset is the separate, owner-only one under /admin-panel/forgot-password/. Google sign-in is untouched.
+    # closed. Google sign-in is untouched.
     re_path(r'^accounts/(?:password/|email/|confirm-email/|reauthenticate/)', not_found),
     path('accounts/', include('allauth.urls')),
     path('reservations/', include('reservations.urls')),

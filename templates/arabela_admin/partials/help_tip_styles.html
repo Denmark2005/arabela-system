@@ -9,8 +9,8 @@
       &lt;details class="ht-tip"&gt;&lt;summary aria-label="About blocked dates" title="About blocked dates"&gt;?&lt;/summary&gt;&lt;div class="ht-tip-pop"&gt;The explanation.&lt;/div&gt;&lt;/details&gt;
 
   Plain script, no framework: it also works in the windows and on the pages that are not built on Alpine. A click outside or Escape closes it (Escape closes
-  ONLY the "?" while one is open, not the window behind it), and a bubble that would run off the edge of the screen is slid back inside (or opened above the
-  "?" when there is no room below it).
+  ONLY the "?" while one is open, not the window behind it), and a bubble that would run off the edge of the screen -- or past the edge of the pop-up window
+  panel it is in, which would cut it off -- is made narrower / slid back inside (or opened above the "?" when there is no room below it).
 {% endcomment %}
 <style>
   .ht-tip { position: relative; display: inline-block; vertical-align: middle; margin-left: .4rem; font-style: normal; font-weight: 400; text-transform: none; letter-spacing: 0; }
@@ -30,23 +30,51 @@
     if (window.__arabelaHelpTips) { return; }
     window.__arabelaHelpTips = true;
     var SELECTOR = 'details.ht-tip[open]';
-    // Keep a bubble on the screen: slide it back in when it would run off the left or right edge, and open it ABOVE the "?" when there is no room
-    // below it (a "?" near the bottom of the screen) and there is room above.
+    // The area a bubble may use: the browser window, narrowed by every box around the "?" that clips what sticks out of it (a pop-up window's
+    // panel, a scrolling table box). Without this a "?" in the right column of a window opened its bubble past the panel's edge and the panel cut it off.
+    function room(tip) {
+      var area = { left: 0, top: 0, right: document.documentElement.clientWidth, bottom: document.documentElement.clientHeight };
+      for (var node = tip.parentElement; node && node !== document.body && node !== document.documentElement; node = node.parentElement) {
+        var style = window.getComputedStyle(node);
+        if (/auto|scroll|hidden|clip/.test(style.overflowX + ' ' + style.overflowY)) {
+          var rect = node.getBoundingClientRect();
+          var left = rect.left + node.clientLeft;
+          var top = rect.top + node.clientTop;
+          area.left = Math.max(area.left, left);
+          area.top = Math.max(area.top, top);
+          area.right = Math.min(area.right, left + node.clientWidth);
+          area.bottom = Math.min(area.bottom, top + node.clientHeight);
+        }
+        // a box fixed to the window is not clipped by the boxes around it, so nothing further out matters
+        if (style.position === 'fixed') { break; }
+      }
+      // a clipping box that is almost closed or scrolled away tells us nothing useful: fall back to the whole window
+      if (area.right - area.left < 120 || area.bottom - area.top < 60) {
+        area = { left: 0, top: 0, right: document.documentElement.clientWidth, bottom: document.documentElement.clientHeight };
+      }
+      return area;
+    }
+    // Keep a bubble inside that area: make it narrower when the area is narrower than the bubble, slide it back in when it would run off the left
+    // or right edge, and open it ABOVE the "?" when there is no room below it (a "?" near the bottom) and there is room above.
     function place(tip) {
       var pop = tip.querySelector('.ht-tip-pop');
       if (!pop) { return; }
       pop.style.transform = '';
       pop.style.top = '';
       pop.style.bottom = '';
+      pop.style.maxWidth = '';
+      var area = room(tip);
       var box = pop.getBoundingClientRect();
-      var width = document.documentElement.clientWidth;
-      var height = document.documentElement.clientHeight;
+      if (box.width > area.right - area.left - 16) {
+        pop.style.maxWidth = Math.max(120, Math.floor(area.right - area.left - 16)) + 'px';
+        box = pop.getBoundingClientRect();
+      }
       var shift = 0;
-      if (box.right > width - 8) { shift = (width - 8) - box.right; }
-      if (box.left + shift < 8) { shift = 8 - box.left; }
+      if (box.right > area.right - 8) { shift = (area.right - 8) - box.right; }
+      if (box.left + shift < area.left + 8) { shift = (area.left + 8) - box.left; }
       if (shift) { pop.style.transform = 'translateX(' + Math.round(shift) + 'px)'; }
       var tipBox = tip.getBoundingClientRect();
-      if (box.bottom > height - 8 && tipBox.top - box.height - 8 > 0) {
+      if (box.bottom > area.bottom - 8 && tipBox.top - box.height - 8 > area.top) {
         pop.style.top = 'auto';
         pop.style.bottom = 'calc(100% + .4rem)';
       }

@@ -231,7 +231,7 @@ class SidebarLinkTests(OwnerCase):
         ("dashboard", {}), ("rental_schedule", {}), ("payment_verification", {}), ("rental_history", {}),
         ("security_deposits", {}), ("reservation_records", {}), ("active_reservations", {}), ("pending_approval", {}),
         ("gown_catalog", {}), ("clients", {}), ("staff_management", {}),
-        ("page", {"page": "profile"}), ("page", {"page": "account-settings"}), ("categories", {}),
+        ("page", {"page": "profile"}), ("categories", {}),
     )
 
     def link(self):

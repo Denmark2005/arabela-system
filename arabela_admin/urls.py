@@ -1,11 +1,5 @@
 from django.urls import path
 
-from .recovery_views import (
-    forgot_password_view,
-    recovery_send_code_view,
-    recovery_verify_code_view,
-    reset_password_view,
-)
 from .audit_views import audit_log_export_view, audit_log_view
 from .cancel_request_views import (
     cancel_request_approve_view,
@@ -66,10 +60,7 @@ from .views import (
     staff_update_view,
     staff_toggle_status_view,
     staff_delete_view,
-    change_own_password_view,
-    change_own_username_view,
     admin_login_view,
-    admin_password_login_view,
     admin_google_finish_view,
     owner_gmail_change_start_view,
     admin_logout_view,
@@ -100,15 +91,8 @@ app_name = "arabela_admin"
 
 urlpatterns = [
     path("admin-login/", admin_login_view, name="admin_login"),
-    # Step 1 of the Google sign-in change: the old username + password page stays reachable ONLY at this unlinked address (a fallback
-    # while the Google sign-in is tested); it is removed in step 2.
-    path("admin-login/password/", admin_password_login_view, name="admin_password_login"),
     path("google-finish/", admin_google_finish_view, name="google_finish"),
     path("api/account/change-gmail/", owner_gmail_change_start_view, name="owner_gmail_change"),
-    path("forgot-password/", forgot_password_view, name="forgot_password"),
-    path("reset-password/<uidb64>/<token>/", reset_password_view, name="reset_password"),
-    path("api/recovery-email/send-code/", recovery_send_code_view, name="recovery_send_code"),
-    path("api/recovery-email/verify/", recovery_verify_code_view, name="recovery_verify_code"),
     path("logout/", admin_logout_view, name="admin_logout"),
     path("", dashboard_view, name="dashboard"),
     path("rental-schedule/", rental_schedule_view, name="rental_schedule"),
@@ -173,8 +157,6 @@ urlpatterns = [
     path("audit-log/export/", audit_log_export_view, name="audit_log_export"),
     path("api/staff/", staff_create_view, name="staff_create"),
     path("api/staff/<int:user_id>/update/", staff_update_view, name="staff_update"),
-    path("api/account/change-password/", change_own_password_view, name="change_own_password"),
-    path("api/account/change-username/", change_own_username_view, name="change_own_username"),
     path("api/staff/<int:user_id>/status/", staff_toggle_status_view, name="staff_toggle_status"),
     path("api/staff/<int:user_id>/delete/", staff_delete_view, name="staff_delete"),
     path("save-profile/", save_profile_view, name="save_profile"),

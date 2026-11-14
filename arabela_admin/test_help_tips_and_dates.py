@@ -99,12 +99,12 @@ class EveryTipIsBuiltTheSameWayTests(SimpleTestCase):
 
     def test_the_gown_catalog_the_calendar_and_the_profile_pages_have_their_share(self):
         counts = {}
-        for name in ("gown-catalog.html", "calendar.html", "profile.html", "account-settings.html", "email-preview.html", "payment-verification.html", "categories.html",
+        for name in ("gown-catalog.html", "calendar.html", "profile.html", "email-preview.html", "payment-verification.html", "categories.html",
                      "staff-management.html", "reservation-records.html"):
             counts[name] = len(re.findall(r'<details class="ht-tip"', (ADMIN / name).read_text(encoding="utf8")))
         self.assertGreaterEqual(counts["gown-catalog.html"], 12)
         self.assertEqual({k: v for k, v in counts.items() if k != "gown-catalog.html"}, {
-            "calendar.html": 2, "profile.html": 5, "account-settings.html": 2, "email-preview.html": 3, "payment-verification.html": 1, "categories.html": 1,
+            "calendar.html": 2, "profile.html": 5, "email-preview.html": 3, "payment-verification.html": 1, "categories.html": 1,
             "staff-management.html": 4, "reservation-records.html": 1})        # profile: + "Your access"; staff management: the choices tip and the per-permission tip, in Add and in Edit
 
 
@@ -137,6 +137,20 @@ class SharedPiecesAreOnEveryPageTests(SimpleTestCase):
         self.assertIn("pop.style.transform = 'translateX('", text)                            # slid back in when it would leave the screen
         self.assertIn("pop.style.bottom = 'calc(100% + .4rem)';", text)                       # opened above when there is no room below
         self.assertNotIn("Alpine", text[text.index("<script>"):])                              # plain script: it works on pages that are not Alpine pages
+
+    def test_the_bubble_stays_inside_the_pop_up_window_it_is_in(self):
+        """A "?" in the right column of Add Account / Edit Account opened its bubble past the window panel's edge and the panel (overflow) cut it
+        off. The bubble is now kept inside the nearest clipping box too, not only inside the browser window."""
+        text = (ADMIN / "partials" / "help_tip_styles.html").read_text(encoding="utf8")
+        self.assertIn("function room(tip)", text)
+        self.assertIn("/auto|scroll|hidden|clip/.test(style.overflowX + ' ' + style.overflowY)", text)       # every clipping box around the "?" counts
+        self.assertIn("if (style.position === 'fixed') { break; }", text)                                      # a fixed box is not clipped by what is around it
+        self.assertIn("var area = room(tip);", text)
+        self.assertIn("pop.style.maxWidth = Math.max(120, Math.floor(area.right - area.left - 16)) + 'px';", text)   # narrower than the panel -> shrink
+        self.assertIn("if (box.right > area.right - 8)", text)
+        self.assertIn("if (box.left + shift < area.left + 8)", text)
+        self.assertIn("if (box.bottom > area.bottom - 8 && tipBox.top - box.height - 8 > area.top)", text)   # open upward inside the panel too
+        self.assertNotIn("var width = document.documentElement.clientWidth;", text)                           # the old window-only measure is gone
 
     def test_the_bubble_looks_like_new_bookings(self):
         text = (ADMIN / "partials" / "help_tip_styles.html").read_text(encoding="utf8")
@@ -243,7 +257,7 @@ class LongTextIsOnlyInsideAQuestionMarkTests(ActiveDropdownBase):
         self.check(html, ["Blocked days are gowns held back for cleaning or repair, not customer bookings", "This calendar is view-only. To change a date or mark a pick-up or return, use Active Reservations."])
         self.assertIn(reverse("arabela_admin:gown_catalog"), tips_text(html))                   # the link to Gown Catalog is kept inside the bubble
 
-    def test_categories_staff_management_and_the_two_profile_pages(self):
+    def test_categories_staff_management_and_the_profile_page(self):
         self.check(self.get("arabela_admin:categories"), ["One tall photo of the whole gown on a plain white background."])
         self.check(self.get("arabela_admin:staff_management"), ["Every staff account can do the daily work: gowns, new bookings, approving and rejecting, pick-ups and returns, receipts and reminders. Tick anything more this person may do. Staff who cannot cancel a booking can send you a cancellation request instead."])
         staff = self.get("arabela_admin:staff_management")
@@ -252,8 +266,6 @@ class LongTextIsOnlyInsideAQuestionMarkTests(ActiveDropdownBase):
         self.check(self.client.get("/admin-panel/profile.html").content.decode(), [
             "Shown to customers when they pay the security deposit. The QR is always shown whole, never cropped.",
             "Customers can be emailed when a reservation is received, approved or rejected", "This is ARABELA's public Facebook page, shown in the site footer and Contact page."])
-        self.check(self.client.get("/admin-panel/account-settings.html").content.decode(), [
-            "If you forget your password, the sign-in page can email you a reset link here.", "Every other device you are signed in on will be signed out."])
 
     def test_the_customer_emails_page(self):
         html = self.get("arabela_admin:email_preview")
@@ -279,7 +291,7 @@ class EveryPageStillRendersTests(ActiveDropdownBase):
         self.client.force_login(owner)
         pages = [reverse(f"arabela_admin:{n}") for n in ("dashboard", "calendar", "gown_catalog", "active_reservations", "pending_approval", "rental_history", "reservation_records",
                                                             "new_booking", "payment_verification", "security_deposits", "clients", "categories", "staff_management")]
-        pages += ["/admin-panel/profile.html", "/admin-panel/account-settings.html"]
+        pages += ["/admin-panel/profile.html"]
         for url in pages:
             with self.subTest(page=url):
                 response = self.client.get(url)

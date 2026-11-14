@@ -14,7 +14,6 @@ ADMIN = Path(settings.BASE_DIR) / "templates" / "arabela_admin"
 
 # template file -> (url, name shown in the breadcrumb, does the row also hold "+ New Booking")
 PAGES = {
-    "account-settings.html": (reverse("arabela_admin:page", kwargs={"page": "account-settings"}), "Account Settings", False),
     "active-reservations.html": (reverse("arabela_admin:active_reservations"), "Active Reservations", True),
     "calendar.html": (reverse("arabela_admin:calendar"), "Calendar", False),
     "categories.html": (reverse("arabela_admin:categories"), "Categories", False),

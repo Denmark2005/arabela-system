@@ -27,7 +27,6 @@ PAGES = {
     "security-deposits": reverse("arabela_admin:security_deposits"),
     "reservation-records": reverse("arabela_admin:reservation_records"),
     "profile": reverse("arabela_admin:page", kwargs={"page": "profile"}),
-    "account-settings": reverse("arabela_admin:page", kwargs={"page": "account-settings"}),
 }
 OWNER_ONLY = {"categories", "staff-management"}
 MARK = re.compile(r"<!-- Menu Item (.+?) -->")

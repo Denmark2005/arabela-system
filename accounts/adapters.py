@@ -50,9 +50,9 @@ def _admin_google_sign_in(request, sociallogin, next_url):
         owner, new_email = admin_google.read_change_token(change_token)
         if owner is None:
             _refuse_admin(request, admin_google.MESSAGES["change_expired"], status=400)
-        if email != new_email:
+        if admin_google.canonical_email(email) != admin_google.canonical_email(new_email):
             _refuse_admin(request, f"You signed in with {email}, but you asked to switch to {new_email}. Nothing was changed.", status=400)
-        problem = admin_google.gmail_problem(new_email, exclude_pk=owner.pk)
+        problem = admin_google.gmail_problem(new_email, exclude_pk=owner.pk, allow_owner_gmail=True)
         if problem:
             _refuse_admin(request, problem, status=400)
         user, change_to = owner, new_email

@@ -8,9 +8,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from functools import wraps
 
-from django.conf import settings
-from django.contrib.auth import authenticate, login, logout, get_user_model, update_session_auth_hash
-from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth import login, logout, get_user_model
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
@@ -32,7 +30,7 @@ from django.views.decorators.http import require_http_methods
 import json
 
 from accounts import audit as audit_log
-from accounts import admin_google, login_throttle, owner_recovery
+from accounts import admin_google
 from accounts.audit import audited
 from accounts.models import CustomerMessage, UserProfile
 from accounts.roles import (
@@ -3972,132 +3970,6 @@ def staff_update_view(request, user_id):
     return JsonResponse({"success": True, "account": _staff_row(target)})
 
 
-# Every admin password protects customers' names, phones, addresses and receipts: the owner's (Account Settings) and
-# each staff password the owner sets in Staff Management are held to the same rules.
-OWNER_PASSWORD_MIN_LENGTH = 10
-OWNER_PASSWORD_MAX_LENGTH = 128
-
-
-def _admin_password_problem(password, user):
-    """Why `password` cannot be used for this staff account, or None: at least 10 characters (at most 128), and Django's
-    own checks (AUTH_PASSWORD_VALIDATORS): not a common password, not only numbers, not too close to the username or name.
-    Existing accounts keep their current password; this only applies when a password is set."""
-    if len(password) < OWNER_PASSWORD_MIN_LENGTH:
-        return f"Use at least {OWNER_PASSWORD_MIN_LENGTH} characters for the password."
-    if len(password) > OWNER_PASSWORD_MAX_LENGTH:
-        return f"Use {OWNER_PASSWORD_MAX_LENGTH} characters or fewer for the password."
-    try:
-        validate_password(password, user)
-    except ValidationError as exc:
-        return " ".join(exc.messages)
-    return None
-
-
-@require_http_methods(["POST"])
-@audited('account.password', 'Staff', audit_describe.change_password, sensitive=True)
-@_require_owner
-def change_own_password_view(request):
-    """Let the currently signed-in OWNER change their own login password.
-
-    Deliberately owner-only, by the user's explicit request: staff accounts have no
-    self-service password change at all -- only the owner may change any password
-    (their own here, or a staff member's via staff_update_view above). @_require_owner
-    is the real enforcement; nothing about what the client sends can bypass it. This
-    also means a staff account can never even reach this endpoint, so there is no
-    "target user" to confuse with the caller -- it is always request.user.
-
-    Requires the CURRENT password first (staff_update_view resetting someone ELSE's
-    password doesn't need this -- the owner is already proven who they are by being
-    logged in as owner; here the owner is proving it's really them, not someone who
-    walked up to an unlocked session).
-    """
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid request."}, status=400)
-    if not isinstance(data, dict):
-        return JsonResponse({"error": "Invalid request."}, status=400)
-
-    current_password = str(data.get("current_password") or "")
-    new_password = str(data.get("new_password") or "")
-    confirm_password = str(data.get("confirm_password") or "")
-
-    if not request.user.check_password(current_password):
-        return JsonResponse({"error": "Your current password is incorrect."}, status=400)
-    if len(new_password) < OWNER_PASSWORD_MIN_LENGTH:
-        return JsonResponse(
-            {"error": f"Use at least {OWNER_PASSWORD_MIN_LENGTH} characters for your new password."}, status=400
-        )
-    if len(new_password) > OWNER_PASSWORD_MAX_LENGTH:
-        return JsonResponse(
-            {"error": f"Use {OWNER_PASSWORD_MAX_LENGTH} characters or fewer for your new password."}, status=400
-        )
-    if new_password != confirm_password:
-        return JsonResponse({"error": "New passwords do not match."}, status=400)
-    if request.user.check_password(new_password):
-        return JsonResponse(
-            {"error": "That's your current password. Please choose a different one."}, status=400
-        )
-    # Django's own checks (AUTH_PASSWORD_VALIDATORS in settings.py): not one of the most common passwords, not
-    # only numbers, not too close to the username / name / email.
-    try:
-        validate_password(new_password, request.user)
-    except ValidationError as exc:
-        return JsonResponse({"error": " ".join(exc.messages)}, status=400)
-
-    request.user.set_password(new_password)
-    request.user.save(update_fields=["password"])
-    # Changing your own password rotates Django's session auth hash -- without this the
-    # owner would be silently signed out immediately after successfully changing it.
-    update_session_auth_hash(request, request.user)
-    return JsonResponse({"success": True})
-
-
-_USERNAME_PATTERN = re.compile(r"[A-Za-z0-9._-]{4,30}")
-
-
-@require_http_methods(["POST"])
-@audited('account.username', 'Staff', audit_describe.change_username, sensitive=True)
-@_require_owner
-def change_own_username_view(request):
-    """Let the signed-in OWNER change their own login username.
-
-    Owner-only for the same reason as the password (staff usernames are set by the owner when the account is
-    created). The CURRENT password is required, so someone at an unlocked screen can't quietly rename the
-    owner's login. Letters, numbers, dot, dash and underscore only (4-30, at least one letter): no spaces and
-    no "@", so a username can never be mistaken for an email address by the sign-in code. Compared without
-    regard to capitals against EVERY account (customers included) so two logins can never look alike.
-    Changing the username does not touch the password, so the owner stays signed in."""
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid request."}, status=400)
-    if not isinstance(data, dict):
-        return JsonResponse({"error": "Invalid request."}, status=400)
-
-    new_username = str(data.get("new_username") or "").strip()
-    current_password = str(data.get("current_password") or "")
-
-    if not request.user.check_password(current_password):
-        return JsonResponse({"error": "Your current password is incorrect."}, status=400)
-    if not _USERNAME_PATTERN.fullmatch(new_username) or not re.search(r"[A-Za-z]", new_username):
-        return JsonResponse(
-            {"error": "Use 4 to 30 letters, numbers, dots, dashes or underscores, with at least one letter."},
-            status=400,
-        )
-    if new_username == request.user.get_username():
-        return JsonResponse({"error": "That is already your username."}, status=400)
-    if User.objects.filter(username__iexact=new_username).exclude(pk=request.user.pk).exists():
-        return JsonResponse({"error": "That username is already taken. Please try another."}, status=400)
-
-    request.user.username = new_username
-    try:
-        request.user.save(update_fields=["username"])
-    except IntegrityError:   # someone took it in the instant between the check above and this save
-        return JsonResponse({"error": "That username is already taken. Please try another."}, status=400)
-    return JsonResponse({"success": True, "username": new_username})
-
-
 @require_http_methods(["POST"])
 @audited('staff.status', 'Staff', audit_describe.staff_status, sensitive=True)
 @_require_owner
@@ -4122,14 +3994,6 @@ def staff_delete_view(request, user_id):
         return error
     target.delete()
     return JsonResponse({"success": True})
-
-
-# Brute-force protection for the admin login: 5 failed attempts locks that username out
-# for 15 minutes. A lockout ends 15 minutes after the 5th wrong
-# attempt; attempts made while locked do not extend it.
-#
-# The counter itself lives in the database now (accounts/login_throttle.py): in the server's memory it was forgotten every
-# time the host restarted or slept, so the lockout kept "resetting".
 
 
 # Django overwrites User.last_login with "now" on every sign-in, so by the time anyone looks at it, it only
@@ -4176,7 +4040,7 @@ def admin_google_finish_view(request):
     old_email = user.email
     if change_to:
         # The owner confirmed a new sign-in Gmail by signing in to it. Check it is still free, then save it.
-        problem = admin_google.gmail_problem(change_to, exclude_pk=user.pk)
+        problem = admin_google.gmail_problem(change_to, exclude_pk=user.pk, allow_owner_gmail=True)
         if problem:
             return render(request, "arabela_admin/admin-login.html", admin_google.sign_in_context(request, problem), status=400)
         user.email = change_to
@@ -4204,93 +4068,13 @@ def owner_gmail_change_start_view(request):
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid request."}, status=400)
     new_email = admin_google.normalize_email(data.get("email"))
-    if new_email == admin_google.normalize_email(request.user.email):
+    if admin_google.canonical_email(new_email) == admin_google.canonical_email(request.user.email):
         return JsonResponse({"error": "That is already your sign-in Gmail."}, status=400)
-    problem = admin_google.gmail_problem(new_email, exclude_pk=request.user.pk)
+    problem = admin_google.gmail_problem(new_email, exclude_pk=request.user.pk, allow_owner_gmail=True)
     if problem:
         return JsonResponse({"error": problem}, status=400)
     url = admin_google.google_login_url(request, admin_google.make_change_token(request.user, new_email))
     return JsonResponse({"success": True, "url": url, "email": new_email})
-
-
-@never_cache  # a copy of this page kept by the browser (back button, restored tab) would carry an out-of-date security secret
-# HIDDEN FALLBACK (step 1 of the Google sign-in change): the old username + password sign-in is no longer linked from anywhere. It stays at
-# /admin-panel/admin-login/password/ only so the shop is never locked out while the Google sign-in is being tested, and is removed in step 2.
-def admin_password_login_view(request):
-    if request.method == "POST":
-        username = request.POST.get("username", "").strip()
-        password = request.POST.get("password", "")
-
-        if not username:
-            return render(
-                request,
-                "arabela_admin/admin-login-password.html",
-                {"error": "Please enter your username.", "username": username},
-            )
-
-        throttle_key = login_throttle.username_key(username)
-        locked_seconds = login_throttle.seconds_locked(throttle_key)
-        if locked_seconds:
-            return render(
-                request,
-                "arabela_admin/admin-login-password.html",
-                {"error": login_throttle.lockout_message(locked_seconds), "username": username},
-            )
-
-        if not password:
-            return render(
-                request,
-                "arabela_admin/admin-login-password.html",
-                {"error": "Please enter your password.", "username": username},
-            )
-
-        authenticated_user = authenticate(request, username=username, password=password)
-        if not authenticated_user:
-            remaining = login_throttle.record_failure(throttle_key)
-            if remaining <= 0:
-                error_message = login_throttle.lockout_message(login_throttle.LOCKOUT_SECONDS)
-                # The Audit Log marks the moment an ADMIN account got locked (a wrong guess for any other username is not written).
-                locked_account = User.objects.filter(username__iexact=username).first()
-                if locked_account is not None and (locked_account.is_staff or locked_account.is_superuser):
-                    audit_log.record(
-                        locked_account, category="Sign-in", action="signin.locked", outcome="failed", sensitive=True, request=request, network=True,
-                        summary=f"{_staff_display_name(locked_account)}'s account was locked for 15 minutes after too many wrong passwords")
-            else:
-                error_message = (
-                    f"Invalid username or password. {remaining} attempt"
-                    f"{'s' if remaining != 1 else ''} remaining before temporary lockout."
-                )
-            return render(
-                request,
-                "arabela_admin/admin-login-password.html",
-                {"error": error_message, "username": username},
-            )
-
-        if not (authenticated_user.is_staff or authenticated_user.is_superuser):
-            return render(
-                request,
-                "arabela_admin/admin-login-password.html",
-                {"error": "This account has no admin access.", "username": username},
-            )
-
-        # Successful login clears any accumulated failed-attempt count for this username.
-        login_throttle.clear(throttle_key)
-        previous_login = authenticated_user.last_login   # read BEFORE login() overwrites it
-        login(request, authenticated_user)
-        request.session[_PREVIOUS_LOGIN_SESSION_KEY] = previous_login.isoformat() if previous_login else ""
-        remember_me = request.POST.get("remember_me") == "on"
-        request.session.set_expiry(settings.REMEMBER_ME_AGE if remember_me else 0)
-        return redirect("arabela_admin:dashboard")
-
-    # Already signed in as staff -- go straight to the dashboard instead of showing the
-    # login form again. Signing out is a deliberate action (see admin_logout_view) so a
-    # "remembered" session survives simply loading this URL (bookmark, back/forward, etc).
-    if _is_admin_staff(request):
-        return redirect("arabela_admin:dashboard")
-    notice = ""
-    if request.GET.get("reset") == "done":      # sent here by the Forgot password page after a new password was saved
-        notice = "Your password was changed. Sign in with your new password."
-    return render(request, "arabela_admin/admin-login-password.html", {"notice": notice})
 
 
 @require_http_methods(["POST"])
@@ -4303,13 +4087,12 @@ def admin_logout_view(request):
 
 
 def page_view(request, page: str):
-    # Only the real Edit Profile / Account Settings pages. Note this deliberately
+    # Only the real Edit Profile page. Note this deliberately
     # EXCLUDES calendar / payment-verification / security-deposits: those have their
     # own gated named routes, and letting the "<page>.html" catch-all also render
     # them bypassed that auth (and served them with no context).
     allowed_pages = {
         "profile",
-        "account-settings",
     }
     if page not in allowed_pages:
         raise Http404("Page not found")
@@ -4325,7 +4108,6 @@ def page_view(request, page: str):
             "last_name": request.user.last_name,
             "email": request.user.email,
             "bio": profile.display_name,
-            "admin_username": request.user.get_username(),
             "previous_login": _previous_login(request),
             # The shop's public phone, Facebook link and address are the OWNER's to change. This is the very check save_profile_view
             # makes before it writes them, so the page can never show a box the server would quietly throw away.
@@ -4335,15 +4117,7 @@ def page_view(request, page: str):
                 PERMISSIONS[key]["label"] for key in PERMISSION_KEYS if key in granted_permissions(request.user, profile)
             ],
         })
-
-    # page == "account-settings"
-    # admin_full_name/admin_role/admin_is_owner already come from the global admin
-    # context processor -- only the raw login username is specific to this page.
-    return render(request, "arabela_admin/account-settings.html", {
-        "admin_username": request.user.get_username(),
-        "previous_login": _previous_login(request),
-        "recovery": owner_recovery.status(request.user),
-    })
+    raise Http404("Page not found")
 
 
 _FACEBOOK_URL_MAX = 200   # SiteSettings.facebook_url is a URLField (200 characters)

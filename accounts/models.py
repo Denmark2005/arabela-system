@@ -114,10 +114,11 @@ class CustomerMessage(models.Model):
 
 
 class LoginThrottle(models.Model):
-    """Failed admin sign-in attempts, per username -- kept in the DATABASE (see accounts/login_throttle.py).
+    """Counters kept in the DATABASE: the rate limits in accounts/rate_limit.py (key "rl:...") and, in older rows, the admin sign-in
+    lockout of the removed username + password page (key "user:..."; the admin panel signs in with Google only now).
 
     They used to live in the server's memory, which the host wipes every time the app restarts or sleeps and which a
-    second server process would not share, so the "5 wrong attempts = locked for 15 minutes" rule kept forgetting."""
+    second server process would not share, so the counts kept forgetting."""
 
     key = models.CharField(max_length=120, unique=True)
     failures = models.PositiveIntegerField(default=0)
@@ -125,22 +126,6 @@ class LoginThrottle(models.Model):
 
     def __str__(self):
         return f'{self.key}: {self.failures} failed'
-
-
-class OwnerRecovery(models.Model):
-    """The shop owner's CONFIRMED recovery email -- the one address a password-reset link may be sent to (accounts/owner_recovery.py).
-
-    Deliberately not the profile's Email box: that box can be typed into with no proof, so it must never decide who can reset the admin
-    password. A row exists only after a code mailed to the address was typed back, so a mistyped or made-up address is never stored.
-    Only the owner can have one; staff and customers never get a reset link."""
-
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='owner_recovery')
-    email = models.EmailField(max_length=254)
-    verified_at = models.DateTimeField()
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return f'{self.user_id}: {self.email}'
 
 
 class CustomerEmailLog(models.Model):
