@@ -4165,6 +4165,13 @@ def admin_google_finish_view(request):
     The session ends when the browser is closed (no 'keep me signed in'); the Sign out button ends it at once."""
     user, change_to = admin_google.read_signin_token(request.GET.get("t", ""))
     if user is None:
+        # The same link used a second time while this browser is ALREADY signed in to the admin panel (Chrome on a phone replays the
+        # hand-over address when "Desktop site" is switched): nothing went wrong, so go to the dashboard instead of saying "expired".
+        # A link made for a Gmail change keeps its own message.
+        if _is_admin_staff(request):
+            kept = admin_google.peek_signin_token(request.GET.get("t", ""))
+            if kept is not None and not kept.get("c"):
+                return redirect("arabela_admin:dashboard")
         return render(request, "arabela_admin/admin-login.html", admin_google.sign_in_context(request, admin_google.MESSAGES["link_expired"]), status=400)
     old_email = user.email
     if change_to:

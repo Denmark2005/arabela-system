@@ -61,7 +61,14 @@ def _admin_google_sign_in(request, sociallogin, next_url):
         if user is None:
             _refuse_admin(request, admin_google.MESSAGES[why])
     token = admin_google.make_signin_token(user, change_to=change_to)
-    raise ImmediateHttpResponse(redirect(f"{admin_google.finish_path()}?{urlencode({'t': token})}"))
+    response = redirect(f"{admin_google.finish_path()}?{urlencode({'t': token})}")
+    state = admin_google.answer_state(request)
+    if state:
+        # Remember WHICH Google answer this was. If the very same answer arrives again (Chrome on a phone replays the whole sign-in when
+        # "Desktop site" is switched on or off), on_authentication_error recognises it and keeps the person in the admin panel.
+        response.set_cookie(admin_google.STATE_COOKIE, state, max_age=admin_google.STATE_COOKIE_MAX_AGE, httponly=True, samesite="Lax",
+                            secure=request.is_secure())
+    raise ImmediateHttpResponse(response)
 
 
 class ArabelaSocialAccountAdapter(DefaultSocialAccountAdapter):
@@ -74,6 +81,13 @@ class ArabelaSocialAccountAdapter(DefaultSocialAccountAdapter):
           * anyone else goes back to the login page, which says what happened and to try once more (keeping where they were headed).
         The login page is a redirect (not the callback URL itself), so a refresh can never replay the failed answer."""
         problem = "cancelled" if error in (AuthError.CANCELLED, AuthError.DENIED) else "incomplete"
+        state = admin_google.answer_state(request)
+        if state and state == request.COOKIES.get(admin_google.STATE_COOKIE):
+            # The same Google answer that already signed an admin in, arriving a second time (Chrome on a phone replays the whole sign-in
+            # when "Desktop site" is switched on or off). Nothing is wrong: the first answer did its job. This answer lands outside the
+            # admin area, so it cannot see the admin sign-in; it must not be taken for a customer's and sent to the customer pages. The
+            # admin sign-in page sends a signed-in admin on to the dashboard, and shows the sign-in again if the session has ended.
+            raise ImmediateHttpResponse(redirect(reverse("arabela_admin:admin_login")))
         if request.COOKIES.get(admin_google.TRY_COOKIE):
             # The admin sign-in page was open a moment ago in this browser: send the person back to IT with the reason.
             logger.warning("Admin Google sign-in did not finish: error=%s exception=%r", error, exception)

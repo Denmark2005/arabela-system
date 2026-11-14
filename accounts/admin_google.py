@@ -33,6 +33,8 @@ CHANGE_SALT = "arabela.admin-google-gmail-change"
 SIGNIN_MAX_AGE = 120            # seconds the hand-over from Google to the admin panel stays valid (and it works once)
 CHANGE_MAX_AGE = 15 * 60        # time the owner has to finish confirming a new sign-in Gmail
 TRY_COOKIE = "arabela_admin_google"     # set while the admin sign-in page is open, so a failed Google answer comes back to it
+STATE_COOKIE = "arabela_admin_google_state"     # the "state" code of the last Google answer that signed an admin in (see answer_state)
+STATE_COOKIE_MAX_AGE = 12 * 60 * 60             # a working day; the sign-in itself ends when the browser closes
 
 MESSAGES = {
     "not_allowed": "This Google account is not allowed to open the admin panel. Ask the owner to add your Gmail in Staff Management.",
@@ -66,6 +68,21 @@ def is_admin_next(next_url):
         return urlparse(next_url or "").path == finish_path()
     except ValueError:
         return False
+
+
+def answer_state(request):
+    """The "state" code that came back with Google's answer, or "" when there is none or it is not a plain short code. Every Google
+    sign-in carries its own random code, so the same code arriving twice means the same answer arrived twice."""
+    value = (request.GET.get("state") or "").strip()
+    return value if re.fullmatch(r"[A-Za-z0-9_-]{4,128}", value) else ""
+
+
+def peek_signin_token(token):
+    """What a hand-over link says, when its signature is genuine -- even if the link is old or was already used. None for a forged one."""
+    try:
+        return signing.loads(token or "", salt=SIGNIN_SALT)
+    except signing.BadSignature:
+        return None
 
 
 def change_token_from_next(next_url):
