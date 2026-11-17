@@ -1765,20 +1765,55 @@
               </div>
 
               {% if admin_is_owner %}
-              <!-- GCash payment details = core business setting (shown to customers in the checkout's
-                   GCash window). Owner-only; the three endpoints behind it enforce that too. Its own
-                   Alpine scope (gcashCard, defined just below) so the page-wide x-data is untouched. -->
+              <!-- GCash payment details = core business setting (shown to customers in the checkout's GCash window). The shop has TWO GCash
+                   accounts, the owner's and the manager's; the switch says which one customers are shown and pay to. Owner-only; the endpoints
+                   behind it enforce that too. Its own Alpine scope (gcashCard, defined just below) so the page-wide x-data is untouched. -->
+              <style>
+                .gc-seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .25rem; width: 100%; max-width: 26rem; padding: .25rem; border: 1px solid #d0d5dd; border-radius: .875rem; background: #f2f4f7; }
+                .gc-seg button { border: 0; border-radius: .625rem; padding: .7rem .5rem; min-height: 2.75rem; text-align: center; font-size: .875rem; font-weight: 600; color: #475467; background: transparent; cursor: pointer; }
+                .gc-seg button[aria-checked="true"] { background: #101828; color: #fff; }
+                .gc-seg button:disabled { opacity: .6; cursor: not-allowed; }
+                .gc-note { font-size: .8125rem; color: #475467; }
+                .gc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 1.25rem; margin-top: 1.25rem; }
+                .gc-panel { border: 1px solid #e4e7ec; border-radius: 1rem; padding: 1rem 1.1rem; }
+                .gc-panel.is-active { border-color: #12b76a; box-shadow: 0 0 0 1px #12b76a inset; }
+                .gc-badge { display: inline-block; margin-left: .5rem; padding: .1rem .55rem; border-radius: 999px; font-size: .6875rem; font-weight: 700; background: #d1fadf; color: #05603a; vertical-align: middle; }
+                .gc-pick { margin-top: 1rem; padding: .85rem 1rem; border: 1px solid #fedf89; border-radius: .75rem; background: #fffaeb; }
+                .gc-field label { display: block; margin-bottom: .375rem; font-size: .875rem; font-weight: 500; color: #344054; }
+                .gc-btn { display: inline-flex; align-items: center; justify-content: center; border: 1px solid #d0d5dd; border-radius: .5rem; background: #fff; padding: .5rem .75rem; font-size: .75rem; font-weight: 500; color: #344054; cursor: pointer; }
+                .gc-btn:disabled { opacity: .6; cursor: not-allowed; }
+                .gc-btn--dark { background: #101828; border-color: #101828; color: #fff; font-size: .875rem; padding: .6rem 1rem; }
+                .dark .gc-seg { background: rgba(255,255,255,.06); border-color: #344054; }
+                .dark .gc-seg button { color: #d0d5dd; }
+                .dark .gc-seg button[aria-checked="true"] { background: #fff; color: #101828; }
+                .dark .gc-note, .dark .gc-field label { color: #98a2b3; }
+                .dark .gc-panel { border-color: #344054; }
+                .dark .gc-btn { background: #1d2939; border-color: #344054; color: #d0d5dd; }
+                .dark .gc-btn--dark { background: #fff; color: #101828; border-color: #fff; }
+              </style>
               <script>
                 window.gcashCard = function () {
+                  var blank = function () { return { name: '', number: '', saved: '', qr: '', holder: '', grace: '48', busy: false, qrError: '', saving: false, msg: '', ok: false }; };
                   return {
-                    name: '', number: '', qrUrl: '', savedNumber: '', graceHours: '48',
-                    busy: false, qrError: '', detailsBusy: false, detailsMsg: '', detailsOk: false, showFull: false,
+                    active: 'owner', holders: [], acc: { owner: blank(), manager: blank() }, switchTo: '', switchGrace: '24', switchBusy: false, switchMsg: '', switchOk: false, fullUrl: '',
                     init() {
                       var d = this.$el.dataset;
-                      this.name = d.name || '';
-                      this.number = d.number || '';
-                      this.savedNumber = this.number;
-                      this.qrUrl = d.qr || '';
+                      this.active = d.active === 'manager' ? 'manager' : 'owner';
+                      ['owner', 'manager'].forEach((key) => {
+                        var a = this.acc[key];
+                        a.name = d[key + 'Name'] || ''; a.number = d[key + 'Number'] || ''; a.saved = a.number; a.qr = d[key + 'Qr'] || '';
+                      });
+                      this.acc.manager.holder = d.managerHolder || '';
+                      try { var list = document.getElementById('gcash-holders-data'); this.holders = list ? JSON.parse(list.textContent) : []; } catch (e) { this.holders = []; }
+                    },
+                    label(key) { return key === 'manager' ? 'Manager’s GCash' : 'Owner’s GCash'; },
+                    digits(text) { return String(text || '').replace(/\D/g, ''); },
+                    numberChanged(key) { var a = this.acc[key]; return !!a.saved && this.digits(a.number) !== this.digits(a.saved); },
+                    holderName() {
+                      var id = String(this.acc.manager.holder || '');
+                      if (!id) return '';
+                      for (var i = 0; i < this.holders.length; i++) { if (String(this.holders[i].id) === id) return this.holders[i].name; }
+                      return '';
                     },
                     csrf() {
                       var m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
@@ -1791,13 +1826,24 @@
                         return res.json().then(function (data) { return { ok: res.ok, data: data }; });
                       });
                     },
-                    pickQr(event) {
+                    absorb(state) {
+                      if (!state) return;
+                      if (state.active) this.active = state.active;
+                      ['owner', 'manager'].forEach((key) => {
+                        if (!state[key]) return;
+                        var a = this.acc[key];
+                        a.name = state[key].name || ''; a.number = state[key].number || ''; a.saved = a.number; a.qr = state[key].qr_url || '';
+                      });
+                      if (state.manager) this.acc.manager.holder = state.manager.holder_id ? String(state.manager.holder_id) : '';
+                    },
+                    pickQr(key, event) {
                       var file = event.target.files && event.target.files[0];
                       event.target.value = '';
                       if (!file) return;
-                      this.qrError = '';
-                      if (file.size > 5 * 1024 * 1024) { this.qrError = 'Image must be 5MB or smaller.'; return; }
-                      this.busy = true;
+                      var a = this.acc[key];
+                      a.qrError = '';
+                      if (file.size > 5 * 1024 * 1024) { a.qrError = 'Image must be 5MB or smaller.'; return; }
+                      a.busy = true;
                       // In-memory copy first (static/js/picked-file.js), so the phone's own file can't break the upload.
                       window.arabelaReadPickedFile(file).then((copy) => {
                         if (!/^image\/(jpeg|png|webp)$/.test(copy.type)) {
@@ -1807,116 +1853,181 @@
                         }
                         var form = new FormData();
                         form.append('qr', copy);
+                        form.append('account', key);
                         return this.post('{% url "arabela_admin:gcash_qr_upload" %}', { body: form });
                       }).then((r) => {
-                        this.busy = false;
-                        if (!r.ok || !r.data.success) { this.qrError = r.data.error || 'Could not upload the image.'; return; }
-                        this.qrUrl = r.data.url;
+                        a.busy = false;
+                        if (!r.ok || !r.data.success) { a.qrError = r.data.error || 'Could not upload the image.'; return; }
+                        a.qr = r.data.url;
                       }).catch((err) => {
-                        this.busy = false;
-                        this.qrError = (err && err.code === 'unreadable_photo') ? err.message : 'Network error. Please try again.';
+                        a.busy = false;
+                        a.qrError = (err && err.code === 'unreadable_photo') ? err.message : 'Network error. Please try again.';
                       });
                     },
-                    removeQr() {
+                    removeQr(key) {
+                      var a = this.acc[key];
                       adminConfirm({
-                        title: 'Remove the GCash QR?',
+                        title: 'Remove the ' + this.label(key) + ' QR?',
                         message: 'Customers will see "QR code coming soon" until you upload a new one.',
                         confirmText: 'Remove', danger: true
                       }).then((ok) => {
                         if (!ok) return;
-                        this.busy = true;
-                        this.post('{% url "arabela_admin:gcash_qr_remove" %}', {}).then((r) => {
-                          this.busy = false;
-                          if (!r.ok || !r.data.success) { this.qrError = r.data.error || 'Could not remove the image.'; return; }
-                          this.qrUrl = ''; this.showFull = false; this.qrError = '';
-                        }).catch(() => { this.busy = false; this.qrError = 'Network error. Please try again.'; });
+                        a.busy = true;
+                        this.post('{% url "arabela_admin:gcash_qr_remove" %}', { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ account: key }) }).then((r) => {
+                          a.busy = false;
+                          if (!r.ok || !r.data.success) { a.qrError = r.data.error || 'Could not remove the image.'; return; }
+                          a.qr = ''; a.qrError = '';
+                        }).catch(() => { a.busy = false; a.qrError = 'Network error. Please try again.'; });
                       });
                     },
-                    saveDetails() {
-                      this.detailsBusy = true; this.detailsMsg = '';
+                    saveDetails(key) {
+                      var a = this.acc[key];
+                      a.saving = true; a.msg = '';
+                      var body = { account: key, name: a.name, number: a.number, old_number_grace_hours: Number(a.grace) };
+                      if (key === 'manager') body.holder_id = a.holder;
                       this.post('{% url "arabela_admin:gcash_details_update" %}', {
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name: this.name, number: this.number, old_number_grace_hours: Number(this.graceHours) })
+                        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
                       }).then((r) => {
-                        this.detailsBusy = false;
-                        this.detailsOk = !!(r.ok && r.data.success);
-                        if (this.detailsOk) { this.name = r.data.name; this.number = r.data.number; this.savedNumber = r.data.number; this.detailsMsg = 'Saved. Customers now see these details.'; }
-                        else { this.detailsMsg = r.data.error || 'Could not save.'; }
-                      }).catch(() => { this.detailsBusy = false; this.detailsOk = false; this.detailsMsg = 'Network error. Please try again.'; });
+                        a.saving = false;
+                        a.ok = !!(r.ok && r.data.success);
+                        if (a.ok) { this.absorb(r.data); a.msg = (key === 'manager' && this.active !== 'manager') ? 'Saved. Switch to this account above to show it to customers.' : 'Saved.'; }
+                        else { a.msg = r.data.error || 'Could not save.'; }
+                      }).catch(() => { a.saving = false; a.ok = false; a.msg = 'Network error. Please try again.'; });
+                    },
+                    askSwitch(key) { if (key === this.active || this.switchBusy) return; this.switchTo = key; this.switchMsg = ''; this.switchGrace = '24'; },
+                    cancelSwitch() { this.switchTo = ''; },
+                    confirmSwitch() {
+                      if (!this.switchTo) return;
+                      this.switchBusy = true; this.switchMsg = '';
+                      this.post('{% url "arabela_admin:gcash_active_update" %}', {
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ active: this.switchTo, old_number_grace_hours: Number(this.switchGrace) })
+                      }).then((r) => {
+                        this.switchBusy = false;
+                        this.switchOk = !!(r.ok && r.data.success);
+                        if (this.switchOk) { this.absorb(r.data); this.switchMsg = 'Done. Customers now pay the ' + this.label(this.active) + '.'; this.switchTo = ''; }
+                        else { this.switchMsg = r.data.error || 'Could not switch.'; }
+                      }).catch(() => { this.switchBusy = false; this.switchOk = false; this.switchMsg = 'Network error. Please try again.'; });
                     }
                   };
                 };
               </script>
+              {{ gcash_holders|json_script:"gcash-holders-data" }}
               <div
+                id="gcash-card"
                 x-data="gcashCard()"
-                data-name="{{ site_gcash_name }}" data-number="{{ site_gcash_number }}" data-qr="{{ site_gcash_qr_url }}"
-                @keydown.escape.window="showFull = false"
+                data-active="{{ site_gcash_active }}"
+                data-owner-name="{{ site_gcash_owner.name }}" data-owner-number="{{ site_gcash_owner.number }}" data-owner-qr="{{ site_gcash_owner.qr_url }}"
+                data-manager-name="{{ site_gcash_manager.name }}" data-manager-number="{{ site_gcash_manager.number }}" data-manager-qr="{{ site_gcash_manager.qr_url }}"
+                data-manager-holder="{{ site_gcash_manager_holder_id }}"
+                @keydown.escape.window="fullUrl = ''"
                 class="p-5 border border-gray-200 rounded-2xl dark:border-gray-800 lg:p-6"
                 style="margin-top: 1.5rem;"
               >
-                <h4 class="flex items-center text-lg font-semibold text-gray-800 dark:text-white/90">GCash Payment<details class="ht-tip"><summary aria-label="About the GCash QR" title="About the GCash QR">?</summary><div class="ht-tip-pop">Shown to customers when they pay the security deposit. The QR is always shown whole, never cropped.</div></details></h4>
+                <h4 class="flex items-center text-lg font-semibold text-gray-800 dark:text-white/90">GCash Payment<details class="ht-tip"><summary aria-label="About the GCash accounts" title="About the GCash accounts">?</summary><div class="ht-tip-pop">Shown to customers when they pay the security deposit. The QR is always shown whole, never cropped. The shop has two GCash accounts: yours and the manager's. Customers only ever see the one marked "Customers pay to": its QR, name and number. A payment to your GCash waits for your Received before staff can approve it; a payment to the manager's GCash does not wait for you.</div></details></h4>
 
-                <div style="display: flex; flex-wrap: wrap; gap: 2rem; margin-top: 1.25rem;">
-                  <div style="width: 208px;">
-                    <div class="rounded-2xl border border-gray-200 bg-white p-3 dark:border-gray-700"
-                         style="width: 208px; height: 208px; display: flex; align-items: center; justify-content: center;">
-                      <template x-if="qrUrl"><img :src="qrUrl" alt="GCash QR code" style="max-width: 100%; max-height: 100%; object-fit: contain;" /></template>
-                      <template x-if="!qrUrl"><p class="px-4 text-center text-sm text-gray-400">No QR uploaded yet</p></template>
-                    </div>
-                    <input type="file" class="hidden" x-ref="qrInput" accept="image/jpeg,image/png,image/webp" @change="pickQr($event)" />
-                    <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem;">
-                      <button type="button" @click="$refs.qrInput.click()" :disabled="busy" :style="busy ? 'opacity: 0.6; cursor: not-allowed;' : ''"
-                              class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200" x-text="busy ? 'Working...' : (qrUrl ? 'Replace QR' : 'Upload QR')"></button>
-                      <button type="button" x-show="qrUrl" x-cloak @click="showFull = true" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">View Full Image</button>
-                      <button type="button" x-show="qrUrl" x-cloak @click="removeQr()" :disabled="busy" style="color: #F04438;" class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200">Remove</button>
-                    </div>
-                    <p x-show="qrError" x-cloak x-text="qrError" class="mt-2 text-xs font-medium text-error-600 dark:text-error-500"></p>
-                    <p class="mt-2 text-xs text-gray-400 dark:text-gray-400">JPG, PNG or WEBP, up to 5MB.</p>
+                <!-- Customers pay to: ONE switch for the whole shop -->
+                <div style="margin-top: 1.1rem;">
+                  <p class="gc-note" style="font-weight: 600; margin-bottom: .4rem;">Customers pay to</p>
+                  <div class="gc-seg" role="radiogroup" aria-label="Customers pay to">
+                    <button type="button" id="gcash-pay-owner" role="radio" :aria-checked="active === 'owner' ? 'true' : 'false'" :disabled="switchBusy" @click="askSwitch('owner')">Owner&rsquo;s GCash</button>
+                    <button type="button" id="gcash-pay-manager" role="radio" :aria-checked="active === 'manager' ? 'true' : 'false'" :disabled="switchBusy" @click="askSwitch('manager')">Manager&rsquo;s GCash</button>
                   </div>
+                  <p id="gcash-active-note" class="gc-note" style="margin-top: .5rem;" x-show="active === 'owner'">Payments go to <b>your</b> GCash. Staff can approve a booking only after you press <b>Received</b> in Payment Verification (or approve it yourself).</p>
+                  <p id="gcash-active-note-manager" class="gc-note" style="margin-top: .5rem;" x-show="active === 'manager'" x-cloak>Payments go to the <b>manager&rsquo;s</b> GCash<span x-show="holderName()" x-text="' (held by ' + holderName() + ')'"></span>. Staff can approve as usual: the manager checks the payment in the shop.</p>
 
-                  <div style="flex: 1; min-width: 260px;">
-                    <div>
-                      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Account name</label>
-                      <input type="text" x-model="name" maxlength="100" placeholder="e.g. Arabela Gown Rental" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800" />
-                    </div>
-                    <div style="margin-top: 1rem;">
-                      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">GCash number</label>
-                      <input type="tel" inputmode="tel" x-model="number" maxlength="20" placeholder="0917 123 4567" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800" />
-                    </div>
-                    <!-- Only when the number is being CHANGED: receipts a customer paid to the old number a little before (or while a QR page was still open)
-                         are still fair, so the owner says how long they keep counting. -->
-                    <div x-show="savedNumber && number.replace(/\D/g, '') !== savedNumber.replace(/\D/g, '')" x-cloak
-                         style="margin-top: 1rem; padding: .75rem 1rem; border: 1px solid #fedf89; border-radius: .75rem; background: #fffaeb;">
-                      <label class="block text-sm font-medium text-gray-700" style="color: #7a2e0e;">Keep accepting receipts paid to the old number</label>
-                      <select x-model="graceHours" class="dark:bg-dark-900 mt-1.5 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-800">
-                        <option value="48">for 48 hours (recommended)</option>
-                        <option value="24">for 24 hours</option>
-                        <option value="0">not at all (the old account is closed or lost)</option>
-                      </select>
-                      <p class="mt-1.5 text-xs" style="color: #93370d;">Receipts to the old number are judged by the time on the receipt. Choose "not at all" only if you can no longer see money sent to it.</p>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 0.75rem; margin-top: 1.25rem;">
-                      <button type="button" @click="saveDetails()" :disabled="detailsBusy" :style="detailsBusy ? 'opacity: 0.6; cursor: not-allowed;' : ''"
-                              class="flex justify-center rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs hover:bg-black dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
-                              x-text="detailsBusy ? 'Saving...' : 'Save Details'"></button>
-                      <p x-show="detailsMsg" x-cloak x-text="detailsMsg" class="text-xs font-medium"
-                         :class="detailsOk ? 'text-success-700 dark:text-success-500' : 'text-error-600 dark:text-error-500'"></p>
+                  <!-- Asked only when the owner picks the account that is not in use: how long the one being switched off still counts -->
+                  <div id="gcash-switch-panel" class="gc-pick" x-show="switchTo" x-cloak>
+                    <p style="font-size: .9rem; font-weight: 600; color: #7a2e0e;" x-text="'Switch customers to the ' + label(switchTo) + '?'"></p>
+                    <label class="block text-sm font-medium" style="color: #7a2e0e; margin-top: .6rem;" for="gcash-switch-grace">Keep accepting receipts paid to the one you are switching off</label>
+                    <select id="gcash-switch-grace" x-model="switchGrace" class="mt-1.5 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-800">
+                      <option value="24">for 24 hours (recommended)</option>
+                      <option value="48">for 48 hours</option>
+                      <option value="0">not at all (that account is closed or lost)</option>
+                    </select>
+                    <p class="mt-1.5 text-xs" style="color: #93370d;">A customer who opened the QR a few minutes before you switched is still accepted. Payments already made keep following the account they were paid to.</p>
+                    <div style="display: flex; gap: .6rem; margin-top: .8rem;">
+                      <button type="button" id="gcash-switch-confirm" class="gc-btn gc-btn--dark" :disabled="switchBusy" x-text="switchBusy ? 'Switching...' : 'Switch now'" @click="confirmSwitch()"></button>
+                      <button type="button" id="gcash-switch-cancel" class="gc-btn" :disabled="switchBusy" @click="cancelSwitch()">Cancel</button>
                     </div>
                   </div>
+                  <p id="gcash-switch-msg" x-show="switchMsg" x-cloak x-text="switchMsg" class="text-xs font-medium" style="margin-top: .5rem;"
+                     :class="switchOk ? 'text-success-700 dark:text-success-500' : 'text-error-600 dark:text-error-500'"></p>
+                </div>
+
+                <div class="gc-grid">
+                  <template x-for="key in ['owner', 'manager']" :key="key">
+                    <div class="gc-panel" :class="active === key ? 'is-active' : ''" :id="'gcash-panel-' + key">
+                      <h5 class="text-base font-semibold text-gray-800 dark:text-white/90"><span x-text="label(key)"></span><span class="gc-badge" x-show="active === key" x-cloak>In use now</span></h5>
+                      <div style="display: flex; flex-wrap: wrap; gap: 1.25rem; margin-top: .9rem;">
+                        <div style="width: 176px;">
+                          <div class="rounded-2xl border border-gray-200 bg-white p-3 dark:border-gray-700" style="width: 176px; height: 176px; display: flex; align-items: center; justify-content: center;">
+                            <template x-if="acc[key].qr"><img :src="acc[key].qr" :alt="label(key) + ' QR code'" style="max-width: 100%; max-height: 100%; object-fit: contain;" /></template>
+                            <template x-if="!acc[key].qr"><p class="px-3 text-center text-sm text-gray-400">No QR uploaded yet</p></template>
+                          </div>
+                          <input type="file" class="hidden" :id="'gcash-qr-input-' + key" accept="image/jpeg,image/png,image/webp" @change="pickQr(key, $event)" />
+                          <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.7rem;">
+                            <button type="button" class="gc-btn" @click="document.getElementById('gcash-qr-input-' + key).click()" :disabled="acc[key].busy" x-text="acc[key].busy ? 'Working...' : (acc[key].qr ? 'Replace QR' : 'Upload QR')"></button>
+                            <button type="button" class="gc-btn" x-show="acc[key].qr" x-cloak @click="fullUrl = acc[key].qr">View Full Image</button>
+                            <button type="button" class="gc-btn" x-show="acc[key].qr" x-cloak :disabled="acc[key].busy" style="color: #F04438;" @click="removeQr(key)">Remove</button>
+                          </div>
+                          <p x-show="acc[key].qrError" x-cloak x-text="acc[key].qrError" class="mt-2 text-xs font-medium text-error-600 dark:text-error-500"></p>
+                          <p class="mt-2 text-xs text-gray-400 dark:text-gray-400">JPG, PNG or WEBP, up to 5MB.</p>
+                        </div>
+
+                        <div style="flex: 1; min-width: 200px;">
+                          <div class="gc-field">
+                            <label :for="'gcash-name-' + key">Account name</label>
+                            <input type="text" :id="'gcash-name-' + key" x-model="acc[key].name" maxlength="100" placeholder="e.g. Arabela Gown Rental" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800" />
+                          </div>
+                          <div class="gc-field" style="margin-top: .9rem;">
+                            <label :for="'gcash-number-' + key">GCash number</label>
+                            <input type="tel" inputmode="tel" :id="'gcash-number-' + key" x-model="acc[key].number" maxlength="20" placeholder="0917 123 4567" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800" />
+                          </div>
+                          <!-- The staff account that has the manager's GCash phone in the shop: it may press Received for payments made here. -->
+                          <template x-if="key === 'manager'">
+                            <div class="gc-field" style="margin-top: .9rem;">
+                              <label for="gcash-holder">Held by</label>
+                              <select id="gcash-holder" x-model="acc.manager.holder" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90">
+                                <option value="">Choose a staff account&hellip;</option>
+                                {% for holder in gcash_holders %}<option value="{{ holder.id }}">{{ holder.name }}</option>{% endfor %}
+                              </select>
+                              <p class="gc-note" style="margin-top: .35rem;">The staff account that has this GCash on their phone in the shop. It can press Received for payments made here.</p>
+                            </div>
+                          </template>
+                          <!-- Only when the number of the account customers pay is being CHANGED: receipts paid to the old number a little before are still fair. -->
+                          <div x-show="active === key && numberChanged(key)" x-cloak style="margin-top: 1rem; padding: .75rem 1rem; border: 1px solid #fedf89; border-radius: .75rem; background: #fffaeb;">
+                            <label class="block text-sm font-medium" style="color: #7a2e0e;" :for="'gcash-grace-' + key">Keep accepting receipts paid to the old number</label>
+                            <select :id="'gcash-grace-' + key" x-model="acc[key].grace" class="mt-1.5 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-800">
+                              <option value="48">for 48 hours (recommended)</option>
+                              <option value="24">for 24 hours</option>
+                              <option value="0">not at all (the old account is closed or lost)</option>
+                            </select>
+                            <p class="mt-1.5 text-xs" style="color: #93370d;">Receipts to the old number are judged by the time on the receipt. Choose "not at all" only if you can no longer see money sent to it.</p>
+                          </div>
+                          <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.1rem;">
+                            <button type="button" class="gc-btn gc-btn--dark" :id="'gcash-save-' + key" @click="saveDetails(key)" :disabled="acc[key].saving" x-text="acc[key].saving ? 'Saving...' : 'Save Details'"></button>
+                            <p x-show="acc[key].msg" x-cloak x-text="acc[key].msg" :id="'gcash-msg-' + key" class="text-xs font-medium"
+                               :class="acc[key].ok ? 'text-success-700 dark:text-success-500' : 'text-error-600 dark:text-error-500'"></p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
                 </div>
 
                 <!-- View Full Image: the QR big, plus a link that opens it in its own tab. -->
-                <div x-show="showFull" x-cloak class="fixed inset-0 flex items-center justify-center p-5 overflow-y-auto z-99999">
-                  <div class="modal-close-btn admin-backdrop fixed inset-0 h-full w-full" @click="showFull = false"></div>
+                <div x-show="fullUrl" x-cloak class="fixed inset-0 flex items-center justify-center p-5 overflow-y-auto z-99999">
+                  <div class="modal-close-btn admin-backdrop fixed inset-0 h-full w-full" @click="fullUrl = ''"></div>
                   <div class="relative rounded-3xl bg-white p-6 dark:bg-gray-900" style="width: min(560px, 92vw);">
                     <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem;">
                       <h4 class="text-lg font-semibold text-gray-800 dark:text-white/90">GCash QR</h4>
-                      <button type="button" @click="showFull = false" class="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Close</button>
+                      <button type="button" @click="fullUrl = ''" class="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Close</button>
                     </div>
                     <div class="rounded-2xl bg-white p-3" style="display: flex; justify-content: center;">
-                      <img :src="qrUrl" alt="GCash QR code, full size" style="display: block; max-width: 100%; max-height: 70vh; object-fit: contain;" />
+                      <img :src="fullUrl" alt="GCash QR code, full size" style="display: block; max-width: 100%; max-height: 70vh; object-fit: contain;" />
                     </div>
-                    <a :href="qrUrl" target="_blank" rel="noopener" style="margin-top: 1rem;" class="inline-flex items-center gap-1.5 text-theme-xs font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400">Open in a new tab</a>
+                    <a :href="fullUrl" target="_blank" rel="noopener" style="margin-top: 1rem;" class="inline-flex items-center gap-1.5 text-theme-xs font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400">Open in a new tab</a>
                   </div>
                 </div>
               </div>

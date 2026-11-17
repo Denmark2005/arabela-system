@@ -631,6 +631,14 @@ class SiteSettings(models.Model):
     gcash_account_name = models.CharField(max_length=100, blank=True, default='', db_default='')
     gcash_number = models.CharField(max_length=20, blank=True, default='', db_default='')
     gcash_qr_url = models.URLField(max_length=500, blank=True, default='', db_default='')
+    # The shop has TWO GCash accounts. The three fields above are the OWNER's; these are the MANAGER's (a staff account the owner names in
+    # `manager_gcash_holder` holds that phone in the shop). `gcash_active` says whose QR customers are shown and pay to. Who has to confirm a
+    # payment depends on the account it was paid to (see reservations/owner_check.py): the owner for hers, the manager for the manager's.
+    manager_gcash_name = models.CharField(max_length=100, blank=True, default='', db_default='')
+    manager_gcash_number = models.CharField(max_length=20, blank=True, default='', db_default='')
+    manager_gcash_qr_url = models.URLField(max_length=500, blank=True, default='', db_default='')
+    manager_gcash_holder = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    gcash_active = models.CharField(max_length=10, default='owner', db_default='owner')
     # What the owner asks as the security deposit for EACH gown (whole pesos, 1 to 10,000). One setting that the checkout, the walk-in
     # booking, the page scripts, the Terms/FAQ wording and the AI chat all read. A booking keeps the deposit it was made with
     # (Reservation.security_deposit), so changing this only affects NEW bookings. db_default: an older deployment sharing this
@@ -675,6 +683,8 @@ class GcashNumberHistory(models.Model):
     while the number is still in use."""
 
     number = models.CharField(max_length=20)
+    # Whose number it is: 'owner' (the owner's GCash) or 'manager' (the manager's). It says who has to confirm a payment made to it.
+    account = models.CharField(max_length=10, default='owner', db_default='owner')
     valid_from = models.DateTimeField(null=True, blank=True)
     valid_until = models.DateTimeField(null=True, blank=True)
     grace_hours = models.PositiveSmallIntegerField(default=0)

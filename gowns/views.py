@@ -1007,8 +1007,11 @@ def _verdict_fields(verdict):
         "proof_recipient": (verdict.recipient or "")[:40],
         "proof_old_number": verdict.old_number,
         "gcash_reference": (verdict.reference or "")[:20],
-        # Online GCash proofs wait for the owner to look in her own GCash (the account is hers alone).
+        # Online GCash proofs wait for the owner to look in her own GCash (the account is hers alone) -- or, when the customer paid the
+        # MANAGER's GCash, for the manager who holds it. `proof_account` remembers which one was paid, so the rule follows the money even
+        # if the owner switches the active account later (reservations/owner_check.py).
         "owner_check": Reservation.OwnerCheck.PENDING,
+        "proof_account": verdict.account or "",
     }
 
 
@@ -1373,6 +1376,8 @@ def reservation_submit(request):
                 # real unit behind it keeps what was sent.
                 gown_name=(item["matched_gown"].name if item["matched_gown"] is not None else item["gown_name"])[:150],
                 gown_slug=item["gown_slug"],
+                # The booked unit's picture, kept on the booking: the link to the gown is cleared if the gown is ever deleted from the catalog.
+                gown_photo_url=((item["matched_gown"].photo_url if item["matched_gown"] is not None else "") or "")[:500],
                 # The booked unit's real size (what the shop will hand over); only an item with no real unit keeps what was sent.
                 size=(item["matched_gown"].size if item["matched_gown"] is not None else item["size"])[:20],
                 rental_price=item["rental_price"],
@@ -1480,7 +1485,11 @@ def reservation_item_detail(request, item_id):
         id=item_id, reservation__customer=request.user,
     )
     reservation = item.reservation
-    gown_photo = sized(item.gown.photo_url, PAGE_WIDTH) if (item.gown_id and item.gown.photo_url) else _FALLBACK_IMG
+    # The picture of the gown that was RESERVED: the gown's own photo while it is in the catalog, else the picture saved on this booking when it was
+    # made. A gown that was deleted and has no saved picture shows no picture at all (the page says so) -- never another gown's.
+    live_photo = item.gown.photo_url if item.gown_id else ""
+    saved_photo = live_photo or item.gown_photo_url
+    gown_photo = sized(saved_photo, PAGE_WIDTH) if saved_photo else ""
     return render(
         request,
         'reservation_item_detail.html',
@@ -1740,10 +1749,22 @@ def notification_badges(request):
     return response
 
 
+MESSAGES_PER_PAGE = 10
+
+
 @login_required(login_url='accounts:login')
 def messages_view(request):
+    """The customer's Messages, newest first, 10 a page (?page=2). Only the messages SHOWN are marked read: one on a page the customer has not
+    opened yet stays unread, so the bell's count stays true and its "New" tag is still there when they get to it. A page number that is not a
+    number is page 1, and one past the end is the last page (which is where a customer lands after clearing the last page)."""
     profile, _ = UserProfile.objects.get_or_create(user=request.user)
-    message_list = list(request.user.customer_messages.all())
+    paginator = Paginator(request.user.customer_messages.order_by('-created_at', '-id'), MESSAGES_PER_PAGE)
+    try:
+        number = int(request.GET.get('page') or 1)
+    except (TypeError, ValueError):
+        number = 1
+    page = paginator.get_page(max(number, 1))          # too big = the last page; zero, negative or not a number = the first
+    message_list = list(page.object_list)
     unread_ids = [m.id for m in message_list if not m.is_read]
     if unread_ids:
         CustomerMessage.objects.filter(id__in=unread_ids).update(is_read=True)
@@ -1761,7 +1782,13 @@ def messages_view(request):
     return render(
         request,
         'messages.html',
-        {"display_name": profile.display_name, "customer_messages": message_list},
+        {
+            "display_name": profile.display_name,
+            "customer_messages": message_list,
+            "messages_page": page,
+            "total_messages": paginator.count,
+            "has_pages": paginator.num_pages > 1,
+        },
     )
 
 

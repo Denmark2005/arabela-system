@@ -818,7 +818,7 @@
           arabelaAlert({ title: 'Choose a photo', message: pickedProblem, danger: true });
           return;
         }
-        input.disabled = true;
+        input.disabled = true; if (window.arabelaReceiptChecking) window.arabelaReceiptChecking.show();
         // Copied into memory (and shrunk if it is a large camera photo) before sending: sending the
         // phone's own file is what made uploads fail with "Failed to fetch" on Android phones
         // (static/js/picked-file.js).
@@ -843,7 +843,7 @@
             window.location.reload();
           })
           .catch(function (err) {
-            input.disabled = false;
+            input.disabled = false; if (window.arabelaReceiptChecking) window.arabelaReceiptChecking.hide();
             input.value = '';
             var described = window.arabelaDescribeRequestError(err, 'Could not upload your proof of payment.');
             arabelaAlert({ title: 'Upload failed', message: described.message, danger: true });
@@ -853,6 +853,7 @@
   <!-- Keeps the badges above current on a page that stays open (see the script's own header). -->
   {% load static %}<script defer src="{% static 'js/customer-badges-live.js' %}?v={{ site_asset_version }}" data-live-badges-url="{% url 'gowns:notification_badges' %}" data-user-id="{{ request.user.id }}"></script>
   <script defer src="{% static 'js/picked-file.js' %}?v={{ site_asset_version }}"></script>
+  <script defer src="{% static 'js/receipt-checking.js' %}?v={{ site_asset_version }}"></script>
   {% include "partials/reservation_hold_banner.html" %}
 {% include "partials/dialog.html" %}
 </body>

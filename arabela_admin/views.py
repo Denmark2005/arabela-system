@@ -167,7 +167,7 @@ def dashboard_view(request):
 
     # Quick Verify lists only the latest few however many are waiting (a short fixed list never crowds the page); `pending_total` is the real
     # number waiting, for the "N waiting" count and "Showing the latest 5 of N".
-    quick_verify_reservations = list(
+    quick_verify_reservations = reservation_owner_check.annotate_waiting(
         Reservation.objects.filter(status=Reservation.Status.PENDING)
         .select_related("customer__profile")
         .prefetch_related(_receipts_prefetch())
@@ -222,6 +222,8 @@ def dashboard_view(request):
             "staff_today": staff_today,
             "quick_verify_reservations": quick_verify_reservations,
             "quick_verify_count": len(quick_verify_reservations),
+            # The owner's own Approve is never held back (it counts as her confirming the payment); everyone else waits for her Received.
+            "viewer_is_owner": _is_owner(request),
             "pending_total": pending_total,
             "registered_customers": User.objects.filter(
                 is_staff=False, is_superuser=False
@@ -750,6 +752,9 @@ def payment_verification_view(request):
     # for the whole list in ONE query instead of one query per booking.
     rows = list(reservations)
     duplicates = _same_gcash_number_elsewhere(rows)
+    reservation_owner_check.annotate_waiting(rows)
+    owner = _is_owner(request)
+    shop = SiteSettings.load()
     status_words = {
         Reservation.Status.PENDING: "Pending", Reservation.Status.REJECTED: "Rejected", Reservation.Status.CANCELLED: "Cancelled",
     }
@@ -762,6 +767,8 @@ def payment_verification_view(request):
         booking.item_total = len(items)
         booking.gcash_dups = duplicates.get(booking.id, "")
         booking.pv_status = status_words.get(booking.status, "Verified")
+        # Who may press Received / Not found on this booking: the owner on any, the manager who holds the manager's GCash on a payment made to it.
+        booking.can_answer_check = reservation_owner_check.can_answer(request.user, booking, is_owner=owner, shop=shop)
     return render(
         request,
         "arabela_admin/payment-verification.html",
@@ -774,6 +781,9 @@ def payment_verification_view(request):
             "owner_check_count": reservation_owner_check.awaiting().count(),
             # The same function the answer endpoint enforces (the template's admin_is_owner flag disagrees for an admin with no profile row).
             "can_answer_owner_check": _is_owner(request),
+            "viewer_is_owner": owner,
+            # The staff account that holds the manager's GCash gets the Received / Not found buttons for the payments made to it (and only those).
+            "viewer_is_holder": (not owner) and reservation_owner_check.holds_manager_account(request.user, shop),
             "verified_this_month_count": reservations.filter(
                 status__in=verified_statuses,
                 reviewed_at__year=now.year, reviewed_at__month=now.month,
@@ -1526,6 +1536,7 @@ def pending_approval_view(request):
     tag_colors = SiteSettings.load().tag_colors()
     today = timezone.localdate()
     duplicates = _same_gcash_number_elsewhere(reservations)
+    reservation_owner_check.annotate_waiting(reservations)
     for reservation in reservations:
         # A booking staff recorded but not paid yet (walk-in, Facebook, phone): no online proof to check -- staff attach the
         # shop's receipt when the customer pays, then Approve.
@@ -1544,7 +1555,7 @@ def pending_approval_view(request):
     return render(
         request,
         "arabela_admin/pending-approval.html",
-        {"page": "pending", "reservations": reservations},
+        {"page": "pending", "reservations": reservations, "viewer_is_owner": _is_owner(request)},
     )
 
 
@@ -2891,13 +2902,26 @@ def reservation_approve_view(request, pk):
         return JsonResponse({"error": "Unauthorized"}, status=401)
     # Claim it only while it is still Pending: one conditional UPDATE, so of two staff clicking at the same moment
     # (or one on an old page) exactly one wins and the other is told it was already decided.
+    # A payment made to the OWNER's GCash (or to the manager's while that account is out of service) cannot be approved by the staff until she
+    # has confirmed it: the very same UPDATE refuses it, so there is no gap to slip through. Her own Approve counts as her confirmation.
     now = timezone.now()
-    claimed = Reservation.objects.filter(id=pk, status=Reservation.Status.PENDING).update(
-        status=Reservation.Status.CONFIRMED, reviewed_at=now, updated_at=now,
-    )
+    owner_approves = _is_owner(request)
+    claim = Reservation.objects.filter(id=pk, status=Reservation.Status.PENDING)
+    if not owner_approves:
+        claim = claim.exclude(reservation_owner_check.waiting_filter())
+    claimed = claim.update(status=Reservation.Status.CONFIRMED, reviewed_at=now, updated_at=now)
     if not claimed:
+        if not owner_approves and Reservation.objects.filter(id=pk, status=Reservation.Status.PENDING).filter(
+                reservation_owner_check.waiting_filter()).exists():
+            return JsonResponse({
+                "error": ("Waiting for the owner to confirm the payment in GCash. This payment went to the owner's GCash account, which only she can "
+                          "see, so it can be approved once she has pressed Received. You can still reject it."),
+                "waiting_for_owner": True,
+            }, status=409)
         return _already_reviewed_response(pk)
     reservation = Reservation.objects.get(id=pk)
+    if owner_approves and reservation_owner_check.owner_must_confirm(reservation):
+        reservation_owner_check.confirm_received(reservation, request.user, now, by_approving=True)
     ReservationStatusEvent.record(
         reservation, "Reservation approved",
         detail="Your payment was verified. Your booking is confirmed.",
@@ -2980,7 +3004,10 @@ def reservation_owner_check_view(request, pk):
     staff cannot see the GCash account, so they cannot answer for her). Everything it does is in reservations/owner_check.py."""
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
-    if not _is_owner(request):
+    owner = _is_owner(request)
+    shop = SiteSettings.load()
+    # The owner answers for every payment. The manager who holds the manager's GCash may answer for the payments made to it, and only those.
+    if not owner and not reservation_owner_check.holds_manager_account(request.user, shop):
         return JsonResponse({"error": "Only the owner can confirm a payment in the GCash account."}, status=403)
     try:
         data = json.loads(request.body or "{}")
@@ -2990,9 +3017,11 @@ def reservation_owner_check_view(request, pk):
     if result not in ("received", "not_found"):
         return JsonResponse({"error": "Choose Received or Not found."}, status=400)
     with transaction.atomic():
-        reservation = Reservation.objects.select_for_update().select_related("customer").filter(pk=pk).first()
+        reservation = Reservation.objects.select_for_update(of=("self",)).select_related("customer").filter(pk=pk).first()
         if reservation is None:
             return JsonResponse({"error": "Reservation not found"}, status=404)
+        if not reservation_owner_check.can_answer(request.user, reservation, is_owner=owner, shop=shop):
+            return JsonResponse({"error": "Only the owner can confirm a payment made to her GCash account."}, status=403)
         if reservation.owner_check != Reservation.OwnerCheck.PENDING:
             if reservation.owner_check in (Reservation.OwnerCheck.RECEIVED, Reservation.OwnerCheck.NOT_FOUND):
                 return JsonResponse({"error": "This payment was already checked. Please refresh the page."}, status=409)
@@ -4112,6 +4141,8 @@ def page_view(request, page: str):
             # The shop's public phone, Facebook link and address are the OWNER's to change. This is the very check save_profile_view
             # makes before it writes them, so the page can never show a box the server would quietly throw away.
             "can_edit_shop_settings": _is_owner(request),
+            # The staff accounts the owner can pick to hold the manager's GCash phone (only she sees the GCash card, so only she pays for the list).
+            "gcash_holders": [_holder_row(user) for user in _gcash_holders()] if _is_owner(request) else [],
             # A staff account sees what the owner allowed it to do besides the daily work ("Your access"); the owner has no such box.
             "your_access": [
                 PERMISSIONS[key]["label"] for key in PERMISSION_KEYS if key in granted_permissions(request.user, profile)
@@ -4701,10 +4732,38 @@ def _delete_old_gcash_qr(url):
         pass
 
 
+def _gcash_account_from(data, key="account", default=gcash_numbers.OWNER):
+    """"owner" / "manager" from a request (JSON dict or form), `default` when it says nothing, None when it says something else."""
+    value = (data.get(key) if hasattr(data, "get") else None) or default
+    value = str(value) if value is not None else None
+    return value if value in gcash_numbers.ACCOUNTS else None
+
+
+def _gcash_holders():
+    """The staff accounts that may hold the manager's GCash: the active staff accounts (never the owner)."""
+    return list(_staff_queryset().filter(is_active=True))
+
+
+def _holder_row(user):
+    return {"id": user.pk, "name": _staff_display_name(user)} if user is not None else {"id": "", "name": ""}
+
+
+def _gcash_state(settings_obj):
+    """Both accounts and which one is active, as the Edit Profile card shows them after a change."""
+    holder = settings_obj.manager_gcash_holder
+    return {
+        "active": gcash_numbers.active_account(settings_obj),
+        "owner": gcash_numbers.account_details(gcash_numbers.OWNER, settings_obj),
+        "manager": {**gcash_numbers.account_details(gcash_numbers.MANAGER, settings_obj), "holder_id": holder.pk if holder else "",
+                    "holder_name": _staff_display_name(holder) if holder else ""},
+    }
+
+
 @require_http_methods(["POST"])
 @audited('settings.gcash', 'Settings', audit_describe.gcash_details, sensitive=True, before=audit_describe.before_settings)
 def gcash_details_update_view(request):
-    """Save the GCash account name and number shown at checkout. Blank clears either one."""
+    """Save the name and number of ONE of the shop's two GCash accounts (the owner's by default, or the manager's with its "Held by" staff
+    account). Blank clears the name or number, except for the account customers are paying right now."""
     refused = _gcash_owner_error(request)
     if refused:
         return refused
@@ -4714,6 +4773,10 @@ def gcash_details_update_view(request):
         return JsonResponse({"error": "Invalid JSON"}, status=400)
     if not isinstance(data, dict):
         return JsonResponse({"error": "Invalid request."}, status=400)
+    account = _gcash_account_from(data)
+    if account is None:
+        return JsonResponse({"error": "Choose the owner's or the manager's GCash."}, status=400)
+    manager = account == gcash_numbers.MANAGER
 
     name = str(data.get("name") or "").strip()
     if len(name) > 100:
@@ -4725,15 +4788,88 @@ def gcash_details_update_view(request):
         )
 
     settings_obj = SiteSettings.load()
-    old_number = settings_obj.gcash_number
-    settings_obj.gcash_account_name = name
-    settings_obj.gcash_number = number
+    other = gcash_numbers.MANAGER if not manager else gcash_numbers.OWNER
+    if number and number == gcash_numbers.normalize(gcash_numbers.account_details(other, settings_obj)["number"]):
+        return JsonResponse({"error": "The owner's and the manager's GCash must use different numbers."}, status=400)
+    active = gcash_numbers.active_account(settings_obj)
+    holder = settings_obj.manager_gcash_holder
+    if manager and "holder_id" in data:
+        raw = data.get("holder_id")
+        if raw in (None, "", 0, "0"):
+            holder = None
+        else:
+            holder = next((user for user in _gcash_holders() if str(user.pk) == str(raw)), None)
+            if holder is None:
+                return JsonResponse({"error": "Choose one of the active staff accounts to hold the manager's GCash."}, status=400)
+    if manager and active == gcash_numbers.MANAGER and (not name or not number or holder is None):
+        return JsonResponse({"error": "Customers are paying the manager's GCash right now, so its name, number and holder cannot be left empty. "
+                                      "Switch to the owner's GCash first."}, status=400)
+
+    old_number = gcash_numbers.account_details(account, settings_obj)["number"]
+    if manager:
+        settings_obj.manager_gcash_name, settings_obj.manager_gcash_number, settings_obj.manager_gcash_holder = name, number, holder
+        fields = ["manager_gcash_name", "manager_gcash_number", "manager_gcash_holder", "updated_at"]
+    else:
+        settings_obj.gcash_account_name, settings_obj.gcash_number = name, number
+        fields = ["gcash_account_name", "gcash_number", "updated_at"]
     with transaction.atomic():
-        settings_obj.save(update_fields=["gcash_account_name", "gcash_number", "updated_at"])
-        # The old number is remembered, with how long receipts to it are still accepted, so a customer who paid it just before the change
-        # is not turned away (gowns/gcash_numbers.py).
-        gcash_numbers.record_change(old_number, number, data.get("old_number_grace_hours"))
-    return JsonResponse({"success": True, "name": name, "number": number})
+        settings_obj.save(update_fields=fields)
+        # When the account customers pay changed its number, the old number is remembered, with how long receipts to it are still accepted, so a
+        # customer who paid it just before the change is not turned away (gowns/gcash_numbers.py). An account nobody is paying has no history.
+        if account == active:
+            gcash_numbers.record_change(old_number, number, data.get("old_number_grace_hours"), account=account)
+    return JsonResponse({"success": True, "account": account, "name": name, "number": number, **_gcash_state(settings_obj)})
+
+
+@require_http_methods(["POST"])
+@audited('settings.gcash_active', 'Settings', audit_describe.gcash_active, sensitive=True, before=audit_describe.before_settings)
+def gcash_active_update_view(request):
+    """Switch which GCash account customers are shown and pay to: the owner's or the manager's. Owner only.
+
+    The account being switched ON must be ready (a number; the manager's also a name, a QR picture and a staff account that holds it). The number
+    being switched OFF keeps counting for receipts for 0, 24 or 48 hours (`old_number_grace_hours`), exactly like a changed number. Payments
+    already made keep following the account they were paid to, so switching never weakens an older booking."""
+    refused = _gcash_owner_error(request)
+    if refused:
+        return refused
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    if not isinstance(data, dict):
+        return JsonResponse({"error": "Invalid request."}, status=400)
+    target = _gcash_account_from(data, key="active", default=None)
+    if target is None:
+        return JsonResponse({"error": "Choose the owner's or the manager's GCash."}, status=400)
+
+    settings_obj = SiteSettings.load()
+    current = gcash_numbers.active_account(settings_obj)
+    if target == current:
+        return JsonResponse({"success": True, "changed": False, **_gcash_state(settings_obj)})
+    details = gcash_numbers.account_details(target, settings_obj)
+    number = gcash_numbers.normalize(details["number"])
+    label = "manager's" if target == gcash_numbers.MANAGER else "owner's"
+    missing = []
+    if not number:
+        missing.append("a GCash number")
+    if target == gcash_numbers.MANAGER:
+        holder = settings_obj.manager_gcash_holder
+        if not (details["name"] or "").strip():
+            missing.append("an account name")
+        if not details["qr_url"]:
+            missing.append("a QR picture")
+        if holder is None or not holder.is_active:
+            missing.append("an active staff account that holds it")
+    if missing:
+        return JsonResponse({"error": f"The {label} GCash cannot be switched on yet. It still needs " + ", ".join(missing[:-1]) +
+                                      (" and " if len(missing) > 1 else "") + missing[-1] + "."}, status=400)
+
+    old_number = gcash_numbers.account_details(current, settings_obj)["number"]
+    with transaction.atomic():
+        settings_obj.gcash_active = target
+        settings_obj.save(update_fields=["gcash_active", "updated_at"])
+        gcash_numbers.record_change(old_number, number, data.get("old_number_grace_hours"), account=target, old_account=current)
+    return JsonResponse({"success": True, "changed": True, **_gcash_state(settings_obj)})
 
 
 @require_http_methods(["POST"])
@@ -4769,6 +4905,10 @@ def gcash_qr_upload_view(request):
     refused = _gcash_owner_error(request)
     if refused:
         return refused
+    account = _gcash_account_from(request.POST)
+    if account is None:
+        return JsonResponse({"error": "Choose the owner's or the manager's GCash."}, status=400)
+    field = "manager_gcash_qr_url" if account == gcash_numbers.MANAGER else "gcash_qr_url"
     upload = request.FILES.get("qr")
     if not upload:
         return JsonResponse({"error": "No image was selected."}, status=400)
@@ -4786,14 +4926,14 @@ def gcash_qr_upload_view(request):
     upload.seek(0)
 
     settings_obj = SiteSettings.load()
-    old_url = settings_obj.gcash_qr_url
+    old_url = getattr(settings_obj, field)
     try:
         saved_path = default_storage.save(f"gcash_qr/{uuid.uuid4().hex}{ext}", upload)
         new_url = default_storage.url(saved_path)
     except Exception:
         return JsonResponse({"error": "The image couldn't be uploaded just now. Please try again."}, status=502)
-    settings_obj.gcash_qr_url = new_url
-    settings_obj.save(update_fields=["gcash_qr_url", "updated_at"])
+    setattr(settings_obj, field, new_url)
+    settings_obj.save(update_fields=[field, "updated_at"])
     _delete_old_gcash_qr(old_url)
     return JsonResponse({"success": True, "url": new_url})
 
@@ -4801,14 +4941,26 @@ def gcash_qr_upload_view(request):
 @require_http_methods(["POST"])
 @audited('settings.gcash_qr_remove', 'Settings', audit_describe.gcash_qr_remove, sensitive=True)
 def gcash_qr_remove_view(request):
-    """Remove the QR picture; checkout goes back to its 'QR coming soon' message."""
+    """Remove the QR picture of one account (the owner's unless the request says the manager's); checkout goes back to its 'QR coming soon'
+    message. The manager's QR cannot be removed while customers are paying that account."""
     refused = _gcash_owner_error(request)
     if refused:
         return refused
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        data = {}
+    account = _gcash_account_from(data if isinstance(data, dict) else {})
+    if account is None:
+        return JsonResponse({"error": "Choose the owner's or the manager's GCash."}, status=400)
     settings_obj = SiteSettings.load()
-    old_url = settings_obj.gcash_qr_url
-    settings_obj.gcash_qr_url = ""
-    settings_obj.save(update_fields=["gcash_qr_url", "updated_at"])
+    if account == gcash_numbers.MANAGER and gcash_numbers.active_account(settings_obj) == gcash_numbers.MANAGER:
+        return JsonResponse({"error": "Customers are paying the manager's GCash right now, so its QR cannot be removed. Switch to the owner's GCash first."},
+                            status=400)
+    field = "manager_gcash_qr_url" if account == gcash_numbers.MANAGER else "gcash_qr_url"
+    old_url = getattr(settings_obj, field)
+    setattr(settings_obj, field, "")
+    settings_obj.save(update_fields=[field, "updated_at"])
     _delete_old_gcash_qr(old_url)
     return JsonResponse({"success": True, "url": ""})
 

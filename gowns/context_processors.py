@@ -9,7 +9,7 @@ from django.utils.dateparse import parse_datetime
 from django.utils.functional import SimpleLazyObject
 
 from accounts import terms
-from gowns import deposit
+from gowns import deposit, gcash_numbers
 from accounts.models import CustomerMessage, UserProfile
 from gowns.models import (
     CustomCategory, Gown, SiteSettings, custom_categories, group_gowns_by_name, hidden_category_names, pick_representative_gown,
@@ -306,10 +306,18 @@ def _phone_tel_href(phone: str) -> str:
     return "tel:" + digits
 
 
+def _holder_name(shop):
+    """The name of the staff account that holds the manager's GCash ('' for none), looked up only when a page actually prints it."""
+    from accounts.roles import staff_display_name
+    holder = shop.manager_gcash_holder
+    return staff_display_name(holder) if holder is not None else ""
+
+
 def site_settings(request):
     """Business contact info shown on the public site (footer, Contact page) and
     edited from the admin Edit Profile page -- one row, one source of truth."""
     s = SiteSettings.load()
+    active_gcash = gcash_numbers.active_details(s)
     deposit_per_gown = deposit.clean(s.security_deposit_per_gown) or deposit.DEFAULT_PER_GOWN
     address_line = " ".join(
         p for p in [s.shop_street, s.shop_city, s.shop_country, s.shop_postal_code] if p
@@ -322,10 +330,16 @@ def site_settings(request):
         "site_shop_city": s.shop_city,
         "site_shop_country": s.shop_country,
         "site_shop_postal_code": s.shop_postal_code,
-        # Where customers pay the security deposit (see the checkout's GCash window).
-        "site_gcash_name": s.gcash_account_name,
-        "site_gcash_number": s.gcash_number,
-        "site_gcash_qr_url": s.gcash_qr_url,
+        # Where customers pay the security deposit (see the checkout's GCash window): the ACTIVE one of the shop's two GCash accounts.
+        "site_gcash_name": active_gcash["name"],
+        "site_gcash_number": active_gcash["number"],
+        "site_gcash_qr_url": active_gcash["qr_url"],
+        "site_gcash_active": gcash_numbers.active_account(s),
+        # Both accounts as saved, for the owner's Edit Profile card and the staff's "Payments go to" note.
+        "site_gcash_owner": gcash_numbers.account_details(gcash_numbers.OWNER, s),
+        "site_gcash_manager": gcash_numbers.account_details(gcash_numbers.MANAGER, s),
+        "site_gcash_manager_holder_id": s.manager_gcash_holder_id or "",
+        "site_gcash_manager_holder_name": SimpleLazyObject(lambda: _holder_name(s)),
         "site_shop_address_line": address_line,
         # The security deposit per gown the owner set (gowns/deposit.py): the pages' scripts and the FAQ / How It Works / Terms wording
         # all read these, so changing the setting changes every place at once.

@@ -249,7 +249,15 @@
           <!-- Gown photo -->
           <div class="lg:col-span-6">
             <div class="aspect-[4/5] w-full overflow-hidden rounded-lg bg-neutral-50">
+              {% if gown_photo %}
               <img alt="{{ item.gown_name }}" class="h-full w-full object-cover" src="{{ gown_photo }}" />
+              {% else %}
+              <div class="flex h-full w-full flex-col items-center justify-center gap-3 px-8 text-center" id="gown-photo-missing" role="img" aria-label="Photo not available for {{ item.gown_name }}">
+                <span class="material-symbols-outlined text-neutral-300" style="font-size: 3.5rem;">checkroom</span>
+                <p class="text-sm font-medium text-neutral-500">Photo not available</p>
+                <p class="max-w-[16rem] text-xs leading-relaxed text-neutral-400">This gown is no longer in our catalog, so its picture can't be shown.</p>
+              </div>
+              {% endif %}
             </div>
           </div>
 
@@ -744,7 +752,7 @@
           arabelaAlert({ title: 'Choose a photo', message: pickedProblem, danger: true });
           return;
         }
-        input.disabled = true;
+        input.disabled = true; if (window.arabelaReceiptChecking) window.arabelaReceiptChecking.show();
         // Copied into memory (and shrunk if it is a large camera photo) before sending: sending the
         // phone's own file is what made uploads fail with "Failed to fetch" on Android phones
         // (static/js/picked-file.js).
@@ -769,7 +777,7 @@
             window.location.reload();
           })
           .catch(function (err) {
-            input.disabled = false;
+            input.disabled = false; if (window.arabelaReceiptChecking) window.arabelaReceiptChecking.hide();
             input.value = '';
             var described = window.arabelaDescribeRequestError(err, 'Could not upload your proof of payment.');
             arabelaAlert({ title: 'Upload failed', message: described.message, danger: true });
@@ -779,6 +787,7 @@
   <!-- Keeps the badges above current on a page that stays open (see the script's own header). -->
   {% load static %}<script defer src="{% static 'js/customer-badges-live.js' %}?v={{ site_asset_version }}" data-live-badges-url="{% url 'gowns:notification_badges' %}" data-user-id="{{ request.user.id }}"></script>
   <script defer src="{% static 'js/picked-file.js' %}?v={{ site_asset_version }}"></script>
+  <script defer src="{% static 'js/receipt-checking.js' %}?v={{ site_asset_version }}"></script>
   {% include "partials/reservation_hold_banner.html" %}
 {% include "partials/dialog.html" %}
 </body>

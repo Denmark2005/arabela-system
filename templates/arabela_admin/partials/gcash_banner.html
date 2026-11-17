@@ -1,0 +1,17 @@
+{# One line for the staff: whose GCash customers are paying right now and what that means for Approve. Needs the context processor's site_gcash_* values. #}
+<style>
+  .gcb { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .6rem; margin: 0 0 1rem; padding: .55rem .9rem; border: 1px solid #e4e7ec; border-radius: .75rem; background: #f9fafb; font-size: .8125rem; color: #475467; }
+  .gcb b { color: #1d2939; font-weight: 600; }
+  .gcb-dot { width: .6rem; height: .6rem; border-radius: 999px; background: #465fff; flex: none; }
+  .gcb-dot--manager { background: #12b76a; }
+  .dark .gcb { background: rgba(255,255,255,.04); border-color: #1d2939; color: #98a2b3; }
+  .dark .gcb b { color: #f2f4f7; }
+</style>
+<div class="gcb" id="gcash-banner" data-active="{{ site_gcash_active }}" role="note">
+  <span class="gcb-dot gcb-dot--{{ site_gcash_active }}" aria-hidden="true"></span>
+  {% if site_gcash_active == "manager" %}
+  <span><b>Payments go to:</b> Manager&rsquo;s GCash{% if site_gcash_manager_holder_name %} (held by {{ site_gcash_manager_holder_name }}){% endif %}. You can approve as usual.</span>
+  {% else %}
+  <span><b>Payments go to:</b> Owner&rsquo;s GCash. Approve opens after the owner confirms the payment in GCash.</span>
+  {% endif %}
+</div>

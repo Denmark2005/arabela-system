@@ -106,7 +106,9 @@
         class="resv-btn resv-btn-approve inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium shadow-theme-xs transition"
         :data-url="{{ var }}.approveUrl" data-label="approved" :data-ref="{{ var }}.reservation"
         :data-walkin="{{ var }}.walkin ? '1' : '0'" :data-receipts="{{ var }}.receiptCount"
-        onclick="reviewReservation(this)">Approve</button>
+        :disabled="{{ var }}.waiting" :style="{{ var }}.waiting ? 'opacity: .55; cursor: not-allowed;' : ''"
+        :title="{{ var }}.waiting ? 'Waiting for the owner to confirm the payment in GCash' : ''"
+        onclick="reviewReservation(this)"><span x-text="{{ var }}.waiting ? 'Waiting for owner' : 'Approve'">Approve</span></button>
       <button type="button"
         class="resv-btn resv-btn-reject inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium shadow-theme-xs transition"
         :data-url="{{ var }}.rejectUrl" data-label="rejected"

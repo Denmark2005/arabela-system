@@ -1257,6 +1257,7 @@
                     </div>
                     <a href="{% url 'arabela_admin:payment_verification' %}" class="qv-all" title="Open Payment Verification">See all <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
                   </div>
+                  <div style="padding: .75rem 1.25rem 0;">{% include "arabela_admin/partials/gcash_banner.html" %}</div>
                   <div>
                     {% for r in quick_verify_reservations %}
                     {% with dup=r.gcash_duplicate_codes %}
@@ -1270,6 +1271,10 @@
                       <div class="qv-date" title="Sent {{ r.created_at|date:'M j, Y, g:i A' }}">{{ r.created_at|date:"M j" }}</div>
                       <div class="qv-acts">
                         <button type="button" @click="openReceiptModal = true; receiptPreview = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"&mdash;"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:'-2g' }}', date: '{{ r.created_at|date:"M j, Y" }}', status: status, proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}'), breakdown: JSON.parse('{{ r.payment_breakdown_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', gcashDup: '{{ dup|escapejs }}' }" class="ar-ib" title="View proof" aria-label="View proof of {{ r.display_customer_name }}, {{ r.reference_code }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                        {% if r.waiting_for_owner and not viewer_is_owner %}
+                        <button type="button" disabled data-waiting-owner="1" x-show="status === 'Pending'" class="ar-ib qv-ok" style="opacity: .55; cursor: not-allowed;"
+                          title="Waiting for the owner to confirm the payment in GCash" aria-label="Approve is locked: waiting for the owner to confirm the payment of {{ r.display_customer_name }}, {{ r.reference_code }}, in GCash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button>
+                        {% else %}
                         <button type="button" x-show="status === 'Pending'"
                           data-url="{% url 'arabela_admin:reservation_approve' r.id %}"
                           data-action="verify"
@@ -1277,6 +1282,7 @@
                           data-reservation="{{ r.reference_code }}"
                           onclick="reviewQuickVerify(this)"
                           class="ar-ib qv-ok" title="Approve payment" aria-label="Approve payment of {{ r.display_customer_name }}, {{ r.reference_code }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
+                        {% endif %}
                         <button type="button" x-show="status === 'Pending'"
                           data-url="{% url 'arabela_admin:reservation_reject' r.id %}"
                           data-action="reject"

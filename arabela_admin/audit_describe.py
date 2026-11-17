@@ -389,18 +389,50 @@ def before_settings(request, kwargs):
     from gowns.models import SiteSettings
     s = SiteSettings.load()
     return {"gcash_account_name": s.gcash_account_name, "gcash_number": s.gcash_number, "deposit": s.security_deposit_per_gown,
-            "gcash_qr": bool(s.gcash_qr_url)}
+            "gcash_qr": bool(s.gcash_qr_url), "manager_gcash_name": s.manager_gcash_name, "manager_gcash_number": s.manager_gcash_number,
+            "manager_holder": s.manager_gcash_holder_id or "", "gcash_active": s.gcash_active}
+
+
+def _person(user_id):
+    """The name of a staff account for the Audit Log ('' for none)."""
+    if not user_id:
+        return ""
+    from accounts.roles import staff_display_name
+    from django.contrib.auth import get_user_model
+    user = get_user_model().objects.filter(pk=user_id).first()
+    return staff_display_name(user) if user is not None else "a removed account"
+
+
+def _account_word(account):
+    return "the manager's" if account == "manager" else "the owner's"
 
 
 def gcash_details(ctx):
     from gowns.models import SiteSettings
     s = SiteSettings.load()
+    manager = (ctx.body or {}).get("account") == "manager"
+    name_key, number_key = ("manager_gcash_name", "manager_gcash_number") if manager else ("gcash_account_name", "gcash_number")
     changes = {}
-    if ctx.before.get("gcash_account_name") != s.gcash_account_name:
-        changes["GCash account name"] = [ctx.before.get("gcash_account_name", ""), s.gcash_account_name]
-    if ctx.before.get("gcash_number") != s.gcash_number:
-        changes["GCash number"] = [ctx.before.get("gcash_number", ""), s.gcash_number]
-    return {"summary": "changed the shop's GCash details", "sensitive": True, "details": changes}
+    if ctx.before.get(name_key) != getattr(s, name_key):
+        changes["GCash account name"] = [ctx.before.get(name_key, ""), getattr(s, name_key)]
+    if ctx.before.get(number_key) != getattr(s, number_key):
+        changes["GCash number"] = [ctx.before.get(number_key, ""), getattr(s, number_key)]
+    if manager and ctx.before.get("manager_holder", "") != (s.manager_gcash_holder_id or ""):
+        changes["Held by"] = [_person(ctx.before.get("manager_holder")), _person(s.manager_gcash_holder_id)]
+    return {"summary": f"changed {_account_word('manager' if manager else 'owner')} GCash details", "sensitive": True, "details": changes}
+
+
+def gcash_active(ctx):
+    """The owner switched whose GCash customers pay: who it was, who it is now, and how long the old number still counted."""
+    from gowns.models import SiteSettings
+    s = SiteSettings.load()
+    before = ctx.before.get("gcash_active") or "owner"
+    grace = (ctx.body or {}).get("old_number_grace_hours")
+    grace_text = {0: "not at all", 24: "24 hours", 48: "48 hours"}.get(grace if isinstance(grace, int) else -1, "48 hours")
+    details = {"Customers pay to": [_account_word(before), _account_word(s.gcash_active)]}
+    if before != s.gcash_active:
+        details["The old GCash still counted for"] = grace_text
+    return {"summary": f"switched the GCash customers pay to {_account_word(s.gcash_active)} GCash", "sensitive": True, "details": details}
 
 
 def deposit_setting(ctx):

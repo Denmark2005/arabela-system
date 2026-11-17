@@ -112,10 +112,17 @@ class Reservation(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
     )
     owner_reminder_sent_at = models.DateTimeField(null=True, blank=True)
+    # Whose GCash the customer paid: 'owner' (her own account: staff cannot approve until she confirms it), 'manager' (the shop's: staff approve as
+    # usual) or '' (a walk-in, or a booking made before the shop had two accounts: never held back). Worked out from the receipt's recipient.
+    proof_account = models.CharField(max_length=10, blank=True, default='', db_default='')
 
     class ProofCheck(models.TextChoices):
         PASS = 'pass', 'Pre-checked'
         NEEDS_CHECK = 'needs_check', 'Needs check'
+
+    class ProofAccount(models.TextChoices):
+        OWNER = 'owner', 'Owner’s GCash'
+        MANAGER = 'manager', 'Manager’s GCash'
 
     class OwnerCheck(models.TextChoices):
         PENDING = 'pending', 'Not checked by the owner yet'
@@ -344,6 +351,21 @@ class Reservation(models.Model):
         return self.owner_check == self.OwnerCheck.PENDING and self.status not in (self.Status.REJECTED, self.Status.CANCELLED)
 
     @property
+    def waiting_for_owner(self):
+        """True while the staff cannot approve this booking yet: the customer paid the OWNER's GCash and she has not confirmed the money arrived
+        (or the payment went to the manager's GCash but that account is out of service, so it falls back to her). Rejecting is never held back.
+        A list view can set `_waiting_for_owner` on each row once, so this does not ask the database for every row (reservations/owner_check.py)."""
+        cached = getattr(self, '_waiting_for_owner', None)
+        if cached is not None:
+            return cached
+        from reservations import owner_check
+        return owner_check.blocks_approval(self)
+
+    @property
+    def paid_to_manager(self):
+        return self.proof_account == self.ProofAccount.MANAGER
+
+    @property
     def proof_badges(self):
         """Small chips for the staff lists: what the receipt check found and what the owner found in her GCash. [(kind, text), ...] where kind is
         ok / warn / bad / muted. Empty for a booking with no online GCash proof (a walk-in, or one made before the check existed)."""
@@ -355,11 +377,16 @@ class Reservation(models.Model):
         if self.proof_old_number:
             badges.append(('warn', 'Old GCash number'))
         if self.owner_check == self.OwnerCheck.RECEIVED:
-            badges.append(('ok', 'Payment confirmed by owner \u2713'))
+            badges.append(('ok', 'Payment confirmed in the manager\u2019s GCash \u2713' if self.paid_to_manager else 'Payment confirmed by owner \u2713'))
         elif self.owner_check == self.OwnerCheck.NOT_FOUND:
-            badges.append(('bad', 'Owner: payment not found \u2717'))
+            badges.append(('bad', 'Payment not found in the GCash \u2717' if self.paid_to_manager else 'Owner: payment not found \u2717'))
         elif self.owner_check_open:
-            badges.append(('muted', 'Not checked by owner yet'))
+            if self.waiting_for_owner:
+                badges.append(('warn', 'Waiting for the owner to confirm'))
+            elif self.paid_to_manager:
+                badges.append(('muted', 'Paid to the manager\u2019s GCash'))
+            else:
+                badges.append(('muted', 'Not checked by owner yet'))
         return badges
 
     @property
@@ -383,6 +410,9 @@ class Reservation(models.Model):
             'ownerCheck': self.owner_check,
             'ownerOpen': self.owner_check_open,
             'ownerLabel': dict(self.OwnerCheck.choices).get(self.owner_check, ''),
+            'account': self.proof_account,
+            'accountLabel': dict(self.ProofAccount.choices).get(self.proof_account, ''),
+            'waiting': bool(self.owner_check_open and self.waiting_for_owner),
             'amount': _peso_text(self.proof_amount) if self.proof_amount is not None else '',
             'paidAt': paid,
             'recipient': number,
@@ -537,6 +567,9 @@ class ReservationItem(models.Model):
     )
     gown_name = models.CharField(max_length=150)
     gown_slug = models.CharField(max_length=150, blank=True)
+    # The gown's picture as it was when this line was booked. The link above is cleared when the gown is deleted from the catalog (a reset, a
+    # removal), and a booking line only keeps the gown's NAME, so without this its page had no picture of what was reserved.
+    gown_photo_url = models.URLField(max_length=500, blank=True, default='', db_default='')
     size = models.CharField(max_length=20, blank=True)
     rental_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     rental_date = models.DateField()   # start of the rental window (default: 2 days before event)

@@ -1288,6 +1288,7 @@
 </div>
 </div>
             <!-- Breadcrumb End -->
+            {% include "arabela_admin/partials/gcash_banner.html" %}
             <!-- The three counts are still buttons that filter the list (the same filter the Status box below sets); the selected one is highlighted. -->
             <div class="pv-strip{% if can_answer_owner_check %} pv-strip--4{% endif %}">
               <button type="button" class="pv-stat" :class="statusFilter === 'Pending' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Pending' ? 'true' : 'false'" @click="statusFilter = 'Pending'">
@@ -1458,11 +1459,16 @@
                     </div>
                     <div class="pv-acts">
                       <button type="button"
-                        @click="viewingPayment = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"&mdash;"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:'-2g' }}', date: '{{ r.created_at|date:"M j, Y" }}', status: '{{ r.pv_status }}', proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}'), breakdown: JSON.parse('{{ r.payment_breakdown_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', gcashDup: '{{ r.gcash_dups|escapejs }}', proof: JSON.parse('{{ r.proof_window_json|escapejs }}'), ownerUrl: '{% url 'arabela_admin:reservation_owner_check' r.id %}' }; openReceiptModal = true"
+                        @click="viewingPayment = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"&mdash;"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:'-2g' }}', date: '{{ r.created_at|date:"M j, Y" }}', status: '{{ r.pv_status }}', proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}'), breakdown: JSON.parse('{{ r.payment_breakdown_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', gcashDup: '{{ r.gcash_dups|escapejs }}', proof: JSON.parse('{{ r.proof_window_json|escapejs }}'), ownerUrl: '{% url 'arabela_admin:reservation_owner_check' r.id %}', canAnswer: {{ r.can_answer_check|yesno:'true,false' }} }; openReceiptModal = true"
                         class="ar-ib" title="View payment proof" aria-label="View the payment proof of {{ r.display_customer_name }}, {{ r.reference_code }}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                       </button>
                       {% if r.status == "Pending" %}
+                      {% if r.waiting_for_owner and not viewer_is_owner %}
+                      <!-- The customer paid the OWNER's GCash: nobody else can see it, so Approve opens when she presses Received. Reject stays available. -->
+                      <button type="button" disabled data-waiting-owner="1" title="Waiting for the owner to confirm the payment in GCash" aria-label="Approve is locked: waiting for the owner to confirm the payment in GCash"
+                        class="resv-btn resv-btn-approve inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-theme-xs font-medium shadow-theme-xs transition" style="opacity: .55; cursor: not-allowed;">Waiting for owner</button>
+                      {% else %}
                       <button type="button"
                         data-url="{% url 'arabela_admin:reservation_approve' r.id %}"
                         data-action="verify"
@@ -1470,6 +1476,7 @@
                         data-reservation="{{ r.reference_code }}"
                         onclick="reviewPayment(this)"
                         class="resv-btn resv-btn-approve inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-theme-xs font-medium shadow-theme-xs transition">Approve</button>
+                      {% endif %}
                       <button type="button"
                         data-url="{% url 'arabela_admin:reservation_reject' r.id %}"
                         data-action="reject"
@@ -1624,12 +1631,14 @@
                       <template x-for="(note, noteIndex) in ((viewingPayment.proof && viewingPayment.proof.notes) || [])" :key="noteIndex"><li x-text="note"></li></template>
                     </ul>
                     <div class="pvk-owner" x-show="viewingPayment.proof && viewingPayment.proof.ownerCheck">
-                      <p x-show="viewingPayment.proof && viewingPayment.proof.ownerCheck === 'received'"><span class="pb-chip pb-chip--ok">Payment confirmed by the owner &#10003;</span></p>
-                      <p x-show="viewingPayment.proof && viewingPayment.proof.ownerCheck === 'not_found'"><span class="pb-chip pb-chip--bad">Owner: payment not found &#10007;</span></p>
-                      <p x-show="viewingPayment.proof && viewingPayment.proof.ownerOpen && !{{ can_answer_owner_check|yesno:'true,false' }}"><span class="pb-chip pb-chip--muted">Not checked by the owner yet</span> The GCash account is the owner's, so only she can confirm that the money arrived.</p>
-                      {% if can_answer_owner_check %}
-                      <div x-show="viewingPayment.proof && viewingPayment.proof.ownerOpen">
-                        <p>Look for this payment in your own GCash (the reference above, or the amount and time), then answer:</p>
+                      <p x-show="viewingPayment.proof && viewingPayment.proof.account" x-cloak><span class="pb-chip pb-chip--muted" x-text="'Paid to: ' + ((viewingPayment.proof || {}).accountLabel || '')"></span></p>
+                      <p x-show="viewingPayment.proof && viewingPayment.proof.ownerCheck === 'received'"><span class="pb-chip pb-chip--ok" x-text="(viewingPayment.proof || {}).account === 'manager' ? 'Payment confirmed in the manager\u2019s GCash \u2713' : 'Payment confirmed by the owner \u2713'"></span></p>
+                      <p x-show="viewingPayment.proof && viewingPayment.proof.ownerCheck === 'not_found'"><span class="pb-chip pb-chip--bad" x-text="(viewingPayment.proof || {}).account === 'manager' ? 'Payment not found in the manager\u2019s GCash \u2717' : 'Owner: payment not found \u2717'"></span></p>
+                      <p x-show="viewingPayment.proof && viewingPayment.proof.ownerOpen && !viewingPayment.canAnswer && viewingPayment.proof.waiting"><span class="pb-chip pb-chip--muted">Waiting for the owner to confirm the payment in GCash</span> This payment went to the owner&rsquo;s GCash account, which only she can see. Approve opens when she presses Received. You can still reject it.</p>
+                      <p x-show="viewingPayment.proof && viewingPayment.proof.ownerOpen && !viewingPayment.canAnswer && !viewingPayment.proof.waiting"><span class="pb-chip pb-chip--muted">Not checked yet</span> This payment went to the manager&rsquo;s GCash. You can approve it as usual.</p>
+                      {% if can_answer_owner_check or viewer_is_holder %}
+                      <div x-show="viewingPayment.proof && viewingPayment.proof.ownerOpen && viewingPayment.canAnswer" x-cloak>
+                        <p x-text="(viewingPayment.proof || {}).account === 'manager' ? 'Look for this payment in the manager\u2019s GCash (the reference above, or the amount and time), then answer:' : 'Look for this payment in your own GCash (the reference above, or the amount and time), then answer:'"></p>
                         <div class="pvk-btns">
                           <button type="button" class="pvk-btn pvk-btn--ok" @click="ownerCheckPayment(viewingPayment, 'received', $event.target)">Received &#10003;</button>
                           <button type="button" class="pvk-btn pvk-btn--bad" @click="ownerCheckPayment(viewingPayment, 'not_found', $event.target)">Not found &#10007;</button>

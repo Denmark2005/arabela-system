@@ -203,6 +203,29 @@
       .messages-hidden {
         display: none !important;
       }
+      /* Messages are read, so the type is sized to be read: 16px message text in a dark grey, 13px bold labels, 14px dates. */
+      .message-icon { font-size: 1.5rem; }
+      .message-label { font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+      .message-body { font-size: 1rem; line-height: 1.65; color: #2f2e2c; }
+      .message-date { font-size: 0.875rem; line-height: 1.35; color: #55534e; white-space: nowrap; }
+      .message-date span { color: #77746d; }
+      .messages-pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem 1rem; padding-top: 1.75rem; }
+      .messages-pager__count { font-size: 0.875rem; color: #55534e; }
+      .messages-pager__nav { display: flex; align-items: center; gap: 0.75rem; }
+      .messages-pager__page { font-size: 0.875rem; font-weight: 600; color: #1b1c1c; min-width: 6.5rem; text-align: center; }
+      .messages-pager__btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.25rem; min-height: 2.75rem; padding: 0 1.1rem;
+        border: 1px solid rgba(0, 0, 0, 0.18); border-radius: 0.25rem; font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+        color: #1b1c1c; background: #ffffff; transition: background-color 0.2s ease, border-color 0.2s ease; }
+      a.messages-pager__btn:hover { background: #f4f2f1; border-color: rgba(0, 0, 0, 0.4); }
+      span.messages-pager__btn { color: #a8a6a1; border-color: rgba(0, 0, 0, 0.08); cursor: default; }
+      @media (max-width: 520px) {
+        /* On a phone: the count, then "Page 1 of 2", then Previous and Next side by side, all inside the card. */
+        .messages-pager { justify-content: center; text-align: center; }
+        .messages-pager__count { width: 100%; text-align: center; }
+        .messages-pager__nav { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.6rem 0.75rem; }
+        .messages-pager__page { grid-column: 1 / -1; grid-row: 1; min-width: 0; }
+        .messages-pager__btn { width: 100%; min-width: 0; padding: 0 0.5rem; }
+      }
       #messages-undo-bar.is-visible {
         opacity: 1;
         transform: translate(-50%, 0);
@@ -289,67 +312,85 @@
         <header class="mb-12 flex items-end justify-between gap-6">
           <div>
             <h2 class="mb-2 text-3xl font-semibold tracking-tight text-[#1b1c1c] md:text-4xl">Messages</h2>
-            <p class="text-sm uppercase tracking-[0.15rem] text-secondary/60">Updates From Arabela</p>
+            <p class="text-sm uppercase tracking-[0.15rem] text-secondary/75">Updates From Arabela</p>
           </div>
-          <button type="button" id="messages-clear-all" class="mb-1 shrink-0 text-[0.6875rem] uppercase tracking-[0.1rem] text-[#615E57] decoration-1 underline-offset-4 transition-colors hover:text-secondary hover:underline{% if not customer_messages %} messages-hidden{% endif %}">Clear all</button>
+          <button type="button" id="messages-clear-all" class="mb-1 shrink-0 text-[0.8125rem] font-medium uppercase tracking-[0.1rem] text-[#4a4843] decoration-1 underline-offset-4 transition-colors hover:text-secondary hover:underline{% if not customer_messages %} messages-hidden{% endif %}">{% if has_pages %}Clear this page{% else %}Clear all{% endif %}</button>
         </header>
 
         {# Deleting waits 5 seconds (Undo) before it calls gowns:messages_delete; only messages already read can go. #}
-        <div class="flex flex-col space-y-0" id="messages-list" data-delete-url="{% url 'gowns:messages_delete' %}" data-csrf="{{ csrf_token }}">
+        <div class="flex flex-col space-y-0" id="messages-list" data-delete-url="{% url 'gowns:messages_delete' %}" data-csrf="{{ csrf_token }}" data-paged="{% if has_pages %}true{% else %}false{% endif %}">
           {% for message in customer_messages %}
             <div class="message-row group flex flex-col justify-between gap-4 py-8 md:flex-row md:items-start entry-line" data-message-id="{{ message.id }}">
               <div class="flex items-start gap-4">
                 {% if message.returned_body %}
-                  <span class="material-symbols-outlined vibrant-green">check_circle</span>
+                  <span class="material-symbols-outlined vibrant-green message-icon">check_circle</span>
                 {% elif message.category == "Account Flagged" %}
-                  <span class="material-symbols-outlined bold-red">flag</span>
+                  <span class="material-symbols-outlined bold-red message-icon">flag</span>
                 {% elif message.category == "Account Unflagged" %}
-                  <span class="material-symbols-outlined vibrant-green">check_circle</span>
+                  <span class="material-symbols-outlined vibrant-green message-icon">check_circle</span>
                 {% elif message.category == "Return Overdue" %}
-                  <span class="material-symbols-outlined bold-red">warning</span>
+                  <span class="material-symbols-outlined bold-red message-icon">warning</span>
                 {% elif message.category == "Reservation Reminder" %}
-                  <span class="material-symbols-outlined text-amber-600">schedule</span>
+                  <span class="material-symbols-outlined text-amber-600 message-icon">schedule</span>
                 {% elif message.category == "Cancellation Lockout" %}
-                  <span class="material-symbols-outlined text-amber-600">lock_clock</span>
+                  <span class="material-symbols-outlined text-amber-600 message-icon">lock_clock</span>
                 {% else %}
-                  <span class="material-symbols-outlined text-neutral-500">notifications</span>
+                  <span class="material-symbols-outlined text-neutral-500 message-icon">notifications</span>
                 {% endif %}
                 <div class="flex flex-col gap-2">
                   <div class="flex flex-wrap items-center gap-3">
                     {% if message.returned_body %}
-                      <span class="text-xs font-semibold uppercase tracking-wider vibrant-green">Returned</span>
+                      <span class="message-label vibrant-green">Returned</span>
                     {% elif message.category == "Account Flagged" %}
-                      <span class="text-xs font-semibold uppercase tracking-wider bold-red">{{ message.category }}</span>
+                      <span class="message-label bold-red">{{ message.category }}</span>
                     {% elif message.category == "Account Unflagged" %}
-                      <span class="text-xs font-semibold uppercase tracking-wider vibrant-green">{{ message.category }}</span>
+                      <span class="message-label vibrant-green">{{ message.category }}</span>
                     {% elif message.category == "Return Overdue" %}
-                      <span class="text-xs font-semibold uppercase tracking-wider bold-red">{{ message.category }}</span>
+                      <span class="message-label bold-red">{{ message.category }}</span>
                     {% elif message.category == "Reservation Reminder" %}
-                      <span class="text-xs font-semibold uppercase tracking-wider text-amber-600">{{ message.category }}</span>
+                      <span class="message-label text-amber-600">{{ message.category }}</span>
                     {% elif message.category == "Cancellation Lockout" %}
-                      <span class="text-xs font-semibold uppercase tracking-wider text-amber-600">{{ message.category }}</span>
+                      <span class="message-label text-amber-600">{{ message.category }}</span>
                     {% else %}
-                      <span class="text-xs font-semibold uppercase tracking-wider text-neutral-500">{{ message.category }}</span>
+                      <span class="message-label text-neutral-600">{{ message.category }}</span>
                     {% endif %}
                     {% if message.was_unread %}
-                      <span class="new-message-tag inline-flex w-fit items-center rounded-full bg-[#dc2626] px-2 py-0.5 text-[0.625rem] font-semibold uppercase tracking-wider text-white">New</span>
+                      <span class="new-message-tag inline-flex w-fit items-center rounded-full bg-[#dc2626] px-2.5 py-0.5 text-[0.75rem] font-semibold uppercase tracking-wider text-white">New</span>
                     {% endif %}
                   </div>
-                  <p class="max-w-xl text-sm leading-relaxed text-secondary">{% if message.returned_body %}{{ message.returned_body }}{% else %}{{ message.body }}{% endif %}</p>
+                  <p class="message-body max-w-xl">{% if message.returned_body %}{{ message.returned_body }}{% else %}{{ message.body }}{% endif %}</p>
                 </div>
               </div>
               <div class="flex shrink-0 items-start justify-between gap-4 pl-9 md:justify-end md:pl-0">
-                <p class="text-xs text-secondary/60 md:text-right">{{ message.created_at|date:"M d, Y" }}<span class="block text-secondary/40">{{ message.created_at|date:"g:i A" }}</span></p>
-                <button type="button" class="js-delete-message -mr-1.5 -mt-1 flex h-8 w-8 items-center justify-center rounded-full text-secondary/40 transition-colors hover:bg-neutral-100 hover:text-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1b1c1c]" aria-label="Delete this message" title="Delete">
+                <p class="message-date md:text-right">{{ message.created_at|date:"M d, Y" }}<span class="block">{{ message.created_at|date:"g:i A" }}</span></p>
+                <button type="button" class="js-delete-message -mr-2 -mt-1.5 flex h-10 w-10 items-center justify-center rounded-full text-[#77746d] transition-colors hover:bg-neutral-100 hover:text-[#1b1c1c] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1b1c1c]" aria-label="Delete this message" title="Delete">
                   <span class="material-symbols-outlined" style="font-size: 1.15rem;">delete</span>
                 </button>
               </div>
             </div>
           {% endfor %}
         </div>
+        {% if has_pages %}
+        <nav class="messages-pager" id="messages-pager" aria-label="Messages pages">
+          <p class="messages-pager__count" id="messages-count">Showing {{ messages_page.start_index }}&ndash;{{ messages_page.end_index }} of {{ total_messages }} messages</p>
+          <div class="messages-pager__nav">
+            {% if messages_page.has_previous %}
+            <a class="messages-pager__btn" id="messages-prev" rel="prev" href="?page={{ messages_page.previous_page_number }}"><span class="material-symbols-outlined" style="font-size: 1.1rem;">chevron_left</span>Previous</a>
+            {% else %}
+            <span class="messages-pager__btn" id="messages-prev" aria-disabled="true"><span class="material-symbols-outlined" style="font-size: 1.1rem;">chevron_left</span>Previous</span>
+            {% endif %}
+            <span class="messages-pager__page" id="messages-page-now">Page {{ messages_page.number }} of {{ messages_page.paginator.num_pages }}</span>
+            {% if messages_page.has_next %}
+            <a class="messages-pager__btn" id="messages-next" rel="next" href="?page={{ messages_page.next_page_number }}">Next<span class="material-symbols-outlined" style="font-size: 1.1rem;">chevron_right</span></a>
+            {% else %}
+            <span class="messages-pager__btn" id="messages-next" aria-disabled="true">Next<span class="material-symbols-outlined" style="font-size: 1.1rem;">chevron_right</span></span>
+            {% endif %}
+          </div>
+        </nav>
+        {% endif %}
         <div id="messages-empty" class="flex flex-col items-center gap-3 py-20 text-center{% if customer_messages %} messages-hidden{% endif %}">
           <span class="material-symbols-outlined text-4xl text-neutral-300">notifications</span>
-          <p class="text-sm text-secondary/60">You have no messages.</p>
+          <p class="text-base text-secondary/70">You have no messages.</p>
         </div>
       </div>
     </main>
@@ -507,7 +548,7 @@
     </script>
   <div id="messages-undo-bar" class="fixed bottom-6 left-1/2 z-[90] flex max-w-[calc(100%-32px)] items-center gap-5 whitespace-nowrap rounded-[6px] bg-[#1b1c1c] px-5 py-3 text-sm text-white opacity-0 shadow-[0_12px_30px_rgba(0,0,0,0.18)] transition-all duration-300 pointer-events-none" style="transform: translate(-50%, 12px);" role="status" aria-live="polite">
     <span id="messages-undo-text">Message deleted</span>
-    <button type="button" id="messages-undo-btn" class="text-[0.6875rem] font-semibold uppercase tracking-[0.15em] text-white/90 decoration-1 underline-offset-4 transition-colors hover:text-white hover:underline">Undo</button>
+    <button type="button" id="messages-undo-btn" class="text-[0.8125rem] font-semibold uppercase tracking-[0.15em] text-white/90 decoration-1 underline-offset-4 transition-colors hover:text-white hover:underline">Undo</button>
   </div>
   <script>
     /* Delete with Undo: a deleted row disappears at once, but the server is only told after 5 seconds (or when the
@@ -569,6 +610,9 @@
         if (!leaving) hideBar();
         send(job.ids, leaving).then(function () {
           job.rows.forEach(function (row) { row.remove(); });
+          // The page is 10 messages: reload it so the next ones fill the gap (an emptied last page steps back to the one before). Not while another
+          // delete is still waiting out its Undo: that one reloads when it finishes, and leaving the page sends it anyway.
+          if (!leaving && !pending && list.dataset.paged === "true") window.location.reload();
         }).catch(function () {
           if (leaving) return;
           job.rows.forEach(function (row) { row.classList.remove("message-hidden"); });

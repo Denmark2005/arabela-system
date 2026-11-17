@@ -25,6 +25,7 @@ recipient's number may be printed in full or hidden (+63 9•••••5992). 
 """
 import base64
 import hashlib
+import io
 import json
 import logging
 import re
@@ -36,6 +37,7 @@ from decimal import Decimal, InvalidOperation
 import requests
 from django.conf import settings
 from django.utils import timezone
+from PIL import Image
 
 from gowns import gcash_numbers, receipt_quality
 
@@ -92,10 +94,29 @@ NEEDS_SHARP_PICTURE = frozenset({"too_old", "wrong_recipient", "old_number"})
 # "a list of transactions" do not: when both readings call the picture CLEAR and say it is no receipt, a flat photo is still no receipt (a flat
 # picture has few edges, so it measures as "blurry" without being unreadable).
 QUALITY_SENSITIVE = NEEDS_SHARP_PICTURE | {"received", "merchant", "failed", "not_gcash"}
+# "This picture is not a GCash payment receipt at all", said in different words. The reading that looks at the picture and the reading that copies
+# its text do not always pick the same one (a screenshot of the admin page was called "a list of transactions" by one and "no receipt" by the
+# other, and the two answers were taken as a disagreement, so the picture was let through). Two refusals from this group AGREE.
+NOT_A_RECEIPT = frozenset({"not_payment", "list_screen", "not_gcash"})
+# A GCash receipt always shows the title of one of its layouts somewhere on it. A picture with none of these is not one, however many numbers,
+# amounts and dates it happens to show (an admin page, a bank statement, a chat).
+RECEIPT_SIGNS = ("express send", "sent via gcash", "transaction details", "transfer from", "total amount sent")
+_RECEIPT_LAYOUTS = ("express_send", "sent_via_gcash", "transaction_details")
 
 
 def reject_reason_text(code):
     return _REASON_TEXT.get(code, code)
+
+
+def looks_like_gcash_receipt(reading):
+    """True when the reading found the title of one of GCash's receipt layouts (Express Send, Sent via GCash, Transaction Details / Transfer
+    from ..., Total Amount Sent)."""
+    if reading is None:
+        return False
+    if reading.layout in _RECEIPT_LAYOUTS:
+        return True
+    signs = " ".join(reading.gcash_signs).lower()
+    return any(sign in signs for sign in RECEIPT_SIGNS)
 
 
 # ---- what the reader found ------------------------------------------------------------------------------------------------------------
@@ -331,8 +352,12 @@ def reading_from_transcript(data):
     paid_at = _transcript_when(flat)
     many_dates = len(_DATE_RE.findall(flat)) >= 3
     status = "failed" if re.search(r"\b(failed|unsuccessful|declined)\b", low) else "completed"
+    # A reference, an amount and a date are not enough: an admin page, a bank statement or a chat can show all three. A GCash receipt also shows the
+    # title of one of its layouts (RECEIPT_SIGNS), and that is what makes this a payment screen. (A Maya or bank receipt is still read as a payment
+    # screen so it is refused as "not GCash", with the message that tells the customer to pay with GCash.)
+    titled = any(sign.lower() in RECEIPT_SIGNS for sign in signs) or app in ("maya", "bank")
     return Reading(
-        is_payment_screen=bool((reference or paid_at) and amount is not None) and not many_dates,
+        is_payment_screen=bool((reference or paid_at) and amount is not None) and not many_dates and titled,
         is_transaction_list=many_dates,
         app=app, direction=direction, recipient_number=number, recipient_pattern=pattern, recipient_name=name, sender_number=sender,
         amount=amount, reference=reference, paid_at=paid_at, status=status, gcash_signs=signs, layout=layout,
@@ -345,7 +370,7 @@ PROMPT = """You read screenshots of phone-wallet payments made in the Philippine
 Copy what is printed; never guess. Use "" (or null for numbers) when something is not visible. The picture may be a camera photo of another phone's screen (tilted, with glare or a visible screen edge): read it the same way.
 
 Keys:
-- "is_payment_screen": true ONLY when the picture is a phone screenshot or a photo of a phone screen showing ONE completed payment or transfer (a receipt, or the details page of one transaction). false for anything else: a photo of a person or place, a chat, a form, a bill, a screenshot of something else.
+- "is_payment_screen": true ONLY when the picture is a phone screenshot or a photo of a phone screen showing ONE completed payment or transfer (a receipt, or the details page of one transaction). false for anything else: a photo of a person or place, a chat, a form, a bill, and any screenshot of a website, a computer screen or an admin / dashboard page (even when it shows payment details, amounts, reference numbers or a picture of a receipt inside it).
 - "is_transaction_list": true when the picture shows a LIST of several transactions instead of one.
 - "app": "gcash", "maya", "bank", "other" or "unknown". GCash receipts: a blue GCash screen or a white card with a check mark; words like "Express Send", "Sent via GCash", "Transaction Details", "Ref No." / "Reference Number" with 13 digits; titles like "Transfer from 09... to 09..." or "Payment to ...". Maya has a green "maya" logo, "Sent money to", "Received money from", "Reference ID". Banks show their own name.
 - "gcash_signs": a short list of GCash-specific words or logos you can actually see (for example "Express Send", "Sent via GCash", "Transaction Details", "Ref No.").
@@ -370,9 +395,14 @@ Answer with ONE JSON object and nothing else:
 {"lines": ["first line", "second line", "..."], "picture": "screenshot" or "photo_of_screen", "clarity": "clear" (every line is easy to read) or "blurry" (some text is hard to read) or "unreadable" (the reference number or the recipient cannot be read), "cut_off": true when part of the receipt is missing (no top, no bottom, no reference number or no date), else false}
 """
 
-READER_TIMEOUT_SECONDS = 28
-READER_CUTOFF_SECONDS = 22          # no new attempt starts after this
-SECOND_READ_SKIP_AFTER_SECONDS = 15  # the second reading is skipped when the first one already took this long (the page must answer in time)
+# The whole check (both readings) must answer in about 20 seconds: the checkout page shows "this can take up to 20 seconds" while it works.
+READER_TIMEOUT_SECONDS = 20
+READER_CUTOFF_SECONDS = 14          # no new attempt starts after this
+SECOND_READ_SKIP_AFTER_SECONDS = 10  # the second reading is skipped when the first one already took this long (the page must answer in time)
+SECOND_READ_CUTOFF_SECONDS = 16
+SECOND_READ_TIMEOUT_SECONDS = 20
+READER_MAX_SIDE = 1800              # a bigger picture is scaled down before it is sent, so it uploads and is read faster
+READER_MAX_BYTES = 600_000
 SECOND_READ_STRONGER_MODEL_SECONDS = 8  # a model chosen with GEMINI_VERIFY_MODEL gets one try of at most this long, then the usual models take over
 RETRYABLE = frozenset({500, 502, 503, 504})
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
@@ -493,8 +523,8 @@ def verify_read(image_bytes, mime_type, started=None):
     started = started or time.monotonic()
     if time.monotonic() - started > SECOND_READ_SKIP_AFTER_SECONDS:
         return None, "no_time"
-    return _ask_gemini(PROMPT_TRANSCRIBE, image_bytes, mime_type, _verify_models(), reading_from_transcript, started=started, cutoff=22,
-                       hard_limit=26, max_tokens=4096, label="verifier",
+    return _ask_gemini(PROMPT_TRANSCRIBE, image_bytes, mime_type, _verify_models(), reading_from_transcript, started=started,
+                       cutoff=SECOND_READ_CUTOFF_SECONDS, hard_limit=SECOND_READ_TIMEOUT_SECONDS, max_tokens=4096, label="verifier",
                        first_model_cap=SECOND_READ_STRONGER_MODEL_SECONDS if _verify_chosen() else None)
 
 
@@ -513,6 +543,7 @@ class Verdict:
     recipient: str = ""
     fingerprint: str = ""
     image_hash: str = ""
+    account: str = ""            # whose GCash the receipt was paid to: "owner" or "manager" (gowns/gcash_numbers.account_for_recipient)
 
     @property
     def rejected(self):
@@ -584,11 +615,12 @@ def _match_recipient(full, pattern, accepted, known):
 
 
 def evaluate(reading, *, expected_amount, started_at=None, now=None, shop_name="", reference_used_by="", image_used_by="",
-             fingerprint_used_by="", accepted_at=None, known_numbers=None):
+             fingerprint_used_by="", accepted_at=None, known_numbers=None, names_by_number=None):
     """Apply every rule to what the reader found. Returns a Verdict; never touches the network or the database.
 
     accepted_at(moment) -> [(number, is_old)] and known_numbers (a set) come from gowns/gcash_numbers.py; they are parameters so a test can
-    hand in its own. `reference_used_by` / `image_used_by` / `fingerprint_used_by` are the booking code that already has it ('' = none).
+    hand in its own. `names_by_number` ({number: account name}) says which name belongs to which of the shop's TWO GCash accounts: a receipt
+    to the manager's number is compared with the manager's account name (without it every receipt is compared with `shop_name`). `reference_used_by` / `image_used_by` / `fingerprint_used_by` are the booking code that already has it ('' = none).
 
     A verdict of "reject" here is only what ONE reading says; check_receipt confirms it with a second reading before the customer sees it."""
     now = now or timezone.now()
@@ -656,6 +688,8 @@ def evaluate(reading, *, expected_amount, started_at=None, now=None, shop_name="
         accepted = dict(accepted_at(moment))
         state, number, is_old = _match_recipient(full, pattern, accepted, known_numbers)
         if state == "match":
+            if names_by_number and number in names_by_number:
+                name_state = names_match(reading.recipient_name, names_by_number[number])      # the name of the account this number belongs to
             if is_old:
                 verdict.old_number = True
                 verdict.codes.append("old_number_used")
@@ -761,6 +795,33 @@ def _mime_for(name):
     return "image/jpeg"
 
 
+def _for_reader(image_bytes, mime):
+    """(bytes, mime) to SEND to the reader. A big picture is scaled down (the text on a phone screenshot stays sharp at 1800 px) so it uploads and is
+    read faster; a small one goes as it is. The stored picture and its hash are never changed. Anything that goes wrong sends the original."""
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        if max(img.size) <= READER_MAX_SIDE and len(image_bytes) <= READER_MAX_BYTES:
+            return image_bytes, mime
+        img.load()
+        if max(img.size) > READER_MAX_SIDE:
+            img.thumbnail((READER_MAX_SIDE, READER_MAX_SIDE), Image.LANCZOS)
+        if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+            rgba = img.convert("RGBA")
+            flat = Image.new("RGB", rgba.size, (255, 255, 255))
+            flat.paste(rgba, mask=rgba.getchannel("A"))
+            img = flat
+        else:
+            img = img.convert("RGB")
+        buffer = io.BytesIO()
+        img.save(buffer, "JPEG", quality=88, optimize=True)
+        smaller = buffer.getvalue()
+        if len(smaller) >= len(image_bytes):
+            return image_bytes, mime
+        return smaller, "image/jpeg"
+    except Exception:
+        return image_bytes, mime
+
+
 def _fill_from_reading(verdict, reading):
     """A verdict that stopped early (a refusal) has no amount / date / reference yet; fill what the reading did find, for the staff."""
     if reading is None:
@@ -796,7 +857,9 @@ def _reconcile(first, second, second_why, quality, first_reading):
                             f"The reader would have refused this receipt ({_reason(first)}), but a second reading could not be made "
                             f"({second_why}), so it was sent to the staff to look at.", "second_read_unavailable")
     if first.status == STATUS_REJECT:
-        if second.status == STATUS_REJECT and second.codes and second.codes[0] == first.codes[0]:
+        both_say_no_receipt = (second.status == STATUS_REJECT and second.codes and first.codes[0] in NOT_A_RECEIPT
+                               and second.codes[0] in NOT_A_RECEIPT)
+        if second.status == STATUS_REJECT and second.codes and (second.codes[0] == first.codes[0] or both_say_no_receipt):
             if quality.get("poor") and first.codes[0] in QUALITY_SENSITIVE:
                 return replace(first, status=STATUS_RETAKE, codes=["blurry"], message=MESSAGES["blurry"], notes=[])
             if first.codes[0] in NEEDS_SHARP_PICTURE and quality.get("label") != "sharp":
@@ -818,21 +881,53 @@ def _reconcile(first, second, second_why, quality, first_reading):
     if second.status in (STATUS_PASS, STATUS_NEEDS_CHECK):
         second.notes = ["The first reading could not read this picture; the second reading did.", *second.notes]
         return second
+    if (second.status == STATUS_RETAKE and not quality.get("poor") and _found_nothing(first_reading) and _found_nothing(second.reading)):
+        # Neither reading found a single field, a layout title or a payment word on a picture our own measure does not call blurry or tiny: there
+        # is nothing to read because there is no receipt in it (a drawing, a photo of a gown). A blurred real receipt always gives the readers
+        # SOMETHING (a reference, an amount, a date) or measures as blurry, so it is still asked for again instead.
+        return replace(first, status=STATUS_REJECT, codes=["not_payment"], message=MESSAGES["not_payment"], notes=[])
     return first
+
+
+def _found_nothing(reading):
+    """True when a reading found no payment screen, no list, no layout title and not one field (reference, amount, date, recipient)."""
+    return (reading is not None and not reading.is_payment_screen and not reading.is_transaction_list and not reading.reference
+            and reading.amount is None and reading.paid_at is None and not reading.recipient_shown and not reading.gcash_signs
+            and reading.app in ("unknown", ""))
+
+
+def _confirm_layout(first, second, second_why, quality, first_reading):
+    """The first reading accepted a picture but did not find the title of any GCash receipt layout on it (looks_like_gcash_receipt): a random
+    screenshot can look like a payment to one reader. The second reading (which copies the text and is judged by our own rules, where a payment
+    screen must carry a layout title) has to confirm it. Real receipts are never refused here: only "this is no receipt at all" from the
+    second reading stops the picture, and anything unclear goes to the staff with a note."""
+    if second is None:
+        return _needs_check(first, first_reading,
+                            f"This does not look like one of GCash's usual receipt screens, and a second reading could not be made ({second_why}) to "
+                            "confirm it. Look at the picture yourself.", "layout_unconfirmed")
+    if second.status == STATUS_REJECT and second.codes and second.codes[0] in NOT_A_RECEIPT:
+        if quality.get("poor"):
+            return replace(first, status=STATUS_RETAKE, codes=["blurry"], message=MESSAGES["blurry"], notes=[])
+        return replace(first, status=STATUS_REJECT, codes=["not_payment"], message=MESSAGES["not_payment"], notes=[])
+    if second.status in (STATUS_PASS, STATUS_NEEDS_CHECK):
+        return first                                    # the second reading found a GCash layout title on it: it is a receipt
+    return _needs_check(first, first_reading,
+                        "This does not look like one of GCash's usual receipt screens, and a second reading did not confirm it "
+                        f"({_reason(second)}). Look at the picture yourself.", "layout_unconfirmed")
 
 
 def check_receipt(image_bytes, file_name, *, expected_amount, started_at=None, exclude_reservation_id=None, now=None):
     """Read the cleaned picture and judge it. `expected_amount` is THIS booking's deposit; `started_at` is when the booking was started
     (the checkout hold's start, or the reservation's creation for an upload made later); `exclude_reservation_id` keeps a booking from
     counting as "another" booking when its own proof is being replaced."""
-    from gowns.models import SiteSettings
     from reservations.models import Reservation
 
     began = time.monotonic()
     now = now or timezone.now()
     image_hash = hashlib.sha256(image_bytes).hexdigest()
     mime = _mime_for(file_name)
-    shop_name = SiteSettings.load().gcash_account_name
+    shop_name = gcash_numbers.active_details()["name"]          # the account customers are shown (the receipt's own account's name wins in evaluate)
+    account_names = gcash_numbers.names_by_number()
 
     def other(**lookup):
         query = Reservation.objects.filter(**lookup)
@@ -847,23 +942,32 @@ def check_receipt(image_bytes, file_name, *, expected_amount, started_at=None, e
         return evaluate(
             reading, expected_amount=expected_amount, started_at=started_at, now=now, shop_name=shop_name,
             reference_used_by=reference_used_by, image_used_by=image_used_by, fingerprint_used_by=fingerprint_used_by,
+            names_by_number=account_names,
         )
 
     image_used_by = other(proof_hash=image_hash)
     reading, why = None, ""
+    sent_bytes, sent_mime = _for_reader(image_bytes, mime)
     if not image_used_by:
-        reading, why = read_receipt(image_bytes, mime)
+        reading, why = read_receipt(sent_bytes, sent_mime)
         if reading is None:
             logger.info("Receipt not read (%s): sent to staff as needs_check", why)
     verdict = judge(reading, image_used_by)
 
     # A refusal (or "cannot read it") from ONE reading is never final: a real receipt must not be lost to a misread. Read it a second way first.
-    if verdict.status in (STATUS_REJECT, STATUS_RETAKE) and verdict.codes and verdict.codes[0] not in CERTAIN_CODES:
+    # The same goes for a picture the first reading ACCEPTED without finding the title of any GCash receipt layout on it.
+    refused_or_unread = verdict.status in (STATUS_REJECT, STATUS_RETAKE) and verdict.codes and verdict.codes[0] not in CERTAIN_CODES
+    unusual = (verdict.status in (STATUS_PASS, STATUS_NEEDS_CHECK) and reading is not None and not image_used_by
+               and not looks_like_gcash_receipt(reading))
+    if refused_or_unread or unusual:
         quality = receipt_quality.picture_quality(image_bytes)
-        second_reading, second_why = verify_read(image_bytes, mime, started=began)
+        second_reading, second_why = verify_read(sent_bytes, sent_mime, started=began)
         second = judge(second_reading) if second_reading is not None else None
         first = verdict
-        verdict = _reconcile(first, second, second_why, quality, reading)
+        if unusual:
+            verdict = _confirm_layout(first, second, second_why, quality, reading)
+        else:
+            verdict = _reconcile(first, second, second_why, quality, reading)
         logger.warning(
             "Receipt check: first reading %s %s -> final %s %s | second reading %s%s | picture %s | first=%s second=%s",
             first.status, first.codes, verdict.status, verdict.codes, second.status if second else "none", f" {second.codes}" if second else f" ({second_why})",
@@ -871,4 +975,7 @@ def check_receipt(image_bytes, file_name, *, expected_amount, started_at=None, e
     verdict.image_hash = image_hash
     if reading is not None and not verdict.reference:
         verdict.reference = reading.reference
+    # Whose GCash was paid decides who confirms the payment (the owner for hers, the manager for the manager's).
+    shown = (verdict.recipient or (reading.recipient_shown if reading is not None else ""))
+    verdict.account = gcash_numbers.account_for_recipient(shown, verdict.paid_at or now)
     return verdict

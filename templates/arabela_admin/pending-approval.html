@@ -1183,6 +1183,7 @@
 </div>
 </div>
             <!-- Breadcrumb End -->
+            {% include "arabela_admin/partials/gcash_banner.html" %}
 
             <!-- ONE box, the same look as Active Reservations: the search, then one short line per booking. A booking with several gowns shows
                  "3 gowns" and opens to one short line per gown. Approve / Reject stay as words; the small actions are icon buttons with a tooltip.
@@ -1251,6 +1252,11 @@
                       {% include "arabela_admin/partials/proof_badges.html" with r=r %}
                     </div>
                     <div class="pa-acts">
+                      {% if r.waiting_for_owner and not viewer_is_owner %}
+                      <!-- The customer paid the OWNER's GCash: nobody else can see it, so Approve opens when she presses Received. Reject stays available. -->
+                      <button type="button" disabled data-waiting-owner="1" title="Waiting for the owner to confirm the payment in GCash" aria-label="Approve is locked: waiting for the owner to confirm the payment in GCash"
+                        class="resv-btn resv-btn-approve inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-theme-xs font-medium shadow-theme-xs transition" style="opacity: .55; cursor: not-allowed;">Waiting for owner</button>
+                      {% else %}
                       <button type="button"
                         class="resv-btn resv-btn-approve inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-theme-xs font-medium shadow-theme-xs transition"
                         data-url="{% url 'arabela_admin:reservation_approve' r.id %}"
@@ -1259,6 +1265,7 @@
                         data-walkin="{% if r.is_staff_recorded and not r.payment_proof_url %}1{% else %}0{% endif %}"
                         data-receipts="{{ r.receipt_count }}"
                         onclick="reviewReservation(this)">Approve</button>
+                      {% endif %}
                       <button type="button"
                         class="resv-btn resv-btn-reject inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-theme-xs font-medium shadow-theme-xs transition"
                         data-url="{% url 'arabela_admin:reservation_reject' r.id %}"
@@ -1272,7 +1279,7 @@
                       {% else %}
                       <!-- Opens the payment proof right here (partials/payment_proof_window.html), with Approve / Reject inside it too. -->
                       <button type="button"
-                        @click="viewingPayment = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"—"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:'-2g' }}', date: '{{ r.created_at|date:"M j, Y" }}', status: '{{ r.status|escapejs }}', proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}'), breakdown: JSON.parse('{{ r.payment_breakdown_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', gcashDup: '{{ r.gcash_dups|escapejs }}', approveUrl: '{% url 'arabela_admin:reservation_approve' r.id %}', rejectUrl: '{% url 'arabela_admin:reservation_reject' r.id %}', walkin: false, receiptCount: {{ r.receipt_count }} }; openReceiptModal = true"
+                        @click="viewingPayment = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"—"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:'-2g' }}', date: '{{ r.created_at|date:"M j, Y" }}', status: '{{ r.status|escapejs }}', proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}'), breakdown: JSON.parse('{{ r.payment_breakdown_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', gcashDup: '{{ r.gcash_dups|escapejs }}', approveUrl: '{% url 'arabela_admin:reservation_approve' r.id %}', rejectUrl: '{% url 'arabela_admin:reservation_reject' r.id %}', walkin: false, receiptCount: {{ r.receipt_count }}, waiting: {% if r.waiting_for_owner and not viewer_is_owner %}true{% else %}false{% endif %} }; openReceiptModal = true"
                         class="ar-ib" title="View payment" aria-label="View payment of {{ r.display_customer_name }}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                       </button>

@@ -259,6 +259,7 @@ def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, a
                     gown=gown,
                     gown_name=gown.name[:150],
                     gown_slug=gown.slug,
+                    gown_photo_url=(gown.photo_url or "")[:500],        # kept on the booking: the gown link is cleared if the gown is ever deleted
                     size=gown.size,
                     rental_price=gown.rental_price,
                     rental_date=line["pickup"],
