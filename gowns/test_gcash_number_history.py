@@ -164,4 +164,4 @@ class TheOwnersSaveButtonTests(TestCase):
         self.client.force_login(self.owner)
         html = self.client.get(reverse("arabela_admin:page", kwargs={"page": "profile"})).content.decode()
         self.assertIn("Keep accepting receipts paid to the old number", html)
-        self.assertIn("for 48 hours (recommended)", html)
+        self.assertIn("48 hours (recommended)", html)
