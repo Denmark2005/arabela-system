@@ -36,6 +36,65 @@ def normalize(raw):
     return ""
 
 
+# The marks GCash (and a reader that copies it) uses for a digit that is hidden on a receipt: +63 9•••••5992.
+HIDDEN_MARKS = "•*●·∙◦○xX?"
+MIN_VISIBLE_DIGITS = 4          # fewer visible digits than this cannot tell one number from another
+
+
+def parse_printed(raw):
+    """(full number, pattern) for a recipient number as it is printed on a receipt.
+
+    `full` is the 11-digit number (09...) when every digit shows, else "". `pattern` is 11 characters when only some digits show: the digits that
+    show and a "?" for each hidden one ("09?????5992" for "+63 9•••••5992"), or "" when nothing usable shows. When only the END of the number
+    shows (••• 5992) the pattern is the end, padded with "?" (that is all that can be compared). Never guesses a hidden digit."""
+    text = str(raw or "").strip()
+    if not text:
+        return "", ""
+    s = re.sub(r"[\s\-().,]", "", text)
+    s = "".join("?" if ch in HIDDEN_MARKS else ch for ch in s)
+    s = s.replace("+", "")
+    if not all(ch.isdigit() or ch == "?" for ch in s) or not s:
+        return "", ""
+    if s.startswith("63") and len(s) == 12:
+        s = "0" + s[2:]
+    elif len(s) == 10 and s[0] in "9?":
+        s = "0" + s                                   # the leading 0 left off
+    if len(s) == 11 and s[0] in "0?":
+        s = "0" + s[1:]
+        if "?" not in s:
+            return (s, "") if s.startswith("09") else ("", "")
+        if s[1] in "9?" and visible_digits(s) >= MIN_VISIBLE_DIGITS:
+            return "", s
+        return "", ""
+    # some other length: a reader that dropped the dots ("95992"), or a cut-off number. Only the END can be trusted, and only when the number was
+    # visibly hidden or short; a long run of plain digits with one missing is just a misread number, which tells nothing.
+    if "?" not in s and len(s) >= 8:
+        return "", ""
+    tail = re.search(r"(\d{%d,})$" % MIN_VISIBLE_DIGITS, s)
+    if tail:
+        end = tail.group(1)[-MIN_VISIBLE_DIGITS:]
+        return "", "?" * (11 - len(end)) + end
+    return "", ""
+
+
+def visible_digits(pattern):
+    """How many digits of a number really show. The first character is not counted: every mobile number starts with 0, so it tells nothing."""
+    return sum(ch.isdigit() for ch in str(pattern or "")[1:])
+
+
+def pattern_matches(pattern, number):
+    """True when `number` (11 digits) has the same digit wherever `pattern` shows one."""
+    pattern, number = str(pattern or ""), str(number or "")
+    if len(pattern) != 11 or len(number) != 11:
+        return False
+    return all(p == "?" or p == n for p, n in zip(pattern, number))
+
+
+def show_pattern(pattern):
+    """A pattern as a customer sees it printed: 09•••••5992."""
+    return str(pattern or "").replace("?", "•")
+
+
 def clean_grace(value):
     """The grace the owner picked, as 0 / 24 / 48 (anything else falls back to the default)."""
     try:

@@ -1021,6 +1021,10 @@ def _check_proof_or_refuse(request, clean_proof, *, expected_amount, started_at,
         image_bytes, getattr(clean_proof, "name", ""), expected_amount=expected_amount, started_at=started_at,
         exclude_reservation_id=getattr(reservation, "pk", None),
     )
+    if verdict.retake:
+        # The picture could not be read (blurry, cut off, no reference number): nothing is booked, but this is NOT a refusal -- it is never counted
+        # against the account. The page shows the message under the upload box and lets the customer choose a better picture.
+        return None, JsonResponse({"success": False, "proof_rejected": True, "proof_retake": True, "account_blocked": False, "error": verdict.message}, status=400)
     if not verdict.rejected:
         return verdict, None
     code = verdict.codes[0] if verdict.codes else "rejected"

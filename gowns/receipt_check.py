@@ -1,20 +1,27 @@
 """The receipt check: reads the GCash screenshot a customer uploads as proof of the security deposit and decides, BEFORE any booking exists,
 whether it may go on.
 
-Three outcomes (`Verdict.status`):
-  * "reject"      -- clearly not a usable proof (a random picture, another app, a payment to someone else, an old or reused receipt...).
-                     The customer sees `Verdict.message`; nothing is booked and no dates are held.
-  * "needs_check" -- could be fine but something is missing or odd (recipient not visible, a different amount, ...). It goes on to the staff
-                     and the owner with the reasons written in `Verdict.notes`; the customer is never blocked by it.
+Four outcomes (`Verdict.status`):
   * "pass"        -- every check was fine. It still waits for the owner to look in her own GCash: nothing here can talk to GCash.
+  * "needs_check" -- could be fine but something is missing or odd (recipient not visible, a different amount, two readings that disagree...).
+                     It goes on to the staff and the owner with the reasons written in `Verdict.notes`; the customer is never blocked by it.
+  * "retake"      -- the picture cannot be read (blurry, cut off, no reference number). The customer is asked for a better picture. It is NOT a
+                     refusal: it never counts against the account.
+  * "reject"      -- clearly not a usable proof (a random picture, another app, a payment to someone else, an old or reused receipt...). Only
+                     when the picture was sharp enough AND two independent readings agree on the reason. The customer sees `Verdict.message`;
+                     nothing is booked and no dates are held.
 
-Two separate parts, so the rules can be tested without ever calling the reader:
-  * `read_receipt(...)`   asks Google's Gemini to READ the picture (it only reads; it decides nothing) -> `Reading`.
-  * `evaluate(...)`       applies the rules to a `Reading` and what the database knows -> `Verdict`. A pure function.
-  * `check_receipt(...)`  does both plus the database lookups (same reference / same picture used before).
+A real receipt must never be refused because the reader misread it, so a refusal is VERIFIED before it is given:
+  1. `read_receipt(...)`   asks Google's Gemini to READ the picture into fields (it only reads; it decides nothing) -> `Reading`.
+  2. `evaluate(...)`       applies the rules to a `Reading` and what the database knows -> `Verdict`. A pure function.
+  3. When step 2 would refuse (or cannot read the picture), `verify_read(...)` reads the picture a SECOND way (the reader copies every line of
+     text and OUR code picks the fields out of it) and the two verdicts are reconciled (`_reconcile`): the same refusal from both, on a sharp
+     picture, stands; anything else becomes "needs_check" or "retake".
+  `check_receipt(...)` does all of it plus the database lookups (same reference / same picture used before).
 
-What the reader sees is judged against the shop's settings: its GCash number AT THE TIME PRINTED ON THE RECEIPT (gowns/gcash_numbers.py,
-so a number the owner changed is handled), its account name, and the deposit of THIS booking.
+GCash prints a receipt in several layouts (Express Send, the white "Sent via GCash" card, the history page "Transfer from ... to ..."), and the
+recipient's number may be printed in full or hidden (+63 9•••••5992). The rules compare a hidden number on the digits that show
+(gowns/gcash_numbers.py) together with the account name, so a real receipt in any layout matches the shop.
 """
 import base64
 import hashlib
@@ -22,7 +29,7 @@ import json
 import logging
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
@@ -30,7 +37,7 @@ import requests
 from django.conf import settings
 from django.utils import timezone
 
-from gowns import gcash_numbers
+from gowns import gcash_numbers, receipt_quality
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +50,10 @@ REFERENCE_DIGITS = 13                       # a GCash reference number has 13 di
 
 STATUS_PASS = "pass"
 STATUS_NEEDS_CHECK = "needs_check"
+STATUS_RETAKE = "retake"
 STATUS_REJECT = "reject"
 
-# ---- what the customer is told when a receipt is refused ------------------------------------------------------------------------------
+# ---- what the customer is told when a receipt is refused or must be taken again ----------------------------------------------------------
 MESSAGES = {
     "not_payment": "This doesn't look like a payment receipt. Please upload the screenshot of your GCash payment to Arabela.",
     "list_screen": "That screenshot shows many transactions. Please open your payment to Arabela and screenshot its details "
@@ -56,6 +64,9 @@ MESSAGES = {
     "received": "This screen shows money you received, not money you sent. Please upload the receipt of the payment you sent to Arabela.",
     "merchant": "This payment went to a store or biller, not to Arabela's GCash number. Please upload the receipt of your payment to Arabela.",
     "no_reference": "The receipt must show the reference number. Please screenshot the whole receipt, including the Ref No.",
+    "cut_off": "Part of this receipt is missing. Please upload the whole receipt, from the top down to the Ref No. and the date.",
+    "blurry": "We couldn't read this picture clearly. Please upload a sharp screenshot of your GCash receipt, or take a straight, well-lit "
+              "photo of the whole screen (no glare, nothing cut off).",
     "wrong_recipient": "This payment was not sent to Arabela's GCash number. Please check the number on the QR and upload the receipt of "
                        "your payment to Arabela.",
     "old_number": "This number is no longer used by the shop. If you already paid it, please message the shop on Facebook with your receipt.",
@@ -69,7 +80,18 @@ _REASON_TEXT = {      # short, plain, for the Reservation's notes and the ProofR
     "failed": "failed payment", "received": "money received, not sent", "merchant": "payment to a store or biller",
     "no_reference": "no reference number", "wrong_recipient": "sent to another number", "old_number": "old GCash number",
     "too_old": "receipt too old", "reference_used": "reference already used", "image_used": "picture already used",
+    "blurry": "picture not readable", "cut_off": "receipt cut off",
 }
+
+# Refusals that are database facts (the same picture or reference is already on another booking): no second reading is needed for them.
+CERTAIN_CODES = frozenset({"image_used", "reference_used"})
+# Refusals that depend on small digits (a date, a phone number). Two readings can make the SAME mistake on a picture that is a little soft (both read
+# 2026 as 2024 on a slightly blurred receipt), so these are only given on a sharp picture; otherwise the staff look.
+NEEDS_SHARP_PICTURE = frozenset({"too_old", "wrong_recipient", "old_number"})
+# Refusals that rest on reading small printed words or digits: on a picture too blurry or tiny to trust they become a retake. "Not a payment" and
+# "a list of transactions" do not: when both readings call the picture CLEAR and say it is no receipt, a flat photo is still no receipt (a flat
+# picture has few edges, so it measures as "blurry" without being unreadable).
+QUALITY_SENSITIVE = NEEDS_SHARP_PICTURE | {"received", "merchant", "failed", "not_gcash"}
 
 
 def reject_reason_text(code):
@@ -83,7 +105,7 @@ class Reading:
     is_transaction_list: bool = False
     app: str = "unknown"                 # gcash | maya | bank | other | unknown
     direction: str = "unknown"           # sent | received | merchant_payment | unknown
-    recipient_number: str = ""           # 11 digits starting 09 when it is a Philippine mobile number, else the digits as shown
+    recipient_number: str = ""           # the 11-digit number (09...) when EVERY digit shows on the receipt, else ""
     recipient_name: str = ""
     sender_number: str = ""
     amount: Decimal | None = None
@@ -91,14 +113,26 @@ class Reading:
     paid_at: datetime | None = None      # timezone-aware, shop time
     status: str = "unknown"              # completed | failed | pending | unknown
     gcash_signs: list = field(default_factory=list)
+    recipient_pattern: str = ""          # when only SOME digits show: 11 characters, "?" for each hidden digit ("09?????5992")
+    layout: str = "unknown"              # express_send | sent_via_gcash | transaction_details | other | unknown
+    picture: str = "unknown"             # screenshot | photo_of_screen | unknown
+    clarity: str = "unknown"             # the reader's own view of the picture: clear | blurry | unreadable | unknown
+    cut_off: bool = False                # part of the receipt is missing (no top, no bottom, no reference or date)
+
+    @property
+    def recipient_shown(self):
+        """What identifies the recipient on this receipt: the full number, or the digits that show."""
+        return self.recipient_number or self.recipient_pattern
 
     def to_json(self):
         return json.dumps({
             "is_payment_screen": self.is_payment_screen, "is_transaction_list": self.is_transaction_list, "app": self.app,
-            "direction": self.direction, "recipient_number": self.recipient_number, "recipient_name": self.recipient_name,
+            "direction": self.direction, "recipient_number": self.recipient_number, "recipient_pattern": self.recipient_pattern,
+            "recipient_name": self.recipient_name,
             "sender_number": self.sender_number, "amount": str(self.amount) if self.amount is not None else None,
             "reference": self.reference, "paid_at": self.paid_at.isoformat() if self.paid_at else None,
-            "status": self.status, "gcash_signs": self.gcash_signs,
+            "status": self.status, "gcash_signs": self.gcash_signs, "layout": self.layout, "picture": self.picture,
+            "clarity": self.clarity, "cut_off": self.cut_off,
         })
 
 
@@ -133,11 +167,24 @@ def _as_text(value, limit=100):
     return str(value or "").strip()[:limit]
 
 
+def _choice(value, allowed, default="unknown"):
+    text = _as_text(value, 24).lower().replace(" ", "_")
+    return text if text in allowed else default
+
+
+_LAYOUTS = ("express_send", "sent_via_gcash", "transaction_details", "other")
+_PICTURES = ("screenshot", "photo_of_screen")
+_CLARITIES = ("clear", "blurry", "unreadable")
+
+
 def reading_from_dict(data):
     """A Reading from the reader's JSON object. Anything missing or odd becomes the "don't know" value, never an exception."""
     if not isinstance(data, dict):
         return None
-    number = gcash_numbers.normalize(data.get("recipient_number")) or _digits(data.get("recipient_number"))
+    printed = data.get("recipient_number_printed") or data.get("recipient_number")
+    number, pattern = gcash_numbers.parse_printed(printed)
+    if not number and not pattern and data.get("recipient_number") and data.get("recipient_number") != printed:
+        number, pattern = gcash_numbers.parse_printed(data.get("recipient_number"))
     sender = gcash_numbers.normalize(data.get("sender_number")) or _digits(data.get("sender_number"))
     signs = data.get("gcash_signs")
     return Reading(
@@ -146,6 +193,7 @@ def reading_from_dict(data):
         app=_as_text(data.get("app"), 12).lower() or "unknown",
         direction=_as_text(data.get("direction"), 20).lower() or "unknown",
         recipient_number=number,
+        recipient_pattern=pattern,
         recipient_name=_as_text(data.get("recipient_name")),
         sender_number=sender,
         amount=_parse_amount(data.get("amount")),
@@ -153,20 +201,161 @@ def reading_from_dict(data):
         paid_at=_parse_when(data.get("date_time")),
         status=_as_text(data.get("status"), 12).lower() or "unknown",
         gcash_signs=[_as_text(s, 40) for s in signs][:8] if isinstance(signs, list) else [],
+        layout=_choice(data.get("layout"), _LAYOUTS),
+        picture=_choice(data.get("picture"), _PICTURES),
+        clarity=_choice(data.get("clarity"), _CLARITIES),
+        cut_off=data.get("cut_off") is True,
+    )
+
+
+# ---- the second reading: every line of text copied, the fields picked out by OUR code ---------------------------------------------------
+_MARKS = "•*●·∙"
+_MONTHS = {"jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6, "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12}
+_DATE_RE = re.compile(r"\b([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4}),?\s+(\d{1,2}):(\d{2})(?::\d{2})?\s*([AaPp]\.?[Mm]\.?)?")
+_REF_RE = re.compile(r"Ref(?:erence)?\.?\s*(?:No\.?|Number|ID|#)?\s*[:#]?\s*((?:\d\s?){10,17})", re.I)
+_REF_LOOSE_RE = re.compile(r"\b(\d{4}\s?\d{3}\s?\d{6})\b")
+_TOTAL_RE = re.compile(r"Total\s+Amount\s+Sent\s*[:]?\s*[₱P]?\s*([\d,]+(?:\.\d{1,2})?)", re.I)
+_AMOUNT_RE = re.compile(r"\bAmount\b\s*[:]?\s*([+\-−–]?)\s*[₱P]?\s*([\d,]+\.\d{2})")
+_PESO_RE = re.compile(r"₱\s?([\d,]+\.\d{2})")
+_TRANSFER_RE = re.compile(r"Transfer\s+from\s+(\S+)\s+to\s+(\S+)", re.I)
+_CARD_NUMBER_RE = re.compile(r"\+\s?63[\s\d•*●·∙xX?\-]{8,18}")
+_PLAIN_NUMBER_RE = re.compile(r"(?<![\d+])0\s?9[\d\s\-]{8,12}")
+_BANK_RE = re.compile(r"\b(instapay|pesonet|bpi|bdo|unionbank|landbank|metrobank|security bank|rcbc|chinabank|pnb|seabank|gotyme)\b", re.I)
+
+
+def _transcript_when(flat):
+    found = _DATE_RE.search(flat)
+    if not found:
+        return None
+    month = _MONTHS.get(found.group(1)[:3].lower())
+    if not month:
+        return None
+    hour, minute = int(found.group(4)), int(found.group(5))
+    marker = (found.group(6) or "").replace(".", "").lower()
+    if marker:
+        if not 1 <= hour <= 12:
+            return None
+        hour = (hour % 12) + (12 if marker == "pm" else 0)
+    elif hour > 23:
+        return None
+    return _parse_when(f"{found.group(3)}-{month:02d}-{int(found.group(2)):02d} {hour:02d}:{minute:02d}")
+
+
+def reading_from_transcript(data):
+    """A Reading made ONLY by our own parsing of the lines the reader copied from the picture (no interpretation by the AI). None when the
+    reader gave no text at all. This is the second, independent way of reading a receipt (see the module docstring)."""
+    if not isinstance(data, dict) or not isinstance(data.get("lines"), list):
+        return None
+    lines = [_as_text(line, 200) for line in data["lines"] if isinstance(line, (str, int, float))][:80]
+    lines = [line for line in lines if line]
+    if not lines:
+        # The reader answered, and found no text at all in the picture (a photo of a gown or a person): that is an answer, not a failure. It is
+        # not a payment screen (unless the reader itself says the picture is unreadable, which makes it a retake).
+        return Reading(picture=_choice(data.get("picture"), _PICTURES), clarity=_choice(data.get("clarity"), _CLARITIES),
+                       cut_off=data.get("cut_off") is True)
+    flat = " ".join(lines)
+    low = flat.lower()
+
+    signs = [word for word in ("Express Send", "Sent via GCash", "Transaction Details", "Transfer from", "Ref No.", "Reference Number",
+                               "Total Amount Sent") if word.lower() in low]
+    if signs or "gcash" in low:
+        app = "gcash"
+    elif "maya" in low:
+        app = "maya"
+    elif _BANK_RE.search(low):
+        app = "bank"
+    else:
+        app = "unknown"
+
+    # the reference number
+    found_ref = _REF_RE.search(flat)
+    reference = _digits(found_ref.group(1))[:REFERENCE_DIGITS] if found_ref else ""
+    if not reference:
+        loose = _REF_LOOSE_RE.search(flat)
+        reference = _digits(loose.group(1)) if loose else ""
+    without_ref = flat.replace(found_ref.group(0), " ") if found_ref else flat
+
+    # the amount (and its sign, which tells a history page "sent" from "received")
+    sign = ""
+    total = _TOTAL_RE.search(flat)
+    if total:
+        amount = _parse_amount(total.group(1))
+    else:
+        plain = _AMOUNT_RE.search(flat)
+        amount = _parse_amount(plain.group(2)) if plain else None
+        sign = plain.group(1) if plain else ""
+    if not sign:
+        signed = _AMOUNT_RE.search(flat)
+        sign = signed.group(1) if signed else ""
+    if amount is None:                      # some apps print the amount with no label, only the peso sign
+        peso = _PESO_RE.search(flat)
+        amount = _parse_amount(peso.group(1)) if peso else None
+
+    # who it was sent to
+    sender_text = ""
+    recipient_text = ""
+    transfer = _TRANSFER_RE.search(flat)
+    if transfer:
+        sender_text, recipient_text = transfer.group(1), transfer.group(2)
+    else:
+        card = _CARD_NUMBER_RE.search(without_ref)
+        if card:
+            recipient_text = card.group(0)
+        else:
+            plain_number = _PLAIN_NUMBER_RE.search(without_ref)
+            recipient_text = plain_number.group(0) if plain_number else ""
+    number, pattern = gcash_numbers.parse_printed(recipient_text)
+    sender = gcash_numbers.normalize(sender_text)
+
+    # the recipient's name: GCash hides most of it with dots ("DE••••K C.")
+    name = ""
+    for line in lines:
+        if (any(mark in line for mark in _MARKS) and not re.search(r"\d", line) and len(line) <= 40
+                and re.search(r"\s[A-Za-z]\.?$", line)):
+            name = line
+            break
+
+    # what kind of screen and what direction
+    if re.search(r"received money from|you received|received via|money received", low):
+        direction = "received"
+    elif re.search(r"payment to |paid to |bancnet|\bp2m\b|merchant|bills? pay", low):
+        direction = "merchant_payment"
+    elif transfer:
+        direction = "received" if sign == "+" else "sent" if sign in ("-", "−", "–") else "unknown"
+    elif "sent via" in low or "express send" in low or "send money" in low:
+        direction = "sent"
+    else:
+        direction = "unknown"
+    layout = ("transaction_details" if transfer else "express_send" if "express send" in low else "sent_via_gcash" if "sent via" in low
+              else "other")
+    paid_at = _transcript_when(flat)
+    many_dates = len(_DATE_RE.findall(flat)) >= 3
+    status = "failed" if re.search(r"\b(failed|unsuccessful|declined)\b", low) else "completed"
+    return Reading(
+        is_payment_screen=bool((reference or paid_at) and amount is not None) and not many_dates,
+        is_transaction_list=many_dates,
+        app=app, direction=direction, recipient_number=number, recipient_pattern=pattern, recipient_name=name, sender_number=sender,
+        amount=amount, reference=reference, paid_at=paid_at, status=status, gcash_signs=signs, layout=layout,
+        picture=_choice(data.get("picture"), _PICTURES), clarity=_choice(data.get("clarity"), _CLARITIES), cut_off=data.get("cut_off") is True,
     )
 
 
 # ---- the reader (Gemini) --------------------------------------------------------------------------------------------------------------
 PROMPT = """You read screenshots of phone-wallet payments made in the Philippines. Look ONLY at the picture and answer with ONE JSON object and nothing else.
-Copy what is printed; never guess. Use "" (or null for numbers) when something is not visible.
+Copy what is printed; never guess. Use "" (or null for numbers) when something is not visible. The picture may be a camera photo of another phone's screen (tilted, with glare or a visible screen edge): read it the same way.
 
 Keys:
-- "is_payment_screen": true ONLY when the picture is a phone screenshot of ONE completed payment or transfer (a receipt, or the details page of one transaction). false for anything else: a photo, a chat, a form, a bill, a screenshot of something else.
+- "is_payment_screen": true ONLY when the picture is a phone screenshot or a photo of a phone screen showing ONE completed payment or transfer (a receipt, or the details page of one transaction). false for anything else: a photo of a person or place, a chat, a form, a bill, a screenshot of something else.
 - "is_transaction_list": true when the picture shows a LIST of several transactions instead of one.
 - "app": "gcash", "maya", "bank", "other" or "unknown". GCash receipts: a blue GCash screen or a white card with a check mark; words like "Express Send", "Sent via GCash", "Transaction Details", "Ref No." / "Reference Number" with 13 digits; titles like "Transfer from 09... to 09..." or "Payment to ...". Maya has a green "maya" logo, "Sent money to", "Received money from", "Reference ID". Banks show their own name.
 - "gcash_signs": a short list of GCash-specific words or logos you can actually see (for example "Express Send", "Sent via GCash", "Transaction Details", "Ref No.").
-- "direction": "sent" when the person SENT money or made a payment to a mobile number; "received" when the screen is about money received (for example "Received money from"); "merchant_payment" for a payment to a store, biller or merchant (for example "Payment to ...", "Bancnet P2M", "Shopee"); "unknown" otherwise.
-- "recipient_number": the Philippine mobile number the money was sent TO, digits only, written in full with its leading 0 like 09171234567 (a number printed as +63 917 123 4567 is 09171234567; for "Transfer from A to B" it is B), or "".
+- "layout": "express_send" (the blue Express Send screen), "sent_via_gcash" (the white card with a check mark and "Sent via GCash"), "transaction_details" (the history page "Transfer from ... to ..."), or "other".
+- "picture": "screenshot" or "photo_of_screen" (a camera photo of a screen).
+- "clarity": "clear" when you can read every field with confidence; "blurry" when some of the text is hard to read; "unreadable" when you cannot read the reference number or the recipient at all.
+- "cut_off": true when part of the receipt is missing (the top, the bottom, the reference number or the date is not in the picture).
+- "direction": "sent" when the person SENT money or made a payment to a mobile number; "received" when the screen is about money received (for example "Received money from", or a history page where the amount has a + sign); "merchant_payment" for a payment to a store, biller or merchant (for example "Payment to ...", "Bancnet P2M", "Shopee"); "unknown" otherwise. On a history page "Transfer from A to B" with a minus amount the person SENT money.
+- "recipient_number_printed": the number the money was sent TO written EXACTLY as printed: keep the + sign, the spaces and every dot or asterisk that hides a digit (a number printed as +63 9•••••5992 stays +63 9•••••5992). Never fill in a hidden digit. For "Transfer from A to B" it is B. "" when no number is shown.
+- "recipient_number": the same number as digits only, written in full with its leading 0 like 09171234567 (+63 917 123 4567 is 09171234567), ONLY when EVERY digit is visible; "" when any digit is hidden.
 - "recipient_name": the recipient's name exactly as printed (it may be partly hidden with * or dots), or "".
 - "sender_number": the number the money came FROM, digits only, or "".
 - "amount": the amount sent in pesos as a plain number (use the "Total Amount Sent" when there is one; no minus sign, no currency sign), or null.
@@ -175,8 +364,16 @@ Keys:
 - "status": "completed", "failed", "pending" or "unknown".
 """
 
+PROMPT_TRANSCRIBE = """You read screenshots and camera photos of phone-wallet payment receipts made in the Philippines. Do NOT interpret anything.
+Copy ALL the text you can see in the picture, one line at a time from top to bottom, exactly as printed: keep every space, every sign (+ - ₱), all punctuation, and every dot • or asterisk * that hides a character. Never fill in, correct or guess a hidden or unclear character; if a line is hard to read, write what you can see of it.
+Answer with ONE JSON object and nothing else:
+{"lines": ["first line", "second line", "..."], "picture": "screenshot" or "photo_of_screen", "clarity": "clear" (every line is easy to read) or "blurry" (some text is hard to read) or "unreadable" (the reference number or the recipient cannot be read), "cut_off": true when part of the receipt is missing (no top, no bottom, no reference number or no date), else false}
+"""
+
 READER_TIMEOUT_SECONDS = 28
 READER_CUTOFF_SECONDS = 22          # no new attempt starts after this
+SECOND_READ_SKIP_AFTER_SECONDS = 15  # the second reading is skipped when the first one already took this long (the page must answer in time)
+SECOND_READ_STRONGER_MODEL_SECONDS = 8  # a model chosen with GEMINI_VERIFY_MODEL gets one try of at most this long, then the usual models take over
 RETRYABLE = frozenset({500, 502, 503, 504})
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
@@ -186,6 +383,21 @@ def _models():
     backup = (getattr(settings, "GEMINI_FALLBACK_MODEL", "") or "").strip()
     if backup and backup != settings.GEMINI_MODEL:
         models.append(backup)
+    return models
+
+
+def _verify_chosen():
+    return (getattr(settings, "GEMINI_VERIFY_MODEL", "") or "").strip()
+
+
+def _verify_models():
+    """The models for the second reading. A model the owner chose with GEMINI_VERIFY_MODEL comes first (none by default: the free "stronger" model
+    was tried and timed out every time). Then the BACKUP model, so the second reading is made by a different model than the first one and a
+    mistake that belongs to one model is not repeated, then the usual one."""
+    models = []
+    for name in [_verify_chosen(), (getattr(settings, "GEMINI_FALLBACK_MODEL", "") or "").strip(), settings.GEMINI_MODEL]:
+        if name and name not in models:
+            models.append(name)
     return models
 
 
@@ -208,58 +420,82 @@ def _extract_json(response_json):
             return None
 
 
-def read_receipt(image_bytes, mime_type):
-    """(Reading, "") when the picture was read, else (None, why) -- why is a short code for the log: disabled, not_configured, timeout, network,
-    http_NNN, unreadable. Never raises: whatever goes wrong here must only mean "staff look at it", never "the customer gets an error"."""
+def _ask_gemini(prompt, image_bytes, mime_type, models, to_reading, *, started, cutoff=READER_CUTOFF_SECONDS, hard_limit=READER_TIMEOUT_SECONDS,
+                max_tokens=3072, label="reader", first_model_cap=None):
+    """(Reading, "") when the picture was read, else (None, why). Tries each model twice (a 'high demand' answer is retried once). Never raises.
+
+    `first_model_cap` is for the second reading's stronger model, which is often busy or slow on the free tier: it gets ONE try of at most this
+    many seconds, and a slow or busy answer simply moves on to the next model, so the page is never kept waiting for it."""
     if not getattr(settings, "RECEIPT_READER_ENABLED", False):
         return None, "disabled"
     if not getattr(settings, "GEMINI_API_KEY", ""):
         return None, "not_configured"
     body = {
         "contents": [{"role": "user", "parts": [
-            {"text": PROMPT},
+            {"text": prompt},
             {"inline_data": {"mime_type": mime_type, "data": base64.b64encode(image_bytes).decode("ascii")}},
         ]}],
-        "generationConfig": {"temperature": 0, "maxOutputTokens": 3072, "responseMimeType": "application/json"},
+        "generationConfig": {"temperature": 0, "maxOutputTokens": max_tokens, "responseMimeType": "application/json"},
     }
-    started = time.monotonic()
     failure = "network"
     tries = 0
-    for model in _models():
-        for attempt in range(2):
+    for position, model in enumerate(models):
+        capped = first_model_cap is not None and position == 0
+        for attempt in range(1 if capped else 2):
             elapsed = time.monotonic() - started
-            if tries and elapsed > READER_CUTOFF_SECONDS:
+            if tries and elapsed > cutoff:
                 return None, failure
             tries += 1
+            allowed = max(hard_limit - elapsed, 3)
             try:
                 response = requests.post(
                     GEMINI_URL.format(model=model), params={"key": settings.GEMINI_API_KEY}, json=body,
-                    timeout=max(READER_TIMEOUT_SECONDS - elapsed, 3),
+                    timeout=min(allowed, first_model_cap) if capped else allowed,
                 )
             except requests.Timeout:
-                logger.warning("Receipt reader %s: timed out", model)
+                logger.warning("Receipt %s %s: timed out", label, model)
+                if capped:
+                    failure = "timeout"
+                    break                   # too slow: the next model gets the time that is left
                 return None, "timeout"
             except requests.RequestException as exc:
-                logger.warning("Receipt reader %s: connection problem %s", model, type(exc).__name__)
+                logger.warning("Receipt %s %s: connection problem %s", label, model, type(exc).__name__)
                 failure = "network"
                 time.sleep(1)
                 continue
             if response.status_code == 200:
                 try:
-                    reading = reading_from_dict(_extract_json(response.json()))
+                    reading = to_reading(_extract_json(response.json()))
                 except ValueError:
                     reading = None
                 if reading is not None:
                     return reading, ""
-                logger.warning("Receipt reader %s: answer could not be understood", model)
+                logger.warning("Receipt %s %s: answer could not be understood", label, model)
                 failure = "unreadable"
                 break                       # the backup model gets a try
             failure = f"http_{response.status_code}"
-            logger.warning("Receipt reader %s: HTTP %s", model, response.status_code)
-            if response.status_code not in RETRYABLE:
+            logger.warning("Receipt %s %s: HTTP %s", label, model, response.status_code)
+            if capped or response.status_code not in RETRYABLE:
                 break
             time.sleep(1)
     return None, failure
+
+
+def read_receipt(image_bytes, mime_type, started=None):
+    """(Reading, "") when the picture was read, else (None, why) -- why is a short code for the log: disabled, not_configured, timeout, network,
+    http_NNN, unreadable. Never raises: whatever goes wrong here must only mean "staff look at it", never "the customer gets an error"."""
+    return _ask_gemini(PROMPT, image_bytes, mime_type, _models(), reading_from_dict, started=started or time.monotonic(), label="reader")
+
+
+def verify_read(image_bytes, mime_type, started=None):
+    """The SECOND reading (see the module docstring): the reader copies every line of text, and our own code picks the fields out of it.
+    (Reading, "") or (None, why). Skipped ("no_time") when the first reading already used most of the time the page may take."""
+    started = started or time.monotonic()
+    if time.monotonic() - started > SECOND_READ_SKIP_AFTER_SECONDS:
+        return None, "no_time"
+    return _ask_gemini(PROMPT_TRANSCRIBE, image_bytes, mime_type, _verify_models(), reading_from_transcript, started=started, cutoff=22,
+                       hard_limit=26, max_tokens=4096, label="verifier",
+                       first_model_cap=SECOND_READ_STRONGER_MODEL_SECONDS if _verify_chosen() else None)
 
 
 # ---- the rules ------------------------------------------------------------------------------------------------------------------------
@@ -267,7 +503,7 @@ def read_receipt(image_bytes, mime_type):
 class Verdict:
     status: str
     codes: list = field(default_factory=list)       # machine reasons ("amount_low", "too_old", ...)
-    message: str = ""                               # for the customer, only when rejected
+    message: str = ""                               # for the customer, only when rejected or when a better picture is needed
     notes: list = field(default_factory=list)       # for staff and the owner (pass / needs_check)
     reading: Reading | None = None
     old_number: bool = False
@@ -281,6 +517,10 @@ class Verdict:
     @property
     def rejected(self):
         return self.status == STATUS_REJECT
+
+    @property
+    def retake(self):
+        return self.status == STATUS_RETAKE
 
 
 def _peso(amount):
@@ -317,12 +557,40 @@ def _fingerprint(amount, paid_at, recipient):
     return f"{amount}|{timezone.localtime(paid_at).strftime('%Y-%m-%d %H:%M')}|{recipient}"
 
 
+def _match_recipient(full, pattern, accepted, known):
+    """How the recipient on the receipt compares with the shop's numbers: (state, number, is_old).
+
+    "match"  -- the number (or the digits that show of a hidden one) is one the shop can be paid on; `is_old` when it is a number the shop
+                stopped using but a payment made then still counts.
+    "old"    -- it is a number the shop used before and a payment made now no longer counts.
+    "other"  -- it is clearly somebody else's number.
+    "unset"  -- the shop has no GCash number saved at all, so there is nothing to compare with."""
+    if not accepted and not known:
+        return "unset", "", False
+    if full:
+        if full in accepted:
+            return "match", full, accepted[full]
+        if full in known:
+            return "old", full, True
+        return "other", "", False
+    hits = [n for n in accepted if gcash_numbers.pattern_matches(pattern, n)]
+    if hits:
+        current = [n for n in hits if not accepted[n]]
+        number = (current or hits)[0]
+        return "match", number, accepted[number]
+    if any(gcash_numbers.pattern_matches(pattern, n) for n in known):
+        return "old", "", True
+    return "other", "", False
+
+
 def evaluate(reading, *, expected_amount, started_at=None, now=None, shop_name="", reference_used_by="", image_used_by="",
              fingerprint_used_by="", accepted_at=None, known_numbers=None):
     """Apply every rule to what the reader found. Returns a Verdict; never touches the network or the database.
 
     accepted_at(moment) -> [(number, is_old)] and known_numbers (a set) come from gowns/gcash_numbers.py; they are parameters so a test can
-    hand in its own. `reference_used_by` / `image_used_by` / `fingerprint_used_by` are the booking code that already has it ('' = none)."""
+    hand in its own. `reference_used_by` / `image_used_by` / `fingerprint_used_by` are the booking code that already has it ('' = none).
+
+    A verdict of "reject" here is only what ONE reading says; check_receipt confirms it with a second reading before the customer sees it."""
     now = now or timezone.now()
     accepted_at = accepted_at or gcash_numbers.accepted_numbers_at
     known_numbers = known_numbers if known_numbers is not None else gcash_numbers.known_numbers()
@@ -336,6 +604,13 @@ def evaluate(reading, *, expected_amount, started_at=None, now=None, shop_name="
         verdict.notes = []
         return verdict
 
+    def retake(code):
+        verdict.status = STATUS_RETAKE
+        verdict.codes = [code]
+        verdict.message = MESSAGES[code]
+        verdict.notes = []
+        return verdict
+
     if image_used_by:
         return refuse("image_used")
 
@@ -345,10 +620,18 @@ def evaluate(reading, *, expected_amount, started_at=None, now=None, shop_name="
         verdict.notes.append("The receipt could not be read automatically, so nothing was checked. Look at the picture yourself.")
         return verdict
 
+    full, pattern = reading.recipient_number, reading.recipient_pattern
+    usable_recipient = bool(full) or gcash_numbers.visible_digits(pattern) >= gcash_numbers.MIN_VISIBLE_DIGITS
+
+    # 0. can it be read at all? An unreadable picture is a picture problem, never a fake.
+    if reading.clarity == "unreadable" or (reading.clarity == "blurry" and not reading.reference and not usable_recipient):
+        return retake("blurry")
     # 1. is it a payment receipt at all?
     if reading.is_transaction_list:
         return refuse("list_screen")
     if not reading.is_payment_screen:
+        if reading.clarity == "blurry":
+            return retake("blurry")
         return refuse("not_payment")
     # 2. GCash only
     if reading.app in ("maya", "bank", "other"):
@@ -360,35 +643,45 @@ def evaluate(reading, *, expected_amount, started_at=None, now=None, shop_name="
         return refuse("received")
     if reading.direction == "merchant_payment":
         return refuse("merchant")
-    # 4. the reference number must be on it
+    # 4. the reference number must be on it. A missing one means the picture is cut off or blurry: the customer sends a whole one.
     if not reading.reference:
-        return refuse("no_reference")
+        return retake("cut_off" if reading.cut_off else "no_reference")
 
     paid_at = reading.paid_at
     moment = paid_at or now
-    # 5. the recipient: the shop's number AT THE TIME OF THE PAYMENT
-    recipient = reading.recipient_number
-    verdict.recipient = recipient
+    # 5. the recipient: the shop's number AT THE TIME OF THE PAYMENT, compared in full, or on the digits that show when GCash hides some
+    verdict.recipient = reading.recipient_shown
     name_state = names_match(reading.recipient_name, shop_name)
-    if recipient:
+    if usable_recipient:
         accepted = dict(accepted_at(moment))
-        if recipient in accepted:
-            if accepted[recipient]:
+        state, number, is_old = _match_recipient(full, pattern, accepted, known_numbers)
+        if state == "match":
+            if is_old:
                 verdict.old_number = True
                 verdict.codes.append("old_number_used")
-                verdict.notes.append(f"Paid to the shop's OLD GCash number ({recipient}). Look for it in the old account.")
+                verdict.notes.append(f"Paid to the shop's OLD GCash number ({number}). Look for it in the old account.")
             if name_state is False:
                 verdict.codes.append("name_differs")
                 verdict.notes.append(f"The name on the receipt ({reading.recipient_name}) is not the shop's account name. It may have been edited.")
-        elif recipient in known_numbers:
+            if not full:
+                shown = gcash_numbers.show_pattern(pattern)
+                if name_state is None:
+                    verdict.codes.append("number_hidden")
+                    verdict.notes.append(f"GCash hides part of the recipient's number on this receipt ({shown}) and no name shows, so it was matched "
+                                         "on the digits that show only. Check the reference in your GCash.")
+                elif name_state is True:
+                    verdict.notes.append(f"GCash hides part of the recipient's number on this receipt ({shown}); the digits that show match the shop's "
+                                         "number and the name matches.")
+        elif state == "old":
             return refuse("old_number")
-        elif not accepted and not known_numbers:
+        elif state == "unset":
             # The shop has no GCash number saved at all, so there is nothing to compare the receipt's number with. That is a settings gap, never
             # the customer's fault: the booking goes through and the staff / owner check it.
             verdict.codes.append("shop_number_not_set")
             verdict.notes.append("The shop's GCash number is not saved in the settings, so the number on the receipt was not checked.")
         else:
-            return refuse("wrong_recipient")
+            shown = full or gcash_numbers.show_pattern(pattern)
+            return _refuse_wrong_recipient(verdict, shown)
     else:
         verdict.codes.append("recipient_not_visible")
         if name_state is True:
@@ -436,7 +729,7 @@ def evaluate(reading, *, expected_amount, started_at=None, now=None, shop_name="
         verdict.notes.append(f"Paid {_peso(amount)}, much more than the deposit of {_peso(expected_amount)}. It may be a typing mistake.")
     elif amount > expected_amount:
         verdict.notes.append(f"Paid {_peso(amount)}; the deposit is {_peso(expected_amount)} (+{_peso(amount - expected_amount)} more than required).")
-    fingerprint = _fingerprint(amount, paid_at, recipient)
+    fingerprint = _fingerprint(amount, paid_at, reading.recipient_shown)
     verdict.fingerprint = fingerprint
     if fingerprint_used_by:
         verdict.codes.append("same_amount_and_time")
@@ -450,6 +743,14 @@ def evaluate(reading, *, expected_amount, started_at=None, now=None, shop_name="
     return verdict
 
 
+def _refuse_wrong_recipient(verdict, shown):
+    verdict.status = STATUS_REJECT
+    verdict.codes = ["wrong_recipient"]
+    verdict.message = MESSAGES["wrong_recipient"] + (f" The receipt shows {shown}." if shown else "")
+    verdict.notes = []
+    return verdict
+
+
 # ---- the whole check (with the database) ----------------------------------------------------------------------------------------------
 def _mime_for(name):
     name = (name or "").lower()
@@ -460,6 +761,66 @@ def _mime_for(name):
     return "image/jpeg"
 
 
+def _fill_from_reading(verdict, reading):
+    """A verdict that stopped early (a refusal) has no amount / date / reference yet; fill what the reading did find, for the staff."""
+    if reading is None:
+        return verdict
+    verdict.reference = verdict.reference or reading.reference
+    verdict.amount = verdict.amount if verdict.amount is not None else reading.amount
+    verdict.paid_at = verdict.paid_at or reading.paid_at
+    verdict.recipient = verdict.recipient or reading.recipient_shown
+    return verdict
+
+
+def _needs_check(base, reading, note, code):
+    """`base` turned into "needs_check": the customer is not blocked, and the staff see why."""
+    result = replace(base, status=STATUS_NEEDS_CHECK, message="", codes=[*base.codes, code] if base.status != STATUS_REJECT else [code],
+                     notes=[note, *base.notes])
+    return _fill_from_reading(result, reading)
+
+
+def _reason(verdict):
+    code = verdict.codes[0] if verdict.codes else ""
+    return reject_reason_text(code) if code else verdict.status
+
+
+def _reconcile(first, second, second_why, quality, first_reading):
+    """The final verdict from the first reading's refusal (or "cannot read") and the second, independent reading.
+
+    A refusal stands only when both readings give the SAME reason and the picture is sharp enough to trust. Anything else must not cost a real
+    customer their booking: it becomes "retake" (the picture cannot be read) or "needs_check" (the staff look)."""
+    if second is None:
+        if first.status == STATUS_RETAKE:
+            return first
+        return _needs_check(first, first_reading,
+                            f"The reader would have refused this receipt ({_reason(first)}), but a second reading could not be made "
+                            f"({second_why}), so it was sent to the staff to look at.", "second_read_unavailable")
+    if first.status == STATUS_REJECT:
+        if second.status == STATUS_REJECT and second.codes and second.codes[0] == first.codes[0]:
+            if quality.get("poor") and first.codes[0] in QUALITY_SENSITIVE:
+                return replace(first, status=STATUS_RETAKE, codes=["blurry"], message=MESSAGES["blurry"], notes=[])
+            if first.codes[0] in NEEDS_SHARP_PICTURE and quality.get("label") != "sharp":
+                return _needs_check(first, first_reading,
+                                    f"Both readings say this receipt is not for the shop ({_reason(first)}), but the picture is not sharp enough to be "
+                                    "sure of the digits, so it was sent to the staff to look at.", "picture_not_sharp")
+            return first                                            # confirmed twice on a picture that can be trusted
+        if second.status == STATUS_RETAKE and first.codes[0] == "not_payment" and not quality.get("poor"):
+            # The first reading found no payment on the picture and the second one could not read anything from it. On a picture that our own
+            # measure does not call blurry or tiny, "nothing to read" means there is no receipt in it (a photo of a gown, a wall): refuse it.
+            return first
+        if second.status == STATUS_RETAKE:
+            return replace(first, status=STATUS_RETAKE, codes=[second.codes[0]], message=second.message, notes=[])
+        return _needs_check(second if second.status in (STATUS_PASS, STATUS_NEEDS_CHECK) else first, first_reading,
+                            f"Two readings of this receipt disagreed: the first would have refused it ({_reason(first)}), the second "
+                            f"{'accepted it' if second.status in (STATUS_PASS, STATUS_NEEDS_CHECK) else 'found a different problem (' + _reason(second) + ')'}. "
+                            "Look at the picture yourself.", "readings_disagree")
+    # the first reading could not read the picture (a retake): a second reading that CAN read it decides
+    if second.status in (STATUS_PASS, STATUS_NEEDS_CHECK):
+        second.notes = ["The first reading could not read this picture; the second reading did.", *second.notes]
+        return second
+    return first
+
+
 def check_receipt(image_bytes, file_name, *, expected_amount, started_at=None, exclude_reservation_id=None, now=None):
     """Read the cleaned picture and judge it. `expected_amount` is THIS booking's deposit; `started_at` is when the booking was started
     (the checkout hold's start, or the reservation's creation for an upload made later); `exclude_reservation_id` keeps a booking from
@@ -467,8 +828,11 @@ def check_receipt(image_bytes, file_name, *, expected_amount, started_at=None, e
     from gowns.models import SiteSettings
     from reservations.models import Reservation
 
+    began = time.monotonic()
     now = now or timezone.now()
     image_hash = hashlib.sha256(image_bytes).hexdigest()
+    mime = _mime_for(file_name)
+    shop_name = SiteSettings.load().gcash_account_name
 
     def other(**lookup):
         query = Reservation.objects.filter(**lookup)
@@ -476,21 +840,34 @@ def check_receipt(image_bytes, file_name, *, expected_amount, started_at=None, e
             query = query.exclude(pk=exclude_reservation_id)
         return query.values_list("reference_code", flat=True).first() or ""
 
+    def judge(reading, image_used_by=""):
+        reference_used_by = other(gcash_reference=reading.reference) if reading is not None and reading.reference else ""
+        fingerprint = _fingerprint(reading.amount, reading.paid_at, reading.recipient_shown) if reading is not None else ""
+        fingerprint_used_by = other(proof_fingerprint=fingerprint) if fingerprint else ""
+        return evaluate(
+            reading, expected_amount=expected_amount, started_at=started_at, now=now, shop_name=shop_name,
+            reference_used_by=reference_used_by, image_used_by=image_used_by, fingerprint_used_by=fingerprint_used_by,
+        )
+
     image_used_by = other(proof_hash=image_hash)
-    reading, why = (None, "")
+    reading, why = None, ""
     if not image_used_by:
-        reading, why = read_receipt(image_bytes, _mime_for(file_name))
+        reading, why = read_receipt(image_bytes, mime)
         if reading is None:
             logger.info("Receipt not read (%s): sent to staff as needs_check", why)
-    reference_used_by = other(gcash_reference=reading.reference) if reading is not None and reading.reference else ""
-    fingerprint = _fingerprint(reading.amount, reading.paid_at, reading.recipient_number) if reading is not None else ""
-    fingerprint_used_by = other(proof_fingerprint=fingerprint) if fingerprint else ""
+    verdict = judge(reading, image_used_by)
 
-    verdict = evaluate(
-        reading, expected_amount=expected_amount, started_at=started_at, now=now,
-        shop_name=SiteSettings.load().gcash_account_name,
-        reference_used_by=reference_used_by, image_used_by=image_used_by, fingerprint_used_by=fingerprint_used_by,
-    )
+    # A refusal (or "cannot read it") from ONE reading is never final: a real receipt must not be lost to a misread. Read it a second way first.
+    if verdict.status in (STATUS_REJECT, STATUS_RETAKE) and verdict.codes and verdict.codes[0] not in CERTAIN_CODES:
+        quality = receipt_quality.picture_quality(image_bytes)
+        second_reading, second_why = verify_read(image_bytes, mime, started=began)
+        second = judge(second_reading) if second_reading is not None else None
+        first = verdict
+        verdict = _reconcile(first, second, second_why, quality, reading)
+        logger.warning(
+            "Receipt check: first reading %s %s -> final %s %s | second reading %s%s | picture %s | first=%s second=%s",
+            first.status, first.codes, verdict.status, verdict.codes, second.status if second else "none", f" {second.codes}" if second else f" ({second_why})",
+            quality, reading.to_json()[:900] if reading is not None else None, second_reading.to_json()[:900] if second_reading is not None else None)
     verdict.image_hash = image_hash
     if reading is not None and not verdict.reference:
         verdict.reference = reading.reference

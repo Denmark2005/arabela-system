@@ -92,9 +92,10 @@ class NotAPaymentTests(SimpleTestCase):
         self.assertEqual(verdict.codes, ["merchant"])
         self.assertIn("store or biller", verdict.message)
 
-    def test_no_reference_number_is_refused(self):
+    def test_no_reference_number_is_a_picture_to_take_again_not_a_refusal(self):
         verdict = judge(reading(reference=""))
         self.assertEqual(verdict.codes, ["no_reference"])
+        self.assertEqual(verdict.status, rc.STATUS_RETAKE)          # a cropped real receipt must not count against the account
         self.assertIn("Ref No.", verdict.message)
 
 

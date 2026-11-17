@@ -372,7 +372,9 @@ class Reservation(models.Model):
             local = timezone.localtime(self.proof_paid_at)
             paid = f"{local:%b} {local.day}, {local:%Y}, {local.hour % 12 or 12}:{local:%M} {'AM' if local.hour < 12 else 'PM'}"
         number = self.proof_recipient
-        if len(number) == 11:
+        if "?" in number:
+            number = number.replace("?", "•")             # GCash hid some digits on the receipt (09?????5992): show them as dots, the way it printed them
+        elif len(number) == 11:
             number = f"{number[:4]} {number[4:7]} {number[7:]}"
         return {
             'check': self.proof_check,

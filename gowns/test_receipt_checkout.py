@@ -69,11 +69,24 @@ class ReceiptCheckBase(TestCase):
         self.reader = None
 
     # ---- the stand-in reader ----
-    def reads(self, reading, why=""):
-        """From now on the reader 'sees' `reading` in every picture (None = the reader is down)."""
+    SHARP = {"label": "sharp", "sharpness": 300.0, "brightness": 200.0, "width": 1080, "height": 2340, "tiny": False, "dark": False, "poor": False}
+
+    def reads(self, reading, why="", second="agree", second_why="timeout", picture=None):
+        """From now on the reader 'sees' `reading` in every picture (None = the reader is down).
+
+        A refusal is only given when a SECOND, independent reading agrees (gowns/receipt_check.py), so the stand-in answers that second reading
+        too: by default it sees the same thing (`second="agree"`); pass a Reading to make it see something else, or None for "not available".
+        `picture` is the sharpness measure of the uploaded picture (these tests upload a tiny placeholder; a real receipt is a full screenshot)."""
         patcher = patch("gowns.receipt_check.read_receipt", return_value=(reading, why))
         self.reader = patcher.start()
         self.addCleanup(patcher.stop)
+        value = reading if isinstance(second, str) and second == "agree" else second
+        second_patch = patch("gowns.receipt_check.verify_read", return_value=(value, "") if value is not None else (None, second_why))
+        self.verifier = second_patch.start()
+        self.addCleanup(second_patch.stop)
+        quality_patch = patch("gowns.receipt_quality.picture_quality", return_value=picture or self.SHARP)
+        quality_patch.start()
+        self.addCleanup(quality_patch.stop)
 
     # ---- the checkout ----
     def checkout(self, who, gown_indexes=(0,), *, picture=None, event=None):
@@ -171,8 +184,14 @@ class ARefusedReceiptTests(ReceiptCheckBase):
     def test_a_store_payment(self):
         self.assert_refused_with(good_reading(direction="merchant_payment", recipient_number=""), "store or biller")
 
-    def test_no_reference_number(self):
-        self.assert_refused_with(good_reading(reference=""), "Ref No.")
+    def test_no_reference_number_is_a_retake_not_a_refusal(self):
+        self.reads(good_reading(reference=""))
+        data = self.refused(self.checkout("a"))
+        self.assertIn("Ref No.", data["error"])
+        self.assertTrue(data["proof_retake"])
+        self.assertFalse(data["account_blocked"])
+        self.nothing_booked()
+        self.assertEqual(ProofRejection.objects.count(), 0)                 # a picture to take again is never counted against the account
 
     def test_another_persons_number(self):
         self.assert_refused_with(good_reading(recipient_number="09265411484"), "not sent to Arabela's GCash number")
@@ -203,6 +222,105 @@ class ARefusedReceiptTests(ReceiptCheckBase):
         row = ProofRejection.objects.get()
         self.assertEqual((row.user, row.reservation, row.source), (self.customers["a"], None, ProofRejection.Source.UPLOAD))
         self.assertTrue(row.reason)
+
+
+class RealReceiptsNeverLostTests(ReceiptCheckBase):
+    """A real receipt must never cost a customer their booking: GCash hides part of the recipient's number on some receipts, pictures come
+    blurry or cut off, and a refusal is only given when a second, independent reading agrees on a sharp picture."""
+
+    def masked(self, **changes):
+        values = dict(recipient_number="", recipient_pattern="09?????5992", recipient_name="DE••••K C.", layout="sent_via_gcash", clarity="clear")
+        values.update(changes)
+        return good_reading(**values)
+
+    def test_the_receipt_with_the_number_hidden_books_like_any_other(self):
+        self.reads(self.masked())
+        reservation = self.booked(self.checkout("a"))
+        self.assertEqual(reservation.proof_check, Reservation.ProofCheck.PASS)
+        self.assertEqual(reservation.proof_recipient, "09?????5992")
+        self.assertIn("09•••••5992", reservation.proof_notes)
+        self.assertEqual(reservation.proof_window["recipient"], "09•••••5992")             # the staff see the dots GCash printed
+        self.assertEqual(ProofRejection.objects.count(), 0)
+        self.verifier.assert_not_called()
+
+    def test_a_hidden_number_that_ends_differently_is_refused_and_counted(self):
+        self.reads(self.masked(recipient_pattern="09?????1234"))
+        data = self.refused(self.checkout("a"))
+        self.assertIn("09•••••1234", data["error"])
+        self.assertEqual(ProofRejection.objects.filter(user=self.customers["a"]).count(), 1)
+        self.nothing_booked()
+
+    def test_a_refusal_the_second_reading_does_not_share_books_the_customer_for_the_staff_to_check(self):
+        self.reads(good_reading(recipient_number="09265411484"), second=good_reading())
+        reservation = self.booked(self.checkout("a"))
+        self.assertEqual(reservation.proof_check, Reservation.ProofCheck.NEEDS_CHECK)
+        self.assertIn("disagreed", reservation.proof_notes)
+        self.assertEqual(ProofRejection.objects.count(), 0)                    # nothing was counted against the customer
+
+    def test_a_refusal_with_no_second_reading_books_the_customer_for_the_staff_to_check(self):
+        self.reads(good_reading(recipient_number="09265411484"), second=None)
+        reservation = self.booked(self.checkout("a"))
+        self.assertEqual(reservation.proof_check, Reservation.ProofCheck.NEEDS_CHECK)
+        self.assertIn("second reading could not be made", reservation.proof_notes)
+        self.assertEqual(ProofRejection.objects.count(), 0)
+
+    def test_a_photo_with_no_text_at_all_is_refused_when_both_readings_agree(self):
+        nothing = rc.reading_from_transcript({"lines": [], "picture": "screenshot", "clarity": "clear", "cut_off": False})
+        self.reads(good_reading(is_payment_screen=False, clarity="clear"), second=nothing)
+        data = self.refused(self.checkout("a"))
+        self.assertIn("doesn't look like a payment receipt", data["error"])
+        self.assertEqual(ProofRejection.objects.count(), 1)
+        self.nothing_booked()
+
+    def test_a_blurry_picture_is_asked_for_again_and_never_counted(self):
+        self.reads(good_reading(recipient_number="09265411484"), picture={**self.SHARP, "label": "blurry", "poor": True})
+        data = self.refused(self.checkout("a"))
+        self.assertTrue(data["proof_retake"])
+        self.assertIn("couldn't read this picture clearly", data["error"])
+        self.assertFalse(data["account_blocked"])
+        self.assertEqual(ProofRejection.objects.count(), 0)
+        self.nothing_booked()
+
+    def test_many_pictures_to_take_again_never_pause_the_account(self):
+        self.reads(good_reading(reference="", clarity="blurry"))
+        for _ in range(services.PROOF_REJECTION_LIMIT + 2):
+            data = self.refused(self.checkout("a"))
+            self.assertTrue(data["proof_retake"])
+        self.assertEqual(ProofRejection.objects.count(), 0)
+        self.assertFalse(UserProfile.objects.get_or_create(user=self.customers["a"])[0].proof_blocked)
+        self.reader.return_value = (good_reading(), "")
+        self.assertEqual(self.checkout("a").status_code, 200)                  # and a good picture still books
+
+    def test_a_cut_off_receipt_says_which_part_is_missing(self):
+        self.reads(good_reading(reference="", cut_off=True))
+        data = self.refused(self.checkout("a"))
+        self.assertIn("Part of this receipt is missing", data["error"])
+        self.assertTrue(data["proof_retake"])
+
+    def test_a_first_reading_that_could_not_read_is_rescued_by_the_second(self):
+        self.reads(good_reading(reference="", clarity="blurry"), second=good_reading())
+        reservation = self.booked(self.checkout("a"))
+        self.assertEqual(reservation.gcash_reference, "5046933479702")
+        self.assertIn("first reading could not read", reservation.proof_notes)
+
+    def test_a_blurry_receipt_uploaded_later_is_asked_for_again_and_changes_nothing(self):
+        reservation = Reservation.objects.create(
+            customer=self.customers["a"], customer_name="Rita A", status=Reservation.Status.PENDING,
+            security_deposit=Decimal("2000"), rental_subtotal=Decimal("3000"), total_amount=Decimal("5000"))
+        item = ReservationItem.objects.create(
+            reservation=reservation, gown=self.gowns[2], gown_name=self.gowns[2].name, size="Medium", rental_price=Decimal("3000"),
+            rental_date=self.event - timedelta(days=2), return_date=self.event + timedelta(days=2))
+        self.reads(good_reading(reference="", clarity="unreadable"))
+        client = Client()
+        client.force_login(self.customers["a"])
+        agreed(self.customers["a"])
+        response = client.post(reverse("gowns:reservation_upload_proof", args=[item.pk]), data={
+            "proof_of_payment": SimpleUploadedFile("late.jpg", unique_jpeg(), content_type="image/jpeg")})
+        data = self.refused(response)
+        self.assertTrue(data["proof_retake"])
+        reservation.refresh_from_db()
+        self.assertEqual((reservation.payment_proof_url, reservation.proof_check), ("", ""))
+        self.assertEqual(ProofRejection.objects.count(), 0)
 
 
 class NeedsAPersonToLookTests(ReceiptCheckBase):

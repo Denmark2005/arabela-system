@@ -435,6 +435,10 @@ GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '').strip()
 GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite')
 # Tried when the main model keeps answering 'high demand' (503) or is refused/retired. Empty = no backup model.
 GEMINI_FALLBACK_MODEL = os.getenv('GEMINI_FALLBACK_MODEL', 'gemini-flash-lite-latest').strip()
+# The receipt check (gowns/receipt_check.py) reads a receipt a SECOND way (every line copied, the fields picked out by our own code) before it
+# refuses one. By default that uses the free backup model above, a different model than the first reading. A model named here is tried first for
+# that second reading (one short try, then the usual models take over). The free gemini-3.6-flash was tried and timed out every time, so none is set.
+GEMINI_VERIFY_MODEL = os.getenv('GEMINI_VERIFY_MODEL', '').strip()
 
 # True while `manage.py test` runs: nothing in the test suite may reach the network, and the sweeps that normally run on page visits stay quiet
 # (tests call them directly).
