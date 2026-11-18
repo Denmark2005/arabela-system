@@ -33,6 +33,7 @@ User = get_user_model()
 # so fake bytes with a JPEG header are refused exactly like a renamed PDF.
 from gowns.sample_images import unique_jpeg      # a real picture: the proof upload now opens what it is given
 from accounts.test_support import agreed
+from gowns.sample_payment import TYPED_AMOUNT, typed_reference
 
 
 def _make_proof(picture=None):
@@ -77,7 +78,7 @@ class ReservationSubmitPriceTrustTests(TestCase):
             "address": "123 Test St",
             "city": "Test City",
             "postal_code": "1000",
-            "payment_method": "GCash",
+            "payment_method": "GCash", "gcash_reference": typed_reference(), "gcash_amount": TYPED_AMOUNT,
             # Deliberately fabricated on every call -- the point of this whole test
             # class is proving none of these three ever survive into the database.
             "rental_subtotal": "1",
@@ -210,7 +211,7 @@ class ReservationSubmitPriceTrustTests(TestCase):
                 "gown_name": "Guest Gown Two", "gown_slug": "archive-satin", "size": "",
                 "rental_price": "1", "rental_date": "2027-06-10", "return_date": "2027-06-13",
             }]),
-            "first_name": "Test", "last_name": "Buyer", "payment_method": "GCash",
+            "first_name": "Test", "last_name": "Buyer", "payment_method": "GCash", "gcash_reference": typed_reference(), "gcash_amount": TYPED_AMOUNT,
             "rental_subtotal": "1", "security_deposit": "1", "total_amount": "1",
             # no proof_of_payment file
         })
@@ -371,7 +372,7 @@ class CustomerStatusEventTests(TestCase):
             }]),
             "first_name": "Evt", "last_name": "Customer", "phone": "09171234567",
             "address": "1 St", "city": "City", "postal_code": "1000",
-            "payment_method": "GCash", "proof_of_payment": _make_proof(),
+            "payment_method": "GCash", "gcash_reference": typed_reference(), "gcash_amount": TYPED_AMOUNT, "proof_of_payment": _make_proof(),
         })
 
     def test_submitting_records_a_customer_event(self):
@@ -389,7 +390,7 @@ class CustomerStatusEventTests(TestCase):
         response = self.client.post(reverse("gowns:reservation_submit"), data={
             "items": json.dumps([]), "first_name": "Evt", "last_name": "Customer",
             "phone": "09171234567", "address": "1 St", "city": "City",
-            "postal_code": "1000", "payment_method": "GCash",
+            "postal_code": "1000", "payment_method": "GCash", "gcash_reference": typed_reference(), "gcash_amount": TYPED_AMOUNT,
             "proof_of_payment": _make_proof(),
         })
         self.assertEqual(response.status_code, 400)
@@ -467,7 +468,7 @@ class CustomerStatusEventTests(TestCase):
             rental_date=self.today, return_date=self.today + timedelta(days=3))
         response = self.client.post(
             reverse("gowns:reservation_upload_proof", args=[item.id]),
-            data={"proof_of_payment": _make_proof()})
+            data={"proof_of_payment": _make_proof(), "gcash_reference": typed_reference(), "gcash_amount": TYPED_AMOUNT})
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(
             reservation.status_events.get(label="Proof of payment uploaded").actor, "Customer")
@@ -979,7 +980,7 @@ class CategorySwapTests(TestCase):
                 }]),
                 "first_name": "Cat", "last_name": "Swap", "phone": "09171234567",
                 "address": "1 St", "city": "City", "postal_code": "1000",
-                "payment_method": "GCash", "proof_of_payment": _make_proof(),
+                "payment_method": "GCash", "gcash_reference": typed_reference(), "gcash_amount": TYPED_AMOUNT, "proof_of_payment": _make_proof(),
             })
         self.assertEqual(response.status_code, 400)
         self.assertEqual(Reservation.objects.count(), before)
@@ -1670,7 +1671,7 @@ class CheckoutGcashWindowTests(TestCase):
                 "rental_date": start, "return_date": end,
             }]),
             "first_name": "Test", "last_name": "Buyer", "phone": "09171234567", "address": "1 St",
-            "city": "City", "postal_code": "1000", "payment_method": "GCash",
+            "city": "City", "postal_code": "1000", "payment_method": "GCash", "gcash_reference": typed_reference(), "gcash_amount": TYPED_AMOUNT,
             "proof_of_payment": _make_proof(),
         }
         payload.update(overrides)
@@ -1680,18 +1681,31 @@ class CheckoutGcashWindowTests(TestCase):
         return Reservation.objects.get(reference_code=response.json()["reference_code"]).gcash_reference
 
     # ---- the reference number ------------------------------------------------------------------------
-    def test_a_booking_without_a_reference_still_works(self):
-        response = self._submit()
-        self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(self._saved_reference(response), "")
+    def test_a_page_that_sends_no_reference_or_amount_is_told_to_reload_and_nothing_is_booked(self):
+        # a checkout page opened before the boxes existed cannot send them: the site says so instead of booking a payment nobody typed
+        payload = {
+            "items": json.dumps([{"gown_name": self.gown.name, "gown_slug": self.gown.slug, "size": "Medium",
+                                  "rental_date": "2027-02-10", "return_date": "2027-02-13"}]),
+            "first_name": "Test", "last_name": "Buyer", "phone": "09171234567", "address": "1 St",
+            "city": "City", "postal_code": "1000", "payment_method": "GCash", "proof_of_payment": _make_proof(),
+        }
+        response = self.client.post(reverse("gowns:reservation_submit"), data=payload)
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(response.json()["typed_required"])
+        self.assertIn("reload", response.json()["error"])
+        self.assertEqual(Reservation.objects.count(), 0)
 
     def test_a_typed_reference_is_saved_as_digits_only(self):
-        # one gown, so each booking gets its own dates
-        for n, typed in enumerate(("1234 567 890123", "1234567890123", "  1234 5678 90123  ")):
+        # one gown, so each booking gets its own dates; each booking needs a reference of its own
+        for n, typed in enumerate(("1234 567 890123", "2234567890123", "  3234 5678 90123  ")):
             with self.subTest(typed=typed):
                 response = self._submit(start=f"2027-0{n + 3}-10", end=f"2027-0{n + 3}-13", gcash_reference=typed)
                 self.assertEqual(response.status_code, 200, response.content)
-                self.assertEqual(self._saved_reference(response), "1234567890123")
+                expected = f"{n + 1}234567890123"
+                self.assertEqual(self._saved_reference(response), expected)
+                reservation = Reservation.objects.get(reference_code=response.json()["reference_code"])
+                self.assertEqual(reservation.proof_typed_reference, expected)
+                self.assertEqual(reservation.proof_typed_amount, Decimal("99999.00"))
 
     def test_a_reference_that_cannot_be_real_is_refused_and_no_booking_is_made(self):
         before = Reservation.objects.count()
@@ -1732,13 +1746,15 @@ class CheckoutGcashWindowTests(TestCase):
         self.assertIn("Send the money to the GCash number above.", html)
         self.assertIn("QR code coming soon", html)
 
-    def test_the_reference_box_is_gone_from_the_page_and_the_form(self):
-        """The customer is no longer asked for it (the server still accepts one, so older bookings and any other caller work)."""
+    def test_the_reference_and_amount_boxes_are_on_the_page_as_required_boxes(self):
+        """2026-11-18: the customer types the reference number and the amount from the receipt (they used to be an optional box, removed 2026-10-23)."""
         html = self.client.get(reverse("gowns:reservation")).content.decode()
-        self.assertNotIn('id="gcash_reference"', html)
-        self.assertNotIn("gcash_reference", html)
-        self.assertNotIn("GCash reference number (optional)", html)
-        self.assertNotIn("You can find it on your GCash receipt", html)
+        self.assertIn('id="gcash_reference"', html)
+        self.assertIn('id="gcash_amount"', html)
+        self.assertIn("GCash Reference No.", html)
+        self.assertIn("Amount Paid", html)
+        self.assertNotIn("GCash reference number (optional)", html)       # not optional any more
+        self.assertNotIn("or leave it blank", html)
 
 
 class LiveNavBadgeTests(TestCase):
@@ -1987,7 +2003,7 @@ class CheckoutLockoutAndRetryTests(TestCase):
                                   "rental_date": start, "return_date": end}]),
             "first_name": "Test", "last_name": "Buyer", "phone": "09171234567",
             "address": "123 Test St", "city": "Test City", "postal_code": "1000",
-            "payment_method": "GCash", "proof_of_payment": proof or _make_proof(),
+            "payment_method": "GCash", "gcash_reference": typed_reference(), "gcash_amount": TYPED_AMOUNT, "proof_of_payment": proof or _make_proof(),
         })
 
     # ---- the lock -----------------------------------------------------------------------------------------------

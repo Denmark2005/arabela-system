@@ -1246,6 +1246,8 @@ def reservation_records_view(request):
                 if r.status == Reservation.Status.CANCELLED else None
             ),
             "receipts": [_receipt_row(rec, today, request.user) for rec in r.receipt_records.all()],
+            # The GCash reference number of the payment (the one the customer typed, else the one read from the receipt), as GCash prints it.
+            "gcashReference": (r.reference_info or {}).get("reference", ""),
             # The booking already has every receipt it needs: no further photo can be added (the server refuses it); a wrong one is replaced.
             "receiptsComplete": r.receipts_complete(list(r.receipt_records.all())),
             # How the booking came in, and -- for one staff recorded (walk-in, Facebook, phone) -- who recorded it, its
@@ -1268,7 +1270,7 @@ def reservation_records_view(request):
             "q": " ".join(filter(None, [
                 r.display_customer_name, r.booked_as_name, r.customer.email if r.customer_id else "", r.phone,
                 r.notebook_number,
-                r.reference_code, *[i.gown_name for i in items],
+                r.reference_code, r.proof_search_text, *[i.gown_name for i in items],
                 *[i.gown.gown_id for i in items if i.gown_id],
             ])).lower(),
         })
@@ -1298,6 +1300,20 @@ def reservation_records_view(request):
     )
 
 
+def _gcash_reference_query(query):
+    """The digits of a search that is a GCash reference number (or the last part of one, at least 6 digits), as the owner pastes it from her GCash
+    app: '5046933479702', '5046 933 479702' or '933 479702'. '' for anything else (a name, a booking code like RSV-2026-0104, a short number)."""
+    if not re.fullmatch(r"[\d\s\-]+", query or ""):
+        return ""
+    digits = re.sub(r"\D", "", query)
+    return digits if len(digits) >= 6 else ""
+
+
+def _gcash_reference_filter(digits):
+    """The bookings carrying this number as the reference the customer typed or the one the receipt reader found."""
+    return Q(gcash_reference__contains=digits) | Q(proof_typed_reference__contains=digits)
+
+
 def receipt_reservation_search_view(request):
     """Live lookup behind Reservation Records' "find the reservation" box: staff type
     part of a customer's name, email, a reference code, or a gown, and pick the booking
@@ -1309,6 +1325,7 @@ def receipt_reservation_search_view(request):
     query = (request.GET.get("q") or "").strip()
     if len(query) < 2:
         return JsonResponse({"results": []})
+    reference_digits = _gcash_reference_query(query)
 
     matches = list(
         Reservation.objects.filter(
@@ -1319,6 +1336,7 @@ def receipt_reservation_search_view(request):
             | Q(customer__last_name__icontains=query)
             | Q(customer__email__icontains=query)
             | Q(items__gown_name__icontains=query)
+            | (_gcash_reference_filter(reference_digits) if reference_digits else Q(pk__in=[]))
         )
         .distinct()
         .select_related("customer__profile")
@@ -1506,20 +1524,33 @@ def _waiting_text(created_at, today):
 def _same_gcash_number_elsewhere(reservations):
     """{reservation id: 'RSV-..., RSV-...'} for every booking here whose GCash reference number is also on ANOTHER booking (the same
     answer as Reservation.gcash_duplicate_codes, worked out for the whole list in ONE query instead of one query per booking)."""
-    numbers = {r.gcash_reference for r in reservations if r.gcash_reference}
+    def numbers_of(r):
+        return {number for number in (r.gcash_reference, r.proof_typed_reference) if number}
+
+    numbers = set().union(*[numbers_of(r) for r in reservations]) if reservations else set()
     if not numbers:
         return {}
-    holders = {}
+    holders = {}            # number -> [(booking id, booking code)] for every booking carrying it, as the typed number or the receipt's own
     rows = (
-        Reservation.objects.filter(gcash_reference__in=numbers)
-        .order_by("created_at").values_list("pk", "gcash_reference", "reference_code")
+        Reservation.objects.filter(Q(gcash_reference__in=numbers) | Q(proof_typed_reference__in=numbers))
+        .order_by("created_at").values_list("pk", "gcash_reference", "proof_typed_reference", "reference_code")
     )
-    for pk, number, code in rows:
-        holders.setdefault(number, []).append((pk, code))
-    return {
-        r.id: ", ".join(code for pk, code in holders.get(r.gcash_reference, []) if pk != r.id)
-        for r in reservations if r.gcash_reference
-    }
+    for pk, read, typed, code in rows:
+        for number in {read, typed}:
+            if number in numbers:
+                holders.setdefault(number, []).append((pk, code))
+    result = {}
+    for r in reservations:
+        mine = numbers_of(r)
+        if not mine:
+            continue
+        others = []
+        for number in sorted(mine):
+            for pk, code in holders.get(number, []):
+                if pk != r.id and code not in others:
+                    others.append(code)
+        result[r.id] = ", ".join(others)
+    return result
 
 
 @_require_admin_staff
@@ -5009,12 +5040,14 @@ def admin_search_view(request):
     query = (request.GET.get("q") or "").strip()
     if len(query) < 2:
         return JsonResponse({"results": []})
+    reference_digits = _gcash_reference_query(query)
 
     matches = (
         Reservation.objects.filter(
             Q(customer_name__icontains=query)
             | Q(reference_code__icontains=query)
             | Q(customer__profile__display_name__icontains=query)
+            | (_gcash_reference_filter(reference_digits) if reference_digits else Q(pk__in=[]))
         )
         .select_related("customer__profile")
         .order_by("-created_at")[:5]
@@ -5029,7 +5062,8 @@ def admin_search_view(request):
         else:
             target_name = "arabela_admin:payment_verification"
         name = r.display_customer_name
-        target_url = reverse(target_name) + "?" + urlencode({"search": name})
+        # A search for a GCash reference number lands on the page filtered by that number (every list matches it), not by the name.
+        target_url = reverse(target_name) + "?" + urlencode({"search": reference_digits or name})
         results.append({
             "type": "reservation",
             "customer_name": name,

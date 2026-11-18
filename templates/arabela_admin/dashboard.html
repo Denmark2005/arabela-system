@@ -124,7 +124,7 @@
   </style>
   </head>
   <body
-    x-data="{ page: 'ecommerce', loaded: true, darkMode: false, stickyMenu: false, sidebarToggle: false, scrollTop: false, openReceiptModal: false, receiptPreview: { name: '', bookedAs: '', reservation: '', amount: '', reference: '', date: '', status: '', proofUrl: '', gcashRef: '', gcashDup: '' }, headerSearch: '', headerSearching: false, headerSearchTimeout: null, filtering: false, filterTimeout: null }"
+    x-data="{ page: 'ecommerce', loaded: true, darkMode: false, stickyMenu: false, sidebarToggle: false, scrollTop: false, openReceiptModal: false, receiptPreview: { name: '', bookedAs: '', reservation: '', amount: '', reference: '', date: '', status: '', proofUrl: '', gcashRef: '', refInfo: null, gcashDup: '' }, headerSearch: '', headerSearching: false, headerSearchTimeout: null, filtering: false, filterTimeout: null }"
     x-init="
          darkMode = JSON.parse(localStorage.getItem('darkMode'));
          $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)))"
@@ -1247,7 +1247,7 @@
                       <div class="qv-amt">{% with bd=r.payment_breakdown %}{% if bd %}{{ bd.headline }}{% else %}&#8369;{{ r.total_amount|floatformat:'-2g' }}{% endif %}{% endwith %}</div>
                       <div class="qv-date" title="Sent {{ r.created_at|date:'M j, Y, g:i A' }}">{{ r.created_at|date:"M j" }}</div>
                       <div class="qv-acts">
-                        <button type="button" @click="openReceiptModal = true; receiptPreview = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"&mdash;"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:'-2g' }}', date: '{{ r.created_at|date:"M j, Y" }}', status: status, proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}'), breakdown: JSON.parse('{{ r.payment_breakdown_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', gcashDup: '{{ dup|escapejs }}' }" class="ar-ib" title="View proof" aria-label="View proof of {{ r.display_customer_name }}, {{ r.reference_code }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                        <button type="button" @click="openReceiptModal = true; receiptPreview = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"&mdash;"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:'-2g' }}', date: '{{ r.created_at|date:"M j, Y" }}', status: status, proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}'), breakdown: JSON.parse('{{ r.payment_breakdown_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', refInfo: JSON.parse('{{ r.reference_info_json|escapejs }}'), gcashDup: '{{ dup|escapejs }}' }" class="ar-ib" title="View proof" aria-label="View proof of {{ r.display_customer_name }}, {{ r.reference_code }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
                         {% if r.waiting_for_owner and not viewer_is_owner %}
                         <button type="button" disabled data-waiting-owner="1" x-show="status === 'Pending'" class="ar-ib qv-ok" style="opacity: .55; cursor: not-allowed;"
                           title="Waiting for the owner to confirm the payment in GCash" aria-label="Approve is locked: waiting for the owner to confirm the payment of {{ r.display_customer_name }}, {{ r.reference_code }}, in GCash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button>
@@ -1302,6 +1302,7 @@
       <p x-show="receiptPreview.bookedAs" class="-mt-4 mb-6 text-xs text-gray-400 dark:text-gray-500">Booked as: <span x-text="receiptPreview.bookedAs"></span></p>
     </div>
     <div class="px-2">
+      {% include "arabela_admin/partials/gcash_reference_block.html" with var="receiptPreview" %}
       <!-- Same viewer as Payment Verification: natural size, never cropped, with a View Full Image link. -->
       <template x-if="receiptPreview.proofUrl">
         <div>
@@ -1357,10 +1358,6 @@
         <div>
           <p class="text-xs text-gray-500 dark:text-gray-400">Status</p>
           <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="receiptPreview.status"></p>
-        </div>
-        <div x-show="receiptPreview.gcashRef" x-cloak>
-          <p class="text-xs text-gray-500 dark:text-gray-400">GCash Reference No.</p>
-          <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="receiptPreview.gcashRef"></p>
         </div>
       </div>
       {% include "arabela_admin/partials/payment_breakdown.html" with var="receiptPreview" %}

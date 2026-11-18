@@ -27,6 +27,7 @@ from accounts.test_support import agreed
 from gowns import gcash_numbers, receipt_check as rc
 from gowns.models import Gown, GownUnavailability, SiteSettings
 from gowns.sample_images import unique_jpeg
+from gowns.sample_payment import typed_reference
 from reservations.models import ProofRejection, Reservation, ReservationItem
 
 User = get_user_model()
@@ -88,13 +89,22 @@ class ReceiptCheckBase(TestCase):
         quality_patch.start()
         self.addCleanup(quality_patch.stop)
 
+    # ---- what the customer types ----
+    def typed(self, due, **overrides):
+        """The reference number and amount typed from the receipt: by default exactly what the stand-in reader sees (the amount is never less
+        than the deposit that is due, which the server would turn away), or a new number when the reader is down."""
+        seen = self.reader.return_value[0] if self.reader is not None else None          # what the stand-in reader sees right now
+        reference = seen.reference if seen is not None and seen.reference else typed_reference()
+        amount = seen.amount if seen is not None and seen.amount is not None and seen.amount >= due else due
+        return {"gcash_reference": reference, "gcash_amount": str(amount), **overrides}
+
     # ---- the checkout ----
-    def checkout(self, who, gown_indexes=(0,), *, picture=None, event=None):
+    def checkout(self, who, gown_indexes=(0,), *, picture=None, event=None, client=None, **typed):
         event = event or self.event
         items = [{"gown_name": self.gowns[i].name, "gown_slug": self.gowns[i].slug, "size": "Medium",
                   "rental_date": (event - timedelta(days=2)).isoformat(), "return_date": (event + timedelta(days=2)).isoformat()}
                  for i in gown_indexes]
-        client = Client()
+        client = client or Client()             # pass the same client to keep one browser's session (the "look again" memory lives in it)
         client.force_login(self.customers[who])
         agreed(self.customers[who])
         return client.post(reverse("gowns:reservation_submit"), data={
@@ -102,6 +112,7 @@ class ReceiptCheckBase(TestCase):
             "city": "Test City", "postal_code": "1000", "payment_method": "GCash",
             "proof_of_payment": SimpleUploadedFile("proof.jpg", picture or unique_jpeg(), content_type="image/jpeg"),
             "expected_deposit": str(2000 * len(gown_indexes)),
+            **self.typed(2000 * len(gown_indexes), **typed),
         })
 
     def booked(self, response):
@@ -183,6 +194,16 @@ class ARefusedReceiptTests(ReceiptCheckBase):
 
     def test_a_store_payment(self):
         self.assert_refused_with(good_reading(direction="merchant_payment", recipient_number=""), "store or biller")
+
+    def test_a_store_payment_the_second_reading_calls_no_receipt_is_refused_too(self):
+        # the school-tuition receipt paid through GCash GBills (2026-11-18): one reading saw a payment to a biller, the other found no GCash
+        # receipt layout on it. Two different refusals once counted as a disagreement and the booking went through to the staff.
+        self.reads(good_reading(direction="merchant_payment", recipient_number=""), second=good_reading(is_payment_screen=False))
+        data = self.refused(self.checkout("a"))
+        self.assertIn("store or biller", data["error"])
+        self.assertFalse(data["account_blocked"])
+        self.nothing_booked()
+        self.assertEqual(ProofRejection.objects.filter(user=self.customers["a"], source=ProofRejection.Source.UPLOAD).count(), 1)
 
     def test_no_reference_number_is_a_retake_not_a_refusal(self):
         self.reads(good_reading(reference=""))
@@ -299,7 +320,7 @@ class RealReceiptsNeverLostTests(ReceiptCheckBase):
 
     def test_a_first_reading_that_could_not_read_is_rescued_by_the_second(self):
         self.reads(good_reading(reference="", clarity="blurry"), second=good_reading())
-        reservation = self.booked(self.checkout("a"))
+        reservation = self.booked(self.checkout("a", gcash_reference="5046933479702"))          # the customer types the number the receipt really has
         self.assertEqual(reservation.gcash_reference, "5046933479702")
         self.assertIn("first reading could not read", reservation.proof_notes)
 
@@ -315,7 +336,7 @@ class RealReceiptsNeverLostTests(ReceiptCheckBase):
         client.force_login(self.customers["a"])
         agreed(self.customers["a"])
         response = client.post(reverse("gowns:reservation_upload_proof", args=[item.pk]), data={
-            "proof_of_payment": SimpleUploadedFile("late.jpg", unique_jpeg(), content_type="image/jpeg")})
+            "proof_of_payment": SimpleUploadedFile("late.jpg", unique_jpeg(), content_type="image/jpeg"), **self.typed(2000)})
         data = self.refused(response)
         self.assertTrue(data["proof_retake"])
         reservation.refresh_from_db()
@@ -324,13 +345,31 @@ class RealReceiptsNeverLostTests(ReceiptCheckBase):
 
 
 class NeedsAPersonToLookTests(ReceiptCheckBase):
-    def test_too_little_money_still_books_but_is_marked_for_the_staff(self):
+    def test_too_little_money_on_the_receipt_is_asked_about_once_then_marked_for_the_staff(self):
+        # The receipt shows 100 pesos but the customer types the 2,000 the deposit needs: the numbers differ, so the first try is only a question
+        # (nothing booked, nothing counted); on the next try the booking goes through for the staff to look at.
         self.reads(good_reading(amount=Decimal("100")))
-        reservation = self.booked(self.checkout("a"))
+        browser = Client()
+        asked = self.checkout("a", client=browser)
+        self.assertEqual(asked.status_code, 400)
+        self.assertEqual((asked.json()["typed_mismatch"], asked.json()["field"]), (True, "amount"))
+        self.nothing_booked()
+        reservation = self.booked(self.checkout("a", client=browser))
         self.assertEqual(reservation.proof_check, Reservation.ProofCheck.NEEDS_CHECK)
         self.assertIn("₱100", reservation.proof_notes)
         self.assertIn("₱2,000", reservation.proof_notes)
+        self.assertEqual(reservation.proof_match, "amount")
         self.assertIn("Needs check", reservation.status_events.get(label="Payment receipt checked").detail)
+        self.assertEqual(ProofRejection.objects.count(), 0)
+
+    def test_typing_less_than_the_deposit_is_turned_away_at_the_box_and_never_counted(self):
+        self.reads(good_reading(amount=Decimal("100")))
+        response = self.checkout("a", gcash_amount="100")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual((response.json()["typed_invalid"], response.json()["field"]), (True, "amount"))
+        self.assertIn("deposit for this booking is ₱2,000", response.json()["error"])
+        self.reader.assert_not_called()                                    # not even read
+        self.nothing_booked()
         self.assertEqual(ProofRejection.objects.count(), 0)
 
     def test_a_different_name_on_the_right_number_is_marked(self):
@@ -347,7 +386,7 @@ class NeedsAPersonToLookTests(ReceiptCheckBase):
                   "rental_date": (self.event - timedelta(days=2)).isoformat(), "return_date": (self.event + timedelta(days=2)).isoformat()}]
         response = client.post(reverse("gowns:reservation_submit"), data={
             "items": json.dumps(items), "first_name": "Rita", "last_name": "A", "phone": "09171234567", "address": "1 Test St", "city": "C",
-            "postal_code": "1000", "payment_method": "GCash",
+            "postal_code": "1000", "payment_method": "GCash", **self.typed(2000),
             "proof_of_payment": SimpleUploadedFile("proof.jpg", unique_jpeg(), content_type="image/jpeg")})
         reservation = self.booked(response)
         self.assertEqual(reservation.proof_check, Reservation.ProofCheck.NEEDS_CHECK)
@@ -488,12 +527,13 @@ class UploadTheProofLaterTests(ReceiptCheckBase):
             rental_date=self.event - timedelta(days=2), return_date=self.event + timedelta(days=2))
         return reservation, item
 
-    def upload(self, who, item, picture=None):
+    def upload(self, who, item, picture=None, **typed):
         client = Client()
         client.force_login(self.customers[who])
         agreed(self.customers[who])
         return client.post(reverse("gowns:reservation_upload_proof", args=[item.pk]), data={
-            "proof_of_payment": SimpleUploadedFile("late.jpg", picture or unique_jpeg(), content_type="image/jpeg")})
+            "proof_of_payment": SimpleUploadedFile("late.jpg", picture or unique_jpeg(), content_type="image/jpeg"),
+            **self.typed(Reservation.objects.get(pk=item.reservation_id).security_deposit, **typed)})
 
     def test_a_good_receipt_uploaded_later_is_checked_and_stored(self):
         reservation, item = self.a_booking_without_proof()

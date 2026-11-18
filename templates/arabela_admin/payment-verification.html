@@ -112,6 +112,9 @@
     .pv-note { margin-top: .2rem; font-size: .72rem; color: #667085; overflow-wrap: anywhere; }
     .dark .pv-note { color: #98a2b3; }
     .pv-note--bad { color: #d92d20; font-weight: 500; }
+    /* The GCash reference number of the payment: readable size, never squeezed in with the small notes, so the owner can compare it with her GCash. */
+    .pv-refno { margin-top: .3rem; font-size: .8125rem; font-weight: 600; color: #344054; letter-spacing: .03em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .dark .pv-refno { color: #d0d5dd; }
     .dark .pv-note--bad { color: #fda29b; }
     .pv-day { font-size: .875rem; color: #667085; white-space: nowrap; }
     .dark .pv-day { color: #98a2b3; }
@@ -1354,7 +1357,7 @@
               <div class="ar-toolbar">
                 <div class="ar-search">
                   <svg class="ar-search-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                  <input type="text" class="ar-search-input" x-model="search" placeholder="Search by customer, booking number or gown..." aria-label="Search payments">
+                  <input type="text" class="ar-search-input" x-model="search" placeholder="Search by customer, booking number, GCash reference or gown..." aria-label="Search payments">
                 </div>
                 <select x-model="monthFilter" class="ar-search-input pv-select" aria-label="Show one month">
                   <option value="All">All Months</option>
@@ -1403,7 +1406,7 @@
                 {% for r in reservations %}
                 <!-- One booking: a closed line (status circle + name, booking number, the payment, when it was submitted, the actions) and, hidden until it is
                      opened, who it was booked as, the amount breakdown and one short line per gown. -->
-                <div class="ar-booking" data-booking-id="{{ r.id }}" data-owner="{% if r.owner_check_open %}pending{% endif %}" data-status="{{ r.pv_status }}" data-year="{{ r.created_at|date:'Y' }}" data-month="{{ r.created_at|date:'M' }}" data-search="{{ r.display_customer_name|lower }} {{ r.reference_code|lower }}{% for gi in r.items.all %} {{ gi.gown_name|lower }}{% endfor %}" x-show="matches($el)">
+                <div class="ar-booking" data-booking-id="{{ r.id }}" data-owner="{% if r.owner_check_open %}pending{% endif %}" data-status="{{ r.pv_status }}" data-year="{{ r.created_at|date:'Y' }}" data-month="{{ r.created_at|date:'M' }}" data-search="{{ r.display_customer_name|lower }} {{ r.reference_code|lower }}{% for gi in r.items.all %} {{ gi.gown_name|lower }}{% endfor %} {{ r.proof_search_text }}" x-show="matches($el)">
                   <!-- A click on the line opens the booking, except a click on the name (it opens Reservation Records) or on an action. The actions do NOT stop the click. -->
                   <div class="ar-line pv-grid" :class="isBookingOpen({{ r.id }}) ? 'is-open' : ''" @click="if (!$event.target.closest('.pv-acts, a')) { toggleBooking({{ r.id }}) }">
                     <div class="pv-cust">
@@ -1419,7 +1422,8 @@
                     </div>
                     <div class="pv-pay">
                       <div class="pv-amt">{% with bd=r.payment_breakdown %}{% if bd %}{{ bd.headline }}{% else %}&#8369;{{ r.total_amount|floatformat:'-2g' }}{% endif %}{% endwith %}</div>
-                      {% if r.payment_method %}<div class="pv-note">{{ r.payment_method }}{% if r.gcash_reference %} &middot; {{ r.gcash_reference }}{% endif %}</div>{% endif %}
+                      {% if r.payment_method %}<div class="pv-note">{{ r.payment_method }}</div>{% endif %}
+                      {% with ri=r.reference_info %}{% if ri %}<div class="pv-refno" title="GCash reference number">Ref. {{ ri.reference }}</div>{% endif %}{% endwith %}
                       {% if not r.payment_proof_url %}
                       {% if r.receipt_records.all %}
                       <div class="pv-note">Shop receipt attached</div>
@@ -1436,7 +1440,7 @@
                     </div>
                     <div class="pv-acts">
                       <button type="button"
-                        @click="viewingPayment = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"&mdash;"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:'-2g' }}', date: '{{ r.created_at|date:"M j, Y" }}', status: '{{ r.pv_status }}', proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}'), breakdown: JSON.parse('{{ r.payment_breakdown_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', gcashDup: '{{ r.gcash_dups|escapejs }}', proof: JSON.parse('{{ r.proof_window_json|escapejs }}'), ownerUrl: '{% url 'arabela_admin:reservation_owner_check' r.id %}', canAnswer: {{ r.can_answer_check|yesno:'true,false' }} }; openReceiptModal = true"
+                        @click="viewingPayment = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"&mdash;"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:'-2g' }}', date: '{{ r.created_at|date:"M j, Y" }}', status: '{{ r.pv_status }}', proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}'), breakdown: JSON.parse('{{ r.payment_breakdown_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', refInfo: JSON.parse('{{ r.reference_info_json|escapejs }}'), gcashDup: '{{ r.gcash_dups|escapejs }}', proof: JSON.parse('{{ r.proof_window_json|escapejs }}'), ownerUrl: '{% url 'arabela_admin:reservation_owner_check' r.id %}', canAnswer: {{ r.can_answer_check|yesno:'true,false' }} }; openReceiptModal = true"
                         class="ar-ib" title="View payment proof" aria-label="View the payment proof of {{ r.display_customer_name }}, {{ r.reference_code }}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                       </button>
@@ -1522,6 +1526,7 @@
                   <p x-show="viewingPayment.bookedAs" class="-mt-4 mb-6 text-xs text-gray-400 dark:text-gray-500">Booked as: <span x-text="viewingPayment.bookedAs"></span></p>
                 </div>
                 <div class="px-2">
+                  {% include "arabela_admin/partials/gcash_reference_block.html" with var="viewingPayment" %}
                   <!-- Natural size, never cropped, capped at 75% of the viewport height
                        so it never needs to spill past the modal -- but a genuinely small or
                        low-resolution upload (a downscaled screenshot, a distant phone photo)
@@ -1584,10 +1589,6 @@
                       <p class="text-xs text-gray-500 dark:text-gray-400">Status</p>
                       <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewingPayment.status"></p>
                     </div>
-                    <div x-show="viewingPayment.gcashRef" x-cloak>
-                      <p class="text-xs text-gray-500 dark:text-gray-400">GCash Reference No.</p>
-                      <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewingPayment.gcashRef"></p>
-                    </div>
                   </div>
                   {% include "arabela_admin/partials/payment_breakdown.html" with var="viewingPayment" %}
                   <!-- What the receipt check read from the picture, and -- for the owner -- the two buttons after she looked in her GCash. -->
@@ -1598,11 +1599,10 @@
                       <span class="pb-chip pb-chip--warn" x-show="viewingPayment.proof && viewingPayment.proof.check === 'needs_check'">Needs check</span>
                       <span class="pb-chip pb-chip--warn" x-show="viewingPayment.proof && viewingPayment.proof.oldNumber">Old GCash number</span>
                     </div>
-                    <div class="pvk-grid" x-show="viewingPayment.proof && (viewingPayment.proof.amount || viewingPayment.proof.paidAt || viewingPayment.proof.recipient || viewingPayment.gcashRef)">
+                    <div class="pvk-grid" x-show="viewingPayment.proof && (viewingPayment.proof.amount || viewingPayment.proof.paidAt || viewingPayment.proof.recipient)">
                       <div x-show="viewingPayment.proof && viewingPayment.proof.amount"><p class="pvk-l">Amount on the receipt</p><p class="pvk-v" x-text="(viewingPayment.proof || {}).amount"></p></div>
                       <div x-show="viewingPayment.proof && viewingPayment.proof.paidAt"><p class="pvk-l">Paid on</p><p class="pvk-v" x-text="(viewingPayment.proof || {}).paidAt"></p></div>
                       <div x-show="viewingPayment.proof && viewingPayment.proof.recipient"><p class="pvk-l">Sent to</p><p class="pvk-v" x-text="(viewingPayment.proof || {}).recipient"></p></div>
-                      <div x-show="viewingPayment.gcashRef"><p class="pvk-l">Reference No.</p><p class="pvk-v" x-text="viewingPayment.gcashRef"></p></div>
                     </div>
                     <ul class="pvk-notes" x-show="viewingPayment.proof && viewingPayment.proof.notes && viewingPayment.proof.notes.length">
                       <template x-for="(note, noteIndex) in ((viewingPayment.proof && viewingPayment.proof.notes) || [])" :key="noteIndex"><li x-text="note"></li></template>

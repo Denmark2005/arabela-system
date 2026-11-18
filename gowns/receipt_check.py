@@ -98,6 +98,11 @@ QUALITY_SENSITIVE = NEEDS_SHARP_PICTURE | {"received", "merchant", "failed", "no
 # its text do not always pick the same one (a screenshot of the admin page was called "a list of transactions" by one and "no receipt" by the
 # other, and the two answers were taken as a disagreement, so the picture was let through). Two refusals from this group AGREE.
 NOT_A_RECEIPT = frozenset({"not_payment", "list_screen", "not_gcash"})
+# "This is not a payment to the shop", whether the picture is no receipt at all or a real GCash payment to somebody else's biller (a school's tuition
+# through GCash GBills, a store). The reading that looks at the picture called such a receipt "a payment to a store or biller" while the reading that
+# copies its text, finding no Express Send / Sent via GCash / Transaction Details title on it, called it "no payment receipt": two refusals that were
+# taken as a disagreement, so a tuition receipt was let through to the staff (2026-11-18). Two refusals from this group AGREE.
+NOT_FOR_THE_SHOP = NOT_A_RECEIPT | {"merchant"}
 # A GCash receipt always shows the title of one of its layouts somewhere on it. A picture with none of these is not one, however many numbers,
 # amounts and dates it happens to show (an admin page, a bank statement, a chat).
 RECEIPT_SIGNS = ("express send", "sent via gcash", "transaction details", "transfer from", "total amount sent")
@@ -395,7 +400,7 @@ Answer with ONE JSON object and nothing else:
 {"lines": ["first line", "second line", "..."], "picture": "screenshot" or "photo_of_screen", "clarity": "clear" (every line is easy to read) or "blurry" (some text is hard to read) or "unreadable" (the reference number or the recipient cannot be read), "cut_off": true when part of the receipt is missing (no top, no bottom, no reference number or no date), else false}
 """
 
-# The whole check (both readings) must answer in about 20 seconds: the checkout page shows "this can take up to 20 seconds" while it works.
+# The whole check (both readings) must answer in about 20 seconds: the customer waits on a spinner (no words) while it works.
 READER_TIMEOUT_SECONDS = 20
 READER_CUTOFF_SECONDS = 14          # no new attempt starts after this
 SECOND_READ_SKIP_AFTER_SECONDS = 10  # the second reading is skipped when the first one already took this long (the page must answer in time)
@@ -857,16 +862,18 @@ def _reconcile(first, second, second_why, quality, first_reading):
                             f"The reader would have refused this receipt ({_reason(first)}), but a second reading could not be made "
                             f"({second_why}), so it was sent to the staff to look at.", "second_read_unavailable")
     if first.status == STATUS_REJECT:
-        both_say_no_receipt = (second.status == STATUS_REJECT and second.codes and first.codes[0] in NOT_A_RECEIPT
-                               and second.codes[0] in NOT_A_RECEIPT)
-        if second.status == STATUS_REJECT and second.codes and (second.codes[0] == first.codes[0] or both_say_no_receipt):
-            if quality.get("poor") and first.codes[0] in QUALITY_SENSITIVE:
+        both_say_not_for_the_shop = (second.status == STATUS_REJECT and second.codes and first.codes[0] in NOT_FOR_THE_SHOP
+                                     and second.codes[0] in NOT_FOR_THE_SHOP)
+        if second.status == STATUS_REJECT and second.codes and (second.codes[0] == first.codes[0] or both_say_not_for_the_shop):
+            # "A payment to a store or biller" says more than "no receipt": when only one reading found the biller, the customer is told that.
+            agreed = second if (second.codes[0] == "merchant" and first.codes[0] in NOT_A_RECEIPT) else first
+            if quality.get("poor") and agreed.codes[0] in QUALITY_SENSITIVE:
                 return replace(first, status=STATUS_RETAKE, codes=["blurry"], message=MESSAGES["blurry"], notes=[])
-            if first.codes[0] in NEEDS_SHARP_PICTURE and quality.get("label") != "sharp":
+            if agreed.codes[0] in NEEDS_SHARP_PICTURE and quality.get("label") != "sharp":
                 return _needs_check(first, first_reading,
                                     f"Both readings say this receipt is not for the shop ({_reason(first)}), but the picture is not sharp enough to be "
                                     "sure of the digits, so it was sent to the staff to look at.", "picture_not_sharp")
-            return first                                            # confirmed twice on a picture that can be trusted
+            return agreed                                           # confirmed twice on a picture that can be trusted
         if second.status == STATUS_RETAKE and first.codes[0] == "not_payment" and not quality.get("poor"):
             # The first reading found no payment on the picture and the second one could not read anything from it. On a picture that our own
             # measure does not call blurry or tiny, "nothing to read" means there is no receipt in it (a photo of a gown, a wall): refuse it.

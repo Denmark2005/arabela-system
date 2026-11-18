@@ -20,6 +20,7 @@ from reservations.models import Reservation, ReservationItem
 User = get_user_model()
 from gowns.sample_images import unique_jpeg      # a real picture: the proof upload now opens what it is given
 from accounts.test_support import agreed
+from gowns.sample_payment import TYPED_AMOUNT, typed_reference
 NAME = "Scenario Barong"
 
 
@@ -58,7 +59,7 @@ class SameGownOtherSizesTests(TestCase):
         agreed(self.customers[who])
         return client.post(reverse("gowns:reservation_submit"), data={
             "items": json.dumps(items), "first_name": "Scen", "last_name": who.upper(), "phone": "09171234567", "address": "1 Test St",
-            "city": "Test City", "postal_code": "1000", "payment_method": "GCash",
+            "city": "Test City", "postal_code": "1000", "payment_method": "GCash", "gcash_reference": typed_reference(), "gcash_amount": TYPED_AMOUNT,
             "proof_of_payment": SimpleUploadedFile("proof.jpg", unique_jpeg(), content_type="image/jpeg")})
 
     def page(self):

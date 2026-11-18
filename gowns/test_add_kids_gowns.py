@@ -28,6 +28,7 @@ from gowns.test_add_barongs import SAVE
 CATEGORY = Gown.Category.KIDS_GOWN
 from gowns.sample_images import TINY_JPEG as _JPEG      # a real picture: the proof upload now opens what it is given
 from accounts.test_support import agreed
+from gowns.sample_payment import TYPED_AMOUNT, typed_reference
 
 # The owner's list, item by item: colour and price exactly as written.
 LIST = [("Red", 2500), ("Rose Gold", 2500), ("White", 1800), ("Lavender", 2800), ("Pink", 2800), ("Red", 2800), ("Rose", 2200), ("Pink", 2500),
@@ -195,7 +196,7 @@ class AddKidsGownsTests(TestCase):
             with mock.patch("gowns.views._save_proof_file", return_value="https://example.test/p.jpg"):
                 return self.client.post(reverse("gowns:reservation_submit"), data={
                     "items": json.dumps([item]), "first_name": "K", "last_name": "C", "phone": "09171234567", "address": "1 St", "city": "C",
-                    "postal_code": "1000", "payment_method": "GCash", "proof_of_payment": SimpleUploadedFile("p.jpg", _JPEG, content_type="image/jpeg")})
+                    "postal_code": "1000", "payment_method": "GCash", "gcash_reference": typed_reference(), "gcash_amount": TYPED_AMOUNT, "proof_of_payment": SimpleUploadedFile("p.jpg", _JPEG, content_type="image/jpeg")})
         refused = submit()
         self.assertEqual(refused.status_code, 400)
         self.assertIn("doesn't come in Extra Large", refused.json()["error"])

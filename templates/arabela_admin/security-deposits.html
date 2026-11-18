@@ -1202,7 +1202,7 @@
                 {% for r in reservations %}
                 <!-- One booking: a closed line (name and booking number, the gown(s), the deposit, the date it was held, ONE status, the payment button) and, hidden
                      until it is opened, who it was booked as and where each gown is. -->
-                <div class="ar-booking" data-booking-id="{{ r.id }}" data-status="{% if r.returned_on %}Returned{% else %}Held{% endif %}" data-year="{{ r.created_at|date:'Y' }}" data-search="{{ r.display_customer_name|lower }} {{ r.reference_code|lower }}{% for gi in r.items.all %} {{ gi.gown_name|lower }}{% endfor %} {{ r.phone|cut:' ' }}" x-show="matches($el)">
+                <div class="ar-booking" data-booking-id="{{ r.id }}" data-status="{% if r.returned_on %}Returned{% else %}Held{% endif %}" data-year="{{ r.created_at|date:'Y' }}" data-search="{{ r.display_customer_name|lower }} {{ r.reference_code|lower }}{% for gi in r.items.all %} {{ gi.gown_name|lower }}{% endfor %} {{ r.phone|cut:' ' }} {{ r.proof_search_text }}" x-show="matches($el)">
                   <!-- A click on the line opens the booking, except a click on the payment button (it does not stop the click: other scripts on the page may listen for it). -->
                   <div class="ar-line sd-grid" :class="isBookingOpen({{ r.id }}) ? 'is-open' : ''" @click="if (!$event.target.closest('.sd-eye')) { toggleBooking({{ r.id }}) }">
                     <div class="sd-cust">
@@ -1238,7 +1238,7 @@
                       {% endif %}
                     </div>
                     <button type="button"
-                      @click="viewingPayment = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"—"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:'-2g' }}', date: '{{ r.created_at|date:"M j, Y"|escapejs }}', status: '{{ r.status|escapejs }}', proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.deposit_receipts_json|escapejs }}'), breakdown: JSON.parse('{{ r.payment_breakdown_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', gcashDup: '{{ r.gcash_dups|escapejs }}' }; openReceiptModal = true"
+                      @click="viewingPayment = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"—"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:'-2g' }}', date: '{{ r.created_at|date:"M j, Y"|escapejs }}', status: '{{ r.status|escapejs }}', proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.deposit_receipts_json|escapejs }}'), breakdown: JSON.parse('{{ r.payment_breakdown_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', refInfo: JSON.parse('{{ r.reference_info_json|escapejs }}'), gcashDup: '{{ r.gcash_dups|escapejs }}' }; openReceiptModal = true"
                       class="ar-ib sd-eye" title="View payment" aria-label="View payment of {{ r.display_customer_name }}">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                     </button>
@@ -1300,6 +1300,7 @@
                   <p x-show="viewingPayment.bookedAs" class="-mt-4 mb-6 text-xs text-gray-400 dark:text-gray-500">Booked as: <span x-text="viewingPayment.bookedAs"></span></p>
                 </div>
                 <div class="px-2">
+                  {% include "arabela_admin/partials/gcash_reference_block.html" with var="viewingPayment" %}
                   <!-- Natural size, never cropped, capped at 75% of the viewport height
                        so it never needs to spill past the modal -- but a genuinely small or
                        low-resolution upload (a downscaled screenshot, a distant phone photo)
@@ -1361,10 +1362,6 @@
                     <div>
                       <p class="text-xs text-gray-500 dark:text-gray-400">Status</p>
                       <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewingPayment.status"></p>
-                    </div>
-                    <div x-show="viewingPayment.gcashRef" x-cloak>
-                      <p class="text-xs text-gray-500 dark:text-gray-400">GCash Reference No.</p>
-                      <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewingPayment.gcashRef"></p>
                     </div>
                   </div>
                   {% include "arabela_admin/partials/payment_breakdown.html" with var="viewingPayment" %}

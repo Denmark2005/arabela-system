@@ -43,6 +43,7 @@ ON = dict(
 )
 from gowns.sample_images import TINY_JPEG as _TINY_JPEG      # a real picture: the proof upload now opens what it is given
 from accounts.test_support import agreed
+from gowns.sample_payment import TYPED_AMOUNT, typed_reference
 
 
 def _built(kind, **changes):
@@ -414,7 +415,7 @@ class CustomerEmailHookTests(TestCase):
                 "items": json.dumps([{"gown_name": gown.name, "gown_slug": gown.slug, "size": "Medium",
                                       "rental_date": "2027-03-10", "return_date": "2027-03-13"}]),
                 "first_name": "Test", "last_name": "Buyer", "phone": "09171234567", "address": "123 Test St",
-                "city": "Test City", "postal_code": "1000", "payment_method": "GCash",
+                "city": "Test City", "postal_code": "1000", "payment_method": "GCash", "gcash_reference": typed_reference(), "gcash_amount": TYPED_AMOUNT,
                 "proof_of_payment": SimpleUploadedFile("proof.jpg", _TINY_JPEG, content_type="image/jpeg"),
             })
 

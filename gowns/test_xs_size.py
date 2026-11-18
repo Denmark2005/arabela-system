@@ -32,6 +32,7 @@ User = get_user_model()
 FLOW_JS = Path(settings.BASE_DIR) / "static" / "js" / "reservation-flow.js"
 from gowns.sample_images import TINY_JPEG as _TINY_JPEG      # a real picture: the proof upload now opens what it is given
 from accounts.test_support import agreed
+from gowns.sample_payment import TYPED_AMOUNT, typed_reference
 KIDS = Gown.Category.KIDS_GOWN
 
 
@@ -278,7 +279,7 @@ class XsCheckoutTests(TestCase):
                   "rental_date": self.start.isoformat(), "return_date": (self.start + timedelta(days=4)).isoformat()}]
         return self.client.post(reverse("gowns:reservation_submit"), data={
             "items": json.dumps(items), "first_name": "Tiny", "last_name": "Buyer", "phone": "09171234567",
-            "address": "1 Test St", "city": "Test City", "postal_code": "1000", "payment_method": "GCash",
+            "address": "1 Test St", "city": "Test City", "postal_code": "1000", "payment_method": "GCash", "gcash_reference": typed_reference(), "gcash_amount": TYPED_AMOUNT,
             "proof_of_payment": SimpleUploadedFile("proof.jpg", _TINY_JPEG, content_type="image/jpeg"),
         })
 

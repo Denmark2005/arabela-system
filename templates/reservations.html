@@ -477,13 +477,9 @@
                   {% endif %}
                   <span class="flex-1"></span>
                   {% if reservation.can_upload_proof %}
-                  <!-- The trigger is a plain button (not wrapped in the label): a button
-                       inside a label ahead of the input steals the label's click target. -->
-                  <input type="file" id="proof-input-{{ item.id }}" accept="image/jpeg,image/png,image/webp" class="hidden"
-                    onclick="event.stopPropagation();"
-                    onchange="uploadPaymentProof('{% url 'gowns:reservation_upload_proof' item.id %}', this)">
+                  <!-- Opens the "Upload your receipt" window (partials/proof_details_dialog.html): the reference number, the amount and the picture. -->
                   <button type="button" class="inline-flex w-fit shrink-0 items-center gap-1.5 rounded-[9999px] border border-[#dc2626]/30 px-3 py-1.5 text-[0.625rem] font-semibold uppercase tracking-wider text-[#dc2626] transition-colors hover:bg-red-50"
-                    onclick="event.stopPropagation(); document.getElementById('proof-input-{{ item.id }}').click()">
+                    onclick="event.stopPropagation(); startProofUpload('{% url 'gowns:reservation_upload_proof' item.id %}', '{{ reservation.security_deposit|stringformat:"s" }}')">
                     <span class="material-symbols-outlined" style="font-size: 1rem;">upload</span>
                     Upload Proof
                   </button>
@@ -808,27 +804,38 @@
         });
       }
 
-      function uploadPaymentProof(url, input) {
-        if (!input.files || !input.files[0]) return;
-        var pickedFile = input.files[0];
-        // A PDF, a video or anything else that is not a JPG / PNG / WEBP picture is turned away right now (static/js/picked-file.js).
-        var pickedProblem = window.arabelaProofPhotoProblem ? window.arabelaProofPhotoProblem(pickedFile) : '';
-        if (pickedProblem) {
-          input.value = '';
-          arabelaAlert({ title: 'Choose a photo', message: pickedProblem, danger: true });
-          return;
+      // Upload a receipt later: a small window asks for the reference number and the amount typed from the receipt together with the
+      // screenshot (partials/proof_details_dialog.html), because the server compares what was typed with the picture. When the server asks
+      // the customer to look again, the window comes back with the same entries and the sentence under the box that needs fixing.
+      function startProofUpload(url, due) {
+        var kept = {};
+        function ask(errors) {
+          if (typeof window.arabelaAskProofDetails !== 'function') {
+            arabelaAlert({ title: 'Please reload this page', message: 'This page did not finish loading. Please reload it and try again.', danger: true });
+            return;
+          }
+          window.arabelaAskProofDetails({ due: due, values: kept, errors: errors || {} }).then(function (details) {
+            if (!details) return;
+            kept = details;
+            sendProof(url, details, ask);
+          });
         }
-        input.disabled = true; if (window.arabelaReceiptChecking) window.arabelaReceiptChecking.show();
+        ask({});
+      }
+      function sendProof(url, details, askAgain) {
+        if (window.arabelaReceiptChecking) window.arabelaReceiptChecking.show();
         // Copied into memory (and shrunk if it is a large camera photo) before sending: sending the
         // phone's own file is what made uploads fail with "Failed to fetch" on Android phones
         // (static/js/picked-file.js).
-        window.arabelaPreparePhotoForUpload(pickedFile)
+        window.arabelaPreparePhotoForUpload(details.file)
           .then(function (fileToUpload) {
             // After a big camera photo has been shrunk: still over 5 MB means it can't be sent.
             var tooBig = window.arabelaProofPhotoProblem ? window.arabelaProofPhotoProblem(fileToUpload, true) : '';
             if (tooBig) throw new Error(tooBig);
             var formData = new FormData();
             formData.append('proof_of_payment', fileToUpload);
+            formData.append('gcash_reference', details.reference);
+            formData.append('gcash_amount', details.amount);
             // No 'Content-Type' header: the browser must set it so the multipart
             // boundary is included. Setting it by hand breaks the upload.
             return fetch(url, {
@@ -839,12 +846,33 @@
           })
           .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
           .then(function (result) {
-            if (!result.ok || !result.data.success) throw new Error(result.data.error || 'Could not upload your proof of payment.');
+            if (!result.ok || !result.data.success) {
+              var failure = new Error(result.data.error || 'Could not upload your proof of payment.');
+              failure.data = result.data;
+              throw failure;
+            }
             window.location.reload();
           })
           .catch(function (err) {
-            input.disabled = false; if (window.arabelaReceiptChecking) window.arabelaReceiptChecking.hide();
-            input.value = '';
+            if (window.arabelaReceiptChecking) window.arabelaReceiptChecking.hide();
+            var data = err && err.data;
+            if (data && (data.typed_invalid || data.typed_mismatch)) {
+              // A box needs fixing, or the numbers typed differ from the receipt: nothing was saved and nothing is counted against the account.
+              var problems = {};
+              problems[data.field === 'amount' ? 'amount' : 'reference'] = data.error;
+              if (data.field === 'both') problems.amount = 'Please check this one too.';
+              askAgain(problems);
+              return;
+            }
+            if (data && data.signed_out) {
+              var signIn = function () { window.location.href = (data.login_url || '/accounts/login/') + '?next=' + encodeURIComponent(window.location.pathname); };
+              arabelaAlert({ title: 'You were signed out', message: data.error, danger: true }).then(signIn, signIn);
+              return;
+            }
+            if (data && data.typed_required) {
+              arabelaAlert({ title: 'Please reload this page', message: data.error, danger: true });
+              return;
+            }
             var described = window.arabelaDescribeRequestError(err, 'Could not upload your proof of payment.');
             arabelaAlert({ title: 'Upload failed', message: described.message, danger: true });
           });
@@ -854,7 +882,9 @@
   {% load static %}<script defer src="{% static 'js/customer-badges-live.js' %}?v={{ site_asset_version }}" data-live-badges-url="{% url 'gowns:notification_badges' %}" data-user-id="{{ request.user.id }}"></script>
   <script defer src="{% static 'js/picked-file.js' %}?v={{ site_asset_version }}"></script>
   <script defer src="{% static 'js/receipt-checking.js' %}?v={{ site_asset_version }}"></script>
+  <script defer src="{% static 'js/proof-details.js' %}?v={{ site_asset_version }}"></script>
   {% include "partials/reservation_hold_banner.html" %}
 {% include "partials/dialog.html" %}
+{% include "partials/proof_details_dialog.html" %}
 </body>
 </html>

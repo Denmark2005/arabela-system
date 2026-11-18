@@ -194,7 +194,7 @@ class MarkupPromisesTests(PendingBase):
         self.assertEqual(html.count('class="pa-card"'), 1)
         self.assertIn('data-arpg=".ar-booking" data-arpg-noun="bookings" data-arpg-top="off" data-arpg-count="#ar-count"', html)
         self.assertRegex(html, r'<div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg=')
-        self.assertIn('placeholder="Search by customer, reference, cellphone or gown ID..."', html)
+        self.assertIn('placeholder="Search by customer, booking number, GCash reference, cellphone or gown ID..."', html)
         self.assertNotIn("<table", html[html.index('class="pa-card"'):html.index('x-show="openCustomerModal"')])
 
     def test_the_words_that_only_repeated_the_page_title_are_gone(self):

@@ -162,10 +162,14 @@ class ListLineTests(PvBase):
         self.assertNotIn("No proof uploaded", cell)
         self.assertNotIn("Shop receipt attached", cell)
 
-    def test_an_older_booking_with_a_stored_gcash_number_shows_it_after_the_method(self):
+    def test_an_older_booking_with_a_stored_gcash_number_shows_it_on_its_own_line_below_the_method(self):
         reservation, _ = self.make("Old Number", "09170000028", proof="https://files.example/o.jpg", gcash="1234567890123")
         _, html = self.page()
-        self.assertIn('<div class="pv-note">GCash &middot; 1234567890123</div>', self.pay_cell(html, reservation))
+        cell = self.pay_cell(html, reservation)
+        self.assertIn('<div class="pv-note">GCash</div>', cell)
+        self.assertIn('<div class="pv-refno" title="GCash reference number">Ref. 1234 567 890123</div>', cell)
+        self.assertNotIn("GCash &middot;", cell)                      # no longer squeezed into the small note
+        self.assertLess(cell.index('class="pv-note">GCash<'), cell.index('class="pv-refno"'))
 
     def test_no_proof_and_a_shop_receipt_say_so_under_the_same_conditions_as_before(self):
         none, _ = self.make("No Proof", "09170000029", proof="")
@@ -321,8 +325,11 @@ class ActionsTests(PvBase):
         _, html = self.page()
         window = html[html.index('x-show="openReceiptModal"'):]
         self.assertIn('@click.outside="openReceiptModal = false"', window)
-        for words in ("GCash Payment Proof", "GCash Reference No.", "Date Submitted", "Amount breakdown", "Check the receipt before approving"):
+        # (the reference number moved out of the small grid into the shared card at the top of the window: test_reference_number.py)
+        for words in ("GCash Payment Proof", "GCash reference number", "data-gcash-reference-block", "Date Submitted", "Amount breakdown",
+                      "Check the receipt before approving"):
             self.assertIn(words, html)
+        self.assertNotIn("GCash Reference No.", html)
         self.assertEqual(html.count("Amount breakdown"), 1)
 
     def test_the_eye_and_the_name_do_not_open_the_booking_but_the_rest_of_the_line_does(self):
@@ -404,7 +411,7 @@ class FiltersAndHooksTests(PvBase):
     def test_the_toolbar_has_the_same_filters(self):
         self.make("Toolbar", "09170000082")
         _, html = self.page()
-        self.assertIn('placeholder="Search by customer, booking number or gown..."', html)
+        self.assertIn('placeholder="Search by customer, booking number, GCash reference or gown..."', html)
         self.assertIn('x-model="search"', html)
         self.assertIn('x-model="monthFilter"', html)
         self.assertIn('x-model="statusFilter"', html)

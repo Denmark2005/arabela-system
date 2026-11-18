@@ -3,6 +3,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import IntegrityError, models, transaction
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.formats import date_format
 
@@ -12,6 +13,12 @@ from accounts.roles import staff_display_name
 def _peso_text(amount):
     """₱5,500 (and ₱5,500.50 when there are centavos) -- how the admin's payment screens write an amount."""
     return f"₱{amount:,.0f}" if amount == int(amount) else f"₱{amount:,.2f}"
+
+
+def _group_reference(digits):
+    """5046933479702 -> '5046 933 479702', the way GCash prints a reference (anything that is not 13 digits is shown as it is)."""
+    digits = digits or ""
+    return f"{digits[:4]} {digits[4:7]} {digits[7:]}" if len(digits) == 13 and digits.isdigit() else digits
 
 
 class Reservation(models.Model):
@@ -115,10 +122,23 @@ class Reservation(models.Model):
     # Whose GCash the customer paid: 'owner' (her own account: staff cannot approve until she confirms it), 'manager' (the shop's: staff approve as
     # usual) or '' (a walk-in, or a booking made before the shop had two accounts: never held back). Worked out from the receipt's recipient.
     proof_account = models.CharField(max_length=10, blank=True, default='', db_default='')
+    # What the customer TYPED from their own GCash app (gowns/typed_payment.py): the 13-digit reference and the amount they paid, and how those
+    # compared with what the receipt reader found in the picture. proof_match: '' = nothing was typed (a walk-in, or a booking made before the
+    # boxes existed), 'match', or 'reference' / 'amount' / 'both' = the typed value differed from the receipt even after the customer looked
+    # again (the staff and the owner see it). db_default for the same reason as every column above.
+    proof_typed_reference = models.CharField(max_length=20, blank=True, default='', db_default='', db_index=True)
+    proof_typed_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    proof_match = models.CharField(max_length=12, blank=True, default='', db_default='')
 
     class ProofCheck(models.TextChoices):
         PASS = 'pass', 'Pre-checked'
         NEEDS_CHECK = 'needs_check', 'Needs check'
+
+    class ProofMatch(models.TextChoices):
+        MATCH = 'match', 'Typed numbers match the receipt'
+        REFERENCE = 'reference', 'Typed reference differs from the receipt'
+        AMOUNT = 'amount', 'Typed amount differs from the receipt'
+        BOTH = 'both', 'Typed reference and amount differ from the receipt'
 
     class ProofAccount(models.TextChoices):
         OWNER = 'owner', 'Owner’s GCash'
@@ -134,13 +154,55 @@ class Reservation(models.Model):
         """Reference codes of OTHER bookings that carry the same GCash reference number, as a
         comma-separated string ('' when there are none or no number was given). One cheap
         indexed query, and only for the few bookings that have a number."""
-        if not self.gcash_reference:
+        numbers = {number for number in (self.gcash_reference, self.proof_typed_reference) if number}
+        if not numbers:
             return ''
         others = (
-            Reservation.objects.filter(gcash_reference=self.gcash_reference)
+            Reservation.objects.filter(Q(gcash_reference__in=numbers) | Q(proof_typed_reference__in=numbers))
             .exclude(pk=self.pk).order_by('created_at').values_list('reference_code', flat=True)
         )
         return ', '.join(others)
+
+    @property
+    def reference_info(self):
+        """What the proof windows show about this payment's GCash reference number, or None when none is known (a walk-in, or a booking made
+        before the receipt check). The number shown is the one the customer typed (the receipt's own, when nothing was typed); when the typed
+        value and the receipt differ, both are given so the staff and the owner can see what was typed and what the picture reads."""
+        typed, read = self.proof_typed_reference, self.gcash_reference
+        shown = typed or read
+        if not shown:
+            return None
+        differs = self.proof_match in (self.ProofMatch.REFERENCE, self.ProofMatch.BOTH)
+        amount_differs = self.proof_match in (self.ProofMatch.AMOUNT, self.ProofMatch.BOTH)
+        return {
+            'reference': _group_reference(shown),
+            'digits': shown,                                    # what the Copy button copies: the plain number the GCash app searches for
+            'typed': bool(typed),
+            'match': self.proof_match,
+            'referenceDiffers': differs,
+            'amountDiffers': amount_differs,
+            'receiptReference': _group_reference(read) if differs and read else '',
+            'typedAmount': _peso_text(self.proof_typed_amount) if self.proof_typed_amount is not None else '',
+            'receiptAmount': _peso_text(self.proof_amount) if amount_differs and self.proof_amount is not None else '',
+        }
+
+    @property
+    def reference_info_json(self):
+        """reference_info as JSON text for a page's script ('null' when there is none); escape it with escapejs."""
+        return json.dumps(self.reference_info)
+
+    @property
+    def proof_search_text(self):
+        """The words the admin lists' search boxes match for this booking's payment: every reference number it carries, as plain digits AND
+        grouped the way GCash prints it, so the owner can paste either from her GCash app."""
+        words = []
+        for number in (self.proof_typed_reference, self.gcash_reference):
+            if number and number not in words:
+                words.append(number)
+                grouped = _group_reference(number)
+                if grouped != number:
+                    words.append(grouped)
+        return ' '.join(words)
 
     @property
     def deposit_returned_on(self):

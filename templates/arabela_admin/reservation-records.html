@@ -326,6 +326,10 @@
       .dark .rrd-lines > .is-total { border-top-color: #1f2a3d; }
       .rrd-lines > .is-total dt { color: #101828; font-weight: 600; }
       .rrd-lines > .is-total dd { font-weight: 600; }
+      /* The GCash reference number of the payment, first line of the breakdown: readable size, the same number the owner searches for. */
+      .rrd-lines > .rrd-refrow { align-items: baseline; padding-bottom: .75rem; margin-bottom: .25rem; border-bottom: 1px solid #e4e7ec; }
+      .dark .rrd-lines > .rrd-refrow { border-bottom-color: #1f2a3d; }
+      .rrd-lines .rrd-refno { font-size: 1.0625rem; font-weight: 700; letter-spacing: .05em; text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; word-break: break-all; }
       .dark .rrd-lines > .is-total dt { color: rgba(255, 255, 255, .92); }
       .rrd-statusrow { display: flex; flex-wrap: wrap; align-items: center; gap: .625rem 1.75rem; margin-top: .875rem; font-size: .9375rem; color: #667085; }
       .dark .rrd-statusrow { color: #98a2b3; }
@@ -2732,6 +2736,7 @@
                 <div class="rrd-collapse" :class="payOpen ? 'is-open' : ''"><div class="rrd-collapse-in">
                 <div class="rrd-accb">
                   <dl class="rrd-lines">
+                    <div class="rrd-refrow" x-show="viewing.gcashReference"><dt>GCash reference</dt><dd class="rrd-refno" x-text="viewing.gcashReference" title="The GCash reference number of the payment"></dd></div>
                     <div><dt>Rental fee</dt><dd x-text="viewing.subtotal"></dd></div>
                     <div><dt>Security deposit</dt><dd x-text="viewing.deposit"></dd></div>
                     <div class="is-total"><dt>Total</dt><dd x-text="viewing.total"></dd></div>

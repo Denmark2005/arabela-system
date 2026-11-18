@@ -22,6 +22,7 @@ from accounts.tests import _ensure_google_social_app
 from gowns.models import Gown
 from gowns.sample_images import TINY_JPEG
 from reservations.models import Reservation
+from gowns.sample_payment import TYPED_AMOUNT, typed_reference
 
 User = get_user_model()
 ROOT = Path(settings.BASE_DIR)
@@ -143,7 +144,7 @@ class ServerChecksTests(TestCase):
         with patch("gowns.views._save_proof_file", return_value="https://example.test/proof.jpg"):
             return self.client.post(reverse("gowns:reservation_submit"), data={
                 "items": json.dumps(items), "first_name": "Test", "last_name": "Buyer", "phone": "09171234567", "address": "123 Test St",
-                "city": "Test City", "postal_code": "1000", "payment_method": "GCash",
+                "city": "Test City", "postal_code": "1000", "payment_method": "GCash", "gcash_reference": typed_reference(), "gcash_amount": TYPED_AMOUNT,
                 "proof_of_payment": SimpleUploadedFile("proof.jpg", TINY_JPEG, content_type="image/jpeg")})
 
     def test_the_countdown_does_not_start_before_the_terms_are_agreed(self):

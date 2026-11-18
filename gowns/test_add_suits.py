@@ -27,6 +27,7 @@ from gowns.test_add_barongs import SAVE
 CATEGORY = Gown.Category.SUIT
 from gowns.sample_images import TINY_JPEG as _JPEG      # a real picture: the proof upload now opens what it is given
 from accounts.test_support import agreed
+from gowns.sample_payment import TYPED_AMOUNT, typed_reference
 
 
 def make_photos(folder):
@@ -203,12 +204,12 @@ class AddSuitsTests(TestCase):
         with mock.patch("gowns.views._save_proof_file", return_value="https://example.test/p.jpg"):
             response = self.client.post(reverse("gowns:reservation_submit"), data={
                 "items": json.dumps([item]), "first_name": "S", "last_name": "C", "phone": "09171234567", "address": "1 St", "city": "C",
-                "postal_code": "1000", "payment_method": "GCash", "proof_of_payment": SimpleUploadedFile("p.jpg", _JPEG, content_type="image/jpeg")})
+                "postal_code": "1000", "payment_method": "GCash", "gcash_reference": typed_reference(), "gcash_amount": TYPED_AMOUNT, "proof_of_payment": SimpleUploadedFile("p.jpg", _JPEG, content_type="image/jpeg")})
         self.assertEqual(response.status_code, 400)
         self.assertIn("doesn't come in Large", response.json()["error"])
         item["size"] = "M"
         with mock.patch("gowns.views._save_proof_file", return_value="https://example.test/p.jpg"):
             ok = self.client.post(reverse("gowns:reservation_submit"), data={
                 "items": json.dumps([item]), "first_name": "S", "last_name": "C", "phone": "09171234567", "address": "1 St", "city": "C",
-                "postal_code": "1000", "payment_method": "GCash", "proof_of_payment": SimpleUploadedFile("p.jpg", _JPEG, content_type="image/jpeg")})
+                "postal_code": "1000", "payment_method": "GCash", "gcash_reference": typed_reference(), "gcash_amount": TYPED_AMOUNT, "proof_of_payment": SimpleUploadedFile("p.jpg", _JPEG, content_type="image/jpeg")})
         self.assertEqual(ok.status_code, 200, ok.content)

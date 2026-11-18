@@ -1,0 +1,191 @@
+{% comment %}
+   "Upload your receipt" window for the booking pages (My Reservations and a booking's own page): the customer types the GCash reference number
+   and the amount from their receipt and chooses the screenshot, all in one place, because the server compares what was typed with the picture
+   (gowns/typed_payment.py). Self-contained (markup + CSS + JS, own .ara-pd-* names, no Tailwind), like partials/dialog.html, so pages that do not
+   extend base.html can include it with one line. Needs static/js/proof-details.js and static/js/picked-file.js on the page.
+
+   API:
+     arabelaAskProofDetails({ due, values: {reference, amount, file}, errors: {reference, amount, file} }) -> Promise of
+       { reference, amount, file } when the customer presses Upload with everything filled in, or null when they cancel.
+     `values` re-fills the boxes (and keeps the chosen picture) after the server asked them to look again; `errors` shows a sentence under a box.
+
+   NOTE: must be {% comment %}, not {# #} -- Django's hash comment is single-line only.
+{% endcomment %}
+<style>
+  .ara-pd { position: fixed; inset: 0; z-index: 120; display: flex; align-items: center; justify-content: center; padding: 1.25rem; visibility: hidden; pointer-events: none; overflow-y: auto; }
+  .ara-pd.is-open { visibility: visible; pointer-events: auto; }
+  .ara-pd__backdrop { position: fixed; inset: 0; background: rgba(27, 28, 28, 0.38); opacity: 0; transition: opacity 0.24s ease; }
+  .ara-pd.is-open .ara-pd__backdrop { opacity: 1; }
+  .ara-pd__card {
+    position: relative; width: 100%; max-width: 440px; margin: auto; background: #ffffff; border-radius: 8px; padding: 1.9rem 1.75rem 1.6rem; text-align: left;
+    box-shadow: 0 18px 48px -16px rgba(27, 28, 28, 0.22); font-family: 'Poppins', sans-serif;
+    opacity: 0; transform: translateY(10px); transition: opacity 0.22s ease, transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .ara-pd.is-open .ara-pd__card { opacity: 1; transform: none; }
+  .ara-pd__title { font-size: 1.0625rem; font-weight: 600; color: #1b1c1c; letter-spacing: -0.015em; line-height: 1.35; margin: 0 0 0.5rem; }
+  .ara-pd__msg { font-size: 0.82rem; line-height: 1.65; color: #615e57; margin: 0 0 1.25rem; }
+  .ara-pd__field { position: relative; margin-bottom: 0.9rem; }
+  .ara-pd__field input {
+    width: 100%; height: 3.5rem; padding: 1.35rem 1rem 0.45rem; border: 1px solid rgba(11, 12, 12, 0.16); border-radius: 8px; background: #ffffff;
+    font-size: 0.875rem; font-family: inherit; color: #1b1c1c; outline: none; transition: border-color 0.2s ease, box-shadow 0.2s ease; box-sizing: border-box;
+  }
+  .ara-pd__field input:focus { border-color: #0b0c0c; box-shadow: 0 0 0 4px rgba(11, 12, 12, 0.07); }
+  .ara-pd__field label {
+    position: absolute; left: 1rem; top: 1.2rem; transform-origin: left top; font-size: 0.875rem; line-height: 1.25; color: #615e57; pointer-events: none;
+    transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), color 0.18s ease;
+  }
+  .ara-pd__field input:focus + label, .ara-pd__field input:not(:placeholder-shown) + label { transform: translateY(-0.7rem) scale(0.78); }
+  .ara-pd__field input:focus + label { color: #0b0c0c; }
+  .ara-pd__field.is-bad input { border-color: #ba1a1a; }
+  .ara-pd__field.is-bad label { color: #ba1a1a; }
+  .ara-pd__err { margin: 0.5rem 0 0; font-size: 0.8125rem; line-height: 1.4; color: #ba1a1a; }
+  .ara-pd__err:empty { display: none; }
+  .ara-pd__hint { margin: 0 0 1.1rem; font-size: 0.75rem; line-height: 1.6; color: #615e57; }
+  .ara-pd__file { margin-bottom: 0.4rem; }
+  .ara-pd__file-row { display: flex; align-items: center; gap: 0.85rem; min-width: 0; }
+  .ara-pd__choose {
+    flex: none; cursor: pointer; font-family: inherit; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #1b1c1c;
+    background: #ffffff; border: 1px solid rgba(11, 12, 12, 0.2); border-radius: 6px; padding: 0.7rem 0.95rem; transition: border-color 0.2s ease, background 0.2s ease;
+  }
+  .ara-pd__choose:hover { border-color: #0b0c0c; background: #f6f3f2; }
+  .ara-pd__name { min-width: 0; font-size: 0.8rem; color: #615e57; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ara-pd__file.is-bad .ara-pd__choose { border-color: #ba1a1a; }
+  .ara-pd__actions { display: flex; justify-content: flex-end; align-items: center; gap: 1.25rem; margin-top: 1.6rem; }
+  .ara-pd__btn { cursor: pointer; font-family: inherit; border: 0; background: none; padding: 0; }
+  .ara-pd__cancel { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: #615e57; text-decoration: underline; text-underline-offset: 6px; text-decoration-color: rgba(11, 12, 12, 0.2); }
+  .ara-pd__cancel:hover { color: #0b0c0c; }
+  .ara-pd__go { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: #ffffff; background: #0b0c0c; border-radius: 6px; padding: 0.85rem 1.6rem; transition: background 0.2s ease; }
+  .ara-pd__go:hover { background: #3b3a37; }
+  .ara-pd__btn:focus-visible { outline: 2px solid #0b0c0c; outline-offset: 2px; }          /* the boxes already show their focus with a darker border and a soft ring */
+  @media (max-width: 480px) { .ara-pd__card { padding: 1.6rem 1.25rem 1.3rem; } }
+  @media (prefers-reduced-motion: reduce) { .ara-pd__backdrop, .ara-pd__card, .ara-pd__field label { transition: none; } }
+</style>
+
+<div class="ara-pd" id="ara-pd" aria-hidden="true">
+  <div class="ara-pd__backdrop" id="ara-pd-backdrop"></div>
+  <form class="ara-pd__card" id="ara-pd-form" role="dialog" aria-modal="true" aria-labelledby="ara-pd-title" novalidate>
+    <h3 class="ara-pd__title" id="ara-pd-title">Upload your receipt</h3>
+    <p class="ara-pd__msg">Type these from your GCash receipt. We check them against your screenshot.</p>
+    <div class="ara-pd__field" id="ara-pd-reference-wrap">
+      <input id="ara-pd-reference" placeholder=" " type="text" inputmode="numeric" autocomplete="off">
+      <label for="ara-pd-reference">GCash Reference No.</label>
+      <p class="ara-pd__err" id="ara-pd-reference-err" role="alert"></p>
+    </div>
+    <div class="ara-pd__field" id="ara-pd-amount-wrap">
+      <input id="ara-pd-amount" placeholder=" " type="text" inputmode="decimal" autocomplete="off">
+      <label for="ara-pd-amount">Amount Paid (&#8369;)</label>
+      <p class="ara-pd__err" id="ara-pd-amount-err" role="alert"></p>
+    </div>
+    <p class="ara-pd__hint">The reference number is the 13 digits shown as &ldquo;Ref No.&rdquo; on your receipt, like 1234 567 890123.</p>
+    <div class="ara-pd__file" id="ara-pd-file-wrap">
+      <div class="ara-pd__file-row">
+        <button type="button" class="ara-pd__btn ara-pd__choose" id="ara-pd-choose">Choose receipt picture</button>
+        <span class="ara-pd__name" id="ara-pd-name">No picture chosen</span>
+      </div>
+      <input type="file" id="ara-pd-file" accept="image/jpeg,image/png,image/webp" hidden>
+      <p class="ara-pd__err" id="ara-pd-file-err" role="alert"></p>
+    </div>
+    <div class="ara-pd__actions">
+      <button type="button" class="ara-pd__btn ara-pd__cancel" id="ara-pd-cancel">Cancel</button>
+      <button type="submit" class="ara-pd__btn ara-pd__go" id="ara-pd-go">Upload</button>
+    </div>
+  </form>
+</div>
+
+<script>
+(function () {
+  var root = document.getElementById('ara-pd');
+  if (!root) return;
+  var form = document.getElementById('ara-pd-form');
+  var referenceBox = document.getElementById('ara-pd-reference');
+  var amountBox = document.getElementById('ara-pd-amount');
+  var fileBox = document.getElementById('ara-pd-file');
+  var nameEl = document.getElementById('ara-pd-name');
+  var chosenFile = null;
+  var dueNow = 0;
+  var settle = null;
+  var returnFocusTo = null;
+
+  function details() { return window.arabelaProofDetails; }
+
+  function show(wrapId, errId, message) {
+    var wrap = document.getElementById(wrapId);
+    var err = document.getElementById(errId);
+    if (err) err.textContent = message || '';
+    if (wrap) wrap.classList[message ? 'add' : 'remove']('is-bad');
+  }
+  function clearAll() {
+    show('ara-pd-reference-wrap', 'ara-pd-reference-err', '');
+    show('ara-pd-amount-wrap', 'ara-pd-amount-err', '');
+    show('ara-pd-file-wrap', 'ara-pd-file-err', '');
+  }
+  function showName() { nameEl.textContent = chosenFile ? chosenFile.name : 'No picture chosen'; }
+
+  function close(result) {
+    root.classList.remove('is-open');
+    root.setAttribute('aria-hidden', 'true');
+    document.removeEventListener('keydown', onKey, true);
+    var done = settle; settle = null;
+    if (returnFocusTo && returnFocusTo.focus) { try { returnFocusTo.focus(); } catch (e) {} }
+    if (done) done(result);
+  }
+  function onKey(event) { if (event.key === 'Escape') { event.stopPropagation(); close(null); } }
+
+  referenceBox.addEventListener('input', function () { show('ara-pd-reference-wrap', 'ara-pd-reference-err', ''); });
+  amountBox.addEventListener('input', function () { show('ara-pd-amount-wrap', 'ara-pd-amount-err', ''); });
+
+  document.getElementById('ara-pd-choose').addEventListener('click', function () { fileBox.click(); });
+  fileBox.addEventListener('change', function () {
+    var picked = fileBox.files && fileBox.files[0];
+    if (!picked) return;
+    // Anything that is not a JPG / PNG / WEBP picture is turned away right now, with what to do instead (static/js/picked-file.js).
+    var problem = window.arabelaProofPhotoProblem ? window.arabelaProofPhotoProblem(picked) : '';
+    if (problem) { fileBox.value = ''; show('ara-pd-file-wrap', 'ara-pd-file-err', problem); return; }
+    chosenFile = picked;
+    show('ara-pd-file-wrap', 'ara-pd-file-err', '');
+    showName();
+  });
+
+  document.getElementById('ara-pd-cancel').addEventListener('click', function () { close(null); });
+  document.getElementById('ara-pd-backdrop').addEventListener('click', function () { close(null); });
+
+  form.addEventListener('submit', function (event) {
+    event.preventDefault();
+    clearAll();
+    var d = details();
+    var bad = null;
+    var referenceMessage = d ? d.referenceProblem(referenceBox.value) : '';
+    var amountMessage = d ? d.amountProblem(amountBox.value, dueNow) : '';
+    if (referenceMessage) { show('ara-pd-reference-wrap', 'ara-pd-reference-err', referenceMessage); bad = bad || referenceBox; }
+    if (amountMessage) { show('ara-pd-amount-wrap', 'ara-pd-amount-err', amountMessage); bad = bad || amountBox; }
+    if (!chosenFile) { show('ara-pd-file-wrap', 'ara-pd-file-err', 'Please choose the screenshot of your receipt.'); bad = bad || document.getElementById('ara-pd-choose'); }
+    if (bad) { bad.focus(); return; }
+    close({ reference: d ? d.cleanReference(referenceBox.value) : referenceBox.value.trim(), amount: amountBox.value.trim(), file: chosenFile });
+  });
+
+  window.arabelaAskProofDetails = function (opts) {
+    opts = opts || {};
+    var values = opts.values || {};
+    var errors = opts.errors || {};
+    if (settle) close(null);
+    dueNow = Number(opts.due) || 0;
+    if (details()) details().attach(referenceBox);          // the page's scripts are deferred: attached when the window opens (attaching twice is harmless)
+    returnFocusTo = document.activeElement;
+    clearAll();
+    referenceBox.value = values.reference ? (details() ? details().formatReference(values.reference) : values.reference) : '';
+    amountBox.value = values.amount || '';
+    chosenFile = values.file || null;
+    fileBox.value = '';
+    showName();
+    if (errors.reference) show('ara-pd-reference-wrap', 'ara-pd-reference-err', errors.reference);
+    if (errors.amount) show('ara-pd-amount-wrap', 'ara-pd-amount-err', errors.amount);
+    if (errors.file) show('ara-pd-file-wrap', 'ara-pd-file-err', errors.file);
+    root.classList.add('is-open');
+    root.setAttribute('aria-hidden', 'false');
+    document.addEventListener('keydown', onKey, true);
+    var first = errors.amount && !errors.reference ? amountBox : referenceBox;
+    window.setTimeout(function () { try { first.focus(); } catch (e) {} }, 60);
+    return new Promise(function (resolve) { settle = resolve; });
+  };
+})();
+</script>

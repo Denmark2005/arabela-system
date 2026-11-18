@@ -28,6 +28,7 @@ reservations_migration = importlib.import_module("reservations.migrations.0023_r
 
 from gowns.sample_images import TINY_JPEG as _TINY_JPEG      # a real picture: the proof upload now opens what it is given
 from accounts.test_support import agreed
+from gowns.sample_payment import TYPED_AMOUNT, typed_reference
 
 
 def make_gown(gown_id, name, category, slug, color="Blue", code="BU"):
@@ -347,7 +348,7 @@ class BagFilledBeforeTheRenameTests(TestCase):
     def submit(self, item):
         return self.client.post(reverse("gowns:reservation_submit"), data={
             "items": json.dumps([item]), "first_name": "Test", "last_name": "Buyer", "phone": "09171234567",
-            "address": "123 Test St", "city": "Test City", "postal_code": "1000", "payment_method": "GCash",
+            "address": "123 Test St", "city": "Test City", "postal_code": "1000", "payment_method": "GCash", "gcash_reference": typed_reference(), "gcash_amount": TYPED_AMOUNT,
             "proof_of_payment": SimpleUploadedFile("proof.jpg", _TINY_JPEG, content_type="image/jpeg"),
         })
 

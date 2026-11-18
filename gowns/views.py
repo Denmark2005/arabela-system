@@ -1,3 +1,4 @@
+import functools
 import hashlib
 import json
 import re
@@ -13,6 +14,7 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.db.models import Q
 from django.http import Http404, JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -43,7 +45,7 @@ from gowns.context_processors import (
 from gowns.models import (
     COOLDOWN_DAYS, EXTRA_SMALL_CATEGORY, SIZE_CODES, Gown, GownUnavailability, group_gowns_by_name, pick_representative_gown, size_codes_of,
 )
-from gowns import availability, deposit, proof_image, receipt_check, reservation_limits
+from gowns import availability, deposit, proof_image, receipt_check, reservation_limits, typed_payment
 from gowns.photos import GRID_WIDTH, PAGE_WIDTH, sized
 from gowns.size_guides import size_guide_for
 from reservations import reminders, timeline
@@ -1032,16 +1034,99 @@ def _check_proof_or_refuse(request, clean_proof, *, expected_amount, started_at,
     if not verdict.rejected:
         return verdict, None
     code = verdict.codes[0] if verdict.codes else "rejected"
+    return None, _refused_proof_response(request, code, verdict.message, reservation)
+
+
+def _refused_proof_response(request, code, message, reservation=None):
+    """The answer for a receipt that is refused: it is counted against the account (a paused account is told so) and the customer is told why."""
     paused = record_rejected_proof(
         request.user, source=ProofRejection.Source.UPLOAD, reason=receipt_check.reject_reason_text(code), reservation=reservation,
     )
-    message = verdict.message
     if paused:
         message += (
             " Your account is now paused because several of your payment proofs were rejected. "
             "Please message the shop on Facebook so the owner can review it."
         )
-    return None, JsonResponse({"success": False, "proof_rejected": True, "account_blocked": bool(paused), "error": message}, status=400)
+    return JsonResponse({"success": False, "proof_rejected": True, "account_blocked": bool(paused), "error": message}, status=400)
+
+
+# ---- what the customer types about the payment (gowns/typed_payment.py) -----------------------------------------------------------------
+def _signed_in_or_json(view):
+    """login_required for the buttons that talk to the server in the background (Confirm Rental, uploading a receipt). A signed-out visitor is
+    answered with a short JSON message the page can show; the sign-in page's HTML, which login_required sends, cannot be read by the page and
+    used to look like "Server busy" (2026-11-18)."""
+    @functools.wraps(view)
+    def wrapper(request, *args, **kwargs):
+        if request.user.is_authenticated:
+            return view(request, *args, **kwargs)
+        return JsonResponse({
+            "success": False, "signed_out": True, "login_url": reverse("accounts:login"),
+            "error": "You were signed out, so nothing was booked. Please sign in again and try once more.",
+        }, status=401)
+    return wrapper
+
+
+def _typed_details_or_refuse(request, *, due):
+    """The reference number and amount the customer typed, checked for FORMAT only (no database): (reference digits, amount, None) when both
+    are fine, else (None, None, the answer that tells the customer which box to fix). Fixing a box is never counted against the account."""
+    if "gcash_reference" not in request.POST and "gcash_amount" not in request.POST:
+        # A checkout page that was opened before the boxes existed (the site was updated while it was open): it cannot send them.
+        return None, None, JsonResponse({
+            "success": False, "typed_required": True,
+            "error": "This page was updated while it was open. Please reload it, then type the reference number and the amount "
+                     "from your GCash receipt.",
+        }, status=400)
+    raw_reference = request.POST.get("gcash_reference") or ""
+    raw_amount = request.POST.get("gcash_amount") or ""
+    problem = typed_payment.reference_problem(raw_reference)
+    if problem:
+        return None, None, JsonResponse({"success": False, "typed_invalid": True, "field": "reference", "error": problem}, status=400)
+    problem = typed_payment.amount_problem(raw_amount, due)
+    if problem:
+        return None, None, JsonResponse({"success": False, "typed_invalid": True, "field": "amount", "error": problem}, status=400)
+    return typed_payment.clean_reference(raw_reference), typed_payment.parse_amount(raw_amount), None
+
+
+def _typed_reference_used_or_refuse(request, reference, reservation=None):
+    """A reference number that is already on another booking (as the number typed there or the one read from its receipt) is refused BEFORE the
+    picture is read: nothing is booked, and no time or reader quota is spent. None when it is free."""
+    others = Reservation.objects.filter(Q(gcash_reference=reference) | Q(proof_typed_reference=reference))
+    if reservation is not None:
+        others = others.exclude(pk=reservation.pk)
+    if not others.exists():
+        return None
+    return _refused_proof_response(request, "reference_used", receipt_check.MESSAGES["reference_used"], reservation)
+
+
+def _typed_attempt_key(request, reservation=None):
+    """Which checkout (or which later upload) a 'the typed numbers differ' try belongs to: a new checkout hold starts again from zero."""
+    if reservation is not None:
+        return f"upload:{reservation.pk}"
+    deadline = get_reservation_hold_deadline(request)
+    return f"checkout:{deadline.isoformat() if deadline else 'none'}"
+
+
+def _compare_typed_or_ask_again(request, verdict, reference, amount, *, reservation=None):
+    """Compares the typed numbers with what the reader found. Returns (columns to save, None) to go on, or (None, the answer that asks the
+    customer to look again). The FIRST difference is only a question (nothing is booked, nothing is counted against the account); if the
+    numbers still differ on the next try the booking goes through as "Needs check", with the difference written for the staff and the owner."""
+    key = _typed_attempt_key(request, reservation)
+    kind = typed_payment.compare(reference, amount, verdict)
+    columns = {"proof_typed_reference": reference, "proof_typed_amount": amount, "proof_match": kind}
+    if kind == typed_payment.MATCH:
+        typed_payment.forget(request.session, key)
+        return columns, None
+    if typed_payment.tries(request.session, key) == 0:
+        typed_payment.remember_difference(request.session, key)
+        return None, JsonResponse({
+            "success": False, "typed_mismatch": True, "field": typed_payment.mismatch_field(kind),
+            "error": typed_payment.mismatch_message(kind),
+        }, status=400)
+    typed_payment.forget(request.session, key)
+    verdict.notes.insert(0, typed_payment.mismatch_note(kind, reference, amount, verdict))
+    verdict.codes.append("typed_differs")
+    verdict.status = receipt_check.STATUS_NEEDS_CHECK
+    return columns, None
 
 
 @login_required(login_url='accounts:login')
@@ -1052,7 +1137,7 @@ def gcash_qr(request):
     return render(request, 'gcash_qr.html')
 
 
-@login_required(login_url='accounts:login')
+@_signed_in_or_json
 @require_http_methods(["POST"])
 def reservation_submit(request):
     """Persist a customer's reservation request (status=Pending) so it flows into
@@ -1183,16 +1268,12 @@ def reservation_submit(request):
     if error:
         return JsonResponse({"success": False, "error": error}, status=400)
 
-    # Optional GCash reference number from the receipt: kept as digits only. Leaving it blank is
-    # fine; a value that can't be a real reference is refused so a typo doesn't silently go in.
-    raw_gcash_reference = (request.POST.get("gcash_reference") or "").strip()
-    gcash_reference = re.sub(r"\D", "", raw_gcash_reference)
-    if raw_gcash_reference and not (8 <= len(gcash_reference) <= 20):
-        return JsonResponse({
-            "success": False,
-            "error": "That GCash reference number doesn't look right. Copy it from your receipt "
-                     "(about 13 digits, like 1234 567 890123), or leave it blank.",
-        }, status=400)
+    # What the customer typed from their GCash app: the 13-digit reference number and the amount they paid. Only the FORMAT is checked here (no
+    # database); the amount must be at least the deposit that is due, which the server works out itself above. A box that needs fixing is
+    # answered at once and is never counted against the account (gowns/typed_payment.py).
+    typed_reference, typed_amount, typed_refusal = _typed_details_or_refuse(request, due=current_deposit)
+    if typed_refusal is not None:
+        return typed_refusal
 
     # Pressing Confirm Rental again after a dropped connection must not book twice: when the first try
     # was saved but its answer never reached the phone, the retry is the exact same request. Recognised
@@ -1205,6 +1286,11 @@ def reservation_submit(request):
         clear_reservation_hold(request)
         return JsonResponse({"success": True, "reference_code": already_saved.reference_code, "already_submitted": True})
 
+    # A reference number that is already on another booking is refused now, BEFORE the picture is read (it costs nothing and saves the wait).
+    used_refusal = _typed_reference_used_or_refuse(request, typed_reference)
+    if used_refusal is not None:
+        return used_refusal
+
     # The receipt check: BEFORE anything is booked (and before any database lock is taken, because reading the picture takes a few seconds).
     # A refused receipt books nothing and holds no dates.
     verdict, refusal_response = _check_proof_or_refuse(
@@ -1212,6 +1298,11 @@ def reservation_submit(request):
     )
     if refusal_response is not None:
         return refusal_response
+
+    # What the customer typed against what the reader found: the first difference only asks them to look again; a second one goes to the staff.
+    typed_columns, typed_question = _compare_typed_or_ask_again(request, verdict, typed_reference, typed_amount)
+    if typed_question is not None:
+        return typed_question
 
     with transaction.atomic():
         # One account's submissions are serialised here, so two quick taps cannot both slip under the open-bookings limit.
@@ -1366,7 +1457,7 @@ def reservation_submit(request):
             rental_subtotal=rental_subtotal,
             security_deposit=security_deposit,
             total_amount=total_amount,
-            **{**_verdict_fields(verdict), "gcash_reference": (verdict.reference or gcash_reference)[:20]},
+            **{**_verdict_fields(verdict), "gcash_reference": (verdict.reference or typed_reference)[:20], **typed_columns},
         )
         for item in parsed_items:
             created_item = ReservationItem.objects.create(
@@ -1566,7 +1657,7 @@ def reservation_item_cancel(request, item_id):
     return JsonResponse({"success": True, "status": reservation.status})
 
 
-@login_required(login_url='accounts:login')
+@_signed_in_or_json
 @require_http_methods(["POST"])
 def reservation_upload_proof(request, item_id):
     """Attach proof of payment to a reservation that was submitted without one.
@@ -1590,12 +1681,23 @@ def reservation_upload_proof(request, item_id):
     if error:
         return JsonResponse({"success": False, "error": error}, status=400)
 
+    # The same typed reference number and amount as at checkout (format first, then a reference already on another booking, then the picture).
+    typed_reference, typed_amount, typed_refusal = _typed_details_or_refuse(request, due=reservation.security_deposit)
+    if typed_refusal is not None:
+        return typed_refusal
+    used_refusal = _typed_reference_used_or_refuse(request, typed_reference, reservation)
+    if used_refusal is not None:
+        return used_refusal
+
     # The same receipt check as at checkout; here the booking already exists, so "when the booking started" is when it was made.
     verdict, refusal_response = _check_proof_or_refuse(
         request, clean_proof, expected_amount=reservation.security_deposit, started_at=reservation.created_at, reservation=reservation,
     )
     if refusal_response is not None:
         return refusal_response
+    typed_columns, typed_question = _compare_typed_or_ask_again(request, verdict, typed_reference, typed_amount, reservation=reservation)
+    if typed_question is not None:
+        return typed_question
 
     try:
         reservation.payment_proof_url = _save_proof_file(clean_proof)
@@ -1604,8 +1706,8 @@ def reservation_upload_proof(request, item_id):
             {"success": False, "error": "The payment proof couldn't be uploaded just now. Please try again."},
             status=502,
         )
-    checked = _verdict_fields(verdict)
-    checked["gcash_reference"] = checked["gcash_reference"] or reservation.gcash_reference
+    checked = {**_verdict_fields(verdict), **typed_columns}
+    checked["gcash_reference"] = checked["gcash_reference"] or reservation.gcash_reference or typed_reference
     for name, value in checked.items():
         setattr(reservation, name, value)
     reservation.save(update_fields=["payment_proof_url", "updated_at", *checked])

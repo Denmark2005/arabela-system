@@ -22,6 +22,7 @@ CAT = Gown.Category.BRIDESMAID_DRESSES
 NAME = "Black Bridesmaid Dress 4"
 from gowns.sample_images import TINY_JPEG as _JPEG      # a real picture: the proof upload now opens what it is given
 from accounts.test_support import agreed
+from gowns.sample_payment import TYPED_AMOUNT, typed_reference
 
 
 class DeleteAndReaddTests(TestCase):
@@ -143,7 +144,7 @@ class DeleteAndReaddTests(TestCase):
         with patch("gowns.views._save_proof_file", return_value="https://example.test/p.jpg"):
             response = client.post(reverse("gowns:reservation_submit"), data={
                 "items": json.dumps([item]), "first_name": "A", "last_name": "B", "phone": "09171234567", "address": "1 St", "city": "C",
-                "postal_code": "1000", "payment_method": "GCash", "proof_of_payment": SimpleUploadedFile("p.jpg", _JPEG, content_type="image/jpeg")})
+                "postal_code": "1000", "payment_method": "GCash", "gcash_reference": typed_reference(), "gcash_amount": TYPED_AMOUNT, "proof_of_payment": SimpleUploadedFile("p.jpg", _JPEG, content_type="image/jpeg")})
         self.assertEqual(response.status_code, 400)
         self.assertIn("doesn't come in Large", response.json()["error"])
         self.assertFalse(Reservation.objects.exists())
@@ -161,7 +162,7 @@ class DeleteAndReaddTests(TestCase):
         with patch("gowns.views._save_proof_file", return_value="https://example.test/p.jpg"):
             response = client.post(reverse("gowns:reservation_submit"), data={
                 "items": json.dumps([item]), "first_name": "A", "last_name": "B", "phone": "09171234567", "address": "1 St", "city": "C",
-                "postal_code": "1000", "payment_method": "GCash", "proof_of_payment": SimpleUploadedFile("p.jpg", _JPEG, content_type="image/jpeg")})
+                "postal_code": "1000", "payment_method": "GCash", "gcash_reference": typed_reference(), "gcash_amount": TYPED_AMOUNT, "proof_of_payment": SimpleUploadedFile("p.jpg", _JPEG, content_type="image/jpeg")})
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(ReservationItem.objects.get().gown.size, "Small")
 

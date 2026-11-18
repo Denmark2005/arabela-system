@@ -149,6 +149,55 @@ class TwoRefusalsThatSayNoReceiptAgreeTests(TestCase):
         verdict = self.run_check(fresh(**NO_RECEIPT["not_payment"]), fresh())
         self.assertEqual((verdict.status, verdict.codes), (rc.STATUS_NEEDS_CHECK, ["readings_disagree"]))
 
+    # ---- a real GCash payment to somebody else's biller (a school's tuition through GCash GBills), 2026-11-18 ----
+    BILLER = dict(direction="merchant_payment", recipient_number="")
+
+    def test_a_payment_to_a_biller_and_a_no_receipt_answer_agree_in_either_order(self):
+        for second in NO_RECEIPT:
+            with self.subTest(first="merchant", second=second):
+                verdict = self.run_check(fresh(**self.BILLER), fresh(**NO_RECEIPT[second]))
+                self.assertEqual((verdict.status, verdict.codes), (rc.STATUS_REJECT, ["merchant"]))
+                self.assertEqual(verdict.message, rc.MESSAGES["merchant"])
+        for first in NO_RECEIPT:
+            with self.subTest(first=first, second="merchant"):
+                verdict = self.run_check(fresh(**NO_RECEIPT[first]), fresh(**self.BILLER))
+                self.assertEqual((verdict.status, verdict.codes), (rc.STATUS_REJECT, ["merchant"]))
+                self.assertEqual(verdict.message, rc.MESSAGES["merchant"])             # the more specific words win, whichever reading said them
+
+    def test_two_biller_answers_still_agree(self):
+        verdict = self.run_check(fresh(**self.BILLER), fresh(**self.BILLER))
+        self.assertEqual((verdict.status, verdict.codes), (rc.STATUS_REJECT, ["merchant"]))
+
+    def test_a_biller_answer_on_a_blurry_picture_is_a_retake_not_a_refusal(self):
+        for first, second in ((fresh(**self.BILLER), fresh(**NO_RECEIPT["not_payment"])), (fresh(**NO_RECEIPT["not_payment"]), fresh(**self.BILLER))):
+            with self.subTest(first=first.direction, second=second.direction):
+                verdict = self.run_check(first, second, quality=POOR)
+                self.assertEqual((verdict.status, verdict.codes), (rc.STATUS_RETAKE, ["blurry"]))
+
+    def test_a_biller_answer_against_a_different_kind_of_refusal_or_an_accepted_receipt_still_goes_to_the_staff(self):
+        # a real receipt may have been misread by one of the readings: only "not for the shop" against "not for the shop" is a refusal
+        for second in (fresh(recipient_number="09265411484"), fresh(direction="received"), fresh()):
+            with self.subTest(second=second.recipient_number or second.direction):
+                verdict = self.run_check(fresh(**self.BILLER), second)
+                self.assertEqual((verdict.status, verdict.codes), (rc.STATUS_NEEDS_CHECK, ["readings_disagree"]))
+
+    def test_the_tuition_receipt_as_the_two_readers_really_saw_it_is_refused(self):
+        # First reading (the one that looks at the picture): a payment to a biller, no recipient number, the name "STI", a 9-digit reference.
+        first = rc.reading_from_dict({
+            "is_payment_screen": True, "is_transaction_list": False, "app": "gcash", "direction": "merchant_payment", "recipient_number": "",
+            "recipient_pattern": "", "recipient_name": "STI", "sender_number": "", "amount": "6437.06", "reference": "586757758",
+            "paid_at": "2026-11-16T00:00:00+08:00", "status": "completed", "gcash_signs": ["Paid via GCASH", "GCash Reference No.", "GCash GBills"],
+            "layout": "other", "picture": "screenshot", "clarity": "clear", "cut_off": False})
+        # Second reading (the one that copies the text): none of the GCash receipt layout titles is on it.
+        second = rc.reading_from_transcript(lines(
+            "STI", "Paid via GCASH", "Campus", "Sample Campus", "Student Name", "Juan Dela Cruz", "Student ID or App No", "02000000000", "School Year",
+            "2026-2027", "Term", "1st Term", "Remarks", "Tuition Fee", "Email Address", "student@example.com", "Bill Amount", "6,412.06", "Fee", "25.00",
+            "Total", "₱ 6,437.06", "Date", "Nov 16, 2026", "GCash Reference No.", "586757758", "GCash GBills"))
+        self.assertFalse(second.is_payment_screen)
+        verdict = self.run_check(first, second)
+        self.assertEqual((verdict.status, verdict.codes), (rc.STATUS_REJECT, ["merchant"]))
+        self.assertIn("store or biller", verdict.message)
+
 
 class AnUnusualLayoutHasToBeConfirmedTests(TestCase):
     """The first reading accepted a picture but found no GCash layout title on it (looks_like_gcash_receipt is False)."""
@@ -331,26 +380,36 @@ class TheWholeCheckStaysInsideAboutTwentySecondsTests(SimpleTestCase):
 
 
 # ---- the loading screen ----------------------------------------------------------------------------------------------------------------
-class TheLoadingScreenTellsTheCustomerWhatIsHappeningTests(TestCase):
+class TheLoadingScreenIsASpinnerWithNoWordsTests(TestCase):
+    """While a receipt is checked the customer sees a plain white loading screen with a spinner and no text (the owner's choice, 2026-11-18)."""
+
     @staticmethod
     def source(name):
         from django.template.loader import get_template
         return get_template(name).template.source
 
-    def test_the_script_is_on_every_customer_page_and_has_the_three_messages(self):
+    def test_the_script_is_on_every_customer_page_and_prints_no_words(self):
         from django.contrib.staticfiles import finders
         self.assertIn("js/receipt-checking.js", self.client.get("/").content.decode())
         with open(finders.find("js/receipt-checking.js"), encoding="utf-8") as handle:
             script = handle.read()
-        for text in ("up to 20 seconds", "Still reading it", "keep this page open"):
-            self.assertIn(text, script)
+        for text in ("up to 20 seconds", "Still reading it", "keep this page open", "receipt-checking-text", "textContent = text", "STEPS"):
+            self.assertNotIn(text, script)
         for name in ("start", "stop", "show", "hide"):
-            self.assertIn(f"{name}: {name}", script)
+            self.assertIn(f"{name}: {name}", script)              # the pages' calls keep working
+        self.assertIn("createElement('div')", script)
+        self.assertNotIn("createElement('p')", script)             # no text element is built
+        self.assertIn("aria-label", script)                        # screen readers still hear what is happening
 
-    def test_the_checkout_loading_screen_shows_the_message_and_runs_it_while_the_receipt_is_checked(self):
+    def test_the_checkout_loading_screen_is_only_a_spinner(self):
         source = self.source("reservation.html")
-        self.assertIn('id="receipt-checking-text"', source)
-        self.assertIn("up to 20 seconds", source)
+        start = source.index('<div id="loading-overlay"')
+        overlay = source[start:source.index("{% endblock %}", start)]          # the overlay is the last thing in the content block
+        self.assertIn("loading-spinner", overlay)
+        self.assertNotIn("<p", overlay)
+        self.assertNotIn("receipt-checking-text", source)
+        self.assertNotIn("Checking your receipt&hellip;", source)
+        self.assertIn('aria-label="Checking your receipt"', overlay)
         self.assertIn("arabelaReceiptChecking.start()", source)
         self.assertIn("arabelaReceiptChecking.stop()", source)
 

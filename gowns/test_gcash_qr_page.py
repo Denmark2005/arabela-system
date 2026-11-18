@@ -10,6 +10,7 @@ from django.urls import reverse
 
 from gowns.models import Gown, SiteSettings
 from accounts.test_support import agreed
+from gowns.sample_payment import TYPED_AMOUNT, typed_reference
 
 User = get_user_model()
 QR_URL = "https://files.example/gcash_qr/shop.png"
@@ -131,11 +132,15 @@ class CheckoutQrWindowTests(TestCase):
         self.assertNotIn(reverse("gowns:gcash_qr"), html)
         self.assertNotIn('id="gcash-qr-img"', html)
 
-    def test_the_reference_number_box_and_everything_that_fed_it_are_gone(self):
+    def test_the_reference_and_amount_boxes_are_back_and_never_kept_in_the_remembered_typing(self):
+        # 2026-11-18: the customer types the reference number and the amount from the receipt (gowns/typed_payment.py). The old optional
+        # box's leftovers (gcashRefEl, refInput, "(optional)") stay gone, and the two boxes are NOT in the remembered-typing list: a number
+        # left over from another receipt must never carry into a new booking.
         html = self.html()
-        for gone in ("gcash_reference", "GCash reference number", "gcashRefEl", "refInput"):
+        for gone in ("gcashRefEl", "refInput", "GCash reference number (optional)"):
             self.assertNotIn(gone, html)
-        # ...while the other checkout boxes and their remembered-typing list are untouched
+        for box in ('id="gcash_reference"', 'id="gcash_amount"', 'id="payment-details-block"'):
+            self.assertIn(box, html)
         self.assertIn("var DRAFT_FIELD_IDS = ['first_name', 'last_name', 'address', 'city', 'postal', 'phone'];", html)
         for field_id in ("first_name", "last_name", "address", "city", "postal", "phone", "proof_of_payment"):
             self.assertIn(f'id="{field_id}"', html)
@@ -146,14 +151,14 @@ class CheckoutQrWindowTests(TestCase):
             self.assertNotIn(leak, html)
 
 
-class CheckoutWithoutTheReferenceTests(TestCase):
-    """The page no longer sends gcash_reference; a booking made without it is saved exactly as before."""
+class CheckoutWithTheTypedDetailsTests(TestCase):
+    """The checkout page sends the reference number and the amount the customer typed from their GCash receipt (gowns/typed_payment.py)."""
 
     @classmethod
     def setUpTestData(cls):
         cls.customer = User.objects.create_user(username="qr_submit_customer", password="x")
 
-    def test_a_booking_is_saved_when_the_page_sends_no_reference(self):
+    def test_a_booking_is_saved_with_the_typed_reference_and_amount(self):
         from gowns.tests import _make_proof
         import json
         from reservations.models import Reservation
@@ -166,11 +171,14 @@ class CheckoutWithoutTheReferenceTests(TestCase):
             "items": json.dumps([{"gown_name": gown.name, "gown_slug": gown.slug, "size": "Medium",
                                   "rental_date": "2027-05-10", "return_date": "2027-05-13"}]),
             "first_name": "Test", "last_name": "Buyer", "phone": "09171234567", "address": "1 St", "city": "City",
-            "postal_code": "1000", "payment_method": "GCash", "proof_of_payment": _make_proof(),
+            "postal_code": "1000", "payment_method": "GCash", "gcash_reference": typed_reference(), "gcash_amount": TYPED_AMOUNT, "proof_of_payment": _make_proof(),
         }
-        self.assertNotIn("gcash_reference", payload)
+        payload["gcash_reference"] = "5046 933 479702"
+        payload["gcash_amount"] = "2,000.00"
         with patch("gowns.views._save_proof_file", return_value="https://example.test/fake-proof.jpg"):
             response = self.client.post(reverse("gowns:reservation_submit"), data=payload)
         self.assertEqual(response.status_code, 200, response.content)
         reservation = Reservation.objects.get(reference_code=response.json()["reference_code"])
-        self.assertEqual(reservation.gcash_reference, "")
+        self.assertEqual(reservation.proof_typed_reference, "5046933479702")
+        self.assertEqual(reservation.proof_typed_amount, Decimal("2000.00"))
+        self.assertEqual(reservation.gcash_reference, "5046933479702")

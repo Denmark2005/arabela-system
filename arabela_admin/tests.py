@@ -2220,7 +2220,7 @@ class QuickVerifyProofPopupTests(TestCase):
 
     def test_the_popup_is_the_payment_verification_viewer(self):
         for piece in ("GCash Payment Proof", "View Full Image", "admin-photo-frame", "max-height: 75vh",
-                      "Date Submitted", "GCash Reference No.", "Check the receipt before approving"):
+                      "Date Submitted", "data-gcash-reference-block", "Check the receipt before approving"):
             with self.subTest(piece=piece):
                 self.assertIn(piece, self.html)
         self.assertNotIn("GCash Receipt Preview", self.html)
@@ -4345,7 +4345,8 @@ class GcashReferenceTests(TestCase):
         self.assertIn("gcashRef: '1234567890123'", html)
         self.assertIn(f"Same GCash ref as {first.reference_code}", html)
         self.assertIn(f"Same GCash ref as {second.reference_code}", html)
-        self.assertIn("GCash Reference No.", html)
+        self.assertIn("GCash reference number", html)                   # the shared card at the top of the proof window
+        self.assertIn("1234 567 890123", html)                          # and the number on its own line of the list
 
     def test_payment_verification_shows_no_warning_for_a_unique_number(self):
         self._reservation("1234567890123")

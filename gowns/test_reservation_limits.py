@@ -22,6 +22,7 @@ from gowns.models import Gown, GownUnavailability
 from gowns.sample_images import unique_jpeg
 from reservations import pending_release
 from reservations.models import Reservation, ReservationItem, ReservationStatusEvent
+from gowns.sample_payment import TYPED_AMOUNT, typed_reference
 
 User = get_user_model()
 
@@ -44,16 +45,21 @@ class LimitsBase(TestCase):
         saver.start()
         self.addCleanup(saver.stop)
         self.numbers = iter(range(10 ** 12, 10 ** 12 + 1000))
+        self.upcoming = ""                  # the reference number the next checkout types: the stand-in reader "sees" the same one on the receipt
         reader = patch("gowns.receipt_check.read_receipt", side_effect=self.a_good_reading)
         reader.start()
         self.addCleanup(reader.stop)
         self.event = timezone.localdate() + timedelta(days=15)
 
+    def next_reference(self):
+        self.upcoming = typed_reference()
+        return self.upcoming
+
     def a_good_reading(self, image_bytes, mime):
         number = next(self.numbers)
         return rc.Reading(
             is_payment_screen=True, is_transaction_list=False, app="gcash", direction="sent", recipient_number="", recipient_name="",
-            sender_number="", amount=Decimal("99999"), reference=str(number)[:13].ljust(13, "0"), paid_at=timezone.now() - timedelta(minutes=1) - timedelta(seconds=number % 997),
+            sender_number="", amount=Decimal("99999"), reference=self.upcoming or str(number)[:13].ljust(13, "0"), paid_at=timezone.now() - timedelta(minutes=1) - timedelta(seconds=number % 997),
             status="completed", gcash_signs=[],
         ), ""
 
@@ -67,7 +73,7 @@ class LimitsBase(TestCase):
         agreed(user)
         return client.post(reverse("gowns:reservation_submit"), data={
             "items": json.dumps(items), "first_name": "Lim", "last_name": "Buyer", "phone": "09171234567", "address": "1 Test St",
-            "city": "Test City", "postal_code": "1000", "payment_method": "GCash",
+            "city": "Test City", "postal_code": "1000", "payment_method": "GCash", "gcash_reference": self.next_reference(), "gcash_amount": TYPED_AMOUNT,
             "proof_of_payment": SimpleUploadedFile("proof.jpg", unique_jpeg(), content_type="image/jpeg")})
 
     def pending_booking(self, user, gown, *, status=Reservation.Status.PENDING, age=timedelta(0), **fields):

@@ -30,6 +30,7 @@ User = get_user_model()
 STAFF_PASSWORD = "Staff-Pass-12345"
 from gowns.sample_images import TINY_JPEG as _TINY_JPEG      # a real picture: the proof upload now opens what it is given
 from accounts.test_support import agreed
+from gowns.sample_payment import TYPED_AMOUNT, typed_reference
 
 
 class SeparateSessionsTests(TestCase):
@@ -187,7 +188,7 @@ class CheckoutRefusesTheWrongAccountTests(TestCase):
                   "rental_date": (event - timedelta(days=2)).isoformat(), "return_date": (event + timedelta(days=2)).isoformat()}]
         return self.client.post(reverse("gowns:reservation_submit"), data={
             "items": json.dumps(items), "first_name": "Guard", "last_name": "Test", "phone": "09171234567", "address": "1 Test St",
-            "city": "Test City", "postal_code": "1000", "payment_method": "GCash",
+            "city": "Test City", "postal_code": "1000", "payment_method": "GCash", "gcash_reference": typed_reference(), "gcash_amount": TYPED_AMOUNT,
             "proof_of_payment": SimpleUploadedFile("proof.jpg", _TINY_JPEG, content_type="image/jpeg"), **extra})
 
     def test_a_page_opened_for_another_account_books_nothing(self):

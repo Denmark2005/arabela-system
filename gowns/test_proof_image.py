@@ -24,6 +24,7 @@ from gowns.models import Gown
 from gowns.sample_images import TINY_JPEG, make_image_bytes
 from reservations.models import Reservation, ReservationItem
 from accounts.test_support import agreed
+from gowns.sample_payment import TYPED_AMOUNT, typed_reference
 
 User = get_user_model()
 
@@ -206,7 +207,7 @@ class ProofUploadLaterEndpointTests(TestCase):
 
     def send(self, file):
         with patch("gowns.views._save_proof_file", return_value="https://example.test/proof.jpg") as saved:
-            response = self.client.post(self.url, data={"proof_of_payment": file})
+            response = self.client.post(self.url, data={"proof_of_payment": file, "gcash_reference": typed_reference(), "gcash_amount": TYPED_AMOUNT})
         self.reservation.refresh_from_db()
         return response, saved
 
@@ -258,7 +259,7 @@ class ProofAtCheckoutTests(TestCase):
         with patch("gowns.views._save_proof_file", return_value="https://example.test/proof.jpg") as saved:
             response = self.client.post(reverse("gowns:reservation_submit"), data={
                 "items": json.dumps(items), "first_name": "Test", "last_name": "Buyer", "phone": "09171234567", "address": "123 Test St",
-                "city": "Test City", "postal_code": "1000", "payment_method": "GCash", "proof_of_payment": file})
+                "city": "Test City", "postal_code": "1000", "payment_method": "GCash", "gcash_reference": typed_reference(), "gcash_amount": TYPED_AMOUNT, "proof_of_payment": file})
         return response, saved
 
     def test_a_renamed_pdf_is_refused_and_no_booking_is_made(self):

@@ -1169,7 +1169,7 @@
               <div class="ar-toolbar">
                 <div class="ar-search">
                   <svg class="ar-search-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                  <input type="text" class="ar-search-input" x-model="search" placeholder="Search by customer, reference, cellphone or gown ID..." aria-label="Search pending bookings">
+                  <input type="text" class="ar-search-input" x-model="search" placeholder="Search by customer, booking number, GCash reference, cellphone or gown ID..." aria-label="Search pending bookings">
                 </div>
               </div>
               <div class="ar-count" id="ar-count" aria-live="polite"></div>
@@ -1186,7 +1186,7 @@
                 {% for r in reservations %}
                 <!-- One booking: a closed line (name, booking number and how long it has waited, the gown, the dates, the total, the actions) and,
                      hidden until it is opened, who booked it and one short line per gown. -->
-                <div class="ar-booking" data-booking-id="{{ r.id }}" data-search="{{ r.display_customer_name|lower }} {{ r.reference_code|lower }}{% for gi in r.items.all %} {{ gi.gown_code|lower }}{% endfor %} {{ r.phone|cut:' ' }}" x-show="search === '' || ($el.getAttribute('data-search') || '').indexOf(search.toLowerCase()) !== -1">
+                <div class="ar-booking" data-booking-id="{{ r.id }}" data-search="{{ r.display_customer_name|lower }} {{ r.reference_code|lower }}{% for gi in r.items.all %} {{ gi.gown_code|lower }}{% endfor %} {{ r.phone|cut:' ' }} {{ r.proof_search_text }}" x-show="search === '' || ($el.getAttribute('data-search') || '').indexOf(search.toLowerCase()) !== -1">
                   <!-- A click on the line opens the booking, except a click on one of its action buttons (.pa-acts). The buttons do NOT stop the click: partials/attach_receipt.html
                        listens for "Attach receipt" on the whole page, and a stopped click would never reach it. -->
                   <div class="ar-line pa-grid" :class="isBookingOpen({{ r.id }}) ? 'is-open' : ''" @click="if (!$event.target.closest('.pa-acts')) { toggleBooking({{ r.id }}) }">
@@ -1256,7 +1256,7 @@
                       {% else %}
                       <!-- Opens the payment proof right here (partials/payment_proof_window.html), with Approve / Reject inside it too. -->
                       <button type="button"
-                        @click="viewingPayment = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"—"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:'-2g' }}', date: '{{ r.created_at|date:"M j, Y" }}', status: '{{ r.status|escapejs }}', proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}'), breakdown: JSON.parse('{{ r.payment_breakdown_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', gcashDup: '{{ r.gcash_dups|escapejs }}', approveUrl: '{% url 'arabela_admin:reservation_approve' r.id %}', rejectUrl: '{% url 'arabela_admin:reservation_reject' r.id %}', walkin: false, receiptCount: {{ r.receipt_count }}, waiting: {% if r.waiting_for_owner and not viewer_is_owner %}true{% else %}false{% endif %} }; openReceiptModal = true"
+                        @click="viewingPayment = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"—"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:'-2g' }}', date: '{{ r.created_at|date:"M j, Y" }}', status: '{{ r.status|escapejs }}', proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}'), breakdown: JSON.parse('{{ r.payment_breakdown_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', refInfo: JSON.parse('{{ r.reference_info_json|escapejs }}'), gcashDup: '{{ r.gcash_dups|escapejs }}', approveUrl: '{% url 'arabela_admin:reservation_approve' r.id %}', rejectUrl: '{% url 'arabela_admin:reservation_reject' r.id %}', walkin: false, receiptCount: {{ r.receipt_count }}, waiting: {% if r.waiting_for_owner and not viewer_is_owner %}true{% else %}false{% endif %} }; openReceiptModal = true"
                         class="ar-ib" title="View payment" aria-label="View payment of {{ r.display_customer_name }}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                       </button>

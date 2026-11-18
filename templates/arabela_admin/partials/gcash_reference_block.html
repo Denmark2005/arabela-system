@@ -1,0 +1,89 @@
+{% comment %}
+  The GCash reference number of a payment, shown big and clear at the top of a payment proof window, with a Copy button: it is the number the owner
+  looks for in her GCash app (and the one searchable in the admin lists). Used by every window that shows a payment proof (Pending Approval, Payment
+  Verification, Security Deposits, the Dashboard's Quick Verify), so the number looks the same everywhere.
+
+  Parameter: var -- the page's own Alpine variable that holds the window's data (viewingPayment / receiptPreview). It carries
+  refInfo (Reservation.reference_info_json): { reference, digits, typed, match, referenceDiffers, amountDiffers, receiptReference, typedAmount,
+  receiptAmount } or null when the booking has no reference (a walk-in), in which case nothing is shown.
+
+  When the customer typed the number the picture does not show, the number shown is the one typed, with a plain line saying what the receipt
+  reads. Own gr- names (the admin CSS build is sparse); the dark twins follow the page's `.dark` class.
+{% endcomment %}
+<style>
+  .gr-card { margin: 0 0 1.25rem; padding: 1.1rem 1.25rem 1.15rem; border: 1px solid #e4e7ec; border-radius: 1rem; background: #f9fafb; }
+  .dark .gr-card { border-color: #1d2939; background: rgba(255, 255, 255, .03); }
+  .gr-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem .75rem; margin-bottom: .6rem; }
+  .gr-label { margin: 0; font-size: .875rem; font-weight: 600; color: #344054; }
+  .dark .gr-label { color: #d0d5dd; }
+  .gr-chip { display: inline-flex; align-items: center; padding: .15rem .7rem; border-radius: 999px; font-size: .75rem; font-weight: 600; line-height: 1.5; white-space: nowrap; }
+  .gr-chip--ok { background: #ecfdf3; color: #027a48; }
+  .gr-chip--warn { background: #fffaeb; color: #b54708; }
+  .gr-chip--muted { background: #f2f4f7; color: #475467; }
+  .dark .gr-chip--ok { background: rgba(18, 183, 106, .16); color: #32d583; }
+  .dark .gr-chip--warn { background: rgba(247, 144, 9, .16); color: #fdb022; }
+  .dark .gr-chip--muted { background: rgba(255, 255, 255, .08); color: #98a2b3; }
+  .gr-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem 1rem; }
+  .gr-number { font-size: 1.625rem; font-weight: 700; line-height: 1.25; letter-spacing: .06em; color: #101828; font-variant-numeric: tabular-nums;
+               font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; word-break: break-all; }
+  .dark .gr-number { color: rgba(255, 255, 255, .95); }
+  .gr-copy { flex: none; display: inline-flex; align-items: center; gap: .4rem; border: 1px solid #d0d5dd; border-radius: .7rem; background: #ffffff; color: #344054;
+             padding: .55rem 1.05rem; font-size: .875rem; font-weight: 600; cursor: pointer; transition: background .15s ease, border-color .15s ease; }
+  .gr-copy:hover { background: #f2f4f7; border-color: #98a2b3; }
+  .dark .gr-copy { border-color: #344054; background: rgba(255, 255, 255, .05); color: #e4e7ec; }
+  .dark .gr-copy:hover { background: rgba(255, 255, 255, .1); }
+  .gr-copy svg { width: 1rem; height: 1rem; }
+  .gr-copy.is-done { border-color: #12b76a; color: #027a48; background: #ecfdf3; }
+  .dark .gr-copy.is-done { border-color: #12b76a; color: #32d583; background: rgba(18, 183, 106, .16); }
+  .gr-help { margin: .65rem 0 0; font-size: .8125rem; line-height: 1.55; color: #667085; }
+  .dark .gr-help { color: #98a2b3; }
+  .gr-diff { margin: .85rem 0 0; padding: .8rem 1rem; border-radius: .75rem; background: #fffaeb; color: #93370d; font-size: .875rem; line-height: 1.6; }
+  .dark .gr-diff { background: rgba(247, 144, 9, .12); color: #fdb022; }
+  .gr-diff p { margin: 0; }
+  .gr-diff p + p { margin-top: .25rem; }
+  .gr-diff b { font-weight: 700; font-variant-numeric: tabular-nums; }
+</style>
+<script>
+  // Copies text to the clipboard (the plain digits of a reference) and calls done() when it worked. Defined once per page.
+  if (typeof window.arabelaCopyText !== 'function') {
+    window.arabelaCopyText = function (text, done) {
+      function fallback() {
+        var box = document.createElement('textarea');
+        box.value = text; box.setAttribute('readonly', ''); box.style.position = 'fixed'; box.style.opacity = '0';
+        document.body.appendChild(box); box.select();
+        var worked = false;
+        try { worked = document.execCommand('copy'); } catch (e) { worked = false; }
+        document.body.removeChild(box);
+        if (worked && done) done();
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { if (done) done(); }, fallback);
+      } else {
+        fallback();
+      }
+    };
+  }
+</script>
+<template x-if="{{ var }}.refInfo">
+  <div class="gr-card" x-data="{ copied: false }" data-gcash-reference-block>
+    <div class="gr-top">
+      <p class="gr-label">GCash reference number</p>
+      <span class="gr-chip gr-chip--ok" x-show="{{ var }}.refInfo.typed && {{ var }}.refInfo.match === 'match'">&#10003; Matches the receipt</span>
+      <span class="gr-chip gr-chip--warn" x-show="{{ var }}.refInfo.referenceDiffers || {{ var }}.refInfo.amountDiffers">Typed numbers differ</span>
+      <span class="gr-chip gr-chip--muted" x-show="!{{ var }}.refInfo.typed">Read from the receipt</span>
+    </div>
+    <div class="gr-row">
+      <span class="gr-number" x-text="{{ var }}.refInfo.reference"></span>
+      <button type="button" class="gr-copy" :class="copied ? 'is-done' : ''" @click="arabelaCopyText({{ var }}.refInfo.digits, function () { copied = true; setTimeout(function () { copied = false; }, 1800); })"
+              :aria-label="'Copy the reference number ' + {{ var }}.refInfo.reference">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        <span x-text="copied ? 'Copied' : 'Copy'">Copy</span>
+      </button>
+    </div>
+    <p class="gr-help" x-show="!({{ var }}.refInfo.referenceDiffers || {{ var }}.refInfo.amountDiffers)">Look for this number in the GCash transactions to find the payment.</p>
+    <div class="gr-diff" x-show="{{ var }}.refInfo.referenceDiffers || {{ var }}.refInfo.amountDiffers">
+      <p x-show="{{ var }}.refInfo.referenceDiffers">The customer typed this number, but the receipt picture reads <b x-text="{{ var }}.refInfo.receiptReference"></b>. Check the picture.</p>
+      <p x-show="{{ var }}.refInfo.amountDiffers">The customer typed <b x-text="{{ var }}.refInfo.typedAmount"></b>, but the receipt picture reads <b x-text="{{ var }}.refInfo.receiptAmount"></b>.</p>
+    </div>
+  </div>
+</template>

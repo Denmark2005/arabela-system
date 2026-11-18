@@ -83,7 +83,6 @@
     .reservation-error-text { margin-top: 0.5rem; font-size: 0.8125rem; line-height: 1.4; color: #ba1a1a; letter-spacing: 0.01em; text-transform: none; }
     #loading-overlay { display: none; position: fixed; inset: 0; z-index: 999999; background-color: #ffffff; }
     #loading-overlay.show { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; padding: 24px; }
-    #receipt-checking-text { margin: 0; max-width: 320px; text-align: center; font-size: 1rem; line-height: 1.5; color: #2f2e2c; }
     .loading-spinner { width: 64px; height: 64px; border: 4px solid #e5e2e1; border-top-color: #0b0c0c; border-radius: 50%; }
 
     /* ---- Order Summary rows ----
@@ -209,6 +208,25 @@
             View QR
           </span>
         </button>
+
+        <!-- What the customer types from their GCash receipt: the server compares it with the screenshot (gowns/typed_payment.py) -->
+        <div class="flex flex-col gap-3" id="payment-details-block">
+          <div class="flex flex-col gap-0.5">
+            <h3 class="text-sm font-medium text-on-surface">Payment Details</h3>
+            <p class="text-[0.8rem] text-secondary">Type these from your GCash receipt. We check them against your screenshot.</p>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="res-field relative">
+              <input class="res-input peer" id="gcash_reference" placeholder=" " type="text" inputmode="numeric" autocomplete="off">
+              <label class="res-label" for="gcash_reference">GCash Reference No.</label>
+            </div>
+            <div class="res-field relative">
+              <input class="res-input peer" id="gcash_amount" placeholder=" " type="text" inputmode="decimal" autocomplete="off">
+              <label class="res-label" for="gcash_amount">Amount Paid (&#8369;)</label>
+            </div>
+          </div>
+          <p class="text-[0.75rem] leading-relaxed text-secondary">The reference number is the 13 digits shown as &ldquo;Ref No.&rdquo; on your receipt, like 1234 567 890123.</p>
+        </div>
 
         <!-- Proof of Payment Upload -->
         <div class="flex flex-col gap-3">
@@ -401,8 +419,8 @@
 </div>
 
 <!-- Loading Overlay -->
-<div id="loading-overlay">
-    <div class="loading-spinner animate-spin"></div><p id="receipt-checking-text" role="status" aria-live="polite">Checking your receipt&hellip; this can take up to 20 seconds.</p>
+<div id="loading-overlay" role="status" aria-label="Checking your receipt">
+    <div class="loading-spinner animate-spin"></div>
 </div>
 
 {% endblock %}
@@ -684,6 +702,30 @@
                 }
             }
 
+            // The reference number and the amount typed from the receipt (the server checks them again and compares them with the screenshot).
+            var details = window.arabelaProofDetails;
+            var referenceInput = document.getElementById('gcash_reference');
+            var amountInput = document.getElementById('gcash_amount');
+            if (details && referenceInput) {
+                var referenceMessage = details.referenceProblem(referenceInput.value);
+                var referenceWrap = referenceInput.closest('.relative');
+                if (referenceMessage && referenceWrap) {
+                    setFieldError(referenceWrap, referenceMessage);
+                    invalidEls.push(referenceWrap);
+                    if (!firstInvalid) firstInvalid = referenceWrap;
+                }
+            }
+            if (details && amountInput) {
+                var dueNow = Number((readReservationPayload() || {}).deposit) || 0;
+                var amountMessage = details.amountProblem(amountInput.value, dueNow);
+                var amountWrap = amountInput.closest('.relative');
+                if (amountMessage && amountWrap) {
+                    setFieldError(amountWrap, amountMessage);
+                    invalidEls.push(amountWrap);
+                    if (!firstInvalid) firstInvalid = amountWrap;
+                }
+            }
+
             var fileInput = document.getElementById('proof_of_payment');
             var proofZone = document.getElementById('proof-payment-dropzone');
             if (fileInput && proofZone && (!fileInput.files || fileInput.files.length === 0)) {
@@ -779,11 +821,44 @@
                 arabelaAlert({ title: 'The deposit changed', message: err.data.error, danger: true }).then(redo, redo);
                 return;
             }
+            if (err && err.data && err.data.signed_out) {
+                // The sign-in ended while this page was open: nothing was booked. Sign in again and come back to this page.
+                var signIn = function () { window.location.href = (err.data.login_url || '/accounts/login/') + '?next=' + encodeURIComponent(window.location.pathname); };
+                arabelaAlert({ title: 'You were signed out', message: err.data.error, danger: true }).then(signIn, signIn);
+                return;
+            }
+            if (err && err.data && err.data.typed_required) {
+                // This page was opened before the two boxes existed: they cannot be sent, so the page has to be loaded again.
+                arabelaAlert({ title: 'Please reload this page', message: err.data.error, danger: true });
+                return;
+            }
+            if (err && err.data && (err.data.typed_invalid || err.data.typed_mismatch)) {
+                // A box needs fixing (or the numbers typed differ from the receipt): nothing was booked and nothing is counted against the
+                // account. Say which box, right under it, and keep everything else as it is.
+                clearReservationValidationVisuals();
+                var wanted = err.data.field === 'both' ? ['gcash_reference', 'gcash_amount'] : [err.data.field === 'amount' ? 'gcash_amount' : 'gcash_reference'];
+                var shaken = [];
+                wanted.forEach(function (id, position) {
+                    var box = document.getElementById(id);
+                    var boxWrap = box ? box.closest('.relative') : null;
+                    if (!boxWrap) return;
+                    setFieldError(boxWrap, position === 0 ? err.data.error : 'Please check this one too.');
+                    shaken.push(boxWrap);
+                });
+                shaken.forEach(triggerReservationInvalidShake);
+                if (shaken[0] && shaken[0].scrollIntoView) shaken[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return;
+            }
             if (err && err.data && err.data.proof_rejected) {
                 // The receipt check refused the picture: nothing was booked and nothing is held. Say why right under the upload box and let
                 // the customer choose another picture.
                 var proofInputEl = document.getElementById('proof_of_payment');
                 if (proofInputEl) proofInputEl.value = '';
+                if (!err.data.proof_retake) {
+                    // A refused receipt is a different payment from the next one: the numbers typed from it go too. (A picture to take again is
+                    // the same receipt, so what was typed stays.)
+                    ['gcash_reference', 'gcash_amount'].forEach(function (id) { var typedBox = document.getElementById(id); if (typedBox) typedBox.value = ''; });
+                }
                 clearProofPreview();
                 proofUploadFilePromise = Promise.resolve(null);
                 setProofError(err.data.error);
@@ -803,7 +878,7 @@
             var titles = { network: 'Connection problem', server: 'Server busy', photo: 'Receipt photo problem' };
             var message = described.message;
             if (described.kind === 'network' || described.kind === 'server') {
-                message += ' Your details are still filled in, so just tap Confirm Rental again. You will not be booked twice.';
+                message += ' If you are not sure, check My Reservations first. If your booking is not there, your details are still filled in, so just tap Confirm Rental again. You will not be booked twice.';
             }
             arabelaAlert({ title: titles[described.kind] || 'Reservation not submitted', message: message, danger: true });
         }
@@ -858,6 +933,17 @@
         document.addEventListener('DOMContentLoaded', function () {
             fillCheckoutFields();
             watchCheckoutDraft();
+            // The two boxes typed from the receipt are never kept in the draft (a number left over from another receipt must not carry into a
+            // new booking): the reference is regrouped as it is typed, and either box loses its red as soon as it is touched.
+            if (window.arabelaProofDetails) window.arabelaProofDetails.attach(document.getElementById('gcash_reference'));
+            ['gcash_reference', 'gcash_amount'].forEach(function (id) {
+                var typedBox = document.getElementById(id);
+                if (!typedBox) return;
+                var typedWrap = typedBox.closest('.relative');
+                function clearTyped() { if (typedWrap) typedWrap.classList.remove('reservation-field-invalid'); }
+                typedBox.addEventListener('focus', clearTyped);
+                typedBox.addEventListener('input', clearTyped);
+            });
 
             var btn = document.getElementById('confirm-rental-btn');
 
@@ -938,6 +1024,11 @@
                     formData.append('city', document.getElementById('city').value.trim());
                     formData.append('postal_code', document.getElementById('postal').value.trim());
                     formData.append('phone', document.getElementById('phone').value.trim());
+                    // The reference number (digits only) and the amount the customer typed from their receipt.
+                    formData.append('gcash_reference', window.arabelaProofDetails
+                        ? window.arabelaProofDetails.cleanReference(document.getElementById('gcash_reference').value)
+                        : document.getElementById('gcash_reference').value.trim());
+                    formData.append('gcash_amount', document.getElementById('gcash_amount').value.trim());
 
                     // Wait for the in-memory copy (a click can land while a large photo is still being
                     // shrunk) and send only that -- never the phone's original file.

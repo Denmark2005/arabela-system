@@ -34,6 +34,7 @@
       <p x-show="{{ var }}.bookedAs" class="-mt-4 mb-6 text-xs text-gray-400 dark:text-gray-500">Booked as: <span x-text="{{ var }}.bookedAs"></span></p>
     </div>
     <div class="px-2">
+      {% include "arabela_admin/partials/gcash_reference_block.html" with var=var %}
       <!-- Natural size, never cropped, with a View Full Image link (same viewer as Payment Verification). -->
       <template x-if="{{ var }}.proofUrl">
         <div>
@@ -89,10 +90,6 @@
         <div>
           <p class="text-xs text-gray-500 dark:text-gray-400">Status</p>
           <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="{{ var }}.status"></p>
-        </div>
-        <div x-show="{{ var }}.gcashRef" x-cloak>
-          <p class="text-xs text-gray-500 dark:text-gray-400">GCash Reference No.</p>
-          <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="{{ var }}.gcashRef"></p>
         </div>
       </div>
       {% include "arabela_admin/partials/payment_breakdown.html" with var=var %}
