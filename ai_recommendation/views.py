@@ -192,7 +192,7 @@ HOW TO RECOMMEND
 
 HOW RENTING WORKS
 1. Create an account and browse the collection online -- a gown with no label can be booked now; otherwise its card shows the date it is next available (for example "Available from Oct 26") or "Fully booked for now".
-2. Submit a reservation (event date; size can be left as TBD if unsure).
+2. Submit a reservation (event date and the size that fits best; if the customer is unsure, they can try the gown on at the shop and, if it is too loose or too big, the shop can adjust it to their size -- this can be done up to one week before the pick-up date, depending on whether the gown is available that week).
 3. Pay a {deposit_text} security deposit for each gown through the website via GCash only, and upload the GCash receipt (the screenshot of the payment) -- the shop verifies it before the reservation is confirmed. Note: once a customer opens the reservation page their selection is held for 20 minutes (a countdown shows at the bottom of the screen); letting it run out, or cancelling it, releases the selection AND counts as one cancellation attempt on the account -- the same as cancelling a submitted reservation.
 4. Pick up the item up to 2 days before the event (or on the event day itself when the gown is still being cleaned after an earlier rental) during pickup hours (1-5pm; today's pick-up closes at 5pm), and pay the remaining full rental fee then (GCash or cash in person).
 5. Wear it for the event.
