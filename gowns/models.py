@@ -351,6 +351,23 @@ class GownSequence(models.Model):
             row.save(update_fields=['next_value'])
         return value
 
+    @classmethod
+    def reserve_block(cls, category, count):
+        """The next `count` tracking numbers of this category, handed out at once ([first, first + 1, ...]): the same row lock and the same seed
+        as `next_value_for`, but a few queries for any `count` instead of several per number (a command that adds hundreds of gowns to a
+        remote database needs that). `count` 0 reserves nothing."""
+        if count <= 0:
+            return []
+        with transaction.atomic():
+            row, created = cls.objects.get_or_create(category=category, color_code=cls.CATEGORY_WIDE)
+            row = cls.objects.select_for_update().get(pk=row.pk)
+            if created:
+                row.next_value = cls._highest_used(category) + 1
+            first = row.next_value
+            row.next_value = first + count
+            row.save(update_fields=['next_value'])
+        return list(range(first, first + count))
+
 
 class GownSlugSequence(models.Model):
     """One row per base slug text (a gown's name, slugified, with any numeric suffix
@@ -402,6 +419,38 @@ class GownSlugSequence(models.Model):
             row.next_suffix = suffix + 1
             row.save(update_fields=['next_suffix'])
             return f'{base}-{suffix}'
+
+    @classmethod
+    def reserve_many(cls, wanted, taken):
+        """Slugs for several gowns at once: `wanted` is {base: how many}, `taken` the set of slugs that exist (it is added to, so two bases can never
+        land on the same string). Returns {base: [slug, ...]}. Every slug is the suffixed form (base-2, base-3 ...): the caller is adding more
+        gowns of a name that already has one, so the bare text is spoken for. The counter rows are read under ONE lock and written in two bulk
+        queries, however many bases there are."""
+        with transaction.atomic():
+            rows = {row.base: row for row in cls.objects.select_for_update().filter(base__in=list(wanted))}
+            to_create, to_update, chosen = [], [], {}
+            for base, count in wanted.items():
+                row = rows.get(base)
+                suffix = row.next_suffix if row else 2
+                slugs = []
+                while len(slugs) < count:
+                    candidate = f'{base}-{suffix}'
+                    suffix += 1
+                    if candidate in taken:
+                        continue
+                    taken.add(candidate)
+                    slugs.append(candidate)
+                chosen[base] = slugs
+                if row:
+                    row.next_suffix = suffix
+                    to_update.append(row)
+                else:
+                    to_create.append(cls(base=base, next_suffix=suffix))
+            if to_update:
+                cls.objects.bulk_update(to_update, ['next_suffix'])
+            if to_create:
+                cls.objects.bulk_create(to_create)
+        return chosen
 
 
 # After every rental the gown rests for this many days starting the day after its return date (checking, washing, repairs).
