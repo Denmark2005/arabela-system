@@ -35,7 +35,7 @@
 <div class="col-span-12 flex flex-col md:flex-row justify-between items-end gap-8 w-full">
 <!-- Left side: Continue Shopping -->
 <div class="order-2 md:order-1">
-<a class="font-label text-[0.625rem] tracking-[0.2em] uppercase underline underline-offset-8 decoration-outline-variant hover:decoration-primary transition-all" href="#">Continue Shopping</a>
+<a id="continue-shopping-link" class="font-label text-[0.625rem] tracking-[0.2em] uppercase underline underline-offset-8 decoration-outline-variant hover:decoration-primary transition-all" href="{% url 'gowns:collection_all' %}">Continue Shopping</a>
 </div>
 <!-- Right side: Total and Button Grouped -->
 <div class="flex flex-col items-end gap-8 order-1 md:order-2">
@@ -64,6 +64,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
+{{ continue_shopping_links|json_script:"continue-shopping-links" }}
 <script>
 // --- Cart logic for selection.html ---
 // USER_STORAGE_KEY is defined in base.html; do not redeclare (would throw and break this page).
@@ -83,6 +84,22 @@ function getProductDetailUrl(item, idx) {
   const col = item && item.collection ? String(item.collection).trim() : 'wedding';
   return `/collections/${encodeURIComponent(col)}/products/${encodeURIComponent(slug)}/?cart_item_index=${idx}`;
 }
+// Continue Shopping goes back to the category of the gown added last (the last row of the bag). With an empty bag, a row that carries
+// no category, or a category the shop no longer has, it goes to the All page, so it never leads to a missing page.
+const ALL_COLLECTIONS_URL = "{% url 'gowns:collection_all' %}";
+let CONTINUE_SHOPPING_LINKS = {};
+try {
+  CONTINUE_SHOPPING_LINKS = JSON.parse(document.getElementById('continue-shopping-links').textContent) || {};
+} catch (e) {}
+function continueShoppingUrl(cart) {
+  const last = Array.isArray(cart) && cart.length ? cart[cart.length - 1] : null;
+  const key = last && last.collection ? String(last.collection).trim().toLowerCase() : '';
+  return key && Object.prototype.hasOwnProperty.call(CONTINUE_SHOPPING_LINKS, key) ? CONTINUE_SHOPPING_LINKS[key] : ALL_COLLECTIONS_URL;
+}
+function updateContinueShoppingLink(cart) {
+  const link = document.getElementById('continue-shopping-link');
+  if (link) link.href = continueShoppingUrl(cart);
+}
 function renderCart() {
   let cart = JSON.parse(localStorage.getItem(CART_STORAGE_KEY) || '[]');
   // One row per gown + size + dates (static/js/cart-lines.js): duplicate rows left by earlier Book Now taps merge into one.
@@ -94,6 +111,7 @@ function renderCart() {
       if (typeof syncCartToServer === 'function') syncCartToServer(cart);
     }
   }
+  updateContinueShoppingLink(cart);
   const cartItemsDiv = document.getElementById('cart-items');
   const cartTotalSpan = document.getElementById('selection-cart-total');
   const cartSubtotalSpan = document.getElementById('selection-cart-subtotal');

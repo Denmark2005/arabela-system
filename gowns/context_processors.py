@@ -99,6 +99,19 @@ def category_url(row: dict) -> str:
     return reverse(f"gowns:{row['url_name']}")
 
 
+def continue_shopping_links() -> dict[str, str]:
+    """Category key -> its page address, for every category that exists right now (the owner's own ones too, none the owner removed).
+
+    The selection page's "Continue Shopping" reads it: it goes back to the category of the gown added last. A shopping bag saved before
+    Ball Gown became Evening Gown still carries the old key, so that key leads to the new page. A key that is not here (a removed
+    category, a bag row with no category) makes the page use the All page instead."""
+    links = {row["key"]: category_url(row) for row in all_categories()}
+    for old_key, new_key in _RENAMED_COLLECTION_KEYS.items():
+        if new_key in links:
+            links[old_key] = links[new_key]
+    return links
+
+
 # "All" is a synthetic first row (not a real category) prepended wherever the
 # full collection list is shown (nav dropdown, search sidebar, explore drawer).
 _ALL_ROW = {"key": "all", "url_name": "collection_all", "label": "All"}

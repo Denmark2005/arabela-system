@@ -31,6 +31,7 @@ from gowns.context_processors import (
     _RENAMED_COLLECTION_KEYS,
     all_categories,
     category_url,
+    continue_shopping_links,
     _FALLBACK_IMG,
     clear_reservation_hold,
     RESERVATION_HOLD_MINUTES,
@@ -1438,7 +1439,8 @@ def reservation_submit(request):
 
 
 def selection(request):
-    return render(request, 'selection.html', {})
+    # continue_shopping_links: where "Continue Shopping" goes for each category (the page picks the one of the gown added last).
+    return render(request, 'selection.html', {"continue_shopping_links": continue_shopping_links()})
 
 
 def confirmation(request):
