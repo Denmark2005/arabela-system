@@ -21,7 +21,8 @@ from .views import _require_owner
 
 User = get_user_model()
 
-MAX_ROWS = 500           # shown on the page, 15 at a time by pager.js; the CSV holds more
+MAX_ROWS = 500           # shown on the page, PAGE_SIZE at a time by pager.js; the CSV holds more
+PAGE_SIZE = 15           # lines a page: the same number static/arabela_admin/pager.js uses (the page also hands it over as data-arpg-size)
 MAX_EXPORT_ROWS = 10000
 RANGES = (("today", "Today"), ("7", "Last 7 days"), ("30", "Last 30 days"), ("all", "Everything kept"), ("custom", "Pick dates..."))
 DEFAULT_RANGE = "7"
@@ -65,6 +66,7 @@ def read_filters(params):
         "from": start.isoformat() if start else "", "to": end.isoformat() if end else "",
         "q": (params.get("q") or "").strip()[:100],
         "important": params.get("important") == "1",
+        "signins": params.get("signins") == "1",
     }
 
 
@@ -92,10 +94,23 @@ def _base_queryset(filters, now=None):
     return rows
 
 
+def routine_sign_ins(rows):
+    """The everyday sign-ins and sign-outs in `rows` (a failed or refused sign-in is NOT routine: it always shows)."""
+    return rows.filter(category=AuditLog.Category.SIGN_IN, outcome=AuditLog.Outcome.OK)
+
+
+def hides_sign_ins(filters):
+    """True when the list leaves the routine sign-ins out: they bury the work (most lines of a quiet day are "Signed in" / "Signed out").
+    Picking the Sign-in kind, or "Show sign-ins", brings them back."""
+    return filters["category"] == "all" and not filters["signins"]
+
+
 def filtered_queryset(filters, now=None):
     rows = _base_queryset(filters, now)
     if filters["category"] != "all":
         rows = rows.filter(category=filters["category"])
+    elif hides_sign_ins(filters):
+        rows = rows.exclude(category=AuditLog.Category.SIGN_IN, outcome=AuditLog.Outcome.OK)
     return rows
 
 
@@ -108,6 +123,44 @@ def _tone(row):
 def _when(moment):
     local = timezone.localtime(moment)
     return f"{date_format(local, 'M j')}, {date_format(local, 'g:i A')}"
+
+
+def _time(moment):
+    return date_format(timezone.localtime(moment), "g:i A")
+
+
+def _when_relative(moment, now=None):
+    """"Today, 6:18 PM" / "Yesterday, 6:18 PM" / "Nov 16, 6:18 PM" (with the year when it is not this year): for the people cards."""
+    now = now or timezone.now()
+    local, today = timezone.localtime(moment), timezone.localtime(now).date()
+    if local.date() == today:
+        day = "Today"
+    elif local.date() == today - dt.timedelta(days=1):
+        day = "Yesterday"
+    else:
+        day = date_format(local, "M j" if local.year == today.year else "M j, Y")
+    return f"{day}, {date_format(local, 'g:i A')}"
+
+
+def day_label(day, today):
+    """The heading above a day's lines: "Today · Wednesday, November 18", "Yesterday · Tuesday, November 17", "Monday, November 16"."""
+    long = date_format(day, "l, F j" if day.year == today.year else "l, F j, Y")
+    if day == today:
+        return f"Today \u00b7 {long}"
+    if day == today - dt.timedelta(days=1):
+        return f"Yesterday \u00b7 {long}"
+    return long
+
+
+def initials(name):
+    """"Jose Tolentino" -> "JT", "Maria" -> "M", nothing -> "?"."""
+    words = [w for w in (name or "").replace("-", " ").split() if w[:1].isalpha()]
+    return "".join(w[0] for w in words[:2]).upper() or "?"
+
+
+def hue(name):
+    """0-5: the same person always gets the same avatar colour."""
+    return sum(ord(c) for c in (name or "")) % 6
 
 
 def _detail_rows(details):
@@ -155,11 +208,29 @@ def row_for_page(row):
         parts = [before, label, after]          # the number in the sentence is the link: nothing repeats it
     elif label and not (label == row.actor_name):
         extra = label                           # a target the sentence does not name: shown in the opened line instead
+    # The line reads as one sentence with the person in bold: "**Jose Tolentino** marked Wedding Gown 3 as returned". The stored sentence
+    # already starts with the name (it stands alone in the CSV), so the rest is what follows it.
+    who = row.actor_name or "Unknown"
+    summary = row.summary
+    lead = who if row.actor_name and summary.startswith(row.actor_name) else ""
+    rest = summary[len(lead):] if lead else " " + summary
+    rest_parts = None
+    if label and link and label in rest:
+        before, _, after = rest.partition(label)
+        rest_parts = [before, label, after]
     return {
         "id": row.id,
         "when": _when(row.created_at),
         "when_full": f"{date_format(local, 'l, F j, Y')} at {date_format(local, 'g:i A')}",
-        "who": row.actor_name or "Unknown",
+        "who": who,
+        "lead": lead,
+        "rest": rest,
+        "rest_parts": rest_parts,
+        "time": _time(row.created_at),
+        "day": timezone.localtime(row.created_at).date(),
+        "initials": initials(who),
+        "hue": hue(who),
+        "quiet": row.category == AuditLog.Category.SIGN_IN and row.outcome == AuditLog.Outcome.OK,
         "role": row.actor_role,
         "category": row.category,
         "summary": row.summary,
@@ -210,16 +281,32 @@ def staff_activity(now=None):
             entry["important"] += 1
         if action.startswith("cancel_request."):
             entry["requests"] += 1
+    # what each person did last, in words: ONE more query for everybody (the line each account wrote at its newest moment; the last-written one on a tie)
+    newest = {}
+    if last_act:
+        at_their_newest = Q()
+        for actor_id, moment in last_act.items():
+            at_their_newest |= Q(actor_id=actor_id, created_at=moment)
+        for row in work.filter(at_their_newest).order_by("id"):
+            newest[row.actor_id] = row
     rows = []
     for user in User.objects.filter(is_staff=True).select_related("profile").order_by("-is_superuser", "first_name", "username"):
         entry = week.get(user.id, {})
+        name = staff_display_name(user)
+        last = newest.get(user.id)
         rows.append({
             "id": user.id,
-            "name": staff_display_name(user),
+            "name": name,
+            "initials": initials(name),
+            "hue": hue(name),
             "role": _role_of(user),
             "active": user.is_active,
             "last_in": _when(last_in[user.id]) if user.id in last_in else "Never",
+            "last_in_text": _when_relative(last_in[user.id], now) if user.id in last_in else "Never signed in",
             "last_action": _when(last_act[user.id]) if user.id in last_act else "—",
+            "last_when": _when_relative(last_act[user.id], now) if user.id in last_act else "",
+            "last_text": _what(last) if last else "",
+            "link": reverse("arabela_admin:audit_log") + f"?staff={user.id}",
             "today": today_n.get(user.id, 0),
             "week": entry.get("actions", 0),
             "refused": entry.get("refused", 0),
@@ -227,6 +314,19 @@ def staff_activity(now=None):
             "requests": entry.get("requests", 0),
         })
     return rows
+
+
+def today_summary(now=None):
+    """The three numbers above the Audit Log: what happened today, by EVERYONE (her own work too; the dashboard strip counts staff only)."""
+    now = now or timezone.now()
+    since = _local_midnight(timezone.localtime(now).date())
+    rows = AuditLog.objects.filter(created_at__gte=since).exclude(category=AuditLog.Category.SIGN_IN)
+    done = rows.filter(outcome=AuditLog.Outcome.OK)
+    return {
+        "actions": done.count(),
+        "people": done.exclude(actor_name="").values("actor_name").distinct().count(),
+        "important": rows.filter(Q(sensitive=True) | ~Q(outcome=AuditLog.Outcome.OK)).count(),
+    }
 
 
 def today_strip(now=None):
@@ -251,14 +351,29 @@ def audit_log_view(request):
     rows = filtered_queryset(filters)
     total = rows.count()
     shown = [row_for_page(row) for row in rows.select_related("actor")[:MAX_ROWS]]
+    # Day headings: a line gets one when it is the first of its day OR the first on its page (the pager moves whole lines, so a page that starts
+    # in the middle of a day still says which day it is). The heading is part of the line, so it appears and disappears with it.
+    today = timezone.localdate()
+    per_day = {}
+    for entry in shown:
+        per_day[entry["day"]] = per_day.get(entry["day"], 0) + 1
+    previous = None
+    for position, entry in enumerate(shown):
+        entry["show_day"] = position % PAGE_SIZE == 0 or entry["day"] != previous
+        entry["day_label"] = day_label(entry["day"], today)
+        entry["day_count"] = per_day[entry["day"]]
+        previous = entry["day"]
     first = AuditLog.objects.order_by("created_at").values_list("created_at", flat=True).first()
-    categories = [("all", "All", sum(counts.values()))] + [(value, value, counts.get(value, 0)) for value in _CATEGORY_ORDER]
+    hidden = routine_sign_ins(base).count() if hides_sign_ins(filters) else 0
+    everything = sum(counts.values()) - hidden
+    categories = [("all", "All", everything)] + [(value, value, counts.get(value, 0)) for value in _CATEGORY_ORDER]
 
     def query(**changes):
         """The filters as an address query (a category button, the export): this page's filters with some changed."""
         from django.utils.http import urlencode
         params = {"category": filters["category"], "staff": filters["staff"], "range": filters["range"], "from": filters["from"],
-                  "to": filters["to"], "q": filters["q"], "important": "1" if filters["important"] else ""}
+                  "to": filters["to"], "q": filters["q"], "important": "1" if filters["important"] else "",
+                  "signins": "1" if filters["signins"] else ""}
         params.update(changes)
         clean = {k: v for k, v in params.items() if v not in ("", "all", None)}
         if clean.get("range") == DEFAULT_RANGE:
@@ -277,6 +392,12 @@ def audit_log_view(request):
         "max_rows": MAX_ROWS,
         "categories": [{"key": key, "label": label, "count": count, "link": link(category=key)} for key, label, count in categories],
         "important_link": link(important="" if filters["important"] else "1"),
+        "signins_link": link(signins="" if filters["signins"] else "1"),
+        "hidden_signins": hidden,
+        "page_size": PAGE_SIZE,
+        "today": today_summary(),
+        "today_link": link(range="today", category="all", important="", signins="", staff="all", q=""),
+        "today_important_link": link(range="today", category="all", important="1", signins="", staff="all", q=""),
         "export_link": reverse("arabela_admin:audit_log_export") + link(),
         "ranges": RANGES,
         "staff_choices": [{"id": u.id, "name": staff_display_name(u)} for u in User.objects.filter(is_staff=True).order_by("first_name", "username")],

@@ -516,10 +516,11 @@ class PageTests(AuditBase):
         refused = next(r for r in rows.values() if "attempt was refused" in r["summary"])
         self.assertEqual(refused["what"], "Refused: deleted gown AB-3")
         html = self.get().content.decode()
-        self.assertIn('data-arpg=".ar-booking"', html)                               # the shared 15-per-page pager
-        self.assertIn("Approved booking <a href=", html)                              # the booking number inside the sentence is the link
+        self.assertIn('data-arpg=".au-entry"', html)                                 # the shared 15-per-page pager
+        self.assertIn('data-arpg-size="15"', html)                                   # ...and the page says how many a page, the same number the pager uses
+        self.assertIn('<strong>Maria Cruz</strong> approved booking <a href=', html)   # one sentence: the person in bold, the booking number inside it is the link
         self.assertIn('>RSV-2026-0001</a>', html)
-        self.assertNotIn("Maria Cruz approved booking", html.split('data-arpg=".ar-booking"')[1])      # the name column says who; the sentence does not repeat it
+        self.assertNotIn("Maria Cruz approved booking", html.split('data-arpg=".au-entry"')[1])      # the name is the bold word, never printed twice
 
     def test_the_before_and_after_are_in_the_opened_row(self):
         row = next(r for r in self.get().context["rows"] if r["summary"].endswith("(Cora)"))
@@ -641,7 +642,7 @@ class LayoutTests(PageTests):
         return self.get(**params).content.decode()
 
     def test_the_list_has_no_scroll_box_of_its_own(self):
-        listing = self.html().split('data-arpg=".ar-booking"')[0].rsplit("<div", 1)[1]
+        listing = self.html().split('data-arpg=".au-entry"')[0].rsplit("<div", 1)[1]
         self.assertNotIn("overflow-y-auto", listing)
         self.assertNotIn("max-height", listing)
         self.assertIn('data-arpg-noun="actions"', self.html())
@@ -686,7 +687,7 @@ class LayoutTests(PageTests):
         self.assertIn('role="tablist"', html)
         self.assertIn('id="au-tab-actions"', html)
         self.assertIn('id="au-tab-staff"', html)
-        self.assertNotIn("<details", html.split("</style>", 1)[1].split("<main", 1)[1])        # no closed row under the list any more
+        self.assertNotIn('<details class="au-people"', html)                                    # no closed row under the list any more
         self.assertEqual(self.get().context["tab"], "actions")
         staff_first = self.get(tab="staff")
         self.assertEqual(staff_first.context["tab"], "staff")
@@ -703,9 +704,9 @@ class LayoutTests(PageTests):
         self.assertIn(f'Staff activity <span class="au-n">{people}</span>', html)
 
     def test_the_owner_tag_is_not_repeated_on_every_line_but_is_in_the_opened_line(self):
-        rows = self.html().split('data-arpg=".ar-booking"', 1)[1].split('<p class="au-note">', 1)[0]          # the lines only (the Staff activity tab keeps its tag)
+        rows = self.html().split('data-arpg=".au-entry"', 1)[1].split('<p class="au-note">', 1)[0]          # the lines only (the Staff activity tab keeps its tag)
         self.assertNotIn('class="au-role"', rows)
-        self.assertIn('<span class="au-k">Role</span><span class="au-v">Owner</span>', rows)
+        self.assertIn('<dt>Role</dt><dd>Owner</dd>', rows)
 
     def test_the_notes_and_the_cap_message_are_still_there(self):
         html = self.html()
@@ -717,3 +718,273 @@ class LayoutTests(PageTests):
                        {"tab": "staff", "category": "Payments"}):
             with self.subTest(params=params):
                 self.assertEqual(self.get(**params).status_code, 200)
+
+
+# --------------------------------------------------------------------------------------------------------------------------------
+class FeedRedesignTests(AuditBase):
+    """The Audit Log as a feed (2026-11-18): a heading for each day, one sentence per action with the person in bold and an icon for the kind of
+    action, routine sign-ins left out until asked for, three numbers for today, and one card per person."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.owner)
+        self.url = reverse("arabela_admin:audit_log")
+
+    def get(self, **params):
+        return self.client.get(self.url, params)
+
+    def sign_ins(self):
+        write_line(self.maria, 30, category="Sign-in", action="signin.ok", summary="Maria Cruz signed in")
+        write_line(self.maria, 29, category="Sign-in", action="signin.out", summary="Maria Cruz signed out")
+        write_line(self.pedro, 28, category="Sign-in", action="signin.failed", summary="A sign-in for Pedro Reyes was refused", outcome="failed")
+
+    # ---- routine sign-ins are left out ------------------------------------------------------------------------------------
+    def test_routine_sign_ins_are_left_out_but_a_failed_one_always_shows(self):
+        write_line(self.maria, 5, category="Gowns", action="gown.update", summary="Maria Cruz edited gown AB-1", target_label="AB-1")
+        self.sign_ins()
+        response = self.get()
+        summaries = [r["summary"] for r in response.context["rows"]]
+        self.assertEqual(summaries, ["Maria Cruz edited gown AB-1", "A sign-in for Pedro Reyes was refused"])
+        self.assertEqual(response.context["hidden_signins"], 2)
+        self.assertEqual(response.context["total"], 2)
+
+    def test_show_sign_ins_brings_them_back_and_the_kind_dropdown_always_can(self):
+        write_line(self.maria, 5, category="Gowns", action="gown.update", summary="Maria Cruz edited gown AB-1")
+        self.sign_ins()
+        shown = self.get(signins="1")
+        self.assertEqual(len(shown.context["rows"]), 4)
+        self.assertEqual(shown.context["hidden_signins"], 0)
+        self.assertEqual(len(self.get(category="Sign-in").context["rows"]), 3)           # picking the kind shows all of them, the routine ones too
+
+    def test_the_counts_in_the_dropdown_match_what_the_list_shows(self):
+        write_line(self.maria, 5, category="Gowns", action="gown.update", summary="Maria Cruz edited gown AB-1")
+        self.sign_ins()
+        html = self.get().content.decode()
+        self.assertIn("All kinds (2)", html)                                             # the list holds 2 lines
+        self.assertIn("Sign-in (3)", html)                                               # the kind still says how many sign-ins there are
+        self.assertIn("All kinds (4)", self.get(signins="1").content.decode())
+
+    def test_the_toggle_link_flips_the_choice_and_keeps_the_other_filters(self):
+        self.sign_ins()
+        off = self.get(range="30", category="all")
+        self.assertEqual(off.context["signins_link"], "?range=30&signins=1")
+        on = self.get(range="30", signins="1")
+        self.assertEqual(on.context["signins_link"], "?range=30")
+        html = on.content.decode()
+        self.assertIn('<input type="hidden" name="signins" value="1">', html)            # a change of dropdown keeps it
+        self.assertIn('aria-pressed="true"', html)
+
+    def test_the_page_says_how_many_are_hidden_and_offers_to_show_them(self):
+        write_line(self.maria, 5, category="Gowns", action="gown.update", summary="Maria Cruz edited gown AB-1")
+        self.sign_ins()
+        html = self.get().content.decode()
+        self.assertIn("2 routine sign-ins left out", html)
+        self.assertIn('Show sign-ins <span class="ar-n">2</span>', html)
+        self.assertNotIn("routine sign-ins left out", self.get(signins="1").content.decode())
+
+    def test_a_day_with_only_routine_sign_ins_is_not_an_empty_page_but_says_how_to_see_them(self):
+        write_line(self.maria, 30, category="Sign-in", action="signin.ok", summary="Maria Cruz signed in")
+        html = self.get().content.decode()
+        self.assertIn("Nothing recorded for these filters.", html)
+        self.assertIn("Show the 1 sign-in", html)
+
+    def test_the_export_follows_the_same_choice(self):
+        write_line(self.maria, 5, category="Gowns", action="gown.update", summary="Maria Cruz edited gown AB-1")
+        self.sign_ins()
+        base = reverse("arabela_admin:audit_log_export")
+        rows = list(csv.reader(io.StringIO(self.client.get(base).content.decode("utf-8-sig"))))
+        self.assertEqual(len(rows), 3)                                                   # the header, the gown line and the failed sign-in
+        rows = list(csv.reader(io.StringIO(self.client.get(base, {"signins": "1"}).content.decode("utf-8-sig"))))
+        self.assertEqual(len(rows), 5)
+        self.assertEqual(self.get(signins="1").context["export_link"], base + "?signins=1")
+        self.assertEqual(self.get().context["export_link"], base + "?")                  # nothing extra when the default is used
+
+    def test_a_quiet_line_is_drawn_quietly_when_sign_ins_are_asked_for(self):
+        self.sign_ins()
+        html = self.get(signins="1").content.decode()
+        self.assertEqual(html.count("au-entry au-entry--quiet"), 2)                      # the two routine ones; the failed sign-in is a full line
+        self.assertIn("au-chip--bad", html)
+
+    # ---- day headings ---------------------------------------------------------------------------------------------------
+    def test_each_day_gets_one_heading_with_its_count(self):
+        write_line(self.maria, 5, summary="Maria Cruz edited gown AB-1")
+        write_line(self.maria, 6, summary="Maria Cruz edited gown AB-2")
+        write_line(self.maria, 60 * 24 + 5, summary="Maria Cruz edited gown AB-3")
+        write_line(self.maria, 60 * 24 * 3, summary="Maria Cruz edited gown AB-4")
+        rows = self.get(range="30").context["rows"]
+        headed = [(r["day_label"].split(" · ")[0], r["day_count"]) for r in rows if r["show_day"]]
+        self.assertEqual(len(headed), 3)
+        self.assertEqual(headed[0], ("Today", 2))
+        self.assertEqual(headed[1], ("Yesterday", 1))
+        self.assertEqual(headed[2][1], 1)
+        html = self.get(range="30").content.decode()
+        self.assertEqual(html.count('class="au-day"'), 3)
+        self.assertIn("2 actions</span>", html)
+        self.assertIn("1 action</span>", html)
+
+    def test_the_heading_text_is_today_yesterday_then_the_weekday(self):
+        from django.utils.formats import date_format
+        today = timezone.localdate()
+        self.assertEqual(audit_views.day_label(today, today), "Today · " + date_format(today, "l, F j"))
+        self.assertEqual(audit_views.day_label(today - timedelta(days=1), today), "Yesterday · " + date_format(today - timedelta(days=1), "l, F j"))
+        older = today - timedelta(days=4)
+        self.assertEqual(audit_views.day_label(older, today), date_format(older, "l, F j"))
+        last_year = today.replace(year=today.year - 1, day=1)
+        self.assertTrue(audit_views.day_label(last_year, today).endswith(str(last_year.year)))
+
+    def test_a_page_that_starts_in_the_middle_of_a_day_still_says_which_day(self):
+        for n in range(20):
+            write_line(self.maria, n + 1, summary=f"Maria Cruz edited gown G-{n}")
+        rows = self.get().context["rows"]
+        self.assertEqual([i for i, r in enumerate(rows) if r["show_day"]], [0, 15])      # the first line of the day and the first line of page 2
+        self.assertEqual(rows[15]["day_label"], rows[0]["day_label"])
+        self.assertEqual(rows[0]["day_count"], 20)
+
+    def test_the_page_size_is_handed_to_the_pager(self):
+        import re
+        from pathlib import Path
+        self.assertEqual(self.get().context["page_size"], audit_views.PAGE_SIZE)
+        script = (Path(__file__).resolve().parents[1] / "static" / "arabela_admin" / "pager.js").read_text(encoding="utf8")
+        self.assertEqual(int(re.search(r"var PAGE_SIZE = (\d+);", script).group(1)), audit_views.PAGE_SIZE)
+
+    # ---- one sentence per action ----------------------------------------------------------------------------------------
+    def test_each_kind_of_action_has_its_own_icon_colour(self):
+        for n, category in enumerate(("Bookings", "Payments", "Gowns", "Customers", "Staff", "Settings")):
+            write_line(self.maria, n + 1, category=category, summary=f"Maria Cruz did something in {category}")
+        html = self.get().content.decode()
+        for category in ("bookings", "payments", "gowns", "customers", "staff", "settings"):
+            self.assertIn(f"au-ic--{category}", html, category)
+        self.assertEqual(html.count('<rect x="3" y="4" width="18" height="18" rx="2"/>'), 1)      # the Bookings icon, once for the one booking line
+
+    def test_the_person_is_bold_at_the_start_and_the_small_line_has_the_kind_and_the_time(self):
+        write_line(self.maria, 5, category="Gowns", summary="Maria Cruz edited gown AB-1", target_label="AB-1", target_type="gown")
+        row = self.get().context["rows"][0]
+        self.assertEqual((row["lead"], row["rest"]), ("Maria Cruz", " edited gown AB-1"))
+        self.assertEqual(row["rest_parts"], [" edited gown ", "AB-1", ""])
+        html = self.get().content.decode()
+        self.assertIn('<p class="au-sentence"><strong>Maria Cruz</strong> edited gown <a href=', html)
+        self.assertIn('<p class="au-meta"><span>Gowns</span><span>' + row["time"] + "</span></p>", html)
+
+    def test_a_sentence_that_does_not_start_with_the_name_still_reads_right(self):
+        write_line(self.owner, 5, category="Settings", summary="the owner changed a setting", actor_name="Owner")
+        row = self.get().context["rows"][0]
+        self.assertEqual(row["lead"], "")
+        self.assertIn("the owner changed a setting", row["rest"])
+
+    def test_important_and_refused_lines_carry_a_small_label_and_everyday_ones_none(self):
+        write_line(self.maria, 5, summary="Maria Cruz edited gown AB-1")
+        write_line(self.maria, 6, summary="Maria Cruz deleted gown AB-2", sensitive=True)
+        write_line(self.pedro, 7, summary="Pedro Reyes's attempt was refused: deleted gown AB-3", sensitive=True, outcome="refused")
+        html = self.get().content.decode()
+        self.assertEqual(html.count('class="au-chip au-chip--important"'), 1)
+        self.assertEqual(html.count('class="au-chip au-chip--bad"'), 1)
+        self.assertIn(">Refused</span>", html)
+        self.assertIn("<strong>Pedro Reyes</strong>&#x27;s attempt was refused: deleted gown AB-3", html)
+
+    def test_an_opened_line_lists_what_changed_with_the_old_value_crossed_out(self):
+        write_line(self.maria, 5, category="Bookings", summary="Maria Cruz approved booking RSV-1", details={"status": ["Pending", "Confirmed"], "reason": "ok"})
+        html = self.get().content.decode()
+        self.assertIn('<dt>Status</dt><dd><span class="au-was">Pending</span><span class="au-arrow">&rarr;</span><span class="au-now">Confirmed</span></dd>', html)
+        self.assertIn("<dt>Reason</dt><dd>ok</dd>", html)
+        self.assertIn("<dt>When</dt>", html)
+
+    def test_the_sign_in_address_and_device_are_in_the_opened_line(self):
+        AuditLog.objects.create(actor=self.maria, actor_name="Maria Cruz", actor_role="Staff", category="Sign-in", action="signin.ok",
+                                summary="Maria Cruz signed in", ip_address="203.0.113.7", device="Chrome on Windows")
+        html = self.get(signins="1").content.decode()
+        self.assertIn("<dt>From</dt><dd>203.0.113.7", html)
+        self.assertIn("Chrome on Windows", html)
+
+    # ---- today at a glance ----------------------------------------------------------------------------------------------
+    def test_the_three_numbers_count_todays_work_by_everyone_and_leave_sign_ins_out(self):
+        write_line(self.maria, 5, summary="Maria Cruz edited gown AB-1")
+        write_line(self.maria, 6, summary="Maria Cruz deleted gown AB-2", sensitive=True)
+        write_line(self.pedro, 7, summary="Pedro Reyes's attempt was refused: deleted gown AB-3", sensitive=True, outcome="refused")
+        write_line(self.owner, 8, category="Settings", summary="cancel_owner changed the security deposit", sensitive=True)
+        write_line(self.maria, 60 * 24 * 2, summary="Maria Cruz edited gown AB-4")                  # not today
+        self.sign_ins()
+        today = self.get().context["today"]
+        self.assertEqual(today, {"actions": 3, "people": 2, "important": 3})                          # refused is not "done"; sign-ins are not work
+
+    def test_each_number_opens_the_matching_list(self):
+        response = self.get(staff=self.maria.pk, q="x", range="all")
+        self.assertEqual(response.context["today_link"], "?range=today")                              # everything else is reset
+        self.assertEqual(response.context["today_important_link"], "?range=today&important=1")
+        html = response.content.decode()
+        self.assertIn('href="?range=today"', html)
+        self.assertIn('href="?tab=staff"', html)
+        self.assertIn("Actions today", html)
+        self.assertIn("working today", html)
+        self.assertIn("Important today", html)
+
+    def test_one_person_is_called_person_not_people(self):
+        write_line(self.maria, 5, summary="Maria Cruz edited gown AB-1")
+        self.assertIn("Person working today", self.get().content.decode())
+        write_line(self.pedro, 6, summary="Pedro Reyes edited gown AB-2")
+        self.assertIn("People working today", self.get().content.decode())
+
+    def test_a_hot_number_is_marked_and_a_zero_is_not(self):
+        self.assertNotIn("au-stat-n is-hot", self.get().content.decode())
+        write_line(self.maria, 5, summary="Maria Cruz deleted gown AB-2", sensitive=True)
+        self.assertIn('au-stat-n is-hot">1<', self.get().content.decode())
+
+    # ---- the people ---------------------------------------------------------------------------------------------------
+    def test_each_person_has_a_card_with_numbers_and_the_last_thing_they_did(self):
+        write_line(self.maria, 5, category="Bookings", summary="Maria Cruz approved booking RSV-2026-0001 (Cora)")
+        write_line(self.maria, 6, summary="Maria Cruz deleted gown AB-2", sensitive=True)
+        people = {p["id"]: p for p in self.get(tab="staff").context["activity"]}
+        maria, pedro = people[self.maria.pk], people[self.pedro.pk]
+        self.assertEqual(maria["last_text"], "Approved booking RSV-2026-0001 (Cora)")                 # the newest line, without the name
+        self.assertEqual((maria["today"], maria["week"], maria["important"]), (2, 2, 1))
+        self.assertEqual(maria["link"], reverse("arabela_admin:audit_log") + f"?staff={self.maria.pk}")
+        self.assertEqual(maria["initials"], "MC")
+        self.assertEqual(pedro["last_text"], "")
+        html = self.get(tab="staff").content.decode()
+        self.assertIn('<article class="au-person">', html)
+        self.assertIn("Approved booking RSV-2026-0001 (Cora)", html)
+        self.assertIn('<span class="au-num-n is-hot">1</span>', html)
+        self.assertIn("No actions yet", html)
+        self.assertIn("See their actions", html)
+        self.assertIn("Last sign-in", html)
+        self.assertIn("Never signed in", html)
+
+    def test_the_last_sign_in_reads_today_yesterday_or_the_date(self):
+        now = timezone.now()
+        self.assertTrue(audit_views._when_relative(now, now).startswith("Today, "))
+        self.assertTrue(audit_views._when_relative(now - timedelta(days=1), now).startswith("Yesterday, "))
+        old = audit_views._when_relative(now - timedelta(days=5), now)
+        self.assertFalse(old.startswith(("Today", "Yesterday")))
+        self.assertIn(",", old)
+
+    def test_a_switched_off_account_says_so(self):
+        User.objects.filter(pk=self.pedro.pk).update(is_active=False)
+        html = self.get(tab="staff").content.decode()
+        self.assertIn('au-role au-role--off">Switched off', html)
+
+    def test_the_link_on_a_card_filters_the_list_to_that_person(self):
+        write_line(self.maria, 5, summary="Maria Cruz edited gown AB-1")
+        write_line(self.pedro, 6, summary="Pedro Reyes edited gown AB-2")
+        rows = self.get(staff=self.maria.pk).context["rows"]
+        self.assertEqual([r["summary"] for r in rows], ["Maria Cruz edited gown AB-1"])
+
+    def test_initials_and_colours(self):
+        self.assertEqual(audit_views.initials("Jose Tolentino"), "JT")
+        self.assertEqual(audit_views.initials("Maria"), "M")
+        self.assertEqual(audit_views.initials("Ana Maria Cruz"), "AM")
+        self.assertEqual(audit_views.initials("  "), "?")
+        self.assertEqual(audit_views.initials(""), "?")
+        self.assertEqual(audit_views.initials("1234"), "?")
+        for name in ("Jose Tolentino", "Maria", "", "Rainer Pepito"):
+            self.assertIn(audit_views.hue(name), range(6))
+        self.assertEqual(audit_views.hue("Maria"), audit_views.hue("Maria"))                 # the same person, the same colour
+
+    def test_no_template_code_leaks_into_the_page_and_every_filter_still_works(self):
+        write_line(self.maria, 5, summary="Maria Cruz edited gown AB-1")
+        self.sign_ins()
+        for params in ({}, {"signins": "1"}, {"tab": "staff"}, {"category": "Sign-in"}, {"important": "1", "signins": "1"}, {"range": "custom", "from": "2000-01-01"}):
+            with self.subTest(params=params):
+                response = self.get(**params)
+                self.assertEqual(response.status_code, 200)
+                html = response.content.decode().split("<main", 1)[1]
+                for leak in ("{%", "{{", "{#"):
+                    self.assertNotIn(leak, html)

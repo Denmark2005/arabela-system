@@ -13,79 +13,195 @@
   <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet">
   {% include "arabela_admin/partials/ar_list_styles.html" %}
   <style>
-    /* Audit Log: the same look as Rental History, Security Deposits and Active Reservations (partials/ar_list_styles.html). Its own classes start with au-. */
+    /* Audit Log: ONE card with two tabs. Actions is a feed (a round icon for the kind of action, one sentence with the person in bold, a small line under it,
+       a heading for each day); Staff activity is one card per person. Same greys, same blue and same corners as Rental History and the other admin pages
+       (partials/ar_list_styles.html); every colour has its .dark twin. Its own classes start with au-. */
+    /* the three numbers above the card */
+    .au-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin-bottom: 1.25rem; }
+    .au-stat { position: relative; display: flex; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; }
+    .dark .au-stat { background: rgba(255,255,255,.03); border-color: #1d2939; }
+    .au-stat-main { flex: 1; display: flex; flex-direction: column; gap: .25rem; padding: 1rem 1.15rem; border-radius: 1rem; color: inherit; text-decoration: none; }
+    .au-stat-main:hover { background: rgba(152,162,179,.08); }
+    .au-stat-main:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+    .au-stat-n { font-size: 1.75rem; line-height: 1.1; font-weight: 600; font-variant-numeric: tabular-nums; color: #1d2939; }
+    .dark .au-stat-n { color: #f2f4f7; }
+    .au-stat-n.is-hot { color: #b54708; }
+    .dark .au-stat-n.is-hot { color: #fdb022; }
+    .au-stat-l { font-size: .875rem; color: #667085; }
+    .dark .au-stat-l { color: #98a2b3; }
+    .au-stat .ht-tip { position: absolute; top: .8rem; right: .8rem; margin: 0; }
     .au-card { margin-bottom: 1.25rem; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; }
     .dark .au-card { background: rgba(255,255,255,.03); border-color: #1d2939; }
-    .ar-search-input.au-select { flex: 0 0 9.5rem; width: 9.5rem; padding-left: .8rem; }
-    .ar-search-input.au-date { flex: 0 0 9.5rem; width: 9.5rem; padding-left: .8rem; }
     a.ar-filter { text-decoration: none; }
-    .au-keyrow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; padding: 0 1.25rem .85rem; }
-    .au-keyrow .ar-count { min-height: 0; padding: 0; }
-    .au-dot--normal { background: #98a2b3; }
     .au-dot--sensitive { background: #f79009; }
-    .au-dot--bad { background: #d92d20; }
-    /* when | who | what happened | arrow. Every column is fixed or has a minimum, never "auto" (the column titles must line up). */
-    .ar-head.au-grid, .ar-line.au-grid { grid-template-columns: 9.5rem minmax(8rem, 12rem) minmax(14rem, 1fr) 2.25rem; }
-    .au-when { font-size: .8125rem; color: #667085; white-space: nowrap; }
-    .au-who { display: flex; align-items: center; gap: .45rem; min-width: 0; }
-    .au-role { padding: .05rem .45rem; border-radius: 999px; background: #eef4ff; color: #3538cd; font-size: .6875rem; font-weight: 600; }
-    .dark .au-role { background: rgba(70,95,255,.18); color: #9db2ff; }
-    .au-what { display: flex; align-items: center; gap: .65rem; min-width: 0; font-size: .875rem; color: #344054; overflow-wrap: anywhere; }
-    .dark .au-what { color: #d0d5dd; }
-    a.au-link { color: #465fff; text-decoration: underline; text-underline-offset: 2px; }
-    a.au-link:hover { color: #3641f5; }
-    .dark a.au-link { color: #9db2ff; }
-    .au-facts { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem 1.5rem; padding: .8rem 1.25rem .85rem; font-size: .8125rem; }
-    .au-fact { display: inline-flex; align-items: center; gap: .45rem; min-width: 0; }
-    .au-k { color: #98a2b3; }
-    .au-v { display: inline-flex; align-items: center; gap: .45rem; color: #344054; font-weight: 500; overflow-wrap: anywhere; }
-    .dark .au-v { color: #d0d5dd; }
-    .au-why { font-weight: 400; color: #667085; }
-    .au-arrow { color: #98a2b3; padding: 0 .15rem; }
-    .au-note { padding: .75rem 1.25rem; font-size: .75rem; color: #98a2b3; border-top: 1px solid #f2f4f7; }
-    .au-people summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem 1rem; padding: 1rem 1.25rem; cursor: pointer; font-size: .9375rem; font-weight: 600; color: #1d2939; list-style: none; }
-    .dark .au-people summary { color: #f2f4f7; }
-    .au-people summary::-webkit-details-marker { display: none; }
-    .au-people summary::after { content: ""; margin-left: auto; width: .55rem; height: .55rem; border-right: 2px solid #98a2b3; border-bottom: 2px solid #98a2b3; transform: rotate(45deg); transition: transform .15s; }
-    .au-people[open] summary::after { transform: rotate(-135deg); }
-    .au-people-hint { font-size: .8125rem; font-weight: 400; color: #667085; }
-    /* ONE card with two tabs (Actions | Staff activity): the staff table no longer hides under the list, and the list is just its 15 rows --
-       no scroll box of its own, so the page scrolls once and never twice. */
+    /* the two tabs */
     .au-tabs { display: flex; flex-wrap: wrap; gap: .25rem; padding: .35rem 1.25rem 0; border-bottom: 1px solid #f2f4f7; }
     .dark .au-tabs { border-color: #1d2939; }
-    .au-tab { display: inline-flex; align-items: center; gap: .5rem; margin-bottom: -1px; padding: .6rem .9rem; border: 0; border-bottom: 2px solid transparent; background: none; font-size: .875rem; font-weight: 600; color: #667085; cursor: pointer; }
+    .au-tab { display: inline-flex; align-items: center; gap: .5rem; margin-bottom: -1px; padding: .7rem .95rem; border: 0; border-bottom: 2px solid transparent; background: none; font-size: .9375rem; font-weight: 600; color: #667085; cursor: pointer; }
     .au-tab:hover { color: #344054; }
     .dark .au-tab:hover { color: #d0d5dd; }
     .au-tab[aria-selected="true"] { color: #465fff; border-bottom-color: #465fff; }
     .dark .au-tab[aria-selected="true"] { color: #9db2ff; border-bottom-color: #9db2ff; }
     .au-tab:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; border-radius: .4rem; }
     .au-n { min-width: 1.25rem; padding: 0 .4rem; border-radius: 999px; background: rgba(152,162,179,.22); font-size: .75rem; font-weight: 600; text-align: center; }
-    .au-card .ar-head.au-grid, .au-card .ar-head.au-pgrid { position: static; }
-    .au-card .ar-line.au-grid { padding-top: .4rem; padding-bottom: .4rem; }
-    .au-card .ar-line .ar-chev { width: 1.75rem; height: 1.75rem; }
-    .au-card .ar-search { flex: 1 1 14rem; }
-    .au-card .au-toolbar-pill { white-space: nowrap; }
-    .au-note { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .5rem; }
-    .au-note #ar-count { font-weight: 600; color: #667085; font-variant-numeric: tabular-nums; }
-    .au-peoplehead { padding: .85rem 1.25rem .6rem; }
-    .ar-head.au-pgrid, .au-prow.au-pgrid { display: grid; align-items: center; gap: .75rem; grid-template-columns: minmax(9rem, 1.5fr) minmax(8rem, 1fr) minmax(8rem, 1fr) 5rem 5rem 6rem; }
-    .au-prow { padding: .7rem 1.25rem; border-top: 1px solid #f2f4f7; font-size: .875rem; color: #475467; }
-    .au-prow .ar-name { display: flex; align-items: center; gap: .6rem; }
-    .au-num { font-variant-numeric: tabular-nums; }
-    @media (max-width: 1100px) {
-      .ar-head.au-grid { display: none; }
-      .ar-line.au-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.25rem; grid-template-areas: "when who chev" "what what what"; row-gap: .45rem; }
-      .ar-line.au-grid > .au-when { grid-area: when; }
-      .ar-line.au-grid > .au-who { grid-area: who; }
-      .ar-line.au-grid > .au-what { grid-area: what; }
-      .ar-line.au-grid > .ar-chev { grid-area: chev; }
-      .ar-head.au-pgrid { display: none; }
-      .au-prow.au-pgrid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-    }
+    /* the search and the filters: a labelled row of controls, never one long squeezed line */
+    .au-toolbar { display: grid; gap: .9rem; padding: 1.1rem 1.25rem; }
+    .au-toolrow { display: flex; align-items: center; gap: .75rem; }
+    .au-toolrow .ar-search { flex: 1 1 auto; }
+    .au-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .75rem 1rem; }
+    .au-field { display: flex; flex-direction: column; gap: .3rem; flex: 0 1 11.5rem; min-width: 8.5rem; }
+    .au-lbl { font-size: .75rem; font-weight: 600; letter-spacing: .01em; color: #667085; }
+    .dark .au-lbl { color: #98a2b3; }
+    .au-field .ar-search-input { padding-left: .8rem; font-size: .875rem; }
+    .au-toggles { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-left: auto; }
+    .au-toggles .ar-filter { height: 2.5rem; white-space: nowrap; }
+    a.ar-filter { text-decoration: none; }
+    /* a day heading, then that day's lines */
+    .au-day { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .15rem 1rem; padding: .7rem 1.25rem; border-top: 1px solid #eaecf0; border-bottom: 1px solid #eaecf0; background: #f9fafb; font-size: .875rem; font-weight: 600; color: #475467; }
+    .dark .au-day { background: rgba(255,255,255,.04); border-color: #1d2939; color: #d0d5dd; }
+    .au-day-n { font-size: .8125rem; font-weight: 500; color: #667085; }
+    .dark .au-day-n { color: #98a2b3; }
+    .au-entry { border-bottom: 1px solid #f2f4f7; }
+    .dark .au-entry { border-color: #1d2939; }
+    .au-line { display: grid; grid-template-columns: 2.5rem minmax(0, 1fr) auto 2rem; align-items: start; column-gap: .9rem; padding: 1rem 1.25rem; cursor: pointer; }
+    .au-line:hover { background: rgba(152,162,179,.06); }
+    .au-entry.is-open > .au-line, .au-line.is-open { background: rgba(70,95,255,.05); }
+    .au-line > .au-ic { grid-column: 1; grid-row: 1; }
+    .au-line > .au-text { grid-column: 2; grid-row: 1; }
+    .au-line > .au-chips { grid-column: 3; grid-row: 1; }
+    .au-line > .ar-chev { grid-column: 4; grid-row: 1; width: 2rem; height: 2rem; }
+    .au-ic { display: inline-flex; align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; border-radius: .75rem; background: #f2f4f7; color: #475467; }
+    .au-ic svg { width: 1.2rem; height: 1.2rem; }
+    .au-ic--bookings { background: #eef4ff; color: #3538cd; }
+    .au-ic--payments { background: #ecfdf3; color: #067647; }
+    .au-ic--gowns { background: #fdf2fa; color: #c11574; }
+    .au-ic--customers { background: #e0f2fe; color: #026aa2; }
+    .au-ic--staff { background: #fff6ed; color: #c4320a; }
+    .au-ic--settings { background: #f2f4f7; color: #475467; }
+    .au-ic--sign-in { background: #f2f4f7; color: #667085; }
+    .dark .au-ic { background: rgba(152,162,179,.16); color: #d0d5dd; }
+    .dark .au-ic--bookings { background: rgba(70,95,255,.18); color: #9db2ff; }
+    .dark .au-ic--payments { background: rgba(18,183,106,.16); color: #32d583; }
+    .dark .au-ic--gowns { background: rgba(238,70,188,.16); color: #f670c7; }
+    .dark .au-ic--customers { background: rgba(11,165,236,.16); color: #36bffa; }
+    .dark .au-ic--staff { background: rgba(251,101,20,.16); color: #fd853a; }
+    .dark .au-ic--sign-in { background: rgba(152,162,179,.12); color: #98a2b3; }
+    .au-text { min-width: 0; }
+    .au-sentence { margin: 0; font-size: .9375rem; line-height: 1.5; color: #344054; overflow-wrap: anywhere; }
+    .dark .au-sentence { color: #d0d5dd; }
+    .au-sentence strong { font-weight: 600; color: #1d2939; }
+    .dark .au-sentence strong { color: #f2f4f7; }
+    .au-meta { display: flex; flex-wrap: wrap; gap: .1rem 0; margin: .2rem 0 0; font-size: .8125rem; color: #667085; }
+    .dark .au-meta { color: #98a2b3; }
+    .au-meta > span + span::before { content: "\00b7"; margin: 0 .5rem; color: #98a2b3; }
+    a.au-link { color: #465fff; text-decoration: underline; text-underline-offset: 2px; }
+    a.au-link:hover { color: #3641f5; }
+    .dark a.au-link { color: #9db2ff; }
+    .au-chips { display: flex; flex-wrap: wrap; gap: .4rem; padding-top: .1rem; }
+    .au-chip { padding: .15rem .65rem; border-radius: 999px; font-size: .75rem; font-weight: 600; white-space: nowrap; }
+    .au-chip--important { background: #fffaeb; color: #b54708; }
+    .dark .au-chip--important { background: rgba(247,144,9,.16); color: #fdb022; }
+    .au-chip--bad { background: #fef3f2; color: #b42318; }
+    .dark .au-chip--bad { background: rgba(240,68,56,.16); color: #f97066; }
+    /* everyday sign-ins that were asked for: quiet, so they never compete with the work */
+    .au-entry--quiet .au-line { align-items: center; padding-top: .55rem; padding-bottom: .55rem; }
+    .au-entry--quiet .au-ic { width: 1.75rem; height: 1.75rem; margin-left: .35rem; border-radius: .5rem; }
+    .au-entry--quiet .au-ic svg { width: .95rem; height: .95rem; }
+    .au-entry--quiet .au-sentence { font-size: .875rem; color: #667085; }
+    .au-entry--quiet .au-sentence strong { font-weight: 500; color: #475467; }
+    .dark .au-entry--quiet .au-sentence { color: #98a2b3; }
+    .dark .au-entry--quiet .au-sentence strong { color: #d0d5dd; }
+    .au-entry--quiet .au-meta { margin-top: 0; }
+    /* what an opened line shows: one soft panel under the sentence, label on the left, value on the right */
+    .au-panel { padding: 0 1.25rem 1.1rem calc(1.25rem + 2.5rem + .9rem); }
+    .au-dl { display: grid; grid-template-columns: 10rem minmax(0, 1fr); gap: .55rem 1rem; margin: 0; padding: .95rem 1.1rem; border: 1px solid #eaecf0; border-radius: .75rem; background: #f9fafb; font-size: .875rem; }
+    .dark .au-dl { border-color: #1d2939; background: rgba(255,255,255,.03); }
+    .au-dl dt { color: #667085; }
+    .dark .au-dl dt { color: #98a2b3; }
+    .au-dl dd { margin: 0; font-weight: 500; color: #1d2939; overflow-wrap: anywhere; }
+    .dark .au-dl dd { color: #f2f4f7; }
+    .au-was { font-weight: 400; color: #667085; text-decoration: line-through; text-decoration-color: rgba(152,162,179,.7); }
+    .dark .au-was { color: #98a2b3; }
+    .au-arrow { padding: 0 .35rem; color: #98a2b3; }
+    .au-now { font-weight: 600; }
+    .au-why { font-weight: 400; color: #667085; }
+    .dark .au-why { color: #98a2b3; }
+    .au-note { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .75rem; padding: .85rem 1.25rem; border-top: 1px solid #f2f4f7; font-size: .8125rem; color: #667085; }
+    .dark .au-note { border-color: #1d2939; color: #98a2b3; }
+    .au-note #ar-count { font-weight: 600; color: #475467; font-variant-numeric: tabular-nums; }
+    .dark .au-note #ar-count { color: #d0d5dd; }
+    /* the people: one card each */
+    .au-people-hint { margin: 0; padding: 1rem 1.25rem 0; font-size: .875rem; color: #667085; }
+    .dark .au-people-hint { color: #98a2b3; }
+    .au-people-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(19.5rem, 1fr)); gap: 1rem; padding: 1.1rem 1.25rem 1.25rem; }
+    .au-person { display: flex; flex-direction: column; gap: 1.1rem; padding: 1.15rem; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; }
+    .dark .au-person { background: rgba(255,255,255,.02); border-color: #1d2939; }
+    .au-person-head { display: flex; align-items: center; gap: .85rem; }
+    .au-av { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 2.9rem; height: 2.9rem; border-radius: 999px; font-size: .9375rem; font-weight: 600; }
+    .au-av--0 { background: #eef4ff; color: #3538cd; }
+    .au-av--1 { background: #ecfdf3; color: #067647; }
+    .au-av--2 { background: #fdf2fa; color: #c11574; }
+    .au-av--3 { background: #e0f2fe; color: #026aa2; }
+    .au-av--4 { background: #fff6ed; color: #c4320a; }
+    .au-av--5 { background: #f4f3ff; color: #5925dc; }
+    .dark .au-av--0 { background: rgba(70,95,255,.18); color: #9db2ff; }
+    .dark .au-av--1 { background: rgba(18,183,106,.16); color: #32d583; }
+    .dark .au-av--2 { background: rgba(238,70,188,.16); color: #f670c7; }
+    .dark .au-av--3 { background: rgba(11,165,236,.16); color: #36bffa; }
+    .dark .au-av--4 { background: rgba(251,101,20,.16); color: #fd853a; }
+    .dark .au-av--5 { background: rgba(124,58,237,.18); color: #b692f6; }
+    .au-person-id { min-width: 0; }
+    .au-person-name { display: flex; flex-wrap: wrap; align-items: center; gap: .15rem .5rem; margin: 0; font-size: 1rem; font-weight: 600; color: #1d2939; }
+    .dark .au-person-name { color: #f2f4f7; }
+    .au-role { padding: .05rem .5rem; border-radius: 999px; background: #eef4ff; color: #3538cd; font-size: .6875rem; font-weight: 600; }
+    .dark .au-role { background: rgba(70,95,255,.18); color: #9db2ff; }
+    .au-role--off { background: #f2f4f7; color: #667085; }
+    .dark .au-role--off { background: rgba(152,162,179,.16); color: #98a2b3; }
+    .au-person-in { display: flex; flex-wrap: wrap; align-items: center; gap: .1rem .45rem; margin: .2rem 0 0; font-size: .8125rem; color: #667085; }
+    .dark .au-person-in { color: #98a2b3; }
+    .au-nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .6rem; }
+    .au-num { position: relative; min-width: 0; padding: .7rem .8rem; border-radius: .75rem; background: #f9fafb; }
+    .dark .au-num { background: rgba(255,255,255,.04); }
+    .au-num-n { display: block; font-size: 1.5rem; line-height: 1.15; font-weight: 600; font-variant-numeric: tabular-nums; color: #1d2939; }
+    .dark .au-num-n { color: #f2f4f7; }
+    .au-num-n.is-hot { color: #b54708; }
+    .dark .au-num-n.is-hot { color: #fdb022; }
+    .au-num-l { display: flex; flex-wrap: wrap; align-items: center; gap: .1rem 0; margin-top: .2rem; font-size: .75rem; color: #667085; }
+    .dark .au-num-l { color: #98a2b3; }
+    .au-num-l .ht-tip { margin-left: .25rem; }
+    .au-last { font-size: .875rem; color: #344054; }
+    .dark .au-last { color: #d0d5dd; }
+    .au-last p { margin: .2rem 0 0; line-height: 1.45; overflow-wrap: anywhere; }
+    .au-k { display: block; font-size: .75rem; font-weight: 600; letter-spacing: .01em; color: #667085; }
+    .dark .au-k { color: #98a2b3; }
+    .au-last-when { font-size: .8125rem; color: #667085; }
+    .dark .au-last-when { color: #98a2b3; }
+    .au-none { color: #98a2b3; }
+    .au-seeall { margin-top: auto; font-size: .875rem; font-weight: 600; color: #465fff; text-decoration: none; }
+    .au-seeall:hover { text-decoration: underline; }
+    .au-seeall:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; border-radius: .25rem; }
+    .dark .au-seeall { color: #9db2ff; }
     @media (max-width: 760px) {
-      .ar-search-input.au-select, .ar-search-input.au-date { flex: 1 1 8rem; width: auto; }
-      .au-keyrow { padding: 0 1rem .75rem; }
-      .au-facts { padding: .8rem 1rem .85rem; }
+      .au-stats { gap: .6rem; }
+      .au-stat-main { padding: .8rem .85rem; }
+      .au-stat-n { font-size: 1.4rem; }
+      .au-stat-l { font-size: .75rem; }
+      .au-stat .ht-tip { top: .55rem; right: .55rem; }
+      .au-tabs { padding: .35rem 1rem 0; }
+      .au-toolbar { padding: .9rem 1rem; }
+      .au-field { flex: 1 1 8.5rem; }
+      .au-toggles { width: 100%; margin-left: 0; }
+      .au-day { padding: .65rem 1rem; }
+      .au-line { grid-template-columns: 2.25rem minmax(0, 1fr) 2rem; column-gap: .75rem; padding: .9rem 1rem; }
+      .au-line > .au-chips { grid-column: 2; grid-row: 2; padding-top: .45rem; }
+      .au-line > .ar-chev { grid-column: 3; }
+      .au-ic { width: 2.25rem; height: 2.25rem; }
+      .au-panel { padding: 0 1rem 1rem; }
+      .au-dl { grid-template-columns: 6.5rem minmax(0, 1fr); padding: .85rem; }
+      .au-num { padding: .65rem .6rem; }
+      .au-note { padding: .8rem 1rem; }
+      .au-people-hint { padding: .9rem 1rem 0; }
+      .au-people-grid { grid-template-columns: minmax(0, 1fr); padding: 1rem; }
     }
   </style>
 </head>
@@ -1132,103 +1248,134 @@
 </div>
 </div>
             <!-- Breadcrumb End -->
-            <!-- ONE box, the same look as Rental History: the search, the person and the period, the kind-of-action buttons (they are the filter, and the
-                 number on each one is the count) with the "Showing 1-15 of 50 actions" line, then one short line per action. Opening a line shows what it
-                 was before and after. Staff activity is a closed row underneath. The page's own name is not repeated here. -->
+            <!-- Today at a glance: three numbers that each open the matching list. -->
+            <div class="au-stats" role="group" aria-label="Today at a glance">
+              <div class="au-stat">
+                <a class="au-stat-main" href="{{ today_link }}" title="Open today's actions"><span class="au-stat-n">{{ today.actions }}</span><span class="au-stat-l">Actions today</span></a>
+              </div>
+              <div class="au-stat">
+                <a class="au-stat-main" href="?tab=staff" title="Open Staff activity"><span class="au-stat-n">{{ today.people }}</span><span class="au-stat-l">{% if today.people == 1 %}Person{% else %}People{% endif %} working today</span></a>
+              </div>
+              <div class="au-stat au-stat--hot">
+                <a class="au-stat-main" href="{{ today_important_link }}" title="Open today's important lines"><span class="au-stat-n{% if today.important %} is-hot{% endif %}">{{ today.important }}</span><span class="au-stat-l">Important today</span></a>
+                <details class="ht-tip"><summary aria-label="About Important" title="About Important">?</summary><div class="ht-tip-pop">Something a staff member did that matters (deleting, cancelling, changing a setting), or an attempt that was refused. Everyday work is not counted here.</div></details>
+              </div>
+            </div>
+            <!-- ONE card, two tabs. Actions: a feed with a heading for each day and one sentence per action (open it to see what changed). Staff activity: one card per
+                 person. The routine "Signed in" / "Signed out" lines are left out until asked for, so the work is what you see. -->
             <div class="au-card">
               <div class="au-tabs" role="tablist" aria-label="Audit Log">
                 <button type="button" class="au-tab" role="tab" id="au-tab-actions" aria-controls="au-pane-actions" aria-selected="{% if tab == 'staff' %}false{% else %}true{% endif %}" :aria-selected="tab === 'actions' ? 'true' : 'false'" @click="tab = 'actions'">Actions <span class="au-n">{{ total }}</span></button>
                 <button type="button" class="au-tab" role="tab" id="au-tab-staff" aria-controls="au-pane-staff" aria-selected="{% if tab == 'staff' %}true{% else %}false{% endif %}" :aria-selected="tab === 'staff' ? 'true' : 'false'" @click="tab = 'staff'">Staff activity <span class="au-n">{{ activity|length }}</span></button>
               </div>
               <div id="au-pane-actions" role="tabpanel" aria-labelledby="au-tab-actions" x-show="tab === 'actions'"{% if tab == 'staff' %} x-cloak{% endif %}>
-              <form method="get" class="ar-toolbar" id="au-form">
+              <form method="get" class="au-toolbar" id="au-form">
                 {% if filters.important %}<input type="hidden" name="important" value="1">{% endif %}
-                <div class="ar-search">
-                  <svg class="ar-search-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                  <input type="search" name="q" value="{{ filters.q }}" class="ar-search-input" placeholder="Search by name, booking or gown..." aria-label="Search the Audit Log" maxlength="100">
+                {% if filters.signins %}<input type="hidden" name="signins" value="1">{% endif %}
+                <div class="au-toolrow">
+                  <div class="ar-search">
+                    <svg class="ar-search-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                    <input type="search" name="q" value="{{ filters.q }}" class="ar-search-input" placeholder="Search by name, booking or gown..." aria-label="Search the Audit Log" maxlength="100">
+                  </div>
+                  <a href="{{ export_link }}" class="ar-ib" title="Download this list as a spreadsheet (CSV)" aria-label="Download this list as a spreadsheet">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+                  </a>
                 </div>
-                <select name="staff" class="ar-search-input au-select" onchange="this.form.submit()" aria-label="Show one person only">
-                  <option value="all">Everyone</option>
-                  {% for person in staff_choices %}<option value="{{ person.id }}"{% if filters.staff == person.id %} selected{% endif %}>{{ person.name }}</option>{% endfor %}
-                </select>
-                <select name="range" class="ar-search-input au-select" onchange="this.form.submit()" aria-label="Show one period only">
-                  {% for key, label in ranges %}<option value="{{ key }}"{% if filters.range == key %} selected{% endif %}>{{ label }}</option>{% endfor %}
-                </select>
-                {% if filters.range == "custom" %}
-                <input type="date" name="from" value="{{ filters.from }}" class="ar-search-input au-date" onchange="this.form.submit()" aria-label="From this day">
-                <input type="date" name="to" value="{{ filters.to }}" class="ar-search-input au-date" onchange="this.form.submit()" aria-label="Up to this day">
-                {% endif %}
-                <select name="category" class="ar-search-input au-select" onchange="this.form.submit()" aria-label="Show one kind of action">
-                  {% for c in categories %}<option value="{{ c.key }}"{% if filters.category == c.key %} selected{% endif %}>{% if c.key == "all" %}All kinds{% else %}{{ c.label }}{% endif %} ({{ c.count }})</option>{% endfor %}
-                </select>
-                <a href="{{ important_link }}" class="ar-filter ar-filter--hot au-toolbar-pill{% if filters.important %} is-on{% endif %}" title="Important: something a staff member did that matters (deleting, cancelling, changing a setting) or an attempt that was refused. Everyday work shows a grey circle."{% if filters.important %} aria-pressed="true"{% endif %}><span class="ar-dot au-dot--sensitive"></span>Important only</a>
-                <a href="{{ export_link }}" class="ar-ib" title="Download this list as a spreadsheet (CSV)" aria-label="Download this list as a spreadsheet">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
-                </a>
+                <div class="au-filters">
+                  <label class="au-field"><span class="au-lbl">Person</span>
+                    <select name="staff" class="ar-search-input au-select" onchange="this.form.submit()" aria-label="Show one person only">
+                      <option value="all">Everyone</option>
+                      {% for person in staff_choices %}<option value="{{ person.id }}"{% if filters.staff == person.id %} selected{% endif %}>{{ person.name }}</option>{% endfor %}
+                    </select>
+                  </label>
+                  <label class="au-field"><span class="au-lbl">When</span>
+                    <select name="range" class="ar-search-input au-select" onchange="this.form.submit()" aria-label="Show one period only">
+                      {% for key, label in ranges %}<option value="{{ key }}"{% if filters.range == key %} selected{% endif %}>{{ label }}</option>{% endfor %}
+                    </select>
+                  </label>
+                  {% if filters.range == "custom" %}
+                  <label class="au-field"><span class="au-lbl">From</span><input type="date" name="from" value="{{ filters.from }}" class="ar-search-input au-date" onchange="this.form.submit()" aria-label="From this day"></label>
+                  <label class="au-field"><span class="au-lbl">Up to</span><input type="date" name="to" value="{{ filters.to }}" class="ar-search-input au-date" onchange="this.form.submit()" aria-label="Up to this day"></label>
+                  {% endif %}
+                  <label class="au-field"><span class="au-lbl">Type</span>
+                    <select name="category" class="ar-search-input au-select" onchange="this.form.submit()" aria-label="Show one kind of action">
+                      {% for c in categories %}<option value="{{ c.key }}"{% if filters.category == c.key %} selected{% endif %}>{% if c.key == "all" %}All kinds{% else %}{{ c.label }}{% endif %} ({{ c.count }})</option>{% endfor %}
+                    </select>
+                  </label>
+                  <div class="au-toggles">
+                    <a href="{{ important_link }}" class="ar-filter ar-filter--hot au-toolbar-pill{% if filters.important %} is-on{% endif %}" title="Important: something a staff member did that matters (deleting, cancelling, changing a setting) or an attempt that was refused. Everyday work shows a grey circle."{% if filters.important %} aria-pressed="true"{% endif %}><span class="ar-dot au-dot--sensitive"></span>Important only</a>
+                    <a href="{{ signins_link }}" class="ar-filter au-signins-pill{% if filters.signins %} is-on{% endif %}" title="Everyday sign-ins and sign-outs are left out so the work is easy to see. A failed sign-in is always shown."{% if filters.signins %} aria-pressed="true"{% endif %}>Show sign-ins{% if hidden_signins %} <span class="ar-n">{{ hidden_signins }}</span>{% endif %}</a>
+                  </div>
+                </div>
               </form>
-              <div data-arpg=".ar-booking" data-arpg-noun="actions" data-arpg-top="off" data-arpg-count="#ar-count">
-                <div class="ar-head au-grid">
-                  <span>When</span>
-                  <span>Who</span>
-                  <span>What happened</span>
-                  <span></span>
-                </div>
+              <div data-arpg=".au-entry" data-arpg-size="{{ page_size }}" data-arpg-noun="actions" data-arpg-top="off" data-arpg-count="#ar-count">
                 {% for r in rows %}
-                <!-- One action: a closed line (when, who, what, what it was about) and, hidden until it is opened, the exact time and what changed. -->
-                <div class="ar-booking" data-row-id="{{ r.id }}">
-                  <div class="ar-line au-grid" :class="isRowOpen({{ r.id }}) ? 'is-open' : ''" @click="if (!$event.target.closest('a')) { toggleRow({{ r.id }}) }">
-                    <div class="au-when">{{ r.when }}</div>
-                    <div class="au-who"><span class="ar-name">{{ r.who }}</span></div>
-                    <div class="au-what"><span class="ar-dot au-dot--{{ r.tone }}" role="img" aria-label="{% if r.tone == 'bad' %}{{ r.outcome }}{% elif r.tone == 'sensitive' %}Important{% else %}Everyday work{% endif %}" title="{% if r.tone == 'bad' %}{{ r.outcome }}{% elif r.tone == 'sensitive' %}Important{% else %}Everyday work{% endif %}"></span><span>{% if r.what_parts %}{{ r.what_parts.0 }}<a href="{{ r.target_link }}" class="au-link" title="Open it">{{ r.what_parts.1 }}</a>{{ r.what_parts.2 }}{% else %}{{ r.what }}{% endif %}</span></div>
+                <!-- One action: a day heading when it starts a day (or a page), the line itself (icon for the kind of action, who and what in one sentence, the time) and,
+                     hidden until it is opened, the exact time and what changed. -->
+                <div class="au-entry{% if r.quiet %} au-entry--quiet{% endif %}" data-row-id="{{ r.id }}">
+                  {% if r.show_day %}<div class="au-day"><span class="au-day-name">{{ r.day_label }}</span><span class="au-day-n">{{ r.day_count }} action{{ r.day_count|pluralize }}</span></div>{% endif %}
+                  <div class="au-line" :class="isRowOpen({{ r.id }}) ? 'is-open' : ''" @click="if (!$event.target.closest('a')) { toggleRow({{ r.id }}) }">
+                    <span class="au-ic au-ic--{{ r.category|lower }}" role="img" aria-label="{{ r.category }}" title="{{ r.category }}">{% include "arabela_admin/partials/audit_icon.html" with category=r.category %}</span>
+                    <div class="au-text">
+                      <p class="au-sentence">{% if r.lead %}<strong>{{ r.lead }}</strong>{% endif %}{% if r.rest_parts %}{{ r.rest_parts.0 }}<a href="{{ r.target_link }}" class="au-link" title="Open it">{{ r.rest_parts.1 }}</a>{{ r.rest_parts.2 }}{% else %}{{ r.rest }}{% endif %}</p>
+                      <p class="au-meta"><span>{{ r.category }}</span><span>{{ r.time }}</span></p>
+                    </div>
+                    {% if r.tone == 'sensitive' %}<div class="au-chips"><span class="au-chip au-chip--important" title="Important: something that matters (deleting, cancelling, changing a setting)">Important</span></div>
+                    {% elif r.tone == 'bad' %}<div class="au-chips"><span class="au-chip au-chip--bad" title="This attempt did not go through">{{ r.outcome }}</span></div>{% endif %}
                     <button type="button" class="ar-chev" @click.stop="toggleRow({{ r.id }})" aria-expanded="false"
                       :aria-expanded="isRowOpen({{ r.id }}) ? 'true' : 'false'" aria-controls="au-panel-{{ r.id }}"
                       aria-label="Show or hide the details of this action">
                       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7.5l5 5 5-5" /></svg>
                     </button>
                   </div>
-                  <div class="ar-panel" id="au-panel-{{ r.id }}" x-show="isRowOpen({{ r.id }})" x-cloak>
-                    <div class="au-facts">
-                      <span class="au-fact"><span class="au-k">When</span><span class="au-v">{{ r.when_full }}</span></span>
-                      {% if r.role %}<span class="au-fact"><span class="au-k">Role</span><span class="au-v">{{ r.role }}</span></span>{% endif %}
-                      {% if r.tone == 'bad' %}<span class="au-fact"><span class="au-k">Result</span><span class="au-v">{{ r.outcome }}</span></span>{% endif %}
-                      {% if r.about_extra %}<span class="au-fact"><span class="au-k">About</span><span class="au-v">{% if r.target_link %}<a href="{{ r.target_link }}" class="au-link" title="Open it">{{ r.about_extra }}</a>{% else %}{{ r.about_extra }}{% endif %}</span></span>{% endif %}
+                  <div class="au-panel" id="au-panel-{{ r.id }}" x-show="isRowOpen({{ r.id }})" x-cloak>
+                    <dl class="au-dl">
+                      <dt>When</dt><dd>{{ r.when_full }}</dd>
+                      {% if r.role %}<dt>Role</dt><dd>{{ r.role }}</dd>{% endif %}
+                      {% if r.tone == 'bad' %}<dt>Result</dt><dd>{{ r.outcome }}</dd>{% endif %}
+                      {% if r.about_extra %}<dt>About</dt><dd>{% if r.target_link %}<a href="{{ r.target_link }}" class="au-link" title="Open it">{{ r.about_extra }}</a>{% else %}{{ r.about_extra }}{% endif %}</dd>{% endif %}
                       {% for label, before, after in r.details %}
-                      <span class="au-fact"><span class="au-k">{{ label }}</span><span class="au-v">{% if after is not None %}{{ before }}<span class="au-arrow">&rarr;</span>{{ after }}{% else %}{{ before }}{% endif %}</span></span>
+                      <dt>{{ label }}</dt><dd>{% if after is not None %}<span class="au-was">{{ before }}</span><span class="au-arrow">&rarr;</span><span class="au-now">{{ after }}</span>{% else %}{{ before }}{% endif %}</dd>
                       {% endfor %}
-                      {% if r.ip %}<span class="au-fact"><span class="au-k">From</span><span class="au-v">{{ r.ip }}{% if r.device %} <span class="au-why">&middot; {{ r.device }}</span>{% endif %}</span></span>{% endif %}
-                    </div>
+                      {% if r.ip %}<dt>From</dt><dd>{{ r.ip }}{% if r.device %} <span class="au-why">&middot; {{ r.device }}</span>{% endif %}</dd>{% endif %}
+                    </dl>
                   </div>
                 </div>
                 {% empty %}
                 <div class="ar-empty">
-                  <p class="text-gray-500 text-theme-sm dark:text-gray-400">{% if starts_on %}Nothing recorded for these filters.{% else %}Nothing yet. Every action your staff take from now on appears here.{% endif %}</p>
+                  <p class="text-gray-500 text-theme-sm dark:text-gray-400">{% if starts_on %}Nothing recorded for these filters.{% if hidden_signins %} <a href="{{ signins_link }}" class="au-link">Show the {{ hidden_signins }} sign-in{{ hidden_signins|pluralize }}</a>.{% endif %}{% else %}Nothing yet. Every action your staff take from now on appears here.{% endif %}</p>
                 </div>
                 {% endfor %}
               </div>
-              <p class="au-note"><span id="ar-count" aria-live="polite"></span>{% if starts_on %}<span>The Audit Log starts on {{ starts_on }} and keeps the last 12 months. It cannot be changed or deleted.{% if capped %} Showing the newest {{ max_rows }} of {{ total }}: narrow the dates or search to see the rest.{% endif %}</span>{% endif %}</p>
+              <p class="au-note"><span id="ar-count" aria-live="polite"></span>{% if hidden_signins and rows %}<span>{{ hidden_signins }} routine sign-in{{ hidden_signins|pluralize }} left out. <a href="{{ signins_link }}" class="au-link">Show</a></span>{% endif %}{% if starts_on %}<span>The Audit Log starts on {{ starts_on }} and keeps the last 12 months. It cannot be changed or deleted.{% if capped %} Showing the newest {{ max_rows }} of {{ total }}: narrow the dates or search to see the rest.{% endif %}</span>{% endif %}</p>
               </div>
 
-              <!-- Staff activity: the second tab of the same card. -->
-              <div id="au-pane-staff" role="tabpanel" aria-labelledby="au-tab-staff" class="au-people" x-show="tab === 'staff'"{% if tab != 'staff' %} x-cloak{% endif %}>
-              <p class="au-people-hint au-peoplehead">Last sign-in and what each person did.</p>
-              <div class="ar-head au-pgrid">
-                <span>Who</span>
-                <span>Last sign-in</span>
-                <span>Last action</span>
-                <span>Today</span>
-                <span>7 days</span>
-                <span>Important</span>
+              <!-- Staff activity: the second tab of the same card, one card per person. -->
+              <div id="au-pane-staff" role="tabpanel" aria-labelledby="au-tab-staff" x-show="tab === 'staff'"{% if tab != 'staff' %} x-cloak{% endif %}>
+              <p class="au-people-hint">Who signed in, and what each person did.</p>
+              <div class="au-people-grid">
+                {% for person in activity %}
+                <article class="au-person">
+                  <header class="au-person-head">
+                    <span class="au-av au-av--{{ person.hue }}" aria-hidden="true">{{ person.initials }}</span>
+                    <div class="au-person-id">
+                      <h3 class="au-person-name">{{ person.name }}{% if person.role == "Owner" %} <span class="au-role">Owner</span>{% endif %}{% if not person.active %} <span class="au-role au-role--off">Switched off</span>{% endif %}</h3>
+                      <p class="au-person-in"><span class="ar-dot {% if person.active %}ar-dot--confirmed{% else %}ar-dot--done{% endif %}" role="img" aria-label="{% if person.active %}Active{% else %}Inactive{% endif %}" title="{% if person.active %}Active account{% else %}Account switched off{% endif %}"></span><span>Last sign-in</span><span class="au-last-when">{{ person.last_in_text }}</span></p>
+                    </div>
+                  </header>
+                  <div class="au-nums" role="group" aria-label="What {{ person.name }} did">
+                    <div class="au-num"><span class="au-num-n">{{ person.today }}</span><div class="au-num-l">Today</div></div>
+                    <div class="au-num"><span class="au-num-n">{{ person.week }}</span><div class="au-num-l">Last 7 days</div></div>
+                    <div class="au-num"><span class="au-num-n{% if person.important %} is-hot{% endif %}">{{ person.important }}</span><div class="au-num-l">Important<details class="ht-tip"><summary aria-label="About Important" title="About Important">?</summary><div class="ht-tip-pop">Something that matters (deleting, cancelling, changing a setting) or an attempt that was refused, in the last 7 days.</div></details></div></div>
+                  </div>
+                  <div class="au-last">
+                    <span class="au-k">Last action</span>
+                    {% if person.last_text %}<p>{{ person.last_text }}</p><span class="au-last-when">{{ person.last_when }}</span>{% else %}<p class="au-none">No actions yet</p>{% endif %}
+                  </div>
+                  <a class="au-seeall" href="{{ person.link }}">See their actions &rarr;</a>
+                </article>
+                {% endfor %}
               </div>
-              {% for person in activity %}
-              <div class="au-prow au-pgrid">
-                <span class="ar-name"><span class="ar-dot {% if person.active %}ar-dot--confirmed{% else %}ar-dot--done{% endif %}" role="img" aria-label="{% if person.active %}Active{% else %}Inactive{% endif %}" title="{% if person.active %}Active{% else %}Inactive{% endif %}"></span>{{ person.name }}{% if person.role == "Owner" %} <span class="au-role">Owner</span>{% endif %}</span>
-                <span>{{ person.last_in }}</span>
-                <span>{{ person.last_action }}</span>
-                <span class="au-num">{{ person.today }}</span>
-                <span class="au-num">{{ person.week }}</span>
-                <span class="au-num">{{ person.important }}</span>
-              </div>
-              {% endfor %}
               </div>
             </div>
           </div>
