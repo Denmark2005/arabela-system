@@ -347,13 +347,13 @@ class ThePictureSentToTheReaderTests(TestCase):
         self.assertLess(len(seen["bytes"]), len(original))
 
 
-class TheWholeCheckStaysInsideAboutTwentySecondsTests(SimpleTestCase):
-    def test_the_limits_add_up_to_twenty_seconds(self):
-        self.assertLessEqual(rc.READER_TIMEOUT_SECONDS, 20)
-        self.assertLessEqual(rc.SECOND_READ_TIMEOUT_SECONDS, 20)
+class TheWholeCheckStaysInsideAboutFifteenSecondsTests(SimpleTestCase):
+    def test_the_limits_add_up_to_fifteen_seconds(self):
+        self.assertLessEqual(rc.READER_TIMEOUT_SECONDS, 15)
+        self.assertLessEqual(rc.SECOND_READ_TIMEOUT_SECONDS, 15)
         self.assertLess(rc.READER_CUTOFF_SECONDS, rc.READER_TIMEOUT_SECONDS)
         self.assertLess(rc.SECOND_READ_CUTOFF_SECONDS, rc.SECOND_READ_TIMEOUT_SECONDS)
-        self.assertLessEqual(rc.SECOND_READ_SKIP_AFTER_SECONDS, 10)
+        self.assertLessEqual(rc.SECOND_READ_SKIP_AFTER_SECONDS, 8)
 
     def test_a_first_reading_that_took_long_leaves_no_time_for_a_second(self):
         with patch("gowns.receipt_check.requests.post") as post:
@@ -370,9 +370,9 @@ class TheWholeCheckStaysInsideAboutTwentySecondsTests(SimpleTestCase):
 
         with self.settings(RECEIPT_READER_ENABLED=True, GEMINI_API_KEY="k", GEMINI_MODEL="a", GEMINI_FALLBACK_MODEL="b", GEMINI_VERIFY_MODEL=""):
             with patch("gowns.receipt_check.requests.post", side_effect=post):
-                rc.verify_read(b"x", "image/png", started=time.monotonic() - 8)
+                rc.verify_read(b"x", "image/png", started=time.monotonic() - 5)
         self.assertTrue(timeouts)
-        self.assertLessEqual(timeouts[0], rc.SECOND_READ_TIMEOUT_SECONDS - 7)                  # 8 seconds were already used
+        self.assertLessEqual(timeouts[0], rc.SECOND_READ_TIMEOUT_SECONDS - 4)                  # 5 seconds were already used
 
     def test_the_first_prompt_says_a_website_or_admin_screenshot_is_no_payment_screen(self):
         self.assertIn("admin / dashboard page", rc.PROMPT)

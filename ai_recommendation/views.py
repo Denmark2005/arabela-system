@@ -69,18 +69,33 @@ OVERLOADED_REPLY = (
 )
 
 # Protects the Gemini quota/cost and the endpoint itself from a sudden flood of
-# requests. Two windows guard two different risks: the per-minute cap stops a
-# script hammering the endpoint in a burst, and the per-day cap stops the same
-# visitor staying just under that burst limit for hours and still running up real
-# API usage over a day.
-AI_CHAT_RATE_LIMIT_PER_MINUTE = 10
+# requests. The chat shares ONE quota with the receipt check (the same key and the same models: 500 requests a day and 15 a minute per model on the free
+# plan), and a chat question is the heavy kind (it sends the whole gown list), so four limits guard it (2026-11-19):
+#   * per internet address, per minute: a person cannot type 5 questions a minute; this stops a script hammering the endpoint in a burst;
+#   * per internet address, per day: stops the same visitor staying just under the burst limit for hours;
+#   * per signed-in customer, per day: one account cannot spend the quota whatever address it uses;
+#   * for the whole shop, per day: a ceiling so the chat can never use up the half of the quota the receipt check needs, however many addresses
+#     and accounts someone uses. (A blocked message never reaches Gemini, so it costs no quota.)
+AI_CHAT_RATE_LIMIT_PER_MINUTE = 5
 AI_CHAT_RATE_LIMIT_WINDOW_SECONDS = 60
-AI_CHAT_DAILY_LIMIT = 40
+AI_CHAT_DAILY_LIMIT = 20
 AI_CHAT_DAILY_WINDOW_SECONDS = 24 * 60 * 60
+AI_CHAT_ACCOUNT_DAILY_LIMIT = 15
+AI_CHAT_SHOP_DAILY_LIMIT = 250
 
 DAILY_LIMIT_REPLY = (
     "You've reached today's message limit for the AI stylist on this connection. "
     "Please try again tomorrow, or message us on Facebook and our team will help you directly."
+)
+
+ACCOUNT_LIMIT_REPLY = (
+    "You've reached today's message limit for the AI stylist on your account. "
+    "Please try again tomorrow, or message us on Facebook and our team will help you directly."
+)
+
+SHOP_LIMIT_REPLY = (
+    "The AI stylist has answered a lot of questions today and is resting until tomorrow. "
+    "You can keep browsing the collection, or message us on Facebook and our team will help you directly."
 )
 
 
@@ -109,6 +124,17 @@ def _ai_chat_rate_limit_reply(request):
     day_count = _hit_fixed_window(f"ai_chat_rl_day:{ip}", AI_CHAT_DAILY_WINDOW_SECONDS)
     if day_count > AI_CHAT_DAILY_LIMIT:
         return DAILY_LIMIT_REPLY, "rate_limited_daily"
+
+    # Only a message that passed the limits above counts toward these two, so one blocked visitor never eats the shop's allowance.
+    user = getattr(request, "user", None)
+    if user is not None and user.is_authenticated:
+        account_count = _hit_fixed_window(f"ai_chat_rl_acct:{user.pk}", AI_CHAT_DAILY_WINDOW_SECONDS)
+        if account_count > AI_CHAT_ACCOUNT_DAILY_LIMIT:
+            return ACCOUNT_LIMIT_REPLY, "rate_limited_account"
+
+    shop_count = _hit_fixed_window("ai_chat_rl_shop", AI_CHAT_DAILY_WINDOW_SECONDS)
+    if shop_count > AI_CHAT_SHOP_DAILY_LIMIT:
+        return SHOP_LIMIT_REPLY, "rate_limited_shop"
 
     return None
 

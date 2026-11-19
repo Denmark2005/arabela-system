@@ -54,6 +54,7 @@ STATUS_PASS = "pass"
 STATUS_NEEDS_CHECK = "needs_check"
 STATUS_RETAKE = "retake"
 STATUS_REJECT = "reject"
+STATUS_TRY_AGAIN = "try_again"      # the reader said "refuse" but a second reading could not be made in time: ask once more instead of booking
 
 # ---- what the customer is told when a receipt is refused or must be taken again ----------------------------------------------------------
 MESSAGES = {
@@ -67,6 +68,7 @@ MESSAGES = {
     "merchant": "This payment went to a store or biller, not to Arabela's GCash number. Please upload the receipt of your payment to Arabela.",
     "no_reference": "The receipt must show the reference number. Please screenshot the whole receipt, including the Ref No.",
     "cut_off": "Part of this receipt is missing. Please upload the whole receipt, from the top down to the Ref No. and the date.",
+    "try_again": "We couldn't check your receipt just now. Please try again in a moment.",
     "blurry": "We couldn't read this picture clearly. Please upload a sharp screenshot of your GCash receipt, or take a straight, well-lit "
               "photo of the whole screen (no glare, nothing cut off).",
     "wrong_recipient": "This payment was not sent to Arabela's GCash number. Please check the number on the QR and upload the receipt of "
@@ -82,7 +84,7 @@ _REASON_TEXT = {      # short, plain, for the Reservation's notes and the ProofR
     "failed": "failed payment", "received": "money received, not sent", "merchant": "payment to a store or biller",
     "no_reference": "no reference number", "wrong_recipient": "sent to another number", "old_number": "old GCash number",
     "too_old": "receipt too old", "reference_used": "reference already used", "image_used": "picture already used",
-    "blurry": "picture not readable", "cut_off": "receipt cut off",
+    "blurry": "picture not readable", "cut_off": "receipt cut off", "try_again": "could not be checked yet",
 }
 
 # Refusals that are database facts (the same picture or reference is already on another booking): no second reading is needed for them.
@@ -160,6 +162,31 @@ class Reading:
             "status": self.status, "gcash_signs": self.gcash_signs, "layout": self.layout, "picture": self.picture,
             "clarity": self.clarity, "cut_off": self.cut_off,
         })
+
+
+def reading_from_stored(data):
+    """A Reading back from what Reading.to_json wrote (a dict). Unlike reading_from_dict -- which understands the READER'S answer, with its own key
+    names -- this is the exact opposite of to_json, so a reading kept for a second try comes back whole (its date included). None when it cannot
+    be rebuilt."""
+    if not isinstance(data, dict):
+        return None
+    try:
+        paid_at = datetime.fromisoformat(data["paid_at"]) if data.get("paid_at") else None
+        if paid_at is not None and timezone.is_naive(paid_at):
+            paid_at = timezone.make_aware(paid_at)
+        amount = Decimal(data["amount"]) if data.get("amount") is not None else None
+        signs = data.get("gcash_signs")
+        return Reading(
+            is_payment_screen=data.get("is_payment_screen") is True, is_transaction_list=data.get("is_transaction_list") is True,
+            app=str(data.get("app") or "unknown"), direction=str(data.get("direction") or "unknown"),
+            recipient_number=str(data.get("recipient_number") or ""), recipient_name=str(data.get("recipient_name") or ""),
+            sender_number=str(data.get("sender_number") or ""), amount=amount, reference=str(data.get("reference") or ""), paid_at=paid_at,
+            status=str(data.get("status") or "unknown"), gcash_signs=[str(x) for x in signs] if isinstance(signs, list) else [],
+            recipient_pattern=str(data.get("recipient_pattern") or ""), layout=str(data.get("layout") or "unknown"),
+            picture=str(data.get("picture") or "unknown"), clarity=str(data.get("clarity") or "unknown"), cut_off=data.get("cut_off") is True,
+        )
+    except (ValueError, InvalidOperation, TypeError):
+        return None
 
 
 def _digits(value):
@@ -400,12 +427,17 @@ Answer with ONE JSON object and nothing else:
 {"lines": ["first line", "second line", "..."], "picture": "screenshot" or "photo_of_screen", "clarity": "clear" (every line is easy to read) or "blurry" (some text is hard to read) or "unreadable" (the reference number or the recipient cannot be read), "cut_off": true when part of the receipt is missing (no top, no bottom, no reference number or no date), else false}
 """
 
-# The whole check (both readings) must answer in about 20 seconds: the customer waits on a spinner (no words) while it works.
-READER_TIMEOUT_SECONDS = 20
-READER_CUTOFF_SECONDS = 14          # no new attempt starts after this
-SECOND_READ_SKIP_AFTER_SECONDS = 10  # the second reading is skipped when the first one already took this long (the page must answer in time)
-SECOND_READ_CUTOFF_SECONDS = 16
-SECOND_READ_TIMEOUT_SECONDS = 20
+# The whole check (both readings) must answer in about 15 seconds: the customer waits on a spinner (no words) while it works. A normal receipt
+# needs one reading (about 5 to 8 seconds); only a receipt the first reading would refuse gets a second look, and when that cannot finish in time the
+# customer is asked to try again (the second try reuses the first reading and gets a fresh 15 seconds) instead of being kept waiting.
+READER_TIMEOUT_SECONDS = 15
+READER_CUTOFF_SECONDS = 10          # no new attempt starts after this
+SECOND_READ_SKIP_AFTER_SECONDS = 7   # the second reading is skipped when the first one already took this long (the page must answer in time)
+SECOND_READ_CUTOFF_SECONDS = 12
+SECOND_READ_TIMEOUT_SECONDS = 15
+# A receipt dated more than this long ago, on a SHARP picture, is refused on ONE reading: a misread digit cannot make a fresh receipt look this old
+# unless the picture is soft, so no second reading (and no extra wait) is needed. Between 24 hours and this, two readings must still agree.
+SINGLE_READING_OLD_AFTER = timedelta(days=3)
 READER_MAX_SIDE = 1800              # a bigger picture is scaled down before it is sent, so it uploads and is read faster
 READER_MAX_BYTES = 600_000
 SECOND_READ_STRONGER_MODEL_SECONDS = 8  # a model chosen with GEMINI_VERIFY_MODEL gets one try of at most this long, then the usual models take over
@@ -549,10 +581,15 @@ class Verdict:
     fingerprint: str = ""
     image_hash: str = ""
     account: str = ""            # whose GCash the receipt was paid to: "owner" or "manager" (gowns/gcash_numbers.account_for_recipient)
+    single_reading: bool = False  # refused as clearly too old on ONE sharp reading (SINGLE_READING_OLD_AFTER), without a second reading
 
     @property
     def rejected(self):
         return self.status == STATUS_REJECT
+
+    @property
+    def try_again(self):
+        return self.status == STATUS_TRY_AGAIN
 
     @property
     def retake(self):
@@ -850,17 +887,39 @@ def _reason(verdict):
     return reject_reason_text(code) if code else verdict.status
 
 
-def _reconcile(first, second, second_why, quality, first_reading):
+_WHY_WORDS = {
+    "no_time": "the first reading had already used the time", "timeout": "Google took too long to answer", "network": "the connection to Google failed",
+    "disabled": "the reader is switched off", "not_configured": "the reader has no key", "unreadable": "the answer could not be understood",
+}
+
+
+def _why_words(code):
+    """The reason a second reading could not be made, in words the staff and the owner can read (the short code stays in the log)."""
+    code = str(code or "")
+    if code in _WHY_WORDS:
+        return _WHY_WORDS[code]
+    if code.startswith("http_"):
+        return "Google was busy or refused the request (" + code[5:] + ")"
+    return code or "no reason given"
+
+
+def _reconcile(first, second, second_why, quality, first_reading, ask_again=False):
     """The final verdict from the first reading's refusal (or "cannot read") and the second, independent reading.
 
     A refusal stands only when both readings give the SAME reason and the picture is sharp enough to trust. Anything else must not cost a real
-    customer their booking: it becomes "retake" (the picture cannot be read) or "needs_check" (the staff look)."""
+    customer their booking: it becomes "retake" (the picture cannot be read) or "needs_check" (the staff look).
+
+    `ask_again`: when the first reading would have REFUSED and the second could not be made in time, the customer is asked to try again (nothing
+    is booked, nothing counted) instead of the booking going through for the staff; the caller turns it off on the second try, so an honest
+    customer is never stuck."""
     if second is None:
         if first.status == STATUS_RETAKE:
             return first
+        if ask_again and first.status == STATUS_REJECT:
+            return Verdict(status=STATUS_TRY_AGAIN, codes=["check_unfinished"], message=MESSAGES["try_again"], reading=first_reading)
         return _needs_check(first, first_reading,
                             f"The reader would have refused this receipt ({_reason(first)}), but a second reading could not be made "
-                            f"({second_why}), so it was sent to the staff to look at.", "second_read_unavailable")
+                            f"({_why_words(second_why)}), so it was sent to the staff to look at.", "second_read_unavailable")
     if first.status == STATUS_REJECT:
         both_say_not_for_the_shop = (second.status == STATUS_REJECT and second.codes and first.codes[0] in NOT_FOR_THE_SHOP
                                      and second.codes[0] in NOT_FOR_THE_SHOP)
@@ -910,7 +969,7 @@ def _confirm_layout(first, second, second_why, quality, first_reading):
     second reading stops the picture, and anything unclear goes to the staff with a note."""
     if second is None:
         return _needs_check(first, first_reading,
-                            f"This does not look like one of GCash's usual receipt screens, and a second reading could not be made ({second_why}) to "
+                            f"This does not look like one of GCash's usual receipt screens, and a second reading could not be made ({_why_words(second_why)}) to "
                             "confirm it. Look at the picture yourself.", "layout_unconfirmed")
     if second.status == STATUS_REJECT and second.codes and second.codes[0] in NOT_A_RECEIPT:
         if quality.get("poor"):
@@ -923,10 +982,17 @@ def _confirm_layout(first, second, second_why, quality, first_reading):
                         f"({_reason(second)}). Look at the picture yourself.", "layout_unconfirmed")
 
 
-def check_receipt(image_bytes, file_name, *, expected_amount, started_at=None, exclude_reservation_id=None, now=None):
+def check_receipt(image_bytes, file_name, *, expected_amount, started_at=None, exclude_reservation_id=None, now=None,
+                  single_old_ok=False, ask_again_when_unsure=False, prior_first_reading=None, final_try=False):
     """Read the cleaned picture and judge it. `expected_amount` is THIS booking's deposit; `started_at` is when the booking was started
     (the checkout hold's start, or the reservation's creation for an upload made later); `exclude_reservation_id` keeps a booking from
-    counting as "another" booking when its own proof is being replaced."""
+    counting as "another" booking when its own proof is being replaced.
+
+    The site passes four more things (the defaults keep the older behaviour, so the rules can still be tested one by one):
+      * `single_old_ok`: a receipt dated more than SINGLE_READING_OLD_AFTER ago, on a sharp picture, is refused on the FIRST reading alone.
+      * `ask_again_when_unsure`: a refusal the second reading could not confirm in time becomes STATUS_TRY_AGAIN (see _reconcile) ...
+      * `final_try`: ... except on the customer's second try, when it goes to the staff as before.
+      * `prior_first_reading`: the first reading of this same picture from the earlier try, so it is not read (or waited for) twice."""
     from reservations.models import Reservation
 
     began = time.monotonic()
@@ -956,14 +1022,26 @@ def check_receipt(image_bytes, file_name, *, expected_amount, started_at=None, e
     reading, why = None, ""
     sent_bytes, sent_mime = _for_reader(image_bytes, mime)
     if not image_used_by:
-        reading, why = read_receipt(sent_bytes, sent_mime)
-        if reading is None:
-            logger.info("Receipt not read (%s): sent to staff as needs_check", why)
+        if prior_first_reading is not None:
+            reading = prior_first_reading                      # the same picture, already read on the first try
+        else:
+            reading, why = read_receipt(sent_bytes, sent_mime)
+            if reading is None:
+                logger.info("Receipt not read (%s): sent to staff as needs_check", why)
     verdict = judge(reading, image_used_by)
+
+    # A receipt clearly too old (days, not hours) on a SHARP picture needs no second reading: refuse it now.
+    one_reading = False
+    if (single_old_ok and verdict.status == STATUS_REJECT and verdict.codes[:1] == ["too_old"] and reading is not None
+            and reading.paid_at is not None and now - reading.paid_at > SINGLE_READING_OLD_AFTER
+            and receipt_quality.picture_quality(image_bytes).get("label") == "sharp"):
+        one_reading = True
+        verdict.single_reading = True
 
     # A refusal (or "cannot read it") from ONE reading is never final: a real receipt must not be lost to a misread. Read it a second way first.
     # The same goes for a picture the first reading ACCEPTED without finding the title of any GCash receipt layout on it.
-    refused_or_unread = verdict.status in (STATUS_REJECT, STATUS_RETAKE) and verdict.codes and verdict.codes[0] not in CERTAIN_CODES
+    refused_or_unread = (verdict.status in (STATUS_REJECT, STATUS_RETAKE) and verdict.codes and verdict.codes[0] not in CERTAIN_CODES
+                         and not one_reading)
     unusual = (verdict.status in (STATUS_PASS, STATUS_NEEDS_CHECK) and reading is not None and not image_used_by
                and not looks_like_gcash_receipt(reading))
     if refused_or_unread or unusual:
@@ -974,7 +1052,7 @@ def check_receipt(image_bytes, file_name, *, expected_amount, started_at=None, e
         if unusual:
             verdict = _confirm_layout(first, second, second_why, quality, reading)
         else:
-            verdict = _reconcile(first, second, second_why, quality, reading)
+            verdict = _reconcile(first, second, second_why, quality, reading, ask_again=ask_again_when_unsure and not final_try)
         logger.warning(
             "Receipt check: first reading %s %s -> final %s %s | second reading %s%s | picture %s | first=%s second=%s",
             first.status, first.codes, verdict.status, verdict.codes, second.status if second else "none", f" {second.codes}" if second else f" ({second_why})",

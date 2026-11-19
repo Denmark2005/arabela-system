@@ -804,6 +804,11 @@
               arabelaAlert({ title: 'You were signed out', message: data.error, danger: true }).then(signIn, signIn);
               return;
             }
+            if (data && data.proof_try_again) {
+              // The check could not finish just now: the window comes back with the same entries and the same picture, and the sentence under it.
+              askAgain({ file: data.error });
+              return;
+            }
             if (data && data.typed_required) {
               arabelaAlert({ title: 'Please reload this page', message: data.error, danger: true });
               return;

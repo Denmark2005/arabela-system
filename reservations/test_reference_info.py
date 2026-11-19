@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 
 from reservations.models import Reservation
 
@@ -92,3 +93,57 @@ class TheBadgeTests(TestCase):
                 self.assertEqual(badges, [("warn", "Needs check")])
         matching = booking(proof_check="pass", proof_match="match").proof_badges
         self.assertEqual(matching, [("ok", "Pre-checked")])
+
+
+class ThePaidDateAndTheReasonTests(TestCase):
+    """The reference card also tells the owner WHEN the receipt says it was paid and why the receipt check sent the booking to the staff (2026-11-19)."""
+
+    def paid(self, **fields):
+        from datetime import datetime
+        return booking(gcash_reference="9046723594550", proof_typed_reference="9046723594550", proof_match="match",
+                       proof_paid_at=timezone.make_aware(datetime(2026, 10, 31, 10, 20)), **fields)
+
+    def test_the_date_is_written_the_way_the_owner_reads_it(self):
+        self.assertEqual(self.paid().reference_info["paidAt"], "Oct 31, 2026, 10:20 AM")
+        from datetime import datetime
+        evening = booking(gcash_reference="9046723594550", proof_paid_at=timezone.make_aware(datetime(2026, 11, 2, 15, 5)))
+        self.assertEqual(evening.reference_info["paidAt"], "Nov 2, 2026, 3:05 PM")
+        noon = booking(gcash_reference="9046723594550", proof_paid_at=timezone.make_aware(datetime(2026, 11, 2, 12, 0)))
+        self.assertEqual(noon.reference_info["paidAt"], "Nov 2, 2026, 12:00 PM")
+
+    def test_a_receipt_more_than_a_day_old_when_the_booking_was_made_is_marked_old(self):
+        old = self.paid()
+        Reservation.objects.filter(pk=old.pk).update(created_at=timezone.make_aware(__import__("datetime").datetime(2026, 11, 18, 23, 17)))
+        old.refresh_from_db()
+        self.assertTrue(old.reference_info["paidOld"])
+
+    def test_the_line_is_exactly_twenty_four_hours(self):
+        from datetime import datetime, timedelta
+        paid = timezone.make_aware(datetime(2026, 11, 18, 10, 0))
+        edge = booking(gcash_reference="1" * 13, proof_paid_at=paid)
+        for delta, expected in ((timedelta(hours=24), False), (timedelta(hours=24, minutes=1), True), (timedelta(hours=2), False)):
+            with self.subTest(delta=delta):
+                Reservation.objects.filter(pk=edge.pk).update(created_at=paid + delta)
+                edge.refresh_from_db()
+                self.assertEqual(edge.reference_info["paidOld"], expected)
+
+    def test_a_fresh_receipt_is_not_old_and_no_date_is_nothing(self):
+        fresh = booking(gcash_reference="1" * 13, proof_paid_at=timezone.now() - timezone.timedelta(minutes=5))
+        self.assertFalse(fresh.reference_info["paidOld"])
+        none = booking(gcash_reference="1" * 13)
+        self.assertEqual((none.reference_info["paidAt"], none.reference_info["paidOld"]), ("", False))
+
+    def test_the_checks_own_words_are_shown_only_when_it_sent_the_booking_to_the_staff(self):
+        notes = "The reader would have refused this receipt (receipt too old), but a second reading could not be made.\nSecond line.\nThird line."
+        flagged = self.paid(proof_check="needs_check", proof_notes=notes)
+        self.assertEqual(flagged.reference_info["notes"], notes.split("\n")[:2])               # at most two lines: the card stays short
+        self.assertEqual(flagged.reference_info["check"], "needs_check")
+        fine = self.paid(proof_check="pass", proof_notes="Paid ₱2,050; the deposit is ₱2,000 (+₱50 more than required).")
+        self.assertEqual(fine.reference_info["notes"], [])
+        self.assertEqual(fine.reference_info["check"], "pass")
+        self.assertEqual(self.paid(proof_check="needs_check", proof_notes="").reference_info["notes"], [])
+        self.assertEqual(self.paid().reference_info["check"], "")
+
+    def test_it_is_still_valid_json_for_the_pages(self):
+        data = json.loads(self.paid(proof_check="needs_check", proof_notes="a").reference_info_json)
+        self.assertEqual((data["paidAt"], data["notes"], data["check"]), ("Oct 31, 2026, 10:20 AM", ["a"], "needs_check"))

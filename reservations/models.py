@@ -174,6 +174,14 @@ class Reservation(models.Model):
             return None
         differs = self.proof_match in (self.ProofMatch.REFERENCE, self.ProofMatch.BOTH)
         amount_differs = self.proof_match in (self.ProofMatch.AMOUNT, self.ProofMatch.BOTH)
+        paid = ''
+        old = False
+        if self.proof_paid_at:
+            local = timezone.localtime(self.proof_paid_at)
+            paid = f"{local:%b} {local.day}, {local:%Y}, {local.hour % 12 or 12}:{local:%M} {'AM' if local.hour < 12 else 'PM'}"
+            # A receipt already more than a day old WHEN the booking was made: the date that exposes an old (but real) payment.
+            old = bool(self.created_at and self.created_at - self.proof_paid_at > timedelta(hours=24))
+        flagged = self.proof_check == self.ProofCheck.NEEDS_CHECK
         return {
             'reference': _group_reference(shown),
             'digits': shown,                                    # what the Copy button copies: the plain number the GCash app searches for
@@ -184,6 +192,11 @@ class Reservation(models.Model):
             'receiptReference': _group_reference(read) if differs and read else '',
             'typedAmount': _peso_text(self.proof_typed_amount) if self.proof_typed_amount is not None else '',
             'receiptAmount': _peso_text(self.proof_amount) if amount_differs and self.proof_amount is not None else '',
+            'paidAt': paid,                                     # the date and time printed on the receipt, as the reader found it
+            'paidOld': old,
+            'check': self.proof_check,
+            # Why the receipt check sent this booking to the staff (its own words), so the owner sees it next to the number.
+            'notes': [line for line in (self.proof_notes or '').split('\n') if line.strip()][:2] if flagged else [],
         }
 
     @property

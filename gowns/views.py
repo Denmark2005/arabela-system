@@ -45,7 +45,7 @@ from gowns.context_processors import (
 from gowns.models import (
     COOLDOWN_DAYS, EXTRA_SMALL_CATEGORY, SIZE_CODES, Gown, GownUnavailability, group_gowns_by_name, pick_representative_gown, size_codes_of,
 )
-from gowns import availability, deposit, proof_image, receipt_check, reservation_limits, typed_payment
+from gowns import availability, deposit, proof_image, receipt_check, receipt_tries, reservation_limits, typed_payment
 from gowns.photos import GRID_WIDTH, PAGE_WIDTH, sized
 from gowns.size_guides import size_guide_for
 from reservations import reminders, timeline
@@ -76,6 +76,12 @@ _SEARCH_MAX_LENGTH = Gown._meta.get_field("name").max_length
 # (how many, per how many seconds).
 _SEARCH_LIMIT = (60, 60)          # searches per minute, per connection (IP address)
 _SUBMIT_LIMIT = (10, 10 * 60)     # reservation submissions per 10 minutes, per account (retries after an error included)
+# How many times one account, and one internet address, may have a receipt picture READ per hour and per day (it protects the shop's free Gemini
+# quota: 500 requests a day per model). A real customer needs 1 to 3; the address allowance is higher because customers share a Wi-Fi or a phone carrier.
+# Only pictures that actually reach the reader count (a box that needs fixing never does), retakes included.
+_SCAN_LIMITS_ACCOUNT = ((10, 60 * 60), (25, 24 * 60 * 60))
+_SCAN_LIMITS_ADDRESS = ((14, 60 * 60), (60, 24 * 60 * 60))
+TOO_MANY_SCANS_MESSAGE = "Too many tries. Please wait, or message the shop on Facebook."
 _HOLD_LIMIT = (20, 10 * 60)       # checkout holds started per 10 minutes, per account
 _CART_SAVE_LIMIT = (60, 60)       # cart saves per minute, per account (the page saves after every change)
 
@@ -1018,15 +1024,52 @@ def _verdict_fields(verdict):
     }
 
 
+def _scan_quota_refusal(request):
+    """None while this account and this internet address are within their allowance of receipt readings, else the answer that stops the picture
+    BEFORE it is read (nothing is booked, and not a request is spent). Skipped when the reader is switched off or has no key: nothing is spent then."""
+    if not (getattr(settings, "RECEIPT_READER_ENABLED", False) and getattr(settings, "GEMINI_API_KEY", "")):
+        return None
+    address = rate_limit.client_ip(request)
+    within = True
+    for kind, who, limits in (("u", request.user.pk, _SCAN_LIMITS_ACCOUNT), ("ip", address, _SCAN_LIMITS_ADDRESS)):
+        for (limit, window), tag in zip(limits, ("h", "d")):
+            if not rate_limit.allowed(f"scan:{kind}:{who}:{tag}", limit, window):
+                within = False
+    if within:
+        return None
+    return JsonResponse({"success": False, "too_many_tries": True, "error": TOO_MANY_SCANS_MESSAGE}, status=429)
+
+
 def _check_proof_or_refuse(request, clean_proof, *, expected_amount, started_at, reservation=None):
     """Runs the receipt check on the cleaned picture. Returns (verdict, None) when the picture may go on, or (None, the refusal response)
-    when it was refused: nothing is booked, no dates are held, the refusal is counted against the account, and the customer is told why."""
+    when it was refused: nothing is booked, no dates are held, the refusal is counted against the account, and the customer is told why.
+
+    Besides the plain check this keeps what the site remembers between two tries of the SAME picture (gowns/receipt_tries.py): a receipt refused as
+    clearly too old on one reading takes the slower two-reading path the next time, and a receipt the reader would refuse but could not be confirmed
+    in time is answered with "please try again" once (nothing booked, nothing counted) and goes to the staff on the second try."""
     image_bytes = clean_proof.read()
     clean_proof.seek(0)
+    quota_refusal = _scan_quota_refusal(request)
+    if quota_refusal is not None:
+        return None, quota_refusal
+    image_hash = hashlib.sha256(image_bytes).hexdigest()
+    earlier = receipt_tries.state(request.session, image_hash)
     verdict = receipt_check.check_receipt(
         image_bytes, getattr(clean_proof, "name", ""), expected_amount=expected_amount, started_at=started_at,
         exclude_reservation_id=getattr(reservation, "pk", None),
+        single_old_ok=not earlier["old_refused"], ask_again_when_unsure=True, final_try=earlier["count"] >= 1 or earlier["old_refused"],
+        prior_first_reading=receipt_tries.first_reading(request.session, image_hash, receipt_check.reading_from_stored),
     )
+    if verdict.try_again:
+        receipt_tries.remember_try_again(request.session, image_hash, verdict.reading.to_json() if verdict.reading is not None else "")
+        return None, JsonResponse({
+            "success": False, "proof_rejected": True, "proof_retake": True, "proof_try_again": True, "account_blocked": False,
+            "error": verdict.message,
+        }, status=400)
+    if verdict.single_reading:
+        receipt_tries.remember_old_refusal(request.session, image_hash)
+    elif earlier["count"] or earlier["old_refused"]:
+        receipt_tries.forget(request.session, image_hash)           # this picture is settled: nothing more to remember about it
     if verdict.retake:
         # The picture could not be read (blurry, cut off, no reference number): nothing is booked, but this is NOT a refusal -- it is never counted
         # against the account. The page shows the message under the upload box and lets the customer choose a better picture.

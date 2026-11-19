@@ -92,7 +92,7 @@ class Command(BaseCommand):
                 now = first.paid_at + timedelta(minutes=5)
                 started_at = now - timedelta(minutes=20)
         began = time.monotonic()
-        verdict = rc.check_receipt(image, cleaned.name, expected_amount=deposit, started_at=started_at, now=now)
+        verdict = rc.check_receipt(image, cleaned.name, expected_amount=deposit, started_at=started_at, now=now, single_old_ok=True)       # as the site does
         took = time.monotonic() - began
         reading = verdict.reading
         if reading is not None:

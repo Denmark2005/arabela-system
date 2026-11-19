@@ -2,9 +2,11 @@
 lines, and searchable (as the owner pastes it from her GCash app) in the search boxes, so she can find who paid.
 
 The number shown is the one the customer typed; when it differs from the receipt picture both are shown (Reservation.reference_info)."""
+from datetime import datetime
 from decimal import Decimal
 
 from django.urls import reverse
+from django.utils import timezone
 
 from arabela_admin import views
 from arabela_admin.test_owner_payment_check import OwnerCheckBase
@@ -184,3 +186,65 @@ class TheSameNumberOnTwoBookingsTests(OwnerCheckBase):
         self.assertNotIn(d.id, found)
         self.assertEqual(views._same_gcash_number_elsewhere([]), {})
         self.assertEqual(views._same_gcash_number_elsewhere([d]), {})
+
+
+class TheOwnersCardShowsTheDateAndTheReasonTests(OwnerCheckBase):
+    """2026-11-19: an old receipt's reference is real in the owner's GCash, so the card must show the date and why the check flagged it, and the green
+    chip must never read as "payment OK"."""
+
+    def page(self, name):
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse(name))
+        self.assertEqual(response.status_code, 200, name)
+        return response.content.decode()
+
+    def old_booking(self, **fields):
+        reservation, item = self.booking(
+            gcash_reference="9046723594550", proof_typed_reference="9046723594550", proof_typed_amount=Decimal("500"), proof_amount=Decimal("500"),
+            proof_match="match", proof_check=Reservation.ProofCheck.NEEDS_CHECK,
+            proof_paid_at=timezone.make_aware(datetime(2026, 10, 31, 10, 20)),
+            proof_notes="The reader would have refused this receipt (receipt too old), but a second reading could not be made (the first reading had already used the time), so it was sent to the staff to look at.",
+            **fields)
+        Reservation.objects.filter(pk=reservation.pk).update(created_at=timezone.make_aware(datetime(2026, 11, 18, 23, 17)))
+        return reservation
+
+    def test_every_window_carries_the_date_the_old_flag_and_the_reason(self):
+        self.old_booking()
+        self.old_booking(status=Reservation.Status.CONFIRMED, owner=Reservation.OwnerCheck.RECEIVED)           # for Security Deposits
+        for name in PAGES:
+            with self.subTest(page=name):
+                html = self.page(name)
+                self.assertIn("Oct 31, 2026, 10:20 AM", html)
+                self.assertIn("paidOld", html)
+                self.assertIn("would have refused this receipt", html)
+                self.assertIn('class="gr-paid"', html)
+                self.assertIn('class="gr-warn"', html)
+
+    def test_the_chip_never_says_the_old_green_words_any_more(self):
+        self.old_booking()
+        for name in PAGES:
+            with self.subTest(page=name):
+                html = self.page(name)
+                self.assertNotIn("Matches the receipt", html)
+                self.assertIn("Typed number matches the picture", html)
+
+    def test_the_chip_is_green_only_when_the_check_passed(self):
+        self.old_booking()
+        html = self.page("arabela_admin:pending_approval")
+        green = "gr-chip gr-chip--ok\" x-show=\"viewingPayment.refInfo.typed && viewingPayment.refInfo.match === 'match' && viewingPayment.refInfo.check === 'pass'\""
+        neutral = "gr-chip gr-chip--muted\" x-show=\"viewingPayment.refInfo.typed && viewingPayment.refInfo.match === 'match' && viewingPayment.refInfo.check !== 'pass'\""
+        self.assertIn(green, html)
+        self.assertIn(neutral, html)
+
+    def test_the_old_date_is_red_and_the_reason_is_amber(self):
+        self.old_booking()
+        html = self.page("arabela_admin:payment_verification")
+        css = html[html.index(".gr-paid {"):]
+        self.assertIn(".gr-paid.is-old { color: #b42318; }", css[:900])
+        self.assertIn(".gr-warn {", css)
+        self.assertIn("background: #fffaeb", css[css.index(".gr-warn {"):][:260])
+        self.assertIn(".dark .gr-paid.is-old", css)
+
+    def test_the_help_sentence_is_only_for_a_booking_with_nothing_to_warn_about(self):
+        html = self.page("arabela_admin:payment_verification")
+        self.assertIn("refInfo.notes || []).length)\">Look for this number in the GCash transactions", html.replace("\r\n", "\n").replace("\n", ""))

@@ -418,7 +418,7 @@ class VerifiedRefusalTests(TestCase):
     def test_a_second_reading_that_could_not_be_made_never_refuses(self):
         verdict = self.run_check(self.fresh(recipient_number="09265411484"), None)
         self.assertEqual((verdict.status, verdict.codes), (rc.STATUS_NEEDS_CHECK, ["second_read_unavailable"]))
-        self.assertTrue(any("second reading could not be made (timeout)" in n for n in verdict.notes))
+        self.assertTrue(any("second reading could not be made (Google took too long to answer)" in n for n in verdict.notes))
         self.assertEqual(verdict.reference, "5046933479702")
 
     def test_a_refusal_on_a_blurry_picture_becomes_a_retake(self):

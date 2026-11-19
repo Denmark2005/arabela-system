@@ -1,4 +1,4 @@
-/* The wait while a payment receipt is checked (the server reads the picture; it can take up to about 20 seconds).
+/* The wait while a payment receipt is checked (the server reads the picture; about 5 to 8 seconds, and never more than about 15).
  *
  * The customer sees a plain white loading screen with a spinner and NO words (the owner's choice, 2026-11-18). Screen readers still hear
  * "Checking your receipt" (aria-label), nothing is printed on the screen.

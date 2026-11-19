@@ -853,14 +853,17 @@
                 // The receipt check refused the picture: nothing was booked and nothing is held. Say why right under the upload box and let
                 // the customer choose another picture.
                 var proofInputEl = document.getElementById('proof_of_payment');
-                if (proofInputEl) proofInputEl.value = '';
+                // "Please try again" (the check could not finish): the SAME picture is sent again, so it stays chosen and previewed.
+                if (proofInputEl && !err.data.proof_try_again) proofInputEl.value = '';
                 if (!err.data.proof_retake) {
                     // A refused receipt is a different payment from the next one: the numbers typed from it go too. (A picture to take again is
                     // the same receipt, so what was typed stays.)
                     ['gcash_reference', 'gcash_amount'].forEach(function (id) { var typedBox = document.getElementById(id); if (typedBox) typedBox.value = ''; });
                 }
-                clearProofPreview();
-                proofUploadFilePromise = Promise.resolve(null);
+                if (!err.data.proof_try_again) {
+                    clearProofPreview();
+                    proofUploadFilePromise = Promise.resolve(null);
+                }
                 setProofError(err.data.error);
                 var zone = document.getElementById('proof-payment-dropzone');
                 if (zone && zone.scrollIntoView) zone.scrollIntoView({ behavior: 'smooth', block: 'center' });

@@ -278,9 +278,19 @@ class RealReceiptsNeverLostTests(ReceiptCheckBase):
         self.assertIn("disagreed", reservation.proof_notes)
         self.assertEqual(ProofRejection.objects.count(), 0)                    # nothing was counted against the customer
 
-    def test_a_refusal_with_no_second_reading_books_the_customer_for_the_staff_to_check(self):
+    def test_a_refusal_with_no_second_reading_asks_to_try_again_first_and_then_books_for_the_staff(self):
+        # (2026-11-19) The reader would refuse the receipt but the second reading could not be made in time: the first time the customer is asked to
+        # try again (nothing booked, nothing counted); the second time, with the same picture, the booking goes to the staff, so nobody is stuck.
         self.reads(good_reading(recipient_number="09265411484"), second=None)
-        reservation = self.booked(self.checkout("a"))
+        browser, picture = Client(), unique_jpeg()
+        asked = self.checkout("a", client=browser, picture=picture)
+        self.assertEqual(asked.status_code, 400)
+        data = asked.json()
+        self.assertEqual((data["proof_rejected"], data["proof_retake"], data["proof_try_again"], data["account_blocked"]), (True, True, True, False))
+        self.assertIn("Please try again", data["error"])
+        self.nothing_booked()
+        self.assertEqual(ProofRejection.objects.count(), 0)
+        reservation = self.booked(self.checkout("a", client=browser, picture=picture))
         self.assertEqual(reservation.proof_check, Reservation.ProofCheck.NEEDS_CHECK)
         self.assertIn("second reading could not be made", reservation.proof_notes)
         self.assertEqual(ProofRejection.objects.count(), 0)
