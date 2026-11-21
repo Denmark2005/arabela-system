@@ -89,6 +89,21 @@
 
     var debounceTimer = null;
     var activeController = null;
+    // What the dropdown shows right now. Enter and the arrow keys only act on results that belong to the text typed right now.
+    var loading = false; // a search request is in flight
+    var shownQuery = ""; // the text the shown results belong to ("" while they are old or not there)
+    var activeIndex = -1; // the highlighted result, -1 = none
+
+    // The box sits inside a plain <form> with no action. Without this, Enter (or a click on the "K" badge, which is a submit button)
+    // submits it: the whole page reloads and the loader runs, even when nothing matched.
+    var form = input.closest("form");
+    if (form) {
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+      });
+    }
+    var badge = document.getElementById("search-button");
+    if (badge) badge.setAttribute("type", "button");
 
     function openDropdown() {
       container.classList.add("is-open");
@@ -98,9 +113,30 @@
       container.classList.remove("is-open");
     }
 
+    function resultLinks() {
+      return container.querySelectorAll("a");
+    }
+
+    function setActive(index) {
+      var items = resultLinks();
+      for (var i = 0; i < items.length; i++) {
+        items[i].classList.toggle("is-active", i === index);
+      }
+      activeIndex = index;
+      if (index >= 0 && items[index] && items[index].scrollIntoView) items[index].scrollIntoView({ block: "nearest" });
+    }
+
+    // True only when the shown results are for exactly what is typed now: not loading, not old, and at least one result.
+    function hasCurrentResults() {
+      var query = input.value.trim();
+      return !loading && query.length >= MIN_QUERY_LENGTH && shownQuery === query && resultLinks().length > 0;
+    }
+
     function runSearch(query) {
       if (activeController) activeController.abort();
       activeController = typeof AbortController !== "undefined" ? new AbortController() : null;
+      loading = true;
+      shownQuery = "";
 
       fetch(SEARCH_URL + "?q=" + encodeURIComponent(query), {
         signal: activeController ? activeController.signal : undefined,
@@ -111,10 +147,16 @@
         })
         .then(function (data) {
           renderResults(container, data.results || []);
+          loading = false;
+          shownQuery = query;
+          setActive(-1);
           openDropdown();
         })
         .catch(function (err) {
           if (err && err.name === "AbortError") return;
+          loading = false;
+          shownQuery = "";
+          activeIndex = -1;
           container.innerHTML =
             '<p class="px-3 py-4 text-center text-sm text-gray-400 dark:text-gray-500">Search unavailable right now.</p>';
           openDropdown();
@@ -124,7 +166,12 @@
     input.addEventListener("input", function () {
       var query = input.value.trim();
       clearTimeout(debounceTimer);
+      shownQuery = ""; // whatever is shown now belongs to older text
+      activeIndex = -1;
       if (query.length < MIN_QUERY_LENGTH) {
+        // Too short: drop any search still on its way, so its answer cannot reopen the dropdown for text that is gone.
+        if (activeController) activeController.abort();
+        loading = false;
         closeDropdown();
         return;
       }
@@ -143,6 +190,33 @@
       if (event.key === "Escape") {
         closeDropdown();
         input.blur();
+        return;
+      }
+      // A keyboard for another language is still composing its letters: Enter belongs to it, not to the search.
+      if (event.isComposing || event.keyCode === 229) return;
+
+      if (event.key === "Enter") {
+        // Enter never submits the form (that reloads the page). It only opens a result that is really shown for the typed text:
+        // not while loading, not for old results, and not when nothing matched.
+        event.preventDefault();
+        if (!hasCurrentResults() || !container.classList.contains("is-open")) return;
+        var items = resultLinks();
+        items[activeIndex >= 0 && activeIndex < items.length ? activeIndex : 0].click();
+        return;
+      }
+
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        if (!hasCurrentResults()) return;
+        event.preventDefault();
+        if (!container.classList.contains("is-open")) {
+          openDropdown();
+          return;
+        }
+        var count = resultLinks().length;
+        var next = event.key === "ArrowDown" ? activeIndex + 1 : activeIndex - 1;
+        if (next >= count) next = 0; // wrap round
+        if (next < 0) next = count - 1;
+        setActive(next);
       }
     });
 
