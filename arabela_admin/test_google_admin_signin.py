@@ -80,9 +80,17 @@ class SignInPageTests(Base):
         customer = self.client.get(reverse("accounts:login")).content.decode()
         admin = self.client.get(reverse("arabela_admin:admin_login")).content.decode()
         for shared in ("inline-flex items-center justify-center gap-3 w-full py-3.5 text-sm font-semibold text-gray-700 transition-colors bg-gray-100 rounded-lg px-7",
-                       "Continue with Google", "max-w-md mx-auto", "text-title-sm"):
+                       "Continue with Google", "max-w-md mx-auto", "Arabela\" width=\"150\""):         # the button, the card width and the same logo
             self.assertIn(shared, customer)
             self.assertIn(shared, admin)
+
+    def test_the_admin_sign_in_page_shows_no_heading_or_extra_sentences(self):
+        """The logo is the title: no visible heading (the h1 is kept for screen readers only, hidden from sight) and none of the old sentences."""
+        admin = self.client.get(reverse("arabela_admin:admin_login")).content.decode()
+        self.assertNotIn("text-title-sm", admin)                                  # the visible heading style is gone
+        self.assertIn("clip: rect(0, 0, 0, 0)", admin)                             # what is left is hidden from sight
+        for gone in ("Only the Gmail accounts added by the owner", "The session ends when you close the browser"):
+            self.assertNotIn(gone, admin)
 
     def test_typing_a_username_and_password_does_nothing(self):
         response = self.client.post(reverse("arabela_admin:admin_login"), {"username": "maria", "password": "x"})

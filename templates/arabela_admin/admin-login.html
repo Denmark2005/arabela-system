@@ -44,13 +44,8 @@
           <div class="flex flex-col justify-center flex-1 w-full max-w-md mx-auto">
             <div>
               {% include "arabela_admin/partials/auth_logo.html" %}
-              <div class="mb-6 sm:mb-8 text-center">
-                <h1
-                  class="font-semibold text-gray-800 text-title-sm dark:text-white/90 sm:text-title-md"
-                >
-                  Sign in to the admin panel
-                </h1>
-              </div>
+              {# No visible heading: the logo is the page's title. The h1 stays for screen readers only, hidden from sight. #}
+              <h1 style="position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;">Sign in to the admin panel</h1>
               <div>
                 {% if google_url %}
                 <a
