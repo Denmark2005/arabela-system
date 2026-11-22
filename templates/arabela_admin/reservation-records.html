@@ -480,6 +480,24 @@
     {{ records|json_script:"reservation-records-data" }}
     {{ date_ranges|json_script:"reservation-records-ranges" }}
 
+    {# Live updates (static/arabela_admin/live-regions.js). The rows below are DRAWN from the JSON above, so a background update hands the fresh JSON to the function registered here; Alpine then redraws the list and every count by itself. #}
+    <span hidden data-live-data="records" data-live-source="#reservation-records-data" data-live-watch=".custom-scrollbar[data-arpg]" data-live-hold="details[open]"></span>
+    <script>
+      window.ArabelaLiveData = window.ArabelaLiveData || {};
+      window.ArabelaLiveData.records = function (text, doc) {
+        var state = window.Alpine && window.Alpine.$data(document.body);
+        if (!state || !Array.isArray(state.records)) { throw new Error('Reservation Records is not ready'); }
+        var records = JSON.parse(text);
+        // Each reservation's status history is drawn by the server into <template id="rr-timeline-N">: bring the new and the changed ones first.
+        Array.prototype.forEach.call(doc.querySelectorAll('template[id^="rr-timeline-"]'), function (fresh) {
+          var current = document.getElementById(fresh.id);
+          if (current) { if (current.innerHTML !== fresh.innerHTML) { current.innerHTML = fresh.innerHTML; } }
+          else { document.body.appendChild(document.importNode(fresh, true)); }
+        });
+        state.records = records;
+      };
+    </script>
+
     <!-- One status history per reservation, rendered server-side by the SAME shared
          partial Active Reservations and Pending Approval use, and copied into the detail
          view on open. Django auto-escapes everything in it, so x-html of this is safe. -->

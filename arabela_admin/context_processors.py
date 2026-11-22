@@ -17,13 +17,13 @@ def admin_asset_version(request):
     means the URL changes automatically on every edit; there is no version constant
     for anyone to forget to bump.
 
-    Also covers notifications-live.js (the live bell), for the same reason.
+    Also covers notifications-live.js (the live bell) and live-regions.js (the pages' background updates), for the same reason.
 
     Falls back to a fixed value if the files are missing (e.g. a fresh checkout before
     static assets are in place) so a template render can never blow up over this.
     """
     newest = 0
-    for name in ("bundle.js", "notifications-live.js"):
+    for name in ("bundle.js", "notifications-live.js", "live-regions.js"):
         try:
             newest = max(newest, int(os.path.getmtime(os.path.join(settings.BASE_DIR, "static", "arabela_admin", name))))
         except OSError:

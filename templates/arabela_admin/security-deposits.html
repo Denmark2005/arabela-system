@@ -1178,7 +1178,7 @@
                   <svg class="ar-search-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
                   <input type="text" class="ar-search-input" x-model="search" placeholder="Search by customer, booking number or gown..." aria-label="Search security deposits">
                 </div>
-                <div class="ar-filters" role="group" aria-label="Show deposits by status">
+                <div class="ar-filters" role="group" aria-label="Show deposits by status" data-live-region="sd-filters" data-live-hold="details[open]">
                   <button type="button" class="ar-filter" :class="statusFilter === 'All' ? 'is-on' : ''" :aria-pressed="statusFilter === 'All' ? 'true' : 'false'" @click="statusFilter = 'All'">All <span class="ar-n">{{ all_count }}</span></button>
                   <button type="button" class="ar-filter" :class="statusFilter === 'Held' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Held' ? 'true' : 'false'" @click="statusFilter = 'Held'" title="The deposit is still held: not every gown is back"><span class="ar-dot sd-dot--held"></span>Held <span class="ar-n">{{ held_count }}</span></button>
                   <button type="button" class="ar-filter" :class="statusFilter === 'Returned' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Returned' ? 'true' : 'false'" @click="statusFilter = 'Returned'" title="Every gown is back, so the deposit is returned"><span class="ar-dot sd-dot--returned"></span>Returned <span class="ar-n">{{ returned_count }}</span></button>
@@ -1187,9 +1187,9 @@
                   <input type="text" inputmode="numeric" class="ar-search-input sd-year-input" x-model="yearFilter" @input="yearFilter = yearFilter.replace(/[^0-9]/g, '').slice(0, 4)" maxlength="4" placeholder="Year" aria-label="Show one year only, for example 2026" title="Show one year only, for example 2026">
                 </div>
               </div>
-              <div class="ar-count sd-countrow"><span id="ar-count" aria-live="polite"></span><span class="sd-month">{{ returned_this_month }} returned this month</span></div>
+              <div class="ar-count sd-countrow"><span id="ar-count" aria-live="polite"></span><span class="sd-month" data-live-region="sd-month">{{ returned_this_month }} returned this month</span></div>
 
-              <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg=".ar-booking" data-arpg-noun="bookings" data-arpg-top="off" data-arpg-count="#ar-count">
+              <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg=".ar-booking" data-arpg-noun="bookings" data-arpg-top="off" data-arpg-count="#ar-count" data-live-region="sd-list" data-live-hold="details[open]">
                 <div class="ar-head sd-grid">
                   <span>Customer</span>
                   <span>Gown</span>

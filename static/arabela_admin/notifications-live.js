@@ -554,7 +554,12 @@
     version = data.version || version;   // only once the swap worked, so a failed one is retried
     var items = data.items || [];
     var fresh = items.filter(function (i) { return i.alert && !known.has(i.key); });
+    // Something came or went (not just "5 min ago" ticking over): tell the page, so the lists and numbers it shows are refreshed too.
+    var changed = items.length !== known.size || items.some(function (i) { return !known.has(i.key); });
     known = new Set(items.map(function (i) { return i.key; }));   // a key that left and comes back counts as new again
+    if (changed) {
+      try { window.dispatchEvent(new CustomEvent('arabela-feed-changed', { detail: { fresh: fresh.length } })); } catch (e) { /* old browser */ }
+    }
     if (fresh.length) {
       announce(fresh).catch(function (err) { report('could not announce', err); });
     }

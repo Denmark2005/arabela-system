@@ -261,8 +261,8 @@
             </div>
           </div>
 
-          <!-- Status + details -->
-          <div class="flex flex-col pt-2 lg:col-span-6">
+          <!-- Status + details (kept current by static/arabela_admin/live-regions.js) -->
+          <div class="flex flex-col pt-2 lg:col-span-6" data-live-region="item-status">
             <div class="mb-8">
               {% if variation == "pending" %}
                 <span class="mb-6 inline-flex w-fit items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-[0.625rem] font-bold uppercase tracking-widest text-amber-700">
@@ -419,7 +419,7 @@
           </p>
           <div class="mb-10 h-px w-20 bg-[#1b1c1c] opacity-20"></div>
 
-          <ol class="max-w-2xl list-none p-0">
+          <ol class="max-w-2xl list-none p-0" data-live-region="item-timeline">
             {% for event in timeline %}
               <li class="flex gap-4">
                 {% comment %}
@@ -820,6 +820,8 @@
     </script>
   <!-- Keeps the badges above current on a page that stays open (see the script's own header). -->
   {% load static %}<script defer src="{% static 'js/customer-badges-live.js' %}?v={{ site_asset_version }}" data-live-badges-url="{% url 'gowns:notification_badges' %}" data-user-id="{{ request.user.id }}"></script>
+  {# Updates the status and the timeline when something changes (see the script's own header); runs after this page's own inline scripts. #}
+  <script defer src="{% static 'arabela_admin/live-regions.js' %}?v={{ admin_asset_version }}"></script>
   <script defer src="{% static 'js/picked-file.js' %}?v={{ site_asset_version }}"></script>
   <script defer src="{% static 'js/receipt-checking.js' %}?v={{ site_asset_version }}"></script>
   <script defer src="{% static 'js/proof-details.js' %}?v={{ site_asset_version }}"></script>

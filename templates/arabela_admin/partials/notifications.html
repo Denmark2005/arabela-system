@@ -248,3 +248,5 @@ pop-up). Everything the script needs is in the data-notif-* attributes on the ro
 </div>
 <!-- Notification Menu Area -->
 <script defer src="{% static 'arabela_admin/notifications-live.js' %}?v={{ admin_asset_version }}"></script>
+{% comment %} Keeps the page's marked parts (data-live-region) current without a reload. Placed here on purpose: this runs BEFORE bundle.js (Alpine), so it sees the page exactly as the server drew it. {% endcomment %}
+<script defer src="{% static 'arabela_admin/live-regions.js' %}?v={{ admin_asset_version }}"></script>

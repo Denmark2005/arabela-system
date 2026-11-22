@@ -23,6 +23,8 @@
   // True once the person has touched the page. Until then a change in the rows is just the page finishing loading, so the page number
   // that came from the address is kept; after that, a change in the rows means they changed a filter / search / sort.
   var interacted = false;
+  // True only while a background update (live-regions.js) swaps the rows: new rows must not send the person back to page 1.
+  var keepPage = false;
 
   var CSS = [
     "[" + OFF + "]{display:none !important;}",
@@ -256,7 +258,7 @@
         var matching = units.filter(function (u) { return isShown(u[0]); });
         var list = matching.map(function (u) { return u[0]; });
         var listChanged = lastList === null || !sameList(lastList, list);
-        if (interacted && lastList !== null && listChanged) { wanted = 1; }      // a new filter, search or sort starts at page 1
+        if (interacted && lastList !== null && listChanged && !keepPage) { wanted = 1; }      // a new filter, search or sort starts at page 1
         lastList = list;
         var pages = Math.max(1, Math.ceil(matching.length / size));
         var page = Math.min(Math.max(wanted, 1), pages);
@@ -348,6 +350,13 @@
 
   // For page scripts that need to know which rows are on screen (the Gown Catalog's "select all"). Pass the list's <tbody> or box.
   window.arabelaPager = {
+    // Runs fn (which replaces the rows) and keeps the current page for the re-counts that follow (the pager re-counts in a mutation
+    // observer, and again when Alpine has shown / hidden the new rows). The flag is cleared a moment later, long before a person
+    // could change a filter, so a real filter change still starts at page 1.
+    keepPage: function (fn) {
+      keepPage = true;
+      try { fn(); } finally { setTimeout(function () { keepPage = false; }, 150); }
+    },
     shownUnits: function (node) {
       for (var i = 0; i < instances.length; i++) {
         if (instances[i].container === node || instances[i].box === node) { return instances[i].pageRows(); }

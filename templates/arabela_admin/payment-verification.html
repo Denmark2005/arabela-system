@@ -1292,6 +1292,8 @@
               {% endif %}
             </div>
 
+            {# Always present (it may start empty), so the first payment verified today can appear by itself. display: contents = no box of its own, the layout is exactly as before. #}
+            <div data-live-region="pv-verified-today" data-live-hold=".pv-vt-more:not([style*='display: none']):not([x-cloak]), details[open]" style="display: contents;">
             {% if verified_today %}
             <!-- Same-day follow-up: a payment that just got verified must not simply
                  vanish from Pending with nothing left to double-check. This clears
@@ -1349,6 +1351,7 @@
               </div>
             </div>
             {% endif %}
+            </div>
 
             <!-- ONE box, the same look as the other lists: the search, the month / status / year, the count with the key to the circles, and one short
                  line per booking. The circle before the name is the booking's status; a booking with several gowns shows "5 gowns" and opens to one short
@@ -1395,7 +1398,7 @@
                 </span>
               </div>
 
-              <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg=".ar-booking" data-arpg-noun="bookings" data-arpg-top="off" data-arpg-count="#pv-count">
+              <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg=".ar-booking" data-arpg-noun="bookings" data-arpg-top="off" data-arpg-count="#pv-count" data-live-region="pv-list" data-live-hold="details[open]">
                 <div class="ar-head pv-grid">
                   <span>Customer</span>
                   <span>Payment</span>

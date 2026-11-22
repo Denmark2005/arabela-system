@@ -1128,7 +1128,7 @@
                   <svg class="ar-search-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
                   <input type="text" class="ar-search-input" x-model="search" placeholder="Search by customer, reference, cellphone or gown ID..." aria-label="Search active reservations">
                 </div>
-                <div class="ar-filters" role="group" aria-label="Show bookings by status">
+                <div class="ar-filters" role="group" aria-label="Show bookings by status" data-live-region="active-filters" data-live-hold="details[open]">
                   <button type="button" class="ar-filter" :class="stateFilter === 'all' ? 'is-on' : ''" :aria-pressed="stateFilter === 'all' ? 'true' : 'false'" @click="stateFilter = 'all'">All <span class="ar-n">{{ state_counts.all }}</span></button>
                   <button type="button" class="ar-filter" :class="stateFilter === 'confirmed' ? 'is-on' : ''" :aria-pressed="stateFilter === 'confirmed' ? 'true' : 'false'" @click="stateFilter = 'confirmed'" title="Waiting for the first pick-up"><span class="ar-dot ar-dot--confirmed"></span>Confirmed <span class="ar-n">{{ state_counts.confirmed }}</span></button>
                   <button type="button" class="ar-filter" :class="stateFilter === 'active' ? 'is-on' : ''" :aria-pressed="stateFilter === 'active' ? 'true' : 'false'" @click="stateFilter = 'active'" title="A gown is out with the customer"><span class="ar-dot ar-dot--active"></span>Active <span class="ar-n">{{ state_counts.active }}</span></button>
@@ -1150,7 +1150,7 @@
               </div>
               <div class="ar-count" id="ar-count" aria-live="polite"></div>
 
-              <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg=".ar-booking" data-arpg-noun="bookings" data-arpg-top="off" data-arpg-count="#ar-count">
+              <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg=".ar-booking" data-arpg-noun="bookings" data-arpg-top="off" data-arpg-count="#ar-count" data-live-region="active-list" data-live-hold="#row-popover[style*='display: block'], .ar-more[aria-expanded='true'], details[open]">
                 <div class="ar-head">
                   <span>Customer</span>
                   <span>Booking no.</span>

@@ -318,7 +318,7 @@
         </header>
 
         {# Deleting waits 5 seconds (Undo) before it calls gowns:messages_delete; only messages already read can go. #}
-        <div class="flex flex-col space-y-0" id="messages-list" data-delete-url="{% url 'gowns:messages_delete' %}" data-csrf="{{ csrf_token }}" data-paged="{% if has_pages %}true{% else %}false{% endif %}">
+        <div class="flex flex-col space-y-0" id="messages-list" data-delete-url="{% url 'gowns:messages_delete' %}" data-csrf="{{ csrf_token }}" data-paged="{% if has_pages %}true{% else %}false{% endif %}" data-live-region="messages-list" data-live-hold="#messages-undo-bar.is-visible" data-live-attrs="data-paged" data-live-strip=".new-message-tag">
           {% for message in customer_messages %}
             <div class="message-row group flex flex-col justify-between gap-4 py-8 md:flex-row md:items-start entry-line" data-message-id="{{ message.id }}">
               <div class="flex items-start gap-4">
@@ -370,6 +370,8 @@
             </div>
           {% endfor %}
         </div>
+        {# Always present (the pager only exists once there are two pages), so it can appear by itself; display: contents = no box, the layout is as before. #}
+        <div data-live-region="messages-pager" style="display: contents;">
         {% if has_pages %}
         <nav class="messages-pager" id="messages-pager" aria-label="Messages pages">
           <p class="messages-pager__count" id="messages-count">Showing {{ messages_page.start_index }}&ndash;{{ messages_page.end_index }} of {{ total_messages }} messages</p>
@@ -388,6 +390,7 @@
           </div>
         </nav>
         {% endif %}
+        </div>
         <div id="messages-empty" class="flex flex-col items-center gap-3 py-20 text-center{% if customer_messages %} messages-hidden{% endif %}">
           <span class="material-symbols-outlined text-4xl text-neutral-300">notifications</span>
           <p class="text-base text-secondary/70">You have no messages.</p>
@@ -654,10 +657,16 @@
         hideBar();
       });
       window.addEventListener("pagehide", function () { commit(true); });
+      // A background update replaced the messages (static/arabela_admin/live-regions.js): show or hide the empty state and Clear all again.
+      window.addEventListener("arabela-region-updated", function (event) {
+        if (event.detail && event.detail.name === "messages-list") refreshEmpty();
+      });
     })();
   </script>
   <!-- Keeps the badges above current on a page that stays open (see the script's own header). -->
   {% load static %}<script defer src="{% static 'js/customer-badges-live.js' %}?v={{ site_asset_version }}" data-live-badges-url="{% url 'gowns:notification_badges' %}" data-user-id="{{ request.user.id }}"></script>
+  {# Updates the messages when something changes (see the script's own header); runs after this page's own inline scripts. #}
+  <script defer src="{% static 'arabela_admin/live-regions.js' %}?v={{ admin_asset_version }}"></script>
   {% include "partials/reservation_hold_banner.html" %}
 </body>
 </html>

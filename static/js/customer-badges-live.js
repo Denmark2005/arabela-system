@@ -96,6 +96,13 @@
     });
   }
 
+  // What a badge of this kind says right now (the first one on the page), so a change in the numbers can be told to the page's own lists.
+  function shown(kind) {
+    var host = document.querySelector('[data-live-badge="' + kind + '"]');
+    var badge = host ? badgeOf(host) : null;
+    return badge ? toCount(badge.textContent) : 0;
+  }
+
   function schedule() {
     clearTimeout(timer);
     if (stopped || document.hidden) { return; }   // nothing to do while the page is in the background
@@ -130,8 +137,15 @@
         return;
       }
       failures = 0;
-      apply('messages', toCount(data.messages));
-      apply('reservations', toCount(data.reservations));
+      var next = { messages: toCount(data.messages), reservations: toCount(data.reservations) };
+      var changed = next.messages !== shown('messages') || next.reservations !== shown('reservations');
+      apply('messages', next.messages);
+      apply('reservations', next.reservations);
+      // A number moved, so something new happened: tell the page, which refreshes its own cards / messages in the background
+      // (static/arabela_admin/live-regions.js, on the Reservations, Messages and reservation detail pages).
+      if (changed) {
+        try { window.dispatchEvent(new CustomEvent('arabela-feed-changed', { detail: next })); } catch (e) { /* old browser */ }
+      }
     }).catch(function () {
       failures += 1;   // slow or offline: say nothing, try again a little later
     }).then(function () {

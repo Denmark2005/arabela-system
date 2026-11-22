@@ -1130,7 +1130,7 @@
                   <svg class="ar-search-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
                   <input type="text" class="ar-search-input" x-model="search" placeholder="Search by account name, reservation name or email..." aria-label="Search customers">
                 </div>
-                <div class="ar-filters" role="group" aria-label="Show customers">
+                <div class="ar-filters" role="group" aria-label="Show customers" data-live-region="cl-filters" data-live-hold="details[open]">
                   <button type="button" class="ar-filter" :class="customerFilter === 'All' ? 'is-on' : ''" :aria-pressed="customerFilter === 'All' ? 'true' : 'false'" @click="customerFilter = 'All'" title="Every registered customer">All <span class="ar-n">{{ total_customers }}</span></button>
                   <button type="button" class="ar-filter" :class="customerFilter === 'New' ? 'is-on' : ''" :aria-pressed="customerFilter === 'New' ? 'true' : 'false'" @click="customerFilter = 'New'" title="Accounts that joined this month">New this month <span class="ar-n">{{ new_this_month }}</span></button>
                   <button type="button" class="ar-filter" :class="customerFilter === 'Flagged' ? 'is-on' : ''" :aria-pressed="customerFilter === 'Flagged' ? 'true' : 'false'" @click="customerFilter = 'Flagged'" title="Accounts flagged by staff or for too many cancellations"><span class="ar-dot cl-dot--flagged"></span>Flagged <span class="ar-n">{{ flagged_count }}</span></button>
@@ -1172,7 +1172,7 @@
                         </th>
                       </tr>
                     </thead>
-                    <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                    <tbody class="divide-y divide-gray-100 dark:divide-gray-800" data-live-region="cl-rows" data-live-hold="details[open]">
                     {% for c in customers %}
                     <tr x-data="{ status: '{% if c.is_flagged %}Flagged{% elif not c.is_active %}Inactive{% else %}Active{% endif %}' }" x-show="(customerFilter === 'All' || (customerFilter === 'Flagged' && status === 'Flagged') || (customerFilter === 'New' && {{ c.is_new_this_month|yesno:'true,false' }})) && (search === '' || '{{ c.display_name|lower|escapejs }} {{ c.email|lower|escapejs }} {{ c.reservation_names_search|escapejs }}'.includes(search.toLowerCase()))" :class="search !== '' && '{{ c.email|lower|escapejs }}' === search.toLowerCase() ? 'bg-brand-50 dark:bg-brand-500/15' : ''">
                       <td class="px-5 py-4 sm:px-6">
