@@ -46,13 +46,10 @@
               {% include "arabela_admin/partials/auth_logo.html" %}
               <div class="mb-6 sm:mb-8 text-center">
                 <h1
-                  class="mb-2 font-semibold text-gray-800 text-title-sm dark:text-white/90 sm:text-title-md"
+                  class="font-semibold text-gray-800 text-title-sm dark:text-white/90 sm:text-title-md"
                 >
                   Sign in to the admin panel
                 </h1>
-                <p class="text-sm text-gray-500 dark:text-gray-400">
-                  Continue with your Google account. Only the Gmail accounts added by the owner can open the admin panel.
-                </p>
               </div>
               <div>
                 {% if google_url %}
@@ -97,9 +94,6 @@
                   <span class="tracking-tight">{{ error }}</span>
                 </div>
                 {% endif %}
-                <p class="mt-6 text-xs text-center text-gray-400">
-                  The session ends when you close the browser. Use Sign out when you are done.
-                </p>
               </div>
             </div>
           </div>
