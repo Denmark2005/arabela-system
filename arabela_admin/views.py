@@ -38,7 +38,7 @@ from accounts.roles import (
     parse_permissions, permission_message, staff_display_name,
 )
 from accounts.services import CANCELLATION_FLAG_THRESHOLD, clear_proof_block, record_rejected_proof
-from arabela_admin import audit_describe
+from arabela_admin import audit_describe, gown_photo
 from gowns import availability, deposit, gcash_numbers
 from gowns.models import (
     COOLDOWN_DAYS,
@@ -1202,6 +1202,9 @@ def reservation_records_view(request):
                     # which tag to look for -- same helper the other booking screens use.
                     "tagColor": _item_gown_tag(i, tag_colors)[1],
                     "tagHex": _item_gown_tag(i, tag_colors)[2],
+                    # What the gown's name opens when clicked (arabela_admin/gown_photo.py): its picture and the line under the name.
+                    "photo": gown_photo.photo_url(i),
+                    "photoSub": gown_photo.subtitle(i, _item_gown_tag(i, tag_colors)[1]),
                     "size": i.size or "TBD",
                     "pickup": date_format(i.rental_date, "M j, Y"),
                     "event": date_format(i.effective_event_date, "M j, Y"),
@@ -1393,6 +1396,8 @@ def active_reservations_view(request):
             # The exact gown this line is matched to + its tag color, shown under the
             # gown name so staff at pick-up can find the right dress among look-alikes.
             item.gown_code, item.tag_color, item.tag_hex = _item_gown_tag(item, tag_colors)
+            # What the gown's name opens when clicked: its picture and the line under the name (arabela_admin/gown_photo.py).
+            item.window_photo, item.window_sub = gown_photo.photo_url(item), gown_photo.subtitle(item, item.tag_color)
             item.suggested_reminder = reservation_reminders.suggested_message(item, today)
             # What the customer originally booked (never touched by a later change --
             # see the model) next to the current dates, plus the status remarks. The
@@ -1576,6 +1581,8 @@ def pending_approval_view(request):
         items = list(reservation.items.all())
         for item in items:
             item.gown_code, item.tag_color, item.tag_hex = _item_gown_tag(item, tag_colors)
+            # What the gown's name opens when clicked: its picture and the line under the name (arabela_admin/gown_photo.py).
+            item.window_photo, item.window_sub = gown_photo.photo_url(item), gown_photo.subtitle(item, item.tag_color)
         # What the closed line of this booking shows (display only -- nothing reads these): how many gowns, the first pick-up and the
         # last return, how long it has waited, and whether the same GCash number is on another booking.
         reservation.gown_count = len(items)

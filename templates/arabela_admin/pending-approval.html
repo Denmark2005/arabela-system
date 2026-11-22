@@ -1206,7 +1206,7 @@
                       <div class="pa-g2 pa-names">{% for item in r.items.all %}{{ item.gown_name }}{% if not forloop.last %} &middot; {% endif %}{% endfor %}</div>
                       {% else %}
                       {% for item in r.items.all %}
-                      <div class="pa-g1">{{ item.gown_name }}</div>
+                      <div class="pa-g1"><span role="button" tabindex="0" data-gpw-name="{{ item.gown_name }}" data-gpw-sub="{{ item.window_sub }}" data-gpw-photo="{{ item.window_photo }}" title="Click to see the photo">{{ item.gown_name }}</span></div>
                       {% if item.gown_code %}
                       <div class="pa-g2" title="Match this to the tag on the dress">
                         <span class="admin-tag-dot" style="background-color: {{ item.tag_hex }};"></span>
@@ -1292,7 +1292,7 @@
                       <div class="ar-gown">
                         <div class="ar-gl pa-gl">
                           <div class="ar-gname">
-                            <span class="ar-gtitle">{{ item.gown_name }}</span>
+                            <span class="ar-gtitle" role="button" tabindex="0" data-gpw-name="{{ item.gown_name }}" data-gpw-sub="{{ item.window_sub }}" data-gpw-photo="{{ item.window_photo }}" title="Click to see the photo">{{ item.gown_name }}</span>
                             {% if r.gown_count > 1 %}<span class="ar-of">{{ forloop.counter }} of {{ r.gown_count }}</span>{% endif %}
                             {% if item.gown_code %}
                             <span class="ar-tag" title="Match this to the tag on the dress">
@@ -1469,6 +1469,7 @@
 {% include "arabela_admin/partials/attach_receipt.html" %}
   <script defer src="{% static 'js/picked-file.js' %}?v={{ site_asset_version }}"></script>
 {% include "arabela_admin/partials/dialog.html" %}
+{% include "arabela_admin/partials/gown_photo_window.html" %}
 </body>
 </html>
 

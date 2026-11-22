@@ -47,6 +47,7 @@
   >
     {% include "arabela_admin/partials/timeline_styles.html" %}
     {% include "arabela_admin/partials/dialog.html" %}
+    {% include "arabela_admin/partials/gown_photo_window.html" %}
     {% include "arabela_admin/partials/cancel_booking.html" %}
     <style>
       /* The list's own box (the rest of this page's list styles are shared with Pending Approval: partials/ar_list_styles.html). */
@@ -1262,7 +1263,7 @@
                           <div class="ar-gl">
                             <span class="ar-num ar-num--{{ item.circle.kind }}" role="img" title="{{ item.circle.title }}" aria-label="{{ item.circle.title }}">{% if item.circle.kind == 'returned' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>{% elif item.circle.kind == 'cancelled' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>{% else %}{{ item.circle.number }}{% endif %}</span>
                             <div class="ar-gname">
-                              <span class="ar-gtitle"{% if item.stage == "Cancelled" %} style="text-decoration: line-through; opacity: .65;"{% endif %}>{{ item.gown_name }}</span>
+                              <span class="ar-gtitle" role="button" tabindex="0" data-gpw-name="{{ item.gown_name }}" data-gpw-sub="{{ item.window_sub }}" data-gpw-photo="{{ item.window_photo }}" title="Click to see the photo"{% if item.stage == "Cancelled" %} style="text-decoration: line-through; opacity: .65;"{% endif %}>{{ item.gown_name }}</span>
                               {% if item_count > 1 %}<span class="ar-of">{{ forloop.counter }} of {{ item_count }}</span>{% endif %}
                               {% if item.gown_code %}
                               <span class="ar-tag" title="Match this to the tag on the dress">

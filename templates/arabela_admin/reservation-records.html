@@ -2573,7 +2573,7 @@
                           <div class="ar-gown">
                             <div class="ar-gl rr-gl">
                               <div class="ar-gname">
-                                <span class="ar-gtitle" :style="item.stage === 'Cancelled' ? 'text-decoration: line-through; opacity: .65;' : ''" x-text="item.gown"></span>
+                                <span class="ar-gtitle" role="button" tabindex="0" :data-gpw-name="item.gown" :data-gpw-sub="item.photoSub" :data-gpw-photo="item.photo" title="Click to see the photo" :style="item.stage === 'Cancelled' ? 'text-decoration: line-through; opacity: .65;' : ''" x-text="item.gown"></span>
                                 <span class="ar-of" x-show="r.items.length > 1" x-text="(n + 1) + ' of ' + r.items.length"></span>
                               </div>
                               <div class="ar-gdates"><span x-text="shortRange(item.pickup, item.ret)"></span></div>
@@ -2711,7 +2711,7 @@
                       <button type="button" class="rrd-gline" @click="toggleGown(itemIndex)" :aria-expanded="gownOpen === itemIndex ? 'true' : 'false'" :aria-label="'Show or hide the dates of ' + item.gown">
                         <span class="rrd-dot" :class="stageDot(item.stage)" role="img" :aria-label="stageLabel(item.stage)" :title="stageLabel(item.stage)"></span>
                         <span class="rrd-gl-main">
-                          <span class="rrd-gown-name" :class="item.stage === 'Cancelled' ? 'is-cancelled' : ''" x-text="item.gown"></span>
+                          <span class="rrd-gown-name" :class="item.stage === 'Cancelled' ? 'is-cancelled' : ''" :data-gpw-name="item.gown" :data-gpw-sub="item.photoSub" :data-gpw-photo="item.photo" title="Click to see the photo" x-text="item.gown"></span>
                           <span class="rrd-gown-meta" :title="(item.tagColor ? item.tagColor + ' tag. ' : '') + 'Match this to the tag on the dress'">
                             <span class="admin-tag-dot" :style="'background-color:' + item.tagHex" x-show="item.tagHex"></span>
                             <span>
@@ -2967,6 +2967,7 @@
   <script defer src="{% static 'js/picked-file.js' %}?v={{ site_asset_version }}"></script>
   <script defer src="{% static 'arabela_admin/global-search.js' %}"></script>
   <script defer src="{% static 'arabela_admin/pager.js' %}"></script>
+  {% include "arabela_admin/partials/gown_photo_window.html" %}
 
 </body>
 </html>

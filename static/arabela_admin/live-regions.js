@@ -145,6 +145,8 @@
   function overlayOpen() {
     var dialog = document.getElementById('adm-dialog');
     if (dialog && dialog.getAttribute('aria-hidden') === 'false') { return true; }
+    // A window that fades in (its card is invisible for its first moments) says it is open with data-overlay-root + aria-hidden="false".
+    if (document.querySelector('[data-overlay-root][aria-hidden="false"]')) { return true; }
     var layers = document.querySelectorAll('.fixed.inset-0, [role="dialog"], [aria-modal="true"]');
     for (var i = 0; i < layers.length; i++) {
       if (!layers[i].hasAttribute('data-live-ignore') && isVisible(layers[i])) { return true; }

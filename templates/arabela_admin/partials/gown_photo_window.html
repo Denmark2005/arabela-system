@@ -1,0 +1,206 @@
+{% comment %}
+  The gown photo window: click a gown's NAME on Active Reservations, Reservation Records or Pending Approval and this opens with that gown's
+  picture. The look is the Gown Catalog's photo window (same white card, same close button, the photo whole and never cropped), but it is
+  view-only: no "Replace Photo", no "View Full Image" (those stay in the Gown Catalog), and the title is the gown's name.
+
+  Included ONCE per page, next to partials/dialog.html. Self-contained (markup + CSS + script) in its own .gpw namespace, because the admin
+  stylesheet is a precompiled Tailwind build that holds only the template pack's own classes. Follows dark mode through the `.dark` class
+  Alpine puts on <body>.
+
+  How a name opens it: put these on the name's element (the pages do; Reservation Records binds them with Alpine):
+      data-gpw-name="Wedding Gown 17"         the title (its presence is what marks the element)
+      data-gpw-sub="White tag · WH-017 · Large"  the line under the title (optional)
+      data-gpw-photo="https://..."            the picture ("" = no photo: the window says so)
+      role="button" tabindex="0"              so the keyboard can reach it (Enter or Space opens it)
+  ONE click listener for the whole page (capture phase), so a row that is swapped in later by the live updates (live-regions.js) works with
+  nothing to re-bind. While the window is open the page is "busy" for those live updates (it is a role="dialog" that shows).
+
+  Safety: the picture address is used only when it is a normal web address (http / https) or a path on this site; the name and the line
+  under it are put in as plain text, never as HTML; a picture that cannot be loaded says so.
+  A click on a name is handled here and goes no further, so it never also opens or closes the booking row it sits in; and while the window
+  is open every click and the Escape key stay inside it, so the window it was opened from (Reservation Records' View window) stays open.
+
+  NOTE: must be {% comment %}, not {# #} -- Django's hash comment is single-line only.
+{% endcomment %}
+{% include "arabela_admin/partials/photo_viewer_styles.html" %}
+<style>
+  /* The names that open the window. */
+  [data-gpw-name] { cursor: pointer; }
+  [data-gpw-name]:hover { text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+  [data-gpw-name]:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; border-radius: 3px; }
+
+  .gpw {
+    position: fixed; inset: 0; z-index: 100000;            /* above the other admin windows (99999), so it also opens from inside one */
+    display: flex; align-items: center; justify-content: center;
+    padding: 1.25rem; visibility: hidden; pointer-events: none;
+  }
+  .gpw.is-open { visibility: visible; pointer-events: auto; }
+  .gpw__backdrop { position: absolute; inset: 0; background: rgba(16, 24, 40, 0.5); opacity: 0; transition: opacity 0.2s ease; }   /* the plain dim of every admin pop-up */
+  .gpw.is-open .gpw__backdrop { opacity: 1; }
+  .dark .gpw__backdrop { background: rgba(0, 0, 0, 0.6); }
+  .gpw__card {
+    position: relative; width: 100%; max-width: 700px; max-height: calc(100vh - 2.5rem); max-height: calc(100dvh - 2.5rem);
+    overflow-y: auto; overscroll-behavior: contain;
+    background: #ffffff; border-radius: 1.5rem; padding: 2rem;
+    box-shadow: 0 24px 60px -12px rgba(16, 24, 40, 0.35);
+    font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+    opacity: 0; transform: translateY(10px) scale(0.98); transition: opacity 0.2s ease, transform 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .gpw.is-open .gpw__card { opacity: 1; transform: none; }
+  .dark .gpw__card { background: #101828; box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.6); }
+  .gpw__x {
+    position: absolute; top: 1.25rem; right: 1.25rem; z-index: 2; width: 2.75rem; height: 2.75rem;
+    display: flex; align-items: center; justify-content: center; border: 0; border-radius: 9999px; cursor: pointer;
+    background: #f2f4f7; color: #98a2b3; transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  .gpw__x:hover { background: #e4e7ec; color: #475467; }
+  .gpw__x:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+  .gpw__x svg { width: 1.5rem; height: 1.5rem; fill: currentColor; }
+  .dark .gpw__x { background: rgba(255, 255, 255, 0.05); color: #98a2b3; }
+  .dark .gpw__x:hover { background: rgba(255, 255, 255, 0.07); color: #d0d5dd; }
+  .gpw__title { margin: 0 0 0.5rem; padding-right: 3.5rem; font-size: 1.5rem; line-height: 1.25; font-weight: 600; color: #1d2939; overflow-wrap: anywhere; }
+  .dark .gpw__title { color: rgba(255, 255, 255, 0.9); }
+  .gpw__sub { margin: 0 0 1.5rem; padding-right: 3.5rem; font-size: 0.875rem; color: #667085; overflow-wrap: anywhere; }
+  .gpw__sub[hidden] { display: none; }
+  .dark .gpw__sub { color: #98a2b3; }
+  .gpw__stage { display: flex; justify-content: center; }
+  .gpw__frame { overflow: hidden; border-radius: 1rem; background: #f2f4f7; }
+  .dark .gpw__frame { background: #1d2939; }
+  .gpw__frame img { display: block; max-height: 60vh; max-width: 100%; width: auto; height: auto; }
+  .gpw__note {
+    display: none; width: 100%; min-height: 10rem; flex-direction: column; align-items: center; justify-content: center; gap: 0.6rem;
+    border-radius: 1rem; background: #f2f4f7; color: #98a2b3; text-align: center; font-size: 0.875rem; padding: 1.5rem;
+  }
+  .dark .gpw__note { background: #1d2939; color: #98a2b3; }
+  .gpw__note svg { width: 3.5rem; height: 3.5rem; }
+  .gpw__spin { width: 2rem; height: 2rem; border-radius: 9999px; border: 3px solid #d0d5dd; border-top-color: #465fff; animation: gpw-spin 0.8s linear infinite; }
+  @keyframes gpw-spin { to { transform: rotate(360deg); } }
+  /* One state at a time: loading | ok | none (no photo on file) | fail (the file would not load). */
+  .gpw[data-state="loading"] .gpw__note--loading, .gpw[data-state="none"] .gpw__note--none, .gpw[data-state="fail"] .gpw__note--fail { display: flex; }
+  .gpw__frame { display: none; }
+  .gpw[data-state="ok"] .gpw__frame { display: inline-block; }
+  .gpw[data-state="loading"] .gpw__frame { display: inline-block; position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }   /* loads off-screen, then shows */
+  @media (max-width: 640px) { .gpw__card { padding: 1.25rem; } .gpw__x { top: 0.9rem; right: 0.9rem; } .gpw__title { font-size: 1.25rem; } }
+  @media (prefers-reduced-motion: reduce) { .gpw__backdrop, .gpw__card { transition: opacity 0.1s ease; transform: none !important; } .gpw__spin { animation-duration: 2s; } }
+</style>
+
+<div class="gpw" id="gpw" aria-hidden="true" data-state="none" data-overlay-root>
+  <div class="gpw__backdrop" data-gpw-close></div>
+  <div class="gpw__card" role="dialog" aria-modal="true" aria-labelledby="gpw-title">
+    <button type="button" class="gpw__x" id="gpw-x" data-gpw-close aria-label="Close the photo">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M6.04289 16.5418C5.65237 16.9323 5.65237 17.5655 6.04289 17.956C6.43342 18.3465 7.06658 18.3465 7.45711 17.956L11.9987 13.4144L16.5408 17.9565C16.9313 18.347 17.5645 18.347 17.955 17.9565C18.3455 17.566 18.3455 16.9328 17.955 16.5423L13.4129 12.0002L17.955 7.45808C18.3455 7.06756 18.3455 6.43439 17.955 6.04387C17.5645 5.65335 16.9313 5.65335 16.5408 6.04387L11.9987 10.586L7.45711 6.04439C7.06658 5.65386 6.43342 5.65386 6.04289 6.04439C5.65237 6.43491 5.65237 7.06808 6.04289 7.4586L10.5845 12.0002L6.04289 16.5418Z"/></svg>
+    </button>
+    <h4 class="gpw__title" id="gpw-title"></h4>
+    <p class="gpw__sub" id="gpw-sub" hidden></p>
+    <div class="gpw__stage">
+      <div class="gpw__note gpw__note--loading" role="status"><span class="gpw__spin" aria-hidden="true"></span><span>Loading the photo...</span></div>
+      <div class="admin-photo-frame gpw__frame"><img id="gpw-img" alt="" /></div>
+      <div class="gpw__note gpw__note--none">
+        <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></svg>
+        <span>No photo available for this gown</span>
+      </div>
+      <div class="gpw__note gpw__note--fail">
+        <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></svg>
+        <span>Photo could not load</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    'use strict';
+    var root = document.getElementById('gpw');
+    if (!root || window.ArabelaGownPhoto) { return; }
+    var titleEl = document.getElementById('gpw-title');
+    var subEl = document.getElementById('gpw-sub');
+    var imgEl = document.getElementById('gpw-img');
+    var closeBtn = document.getElementById('gpw-x');
+    var opener = null;       // the name that opened it, to give the focus back
+    var shown = 0;           // counts the openings, so a late answer for an earlier picture is ignored
+
+    // Only a normal web address, or a path on this site, is ever used as the picture; anything else (javascript:, data:, a protocol-relative
+    // //host address) is treated as "no photo".
+    function safeUrl(raw) {
+      var url = String(raw || '').trim();
+      if (/^https?:\/\//i.test(url)) { return url; }
+      if (url.charAt(0) === '/' && url.charAt(1) !== '/') { return url; }
+      return '';
+    }
+
+    function isOpen() { return root.classList.contains('is-open'); }
+
+    function open(node) {
+      var ticket = ++shown;
+      var name = node.getAttribute('data-gpw-name') || '';
+      var sub = node.getAttribute('data-gpw-sub') || '';
+      var url = safeUrl(node.getAttribute('data-gpw-photo'));
+      opener = node;
+      titleEl.textContent = name || 'Gown';           // plain text, never HTML
+      subEl.textContent = sub;
+      subEl.hidden = !sub;
+      imgEl.alt = name;
+      imgEl.onload = imgEl.onerror = null;
+      imgEl.removeAttribute('src');
+      if (!url) {
+        root.setAttribute('data-state', 'none');
+      } else {
+        root.setAttribute('data-state', 'loading');
+        imgEl.onload = function () { if (ticket === shown) { root.setAttribute('data-state', 'ok'); } };
+        imgEl.onerror = function () { if (ticket === shown) { root.setAttribute('data-state', 'fail'); } };
+        imgEl.src = url;
+        if (imgEl.complete && imgEl.naturalWidth > 0) { root.setAttribute('data-state', 'ok'); }   // already in the browser's memory
+      }
+      root.classList.add('is-open');
+      root.setAttribute('aria-hidden', 'false');
+      window.setTimeout(function () { if (isOpen() && ticket === shown) { closeBtn.focus(); } }, 40);
+    }
+
+    function close() {
+      shown += 1;
+      root.classList.remove('is-open');
+      root.setAttribute('aria-hidden', 'true');
+      imgEl.onload = imgEl.onerror = null;
+      imgEl.removeAttribute('src');                    // stops a picture that is still coming
+      var back = opener;
+      opener = null;
+      if (back && back.isConnected && typeof back.focus === 'function') { try { back.focus({ preventScroll: true }); } catch (e) { /* the page moved on */ } }
+    }
+
+    // ONE listener for the whole page, in the capture phase: it sees the click before the row, the booking line or an "outside click" window
+    // under it, and ends it there (stopImmediatePropagation), so a click on a name never also opens or closes what it sits in.
+    document.addEventListener('click', function (event) {
+      var target = event.target;
+      if (!target || typeof target.closest !== 'function') { return; }
+      if (isOpen()) {
+        if (root.contains(target)) {
+          if (target.closest('[data-gpw-close]')) { close(); }
+          event.stopImmediatePropagation();            // nothing underneath may react to a click on the photo window
+        }
+        return;
+      }
+      var name = target.closest('[data-gpw-name]');
+      if (name) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        open(name);
+      }
+    }, true);
+
+    document.addEventListener('keydown', function (event) {
+      if (isOpen()) {
+        if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); close(); }
+        else if (event.key === 'Tab') { event.preventDefault(); closeBtn.focus(); }      // the close button is the only control: the focus stays in the window
+        return;
+      }
+      var target = event.target;
+      if ((event.key === 'Enter' || event.key === ' ') && target && target.hasAttribute && target.hasAttribute('data-gpw-name') && target.getAttribute('role') === 'button') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        open(target);
+      }
+    }, true);
+
+    window.ArabelaGownPhoto = { close: close, isOpen: isOpen };
+  })();
+</script>
