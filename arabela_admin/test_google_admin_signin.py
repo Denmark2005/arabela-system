@@ -1,6 +1,7 @@
 """Admin panel sign-in with Google (owner + staff): the sign-in page, the Gmail check, the hand-over to the admin area, staff created from a
 Gmail, and the owner changing her own sign-in Gmail (confirmed with Google). No real Google call is made: the Google answer is faked."""
 import json
+import re
 from types import SimpleNamespace
 from unittest import mock
 
@@ -80,17 +81,34 @@ class SignInPageTests(Base):
         customer = self.client.get(reverse("accounts:login")).content.decode()
         admin = self.client.get(reverse("arabela_admin:admin_login")).content.decode()
         for shared in ("inline-flex items-center justify-center gap-3 w-full py-3.5 text-sm font-semibold text-gray-700 transition-colors bg-gray-100 rounded-lg px-7",
-                       "Continue with Google", "max-w-md mx-auto", "Arabela\" width=\"150\""):         # the button, the card width and the same logo
+                       "Continue with Google", "max-w-md mx-auto", "text-title-sm", "Arabela\" width=\"150\""):         # the button, the card width, the heading size and the same logo
             self.assertIn(shared, customer)
             self.assertIn(shared, admin)
 
-    def test_the_admin_sign_in_page_shows_no_heading_or_extra_sentences(self):
-        """The logo is the title: no visible heading (the h1 is kept for screen readers only, hidden from sight) and none of the old sentences."""
-        admin = self.client.get(reverse("arabela_admin:admin_login")).content.decode()
-        self.assertNotIn("text-title-sm", admin)                                  # the visible heading style is gone
-        self.assertIn("clip: rect(0, 0, 0, 0)", admin)                             # what is left is hidden from sight
-        for gone in ("Only the Gmail accounts added by the owner", "The session ends when you close the browser"):
-            self.assertNotIn(gone, admin)
+    def test_the_admin_heading_is_the_same_size_as_the_customer_one_with_arabela_in_the_logo_font(self):
+        """"Sign in to Arabela Admin": one visible heading, the same size classes as the customer sign-in heading, and only the word Arabela in the
+        logo's script font (Lobster Two). No extra sentences under it."""
+        def heading(html):
+            found = re.search(r"<h1\b([^>]*)>(.*?)</h1>", html, re.S)
+            self.assertIsNotNone(found)
+            return found.group(1), found.group(2)
+
+        customer_attrs, _ = heading(self.client.get(reverse("accounts:login")).content.decode())
+        admin_html = self.client.get(reverse("arabela_admin:admin_login")).content.decode()
+        admin_attrs, admin_inner = heading(admin_html)
+        classes = lambda attrs: set(re.search(r'class="([^"]*)"', attrs).group(1).split())
+        self.assertEqual(admin_html.count("<h1"), 1)
+        self.assertEqual(classes(admin_attrs), classes(customer_attrs))                         # same size, weight and colour as the customer heading
+        self.assertIn("text-title-sm", classes(admin_attrs))
+        self.assertIn("sm:text-title-md", classes(admin_attrs))
+        self.assertEqual(" ".join(re.sub(r"<[^>]+>", "", admin_inner).split()), "Sign in to Arabela Admin")
+        script_words = re.findall(r"<span[^>]*Lobster Two[^>]*>(.*?)</span>", admin_inner, re.S)
+        self.assertEqual(script_words, ["Arabela"])                                             # only the brand word is in the script font
+        self.assertNotIn("Lobster Two", admin_attrs)                                            # the rest of the heading keeps the normal font
+        self.assertIn("family=Lobster+Two", admin_html)                                         # the page loads that font
+        self.assertNotIn("clip: rect", admin_html)                                              # nothing is hidden any more
+        for gone in ("Sign in to the admin panel", "Only the Gmail accounts added by the owner", "The session ends when you close the browser"):
+            self.assertNotIn(gone, admin_html)
 
     def test_typing_a_username_and_password_does_nothing(self):
         response = self.client.post(reverse("arabela_admin:admin_login"), {"username": "maria", "password": "x"})
