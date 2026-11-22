@@ -71,7 +71,8 @@ class SignInPageTests(Base):
         self.assertEqual(response.status_code, 200)
         html = response.content.decode()
         self.assertIn("Continue with Google", html)
-        self.assertIn("logo/logo.svg", html)                                    # the Arabela logo stays
+        self.assertNotIn("logo/logo.svg", html)                                 # no logo picture: the heading "Sign in to Arabela Admin" is the title
+        self.assertIn("Arabela</span> Admin", html)
         self.assertIn("/accounts/google/login/", html)
         self.assertIn("next=%2Fadmin-panel%2Fgoogle-finish%2F", html)
         for gone in ('type="password"', 'name="username"', "Forgot password", "Keep me logged in", "Remember", "change-password"):
@@ -81,9 +82,11 @@ class SignInPageTests(Base):
         customer = self.client.get(reverse("accounts:login")).content.decode()
         admin = self.client.get(reverse("arabela_admin:admin_login")).content.decode()
         for shared in ("inline-flex items-center justify-center gap-3 w-full py-3.5 text-sm font-semibold text-gray-700 transition-colors bg-gray-100 rounded-lg px-7",
-                       "Continue with Google", "max-w-md mx-auto", "text-title-sm", "Arabela\" width=\"150\""):         # the button, the card width, the heading size and the same logo
+                       "Continue with Google", "max-w-md mx-auto", "text-title-sm"):         # the button, the card width and the heading size
             self.assertIn(shared, customer)
             self.assertIn(shared, admin)
+        self.assertIn("logo/logo.svg", customer)                                       # only the customer page shows the logo picture
+        self.assertNotIn("logo/logo.svg", admin)
 
     def test_the_admin_heading_is_the_same_size_as_the_customer_one_with_arabela_in_the_logo_font(self):
         """"Sign in to Arabela Admin": one visible heading, the same size classes as the customer sign-in heading, and only the word Arabela in the
