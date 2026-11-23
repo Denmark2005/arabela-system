@@ -38,7 +38,7 @@ from accounts.roles import (
     parse_permissions, permission_message, staff_display_name,
 )
 from accounts.services import CANCELLATION_FLAG_THRESHOLD, clear_proof_block, record_rejected_proof
-from arabela_admin import audit_describe, gown_photo
+from arabela_admin import audit_describe, gown_inventory, gown_photo
 from gowns import availability, deposit, gcash_numbers
 from gowns.models import (
     COOLDOWN_DAYS,
@@ -151,6 +151,24 @@ def _require_owner(view_func):
     return wrapper
 
 
+def _attach_duplicate_codes(rows):
+    """Set `qv_dup` on every row: the reference codes of OTHER bookings that carry the same GCash number, exactly what
+    Reservation.gcash_duplicate_codes says -- but for ALL the rows in ONE query, where that property asks the database once per row."""
+    def numbers(row):
+        return {n for n in (row.gcash_reference, row.proof_typed_reference) if n}
+
+    wanted = set().union(*(numbers(r) for r in rows)) if rows else set()
+    others = []
+    if wanted:
+        others = list(
+            Reservation.objects.filter(Q(gcash_reference__in=wanted) | Q(proof_typed_reference__in=wanted))
+            .order_by("created_at").values_list("id", "reference_code", "gcash_reference", "proof_typed_reference")
+        )
+    for row in rows:
+        mine = numbers(row)
+        row.qv_dup = ", ".join(code for pk, code, read, typed in others if pk != row.pk and mine & {read, typed})
+
+
 @_require_admin_staff
 def dashboard_view(request):
     # The shop's stand-in for a nightly cron job. This project has no scheduler, so the
@@ -170,9 +188,14 @@ def dashboard_view(request):
     quick_verify_reservations = reservation_owner_check.annotate_waiting(
         Reservation.objects.filter(status=Reservation.Status.PENDING)
         .select_related("customer__profile")
-        .prefetch_related(_receipts_prefetch())
+        .prefetch_related(_receipts_prefetch(), "items")
         .order_by("-created_at")[:5]
     )
+    # The booking's first pick-up and last return, for the table's Pick-up / Return columns (the same window Active Reservations and
+    # Reservation Records show). Read from the items prefetched above, so it costs no query per row.
+    for booking in quick_verify_reservations:
+        booking.qv_pickup, booking.qv_return = _reservation_window(list(booking.items.all()))
+    _attach_duplicate_codes(quick_verify_reservations)
     pending_total = Reservation.objects.filter(status=Reservation.Status.PENDING).count()
 
     # Every figure here is counted the SAME way as the page it links to, so the
@@ -181,16 +204,15 @@ def dashboard_view(request):
     # tallies mirror gown_catalog_view, and customers exclude staff/superusers exactly
     # as clients_view does. These replaced hardcoded demo figures (286 / 5,359) that
     # disagreed with the real data by two orders of magnitude.
-    gowns = Gown.objects.all()
-    gown_total = gowns.count()
-    # Gown Inventory tile: the SAME four figures as Gown Catalog's stat row (Total / Available /
-    # Reserved / Blocked). "Blocked" is the number of gowns with a block covering today -- counted
-    # per gown, so two back-to-back blocks on one gown still make one blocked gown.
+    # Gown Inventory tile: the SAME figures as Gown Catalog's stat row (Total / Available / Reserved / Blocked / Out-of-Stock),
+    # worked out by the one rule in gown_inventory.py so every gown is in exactly one box and the boxes add up to the total.
+    # A gown blocked by two back-to-back blocks is still one gown (the ids are a set).
     today = timezone.localdate()
-    gown_blocked = (
-        GownUnavailability.objects.filter(start_date__lte=today, end_date__gte=today)
-        .values("gown_id").distinct().count()
+    inventory = gown_inventory.split(
+        Gown.objects.values_list("id", "status"),
+        GownUnavailability.objects.filter(start_date__lte=today, end_date__gte=today).values_list("gown_id", flat=True),
     )
+    gown_total = inventory["total"]
 
     # Reservations This Month: one per BOOKING (not per gown), counted in the month its
     # FIRST gown is picked up (the same first pick-up _reservation_window gives
@@ -236,9 +258,10 @@ def dashboard_view(request):
                 items__stage__in=[s for s in ReservationItem.Stage.values if s not in ReservationItem.FINISHED_STAGES],
             ).distinct().count(),
             "gown_total": gown_total,
-            "gown_available": gowns.filter(status=Gown.Status.AVAILABLE).count(),
-            "gown_reserved": gowns.filter(status=Gown.Status.RESERVED).count(),
-            "gown_blocked": gown_blocked,
+            "gown_available": inventory["available"],
+            "gown_reserved": inventory["reserved"],
+            "gown_blocked": inventory["blocked"],
+            "gown_out_of_stock": inventory["out_of_stock"],
             # Drives the empty-state call to action: with no gowns the shop cannot take
             # a real booking at all, so it is the single most important thing to surface.
             "catalog_is_empty": gown_total == 0,
@@ -1829,6 +1852,10 @@ def gown_catalog_view(request):
         if active_block:
             blocked_gowns_today.append({"gown": g, "block": active_block})
     blocked_gowns_today.sort(key=lambda row: row["block"]["end"])
+    # The strip's five figures: the same one-box-per-gown rule as the dashboard tile (gown_inventory.py).
+    inventory = gown_inventory.split(
+        ((g.id, g.status) for g in gowns), (row["gown"].id for row in blocked_gowns_today),
+    )
 
     return render(
         request,
@@ -1848,8 +1875,10 @@ def gown_catalog_view(request):
             "block_reasons": [r for r in GownUnavailability.Reason.values if r != GownUnavailability.Reason.COOLDOWN],
             "today_iso": today.isoformat(),
             "total_gowns_count": len(gowns),
-            "available_count": sum(1 for g in gowns if g.status == Gown.Status.AVAILABLE),
-            "reserved_count": sum(1 for g in gowns if g.status == Gown.Status.RESERVED),
+            "available_count": inventory["available"],
+            "reserved_count": inventory["reserved"],
+            "blocked_count": inventory["blocked"],
+            "out_of_stock_count": inventory["out_of_stock"],
             "blocked_gowns_today": blocked_gowns_today,
             "category_rows": category_rows,
             "has_custom_categories": bool(custom_by_name),

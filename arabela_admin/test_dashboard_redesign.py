@@ -17,11 +17,12 @@ from django.test import SimpleTestCase, TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import escapejs
 
 from accounts.models import UserProfile
 from arabela_admin.tests import _make_gown
 from gowns.models import Gown
-from reservations.models import Reservation
+from reservations.models import Reservation, ReservationItem
 
 User = get_user_model()
 URL = reverse("arabela_admin:dashboard")
@@ -87,12 +88,12 @@ class OverviewStripTests(DashboardBase):
         self.assertEqual(html.count('class="ov-strip ov-strip--gowns"'), 1)
         tile = html[html.index("Gown Inventory"):]
         tile = tile[:tile.index("</a>")]                                            # the whole strip is ONE link, to the Gown Catalog
-        for word in ("Total Gowns", "Available", "Reserved", "Blocked Gowns"):
+        for word in ("Total Gowns", "Available", "Reserved", "Blocked Gowns", "Out-of-Stock"):
             self.assertIn(word, tile)
-        for dot in ("ov-dot--available", "ov-dot--reserved", "ov-dot--blocked"):
+        for dot in ("ov-dot--available", "ov-dot--reserved", "ov-dot--blocked", "ov-dot--oos"):
             self.assertIn(dot, tile)
-        self.assertEqual([response.context[k] for k in ("gown_total", "gown_available", "gown_reserved", "gown_blocked")], [3, 2, 1, 0])
-        self.assertEqual(len(re.findall(r'<span class="ov-num[^"]*">\d+</span>', tile)), 4)
+        self.assertEqual([response.context[k] for k in ("gown_total", "gown_available", "gown_reserved", "gown_blocked", "gown_out_of_stock")], [3, 2, 1, 0, 0])
+        self.assertEqual(len(re.findall(r'<span class="ov-num[^"]*">\d+</span>', tile)), 5)
         self.assertIn('href="%s"' % reverse("arabela_admin:gown_catalog"), html[html.index('class="ov-strip ov-strip--gowns"') - 150:html.index('class="ov-strip ov-strip--gowns"')])
 
     def test_a_zero_blocked_is_grey_and_says_none_blocked_today_on_hover(self):
@@ -261,11 +262,101 @@ class QuickVerifyRowTests(DashboardBase):
                 self.assertEqual(self.client.get(URL).status_code, 200)
             return len(captured.captured_queries)
 
+        self.client.get(URL)                       # the once-a-day reminder sweep runs on the first load of the day: keep its queries out of the count
         self.pending("Q1")
         few = queries()
         for i in range(2, 14):
             self.pending("Q%d" % i, hours_ago=i)
-        self.assertLessEqual(queries(), few)
+        self.assertEqual(queries(), few)           # 1 row or the 5 the list shows: the same number of questions (no query per row)
+
+    # ---- the title row, the labels and the pick-up / return columns
+    def item(self, reservation, pickup, ret, name="Test Gown", **extra):
+        return ReservationItem.objects.create(
+            reservation=reservation, gown_name=name, size="Medium", rental_price=Decimal("3000"), rental_date=pickup, return_date=ret, **extra)
+
+    def day(self, offset):
+        d = timezone.localdate() + timedelta(days=offset)
+        return f"{d:%b} {d.day}, {d.year}"
+
+    def test_the_title_row_names_every_column_in_the_order_the_values_come(self):
+        self.pending("Title Person")
+        _, html = self.page()
+        start = html.index('class="qv-cols"')
+        titles = re.findall(r"<span>([^<]*)</span>", html[start:html.index("</div>", start)])
+        self.assertEqual(titles, ["Customer", "Booking no.", "Deposit paid", "Pick-up", "Return", "Submitted", "Actions"])
+
+    def test_with_nothing_waiting_there_is_no_title_row(self):
+        _, html = self.page()
+        self.assertNotIn('class="qv-cols"', html)
+        self.assertIn("No payments awaiting review right now.", html)
+
+    def test_each_value_carries_its_own_label_for_laptops_and_phones(self):
+        reservation = self.pending("Label Person")
+        _, html = self.page()
+        row = self.row(html, reservation)
+        for label in ("Booking no.", "Deposit paid", "Pick-up", "Return", "Submitted"):
+            with self.subTest(label=label):
+                self.assertIn('data-label="%s"' % label, row)
+
+    def test_pickup_and_return_are_the_first_pickup_and_the_last_return_of_the_booking(self):
+        reservation = self.pending("Two Gowns")
+        self.item(reservation, timezone.localdate() + timedelta(days=10), timezone.localdate() + timedelta(days=14), "First")
+        self.item(reservation, timezone.localdate() + timedelta(days=8), timezone.localdate() + timedelta(days=12), "Second")
+        _, html = self.page()
+        row = self.row(html, reservation)
+        self.assertIn('data-label="Pick-up">%s<' % self.day(8), row)
+        self.assertIn('data-label="Return">%s<' % self.day(14), row)
+
+    def test_a_single_gown_shows_its_own_dates_with_the_year(self):
+        reservation = self.pending("One Gown")
+        self.item(reservation, timezone.localdate() + timedelta(days=40), timezone.localdate() + timedelta(days=44))
+        _, html = self.page()
+        row = self.row(html, reservation)
+        self.assertIn('data-label="Pick-up">%s<' % self.day(40), row)
+        self.assertIn('data-label="Return">%s<' % self.day(44), row)
+
+    def test_a_gown_the_shop_cancelled_does_not_stretch_the_window(self):
+        reservation = self.pending("Cancelled One")
+        today = timezone.localdate()
+        self.item(reservation, today + timedelta(days=10), today + timedelta(days=14), "Kept")
+        self.item(reservation, today + timedelta(days=2), today + timedelta(days=30), "Dropped", stage=ReservationItem.Stage.CANCELLED)
+        _, html = self.page()
+        row = self.row(html, reservation)
+        self.assertIn('data-label="Pick-up">%s<' % self.day(10), row)
+        self.assertIn('data-label="Return">%s<' % self.day(14), row)
+
+    def test_a_booking_with_no_gowns_shows_dashes_not_an_error(self):
+        reservation = self.pending("No Gowns")
+        _, html = self.page()
+        row = self.row(html, reservation)
+        self.assertIn('data-label="Pick-up">&mdash;<', row)
+        self.assertIn('data-label="Return">&mdash;<', row)
+
+    def test_deposit_paid_is_the_deposit_and_only_a_booking_that_cannot_be_split_says_total(self):
+        split = self.pending("Split Person")
+        Reservation.objects.filter(pk=split.pk).update(security_deposit=Decimal("2000"), rental_subtotal=Decimal("3000"), total_amount=Decimal("5000"))
+        plain = self.pending("Plain Person", total="2500")
+        _, html = self.page()
+        split_row, plain_row = self.row(html, split), self.row(html, plain)
+        self.assertIn('data-label="Deposit paid"', split_row)
+        self.assertIn("₱2,000", split_row.split('data-label="Pick-up"')[0])
+        self.assertNotIn("qv-tot", split_row)                                       # the deposit alone: nothing to explain
+        self.assertIn("2,500", plain_row)
+        self.assertIn('<span class="qv-tot">total</span>', plain_row)                # a total that could not be split says so
+
+    def test_the_duplicate_gcash_warning_is_the_same_as_before_for_every_row(self):
+        a = self.pending("Dup A")
+        b = self.pending("Dup B")
+        c = self.pending("Dup C")
+        Reservation.objects.filter(pk=b.pk).update(gcash_reference=a.gcash_reference)                  # B has A's number
+        Reservation.objects.filter(pk=c.pk).update(proof_typed_reference=a.gcash_reference)            # C TYPED A's number
+        _, html = self.page()
+        for reservation in (a, b, c):
+            reservation.refresh_from_db()
+            with self.subTest(reservation=reservation.reference_code):
+                self.assertTrue(reservation.gcash_duplicate_codes)                                      # each of the three really has a duplicate
+                self.assertIn("gcashDup: '%s'" % escapejs(reservation.gcash_duplicate_codes), self.row(html, reservation))
+        self.assertIn(b.reference_code, a.gcash_duplicate_codes)
 
 
 class StaticTemplateTests(SimpleTestCase):
@@ -283,8 +374,15 @@ class StaticTemplateTests(SimpleTestCase):
             self.assertIn("\n    .dark " + light, self.source, light)
 
     def test_the_small_screens_have_their_own_layout(self):
-        for rule in ("@media (max-width: 1180px)", "@media (max-width: 760px)", "grid-template-areas: \"who who acts\" \"ref amt date\""):
+        for rule in ("@media (max-width: 1279px)", "@media (max-width: 1180px)", "@media (max-width: 760px)",
+                     "grid-template-areas: \"who who who who acts\" \"ref amt pick ret sent\"",          # a laptop / tablet: two lines per booking
+                     "grid-template-areas: \"who who acts\" \"ref amt date\" \"pick pick ret\""):        # a phone
             self.assertIn(rule, self.source)
+
+    def test_the_title_row_has_a_dark_twin_and_goes_away_where_the_labels_take_over(self):
+        self.assertIn("\n    .dark .qv-cols {", self.source)
+        self.assertRegex(self.source, r"@media \(max-width: 1279px\) \{\s+\.qv-cols \{ display: none; \}")
+        self.assertIn(".qv-line > [data-label]::before { content: attr(data-label);", self.source)
 
     def test_the_file_keeps_its_line_endings(self):
         self.assertEqual(TEMPLATE.read_bytes().count(b"\r\n"), 0)                    # LF, like the rest of the admin pages except four

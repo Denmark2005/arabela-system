@@ -29,8 +29,11 @@ class LayoutFilesTests(SimpleTestCase):
         self.assertIn('class="gc-stats"', html)
         self.assertNotIn("admin-stat-grid-4", html)
         strip = html[html.index('class="gc-stats"'):html.index("Blocked Gowns list")]
-        for label in ("Total Gowns", "Available", "Reserved", "Blocked Gowns"):
+        for label in ("Total Gowns", "Available", "Reserved", "Blocked Gowns", "Out-of-Stock"):
             self.assertIn(label, strip)
+        self.assertIn("gc-dot--oos", strip)
+        self.assertIn("{{ blocked_count }}", strip)
+        self.assertIn("{{ out_of_stock_count }}", strip)
         self.assertIn("showBlockedGownsList = !showBlockedGownsList", strip)        # View & release still works
 
     def test_the_chips_and_the_old_category_select_are_gone_and_one_dropdown_drives_the_same_filter(self):
@@ -185,7 +188,7 @@ class LaptopFitTests(SimpleTestCase):
 
     def test_the_booking_number_chip_never_breaks_across_two_lines(self):
         dashboard = self.text("dashboard.html")                              # Quick Verify: the Pending Approval look, the chip is the <b> in the booking-number cell
-        self.assertIn("<div class=\"ar-ref\"><b>{{ r.reference_code }}</b></div>", dashboard)
+        self.assertIn("<div class=\"ar-ref\" data-label=\"Booking no.\"><b>{{ r.reference_code }}</b></div>", dashboard)
         self.assertIn(".qv-line .ar-ref b { white-space: nowrap; }", dashboard)
         pending = self.text("pending-approval.html")                       # the Active Reservations look: the chip is the <b> in the booking-number line
         self.assertIn("<b>{{ r.reference_code }}</b>", pending)

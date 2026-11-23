@@ -2166,24 +2166,31 @@ class DashboardGownInventoryTileTests(TestCase):
         self.block(_make_gown(6, status=Gown.Status.AVAILABLE), 5, 8)    # future only: not blocked today
         self.block(_make_gown(7, status=Gown.Status.AVAILABLE), -9, -2)  # expired: not blocked today
 
-    def test_the_four_figures_are_the_catalogs_own_numbers(self):
+    def test_the_five_figures_are_the_catalogs_own_numbers_and_add_up_to_the_total(self):
         self.seed()
         response = self.client.get(self.dashboard)
         catalog = self.client.get(reverse("arabela_admin:gown_catalog")).context
         self.assertEqual(response.context["gown_total"], catalog["total_gowns_count"])
         self.assertEqual(response.context["gown_available"], catalog["available_count"])
         self.assertEqual(response.context["gown_reserved"], catalog["reserved_count"])
-        self.assertEqual(response.context["gown_blocked"], len(catalog["blocked_gowns_today"]))
+        self.assertEqual(response.context["gown_blocked"], catalog["blocked_count"])
+        self.assertEqual(response.context["gown_out_of_stock"], catalog["out_of_stock_count"])
+        # 7 gowns: #1 #2 #6 #7 can be rented today, #3 is Reserved, #5 is blocked today (it is NOT also counted as Available), #4 is Out-of-Stock
         self.assertEqual(
-            (response.context["gown_total"], response.context["gown_available"],
-             response.context["gown_reserved"], response.context["gown_blocked"]), (7, 5, 1, 1))
+            (response.context["gown_total"], response.context["gown_available"], response.context["gown_reserved"],
+             response.context["gown_blocked"], response.context["gown_out_of_stock"]), (7, 4, 1, 1, 1))
+        self.assertEqual(
+            response.context["gown_available"] + response.context["gown_reserved"] + response.context["gown_blocked"] + response.context["gown_out_of_stock"],
+            response.context["gown_total"])
+        self.assertEqual(
+            catalog["available_count"] + catalog["reserved_count"] + catalog["blocked_count"] + catalog["out_of_stock_count"], catalog["total_gowns_count"])
 
     def test_the_tile_uses_the_catalogs_wording_and_drops_needs_attention(self):
         self.seed()
         html = self.client.get(self.dashboard).content.decode()
         tile = html[html.index("Gown Inventory"):]
         tile = tile[:tile.index("</a>")]
-        for word in ("Total Gowns", "Available", "Reserved", "Blocked Gowns"):
+        for word in ("Total Gowns", "Available", "Reserved", "Blocked Gowns", "Out-of-Stock"):
             with self.subTest(word=word):
                 self.assertIn(word, tile)
         self.assertNotIn("Needs Attention", tile)

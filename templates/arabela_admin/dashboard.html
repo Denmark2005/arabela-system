@@ -25,7 +25,7 @@
     .ov-strip--top { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .ov-strip--staff { grid-template-columns: minmax(11rem, 1.25fr) repeat(3, minmax(0, 1fr)); transition: background-color .15s; }
     .ov-dot--important { background: #f79009; }
-    .ov-strip--gowns { grid-template-columns: minmax(11rem, 1.25fr) repeat(4, minmax(0, 1fr)); transition: background-color .15s; }
+    .ov-strip--gowns { grid-template-columns: minmax(11rem, 1.25fr) repeat(5, minmax(0, 1fr)); transition: background-color .15s; }
     a.ov-strip:hover, a.ov-cell:hover { background: rgba(152,162,179,.08); }
     a.ov-strip:focus-visible, a.ov-cell:focus-visible { outline: 2px solid #465fff; outline-offset: -2px; }
     .ov-cell { display: flex; align-items: center; gap: .85rem; min-width: 0; padding: .85rem 1.25rem; color: inherit; text-decoration: none; transition: background-color .15s; }
@@ -50,6 +50,7 @@
     .ov-dot--available { background: #12b76a; box-shadow: 0 0 0 3px rgba(18,183,106,.18); }
     .ov-dot--reserved { background: #f79009; box-shadow: 0 0 0 3px rgba(247,144,9,.2); }
     .ov-dot--blocked { background: #98a2b3; box-shadow: 0 0 0 3px rgba(152,162,179,.25); }
+    .ov-dot--oos { background: #f04438; box-shadow: 0 0 0 3px rgba(240,68,56,.18); }
 
     .qv-card { overflow: hidden; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; }
     .dark .qv-card { background: rgba(255,255,255,.03); border-color: #1d2939; }
@@ -65,9 +66,16 @@
     .qv-all:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; border-radius: .25rem; }
     .qv-all svg { width: .95rem; height: .95rem; }
     .dark .qv-all { color: #9bb0ff; }
-    /* name | booking number | amount | day sent | the three icon buttons. Every column is fixed or has a minimum (never "auto"). */
-    .qv-line { display: grid; grid-template-columns: minmax(8rem, 1.7fr) minmax(8rem, 1fr) 6rem 4.25rem 7.25rem; align-items: center; column-gap: 1rem; padding: .7rem 1.25rem; border-top: 1px solid #f2f4f7; }
+    /* customer | booking number | deposit paid | pick-up | return | day submitted | the three icon buttons. Every column is fixed or has a minimum (never "auto").
+       The title row (.qv-cols) uses the same columns; on a laptop or smaller screen it goes away and each value carries its own small label instead. */
+    .qv-line { display: grid; grid-template-columns: minmax(8rem, 1.7fr) minmax(7.5rem, 1fr) 6.25rem 6.75rem 6.75rem 4.5rem 7.25rem; align-items: center; column-gap: 1rem; padding: .7rem 1.25rem; border-top: 1px solid #f2f4f7; }
     .dark .qv-line { border-color: #1d2939; }
+    .qv-cols { display: grid; grid-template-columns: minmax(8rem, 1.7fr) minmax(7.5rem, 1fr) 6.25rem 6.75rem 6.75rem 4.5rem 7.25rem; align-items: center; column-gap: 1rem; padding: .6rem 1.25rem; border-top: 1px solid #f2f4f7; border-bottom: 0; background: #f9fafb; font-size: .75rem; font-weight: 500; color: #667085; }
+    .dark .qv-cols { background: rgba(255,255,255,.025); border-color: #1d2939; color: #98a2b3; }
+    .qv-cols > span:last-child { text-align: right; }
+    .qv-tot { font-size: .6875rem; font-weight: 500; color: #98a2b3; }
+    .qv-day { font-size: .8125rem; color: #475467; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .dark .qv-day { color: #d0d5dd; }
     .qv-line .ar-ref b { white-space: nowrap; }
     .qv-who { display: flex; flex-direction: column; min-width: 0; }
     .qv-sub { margin-top: .1rem; font-size: .75rem; color: #98a2b3; overflow-wrap: anywhere; }
@@ -91,9 +99,23 @@
     .qv-foot a { color: #465fff; font-weight: 500; }
     .dark .qv-foot a { color: #9bb0ff; }
 
-    /* A small laptop: the gown strip's title takes its own line, the four figures share the next one. */
+    /* A small laptop or a tablet: Quick Verify has no room for seven columns in one line, so each booking is two lines -- the customer and the buttons, then
+       the booking number, deposit, pick-up, return and day submitted, each with its small label above it (the title row is hidden). */
+    @media (max-width: 1279px) {
+      .qv-cols { display: none; }
+      .qv-line { grid-template-columns: repeat(4, minmax(0, 1fr)) 7.25rem; grid-template-areas: "who who who who acts" "ref amt pick ret sent"; row-gap: .6rem; column-gap: .75rem; }
+      .qv-line > .ar-who { grid-area: who; }
+      .qv-line > .ar-ref { grid-area: ref; align-self: start; }
+      .qv-line > .qv-amt { grid-area: amt; align-self: start; }
+      .qv-line > .qv-pick { grid-area: pick; align-self: start; }
+      .qv-line > .qv-ret { grid-area: ret; align-self: start; }
+      .qv-line > .qv-date { grid-area: sent; align-self: start; text-align: right; }
+      .qv-line > .qv-acts { grid-area: acts; }
+      .qv-line > [data-label]::before { content: attr(data-label); display: block; flex: 0 0 100%; margin-bottom: .15rem; font-size: .6875rem; font-weight: 500; line-height: 1.2; color: #98a2b3; white-space: nowrap; }
+    }
+    /* A small laptop: the gown strip's title takes its own line, the five figures share the next one. */
     @media (max-width: 1180px) {
-      .ov-strip--gowns { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .ov-strip--gowns { grid-template-columns: repeat(5, minmax(0, 1fr)); }
       .ov-strip--gowns > .ov-head { grid-column: 1 / -1; padding-bottom: .7rem; border-bottom: 1px solid #f2f4f7; }
       .dark .ov-strip--gowns > .ov-head { border-color: #1d2939; }
       .ov-strip--gowns > .ov-head + .ov-cell { border-left: 0; }
@@ -110,16 +132,15 @@
       .ov-strip--gowns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .ov-strip--gowns > .ov-cell:nth-child(4) { border-left: 0; border-top: 1px solid #f2f4f7; }
       .ov-strip--gowns > .ov-cell:nth-child(5) { border-top: 1px solid #f2f4f7; }
-      .dark .ov-strip--gowns > .ov-cell:nth-child(4), .dark .ov-strip--gowns > .ov-cell:nth-child(5) { border-top-color: #1d2939; }
+      .ov-strip--gowns > .ov-cell:nth-child(6) { border-left: 0; border-top: 1px solid #f2f4f7; grid-column: 1 / -1; }      /* the fifth figure sits alone on the last row */
+      .dark .ov-strip--gowns > .ov-cell:nth-child(4), .dark .ov-strip--gowns > .ov-cell:nth-child(5), .dark .ov-strip--gowns > .ov-cell:nth-child(6) { border-top-color: #1d2939; }
       .ov-cell { padding: .8rem 1rem; }
       .ov-head { padding: .8rem 1rem .7rem; }
       .qv-head, .qv-foot, .qv-empty { padding-left: 1rem; padding-right: 1rem; }
-      .qv-line { grid-template-columns: minmax(7.5rem, auto) minmax(0, 1fr) 7.25rem; grid-template-areas: "who who acts" "ref amt date"; row-gap: .5rem; padding: .7rem 1rem; }
-      .qv-line > .ar-who { grid-area: who; }
-      .qv-line > .ar-ref { grid-area: ref; }
-      .qv-line > .qv-amt { grid-area: amt; }
+      .qv-line { grid-template-columns: 7.5rem minmax(0, 1fr) 7.25rem; grid-template-areas: "who who acts" "ref amt date" "pick pick ret"; row-gap: .5rem; padding: .7rem 1rem; }
+      .qv-line > .qv-pick { grid-area: pick; }
+      .qv-line > .qv-ret { grid-area: ret; }
       .qv-line > .qv-date { grid-area: date; text-align: right; }
-      .qv-line > .qv-acts { grid-area: acts; }
     }
   </style>
   </head>
@@ -1206,11 +1227,12 @@
 {% else %}
                 <a href="{% url 'arabela_admin:gown_catalog' %}" title="View Gown Catalog" class="ov-strip ov-strip--gowns" data-live-region="overview-gowns">
                   <div class="ov-head"><span class="ov-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"/></svg></span><span class="ov-lbl">Gown Inventory</span></div>
-                  {# The same four figures, in the same words, as the stat row on Gown Catalog; the circles are the Catalog's own colours. #}
+                  {# The same five figures, in the same words, as the stat row on Gown Catalog (every gown is in exactly ONE box, so they add up to Total Gowns -- see gown_inventory.py); the circles are the Catalog's own colours. #}
                   <div class="ov-cell ov-cell--stat"><span class="ov-lbl">Total Gowns</span><span class="ov-num">{{ gown_total }}</span></div>
                   <div class="ov-cell ov-cell--stat"><span class="ov-lbl"><span class="ar-dot ov-dot--available" aria-hidden="true"></span>Available</span><span class="ov-num">{{ gown_available }}</span></div>
                   <div class="ov-cell ov-cell--stat"><span class="ov-lbl"><span class="ar-dot ov-dot--reserved" aria-hidden="true"></span>Reserved</span><span class="ov-num">{{ gown_reserved }}</span></div>
                   <div class="ov-cell ov-cell--stat"{% if not gown_blocked %} title="None blocked today"{% endif %}><span class="ov-lbl"><span class="ar-dot ov-dot--blocked" aria-hidden="true"></span>Blocked Gowns</span><span class="ov-num{% if not gown_blocked %} ov-num--zero{% endif %}">{{ gown_blocked }}</span></div>
+                  <div class="ov-cell ov-cell--stat"{% if not gown_out_of_stock %} title="None out of stock"{% endif %}><span class="ov-lbl"><span class="ar-dot ov-dot--oos" aria-hidden="true"></span>Out-of-Stock</span><span class="ov-num{% if not gown_out_of_stock %} ov-num--zero{% endif %}">{{ gown_out_of_stock }}</span></div>
                 </a>
 {% endif %}
                 {# Owner only: what staff did today, as one slim strip. It opens the Audit Log. #}
@@ -1236,16 +1258,24 @@
                   </div>
                   <div style="padding: .75rem 1.25rem 0;">{% include "arabela_admin/partials/gcash_banner.html" %}</div>
                   <div>
+                    {# The title row: what each column is. Hidden on a laptop or smaller screen, where every value carries its own small label instead (data-label). #}
+                    {% if quick_verify_reservations %}
+                    <div class="qv-cols" aria-hidden="true"><span>Customer</span><span>Booking no.</span><span>Deposit paid</span><span>Pick-up</span><span>Return</span><span>Submitted</span><span>Actions</span></div>
+                    {% endif %}
                     {% for r in quick_verify_reservations %}
-                    {% with dup=r.gcash_duplicate_codes %}
+                    {% with dup=r.qv_dup %}
                     <div data-qv-row x-show="headerSearch === '' || '{{ r.display_customer_name|lower|escapejs }} {{ r.reference_code|lower|escapejs }}'.includes(headerSearch.toLowerCase())" x-data="{ status: 'Pending' }" class="qv-line">
                       <div class="ar-who">
                         <span class="ar-dot qv-dot" role="img" aria-label="Waiting for review" title="Waiting for review"></span>
                         <div class="qv-who"><span class="ar-name">{{ r.display_customer_name }}</span>{% if r.booked_as_name %}<span class="qv-sub">Booked as: {{ r.booked_as_name }}</span>{% endif %}</div>
                       </div>
-                      <div class="ar-ref"><b>{{ r.reference_code }}</b></div>
-                      <div class="qv-amt">{% with bd=r.payment_breakdown %}{% if bd %}{{ bd.headline }}{% else %}&#8369;{{ r.total_amount|floatformat:'-2g' }}{% endif %}{% endwith %}</div>
-                      <div class="qv-date" title="Sent {{ r.created_at|date:'M j, Y, g:i A' }}">{{ r.created_at|date:"M j" }}</div>
+                      <div class="ar-ref" data-label="Booking no."><b>{{ r.reference_code }}</b></div>
+                      {# The amount the customer sent by GCash = the security deposit. A rare old booking that cannot be split shows its total instead, and says so. #}
+                      <div class="qv-amt" data-label="Deposit paid" title="The security deposit the customer sent by GCash">{% with bd=r.payment_breakdown %}{% if bd %}{{ bd.headline }}{% else %}&#8369;{{ r.total_amount|floatformat:'-2g' }} <span class="qv-tot">total</span>{% endif %}{% endwith %}</div>
+                      {# The booking's first pick-up and last return (a multi-gown booking can differ per gown): the same window Active Reservations and Reservation Records show. #}
+                      <div class="qv-day qv-pick" data-label="Pick-up">{% if r.qv_pickup %}{{ r.qv_pickup|date:"M j, Y" }}{% else %}&mdash;{% endif %}</div>
+                      <div class="qv-day qv-ret" data-label="Return">{% if r.qv_return %}{{ r.qv_return|date:"M j, Y" }}{% else %}&mdash;{% endif %}</div>
+                      <div class="qv-date" data-label="Submitted" title="Sent {{ r.created_at|date:'M j, Y, g:i A' }}">{{ r.created_at|date:"M j" }}</div>
                       <div class="qv-acts">
                         <button type="button" @click="openReceiptModal = true; receiptPreview = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"&mdash;"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:'-2g' }}', date: '{{ r.created_at|date:"M j, Y" }}', status: status, proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}'), breakdown: JSON.parse('{{ r.payment_breakdown_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', refInfo: JSON.parse('{{ r.reference_info_json|escapejs }}'), gcashDup: '{{ dup|escapejs }}' }" class="ar-ib" title="View proof" aria-label="View proof of {{ r.display_customer_name }}, {{ r.reference_code }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
                         {% if r.waiting_for_owner and not viewer_is_owner %}

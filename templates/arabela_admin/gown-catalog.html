@@ -16,7 +16,8 @@
   <style>
     /* ===== Gown Catalog layout (gc- rules; nothing else uses them): slim stat strip, one list card, status circles + legend ===== */
     .gc-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: #e4e7ec; border: 1px solid #e4e7ec; border-radius: 1rem; overflow: hidden; }
-    @media (min-width: 720px) { .gc-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    .gc-stats > .gc-stat:last-child:nth-child(odd) { grid-column: 1 / -1; }      /* five figures on a phone: the last one sits alone on its row, no empty grey box */
+    @media (min-width: 720px) { .gc-stats { grid-template-columns: repeat(5, minmax(0, 1fr)); } .gc-stats > .gc-stat:last-child:nth-child(odd) { grid-column: auto; } }
     .dark .gc-stats { background: #1d2939; border-color: #1d2939; }
     .gc-stat { margin: 0; padding: .85rem 1.15rem; text-align: left; background: #ffffff; border: 0; min-width: 0; font: inherit; }
     .dark .gc-stat { background: #171f2f; }
@@ -1997,7 +1998,8 @@
 </div>
 </div>
             <!-- Breadcrumb End -->
-            <!-- Totals in one slim strip. The three coloured dots are the same circles the list uses for a gown's status. -->
+            <!-- Totals in one slim strip. The coloured dots are the same circles the list uses for a gown's status. Every gown is in exactly ONE box
+                 (gown_inventory.py), so Available + Reserved + Blocked + Out-of-Stock always add up to Total Gowns. -->
             <div class="gc-stats" role="group" aria-label="Gown totals">
               <div class="gc-stat">
                 <p class="gc-stat-label">Total Gowns</p>
@@ -2014,7 +2016,7 @@
               {% if blocked_gowns_today %}
               <button type="button" class="gc-stat" @click="showBlockedGownsList = !showBlockedGownsList" :aria-expanded="showBlockedGownsList ? 'true' : 'false'">
                 <p class="gc-stat-label"><span class="gc-dot gc-dot--blocked" aria-hidden="true"></span>Blocked Gowns</p>
-                <p class="gc-stat-num">{{ blocked_gowns_today|length }}
+                <p class="gc-stat-num">{{ blocked_count }}
                   <span class="gc-stat-link">
                     <span x-show="!showBlockedGownsList">View &amp; release &darr;</span>
                     <span x-show="showBlockedGownsList" x-cloak>Hide list &uarr;</span>
@@ -2027,6 +2029,10 @@
                 <p class="gc-stat-num">0 <span class="gc-stat-note">None blocked today</span></p>
               </div>
               {% endif %}
+              <div class="gc-stat">
+                <p class="gc-stat-label"><span class="gc-dot gc-dot--oos" aria-hidden="true"></span>Out-of-Stock</p>
+                <p class="gc-stat-num">{{ out_of_stock_count }}{% if not out_of_stock_count %} <span class="gc-stat-note">None out of stock</span>{% endif %}</p>
+              </div>
             </div>
 
             {% if blocked_gowns_today %}
