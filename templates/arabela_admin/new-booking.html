@@ -89,9 +89,6 @@
     .nb-sum td:last-child { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .nb-sum tr.nb-sum-total td { font-weight: 700; color: #1d2939; border-bottom: 0; }
     .dark .nb-sum tr.nb-sum-total td { color: #f2f4f7; }
-    .nb-receipt { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; padding: .75rem; border: 1px dashed #d0d5dd; border-radius: .7rem; margin-bottom: .75rem; }
-    .dark .nb-receipt { border-color: #344054; }
-    .nb-receipt img { width: 4rem; height: 4rem; object-fit: cover; border-radius: .45rem; background: #f2f4f7; }
     .nb-error { margin: 0 0 1rem; padding: .7rem .9rem; border-radius: .7rem; background: #fef3f2; color: #b42318; border: 1px solid #fecdca; font-size: .875rem; line-height: 1.5; }
     .dark .nb-error { background: rgba(240,68,56,.14); color: #fda29b; border-color: rgba(240,68,56,.35); }
     .nb-saved { padding: 1.25rem; border-radius: 1rem; background: #ecfdf3; border: 1px solid #abefc6; color: #05603a; margin-bottom: 1.25rem; }
@@ -288,7 +285,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -800,6 +797,15 @@
               >
                 <li>
                   <a
+                    href="{% url 'arabela_admin:payments' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'payments' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Payments
+                  </a>
+                </li>
+                <li>
+                  <a
                     href="{% url 'arabela_admin:payment_verification' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'payment-verification' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
@@ -1300,9 +1306,11 @@
                 <div class="nb-saved" role="status" aria-live="polite">
                   <p style="margin: 0; font-weight: 600;">Booking saved</p>
                   <p class="nb-saved-ref" x-text="saved.reference_code"></p>
-                  <p style="margin: 0 0 .9rem;" x-text="(saved.depositOnly ? 'Confirmed and on the calendar. Only the deposit was paid: when the customer pays the rental, upload that receipt in Reservation Records. ' : 'Confirmed and on the calendar. ') + 'Write this number on the shop\'s paper slip and tell the customer.'"></p>
+                  <p style="margin: 0 0 .5rem;" x-text="'Confirmed and on the calendar. Payment received, receipt ' + saved.receiptNumber + '.'"></p>
+                  <p style="margin: 0 0 .9rem;" x-text="saved.depositOnly ? ('Only the deposit was paid. Balance still to pay at the shop: ' + peso(Number(String(saved.balance).replace(/,/g, ''))) + '. Record it in Payments when the customer pays it.') : 'Nothing is left to pay. Tell the customer the booking number.'"></p>
                   <div class="nb-actions" style="justify-content: flex-start;">
-                    <a class="nb-btn nb-btn--primary" :href="saved.url" x-text="'Open in ' + saved.where"></a>
+                    <a class="nb-btn nb-btn--primary" :href="saved.receiptUrl" target="_blank" rel="noopener">Print receipt</a>
+                    <a class="nb-btn nb-btn--ghost" :href="saved.url" x-text="'Open in ' + saved.where"></a>
                     <button type="button" class="nb-btn nb-btn--ghost" @click="startOver()">Record another booking</button>
                   </div>
                 </div>
@@ -1599,7 +1607,7 @@
                       <span class="nb-label" id="nb-paid-label">Payment <span class="nb-req">*</span>
                         <details class="nb-tip" @click.outside="$el.removeAttribute('open')" @keydown.escape.stop="$el.removeAttribute('open')">
                           <summary aria-label="About the payment choices">?</summary>
-                          <div class="nb-tip-pop"><strong>Paid in full:</strong> the rental and the deposit were paid.<br><strong>Deposit only:</strong> only the deposit was paid; upload the rental receipt later in Reservation Records.<br>Either way the booking is confirmed straight away.</div>
+                          <div class="nb-tip-pop"><strong>Paid in full:</strong> the rental and the deposit were paid.<br><strong>Deposit only:</strong> only the deposit was paid; the rental balance is recorded later in Payments when the customer pays it.<br>The deposit is always received exactly, never in parts. Either way the booking is confirmed straight away and the receipt prints.</div>
                         </details>
                       </span>
                       <div class="nb-seg" role="radiogroup" aria-labelledby="nb-paid-label">
@@ -1609,33 +1617,20 @@
                       <p class="nb-hint" x-show="payment === 'deposit' &amp;&amp; anyTakesNow">A gown can only leave the shop once the rental is paid. Choose "Paid in full", or untick "Customer takes the gown now".</p>
 
                       <div x-show="payment !== ''" x-cloak style="margin-top: .9rem;">
-                        <span class="nb-label">The shop's receipt <span class="nb-req">*</span>
-                          <details class="nb-tip" @click.outside="$el.removeAttribute('open')" @keydown.escape.stop="$el.removeAttribute('open')">
-                            <summary aria-label="About the receipt">?</summary>
-                            <div class="nb-tip-pop">One photo of the shop's receipt. It is saved as the <span x-text="payment === 'full' ? 'Paid in full' : 'Deposit'"></span> receipt. The same photo can't be used for two bookings.</div>
-                          </details>
-                        </span>
-                        <template x-for="(rc, rIndex) in receipts" :key="rc.key">
-                          <div class="nb-receipt">
-                            <template x-if="rc.preview"><img :src="rc.preview" alt="Receipt photo"></template>
-                            <template x-if="rc.preparing"><span class="nb-help"><span class="nb-spinner"></span> Preparing photo…</span></template>
-                            <div style="flex: 1 1 8rem; min-width: 0;">
-                              <p class="nb-gmeta" style="margin: 0; overflow-wrap: anywhere;" x-text="rc.name"></p>
-                            </div>
-                            <button type="button" class="nb-ib nb-ib--danger" @click="removeReceipt(rIndex)" title="Remove this photo" aria-label="Remove this photo">
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>
-                            </button>
-                          </div>
-                        </template>
-                        <input type="file" class="nb-hidden" x-ref="nbReceiptFile" accept="image/png,image/jpeg,image/webp" @change="pickReceipt($event)">
-                        <input type="file" class="nb-hidden" x-ref="nbReceiptCamera" accept="image/png,image/jpeg,image/webp" capture="environment" @change="pickReceipt($event)">
-                        <div class="nb-actions" style="justify-content: flex-start;" x-show="receipts.length &lt; MAX_RECEIPTS">
-                          <button type="button" class="nb-ib touch-only" @click="$refs.nbReceiptCamera.click()" title="Take a photo of the receipt" aria-label="Take a photo of the receipt">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                          </button>
-                          <button type="button" class="nb-ib" @click="$refs.nbReceiptFile.click()" title="Choose the receipt photo" aria-label="Choose the receipt photo">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-                          </button>
+                        <span class="nb-label" id="nb-method-label">Paid by <span class="nb-req">*</span></span>
+                        <div class="nb-seg" role="radiogroup" aria-labelledby="nb-method-label">
+                          <label :class="method === 'Cash' &amp;&amp; 'is-on'"><input type="radio" name="nb-method" value="Cash" x-model="method"> Cash</label>
+                          <label :class="method === 'GCash' &amp;&amp; 'is-on'"><input type="radio" name="nb-method" value="GCash" x-model="method"> GCash</label>
+                        </div>
+                        <div x-show="method === 'GCash'" x-cloak style="margin-top: .75rem;">
+                          <label class="nb-label" for="nb-ref">GCash reference number <span class="nb-req">*</span></label>
+                          <input class="nb-input" id="nb-ref" type="text" inputmode="numeric" maxlength="24" x-model="reference" placeholder="5046 933 479702" autocomplete="off">
+                          <p class="nb-hint">The 13-digit Ref No. on the customer's GCash screen. One reference number pays only once.</p>
+                        </div>
+                        <div style="margin-top: .75rem;">
+                          <label class="nb-label" for="nb-amount">Amount received (pesos) <span class="nb-req">*</span></label>
+                          <input class="nb-input" id="nb-amount" type="text" inputmode="decimal" :value="amountText" @input="amount = $event.target.value; amountEdited = true" autocomplete="off">
+                          <p class="nb-hint" x-text="'It must be exactly ' + peso(amountDue) + ' (' + (payment === 'full' ? 'the rental and the deposit' : 'the deposit') + '). Check it against what the customer handed over.'"></p>
                         </div>
                       </div>
 
@@ -1751,11 +1746,14 @@
         return (err && err.message) || fallback;
       }
 
+      function nbUid() {
+        if (window.crypto && window.crypto.randomUUID) { return window.crypto.randomUUID(); }
+        return 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+      }
       var firstLine = newLine();
 
       return {
         MAX_GOWNS: {{ max_gowns }},
-        MAX_RECEIPTS: {{ max_receipts }},
         DEPOSIT: {{ deposit_per_gown }},
         TODAY: TODAY,
         IS_OWNER: IS_OWNER,
@@ -1768,13 +1766,16 @@
         hint: [], hintSeq: 0,
         lines: [firstLine],
         editKey: firstLine.key,                // the one gown row that is open as an editor (0 = none)
-        payment: '', receipts: [], note: '',
+        payment: '', method: 'Cash', reference: '', amount: '', amountEdited: false, requestId: nbUid(), note: '',
         saving: false, error: '', saved: null,
 
         get chosenLines() { return this.lines.filter(function (l) { return l.gown; }); },
         get anyTakesNow() { return this.lines.some(function (l) { return l.takesNow; }); },
         get rentalTotal() { return this.chosenLines.reduce(function (sum, l) { return sum + l.gown.priceValue; }, 0); },
         get depositTotal() { return this.chosenLines.length * this.DEPOSIT; },
+        // What the payment choice asks for, exactly: the deposit alone, or the rental and the deposit. The box starts with it; staff confirm or correct it.
+        get amountDue() { return this.payment === 'full' ? this.rentalTotal + this.depositTotal : this.depositTotal; },
+        get amountText() { return this.amountEdited ? this.amount : (this.payment === '' || !this.amountDue ? '' : String(this.amountDue)); },
         get editingLine() { var key = this.editKey; return this.lines.find(function (l) { return l.key === key; }) || null; },
         get hasRows() { var key = this.editKey; return this.lines.some(function (l) { return l.key !== key; }); },
         get canAdd() {
@@ -2053,29 +2054,6 @@
           });
         },
 
-        // ---- receipts ----
-        pickReceipt: function (event) {
-          var file = event.target.files && event.target.files[0];
-          event.target.value = '';
-          if (!file) { return; }
-          if (this.receipts.length >= this.MAX_RECEIPTS) { return; }
-          this.receipts.push({ key: ++keySeq, file: null, name: file.name, preview: '', preparing: true });
-          var entry = this.receipts[this.receipts.length - 1], self = this;
-          var prepare = window.arabelaPreparePhotoForUpload || function (f) { return Promise.resolve(f); };
-          prepare(file).then(function (ready) {
-            entry.file = ready; entry.preview = URL.createObjectURL(ready); entry.preparing = false;
-          }, function (err) {
-            var at = self.receipts.indexOf(entry);
-            if (at !== -1) { self.receipts.splice(at, 1); }
-            self.error = (err && err.message) || 'That photo could not be opened. Please choose it again.';
-          });
-        },
-        removeReceipt: function (index) {
-          var rc = this.receipts[index];
-          if (rc && rc.preview) { URL.revokeObjectURL(rc.preview); }
-          this.receipts.splice(index, 1);
-        },
-
         // ---- save ----
         problems: function () {
           var out = [];
@@ -2088,8 +2066,9 @@
           if (this.payment === '') { out.push('Choose "Paid in full" or "Deposit only".'); }
           if (this.payment === 'deposit' && this.anyTakesNow) { out.push('A gown can only leave the shop once the rental is paid.'); }
           if (this.payment !== '') {
-            if (!this.receipts.length) { out.push("Attach the photo of the shop's receipt."); }
-            if (this.receipts.some(function (r) { return r.preparing; })) { out.push('A receipt photo is still being prepared, one moment.'); }
+            if (this.method !== 'Cash' && this.method !== 'GCash') { out.push('Choose Cash or GCash.'); }
+            if (this.method === 'GCash' && !String(this.reference).replace(/\D/g, '')) { out.push('Type the GCash reference number.'); }
+            if (Math.abs(Number(String(this.amountText).replace(/[^0-9.]/g, '')) - this.amountDue) > 0.001) { out.push('The amount received must be exactly ' + this.peso(this.amountDue) + '.'); }
           }
           return out;
         },
@@ -2113,9 +2092,10 @@
           })));
           form.append('payment', this.payment);
           form.append('note', this.note);
-          this.receipts.forEach(function (rc, i) {
-            form.append('receipt_' + (i + 1), rc.file, rc.file.name || ('receipt-' + (i + 1) + '.jpg'));
-          });
+          form.append('method', this.method);
+          form.append('reference', this.reference);
+          form.append('amount', this.amountText);
+          form.append('request_id', this.requestId);
           this.saving = true;
           var self = this;
           fetch(URLS.create, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body: form, credentials: 'same-origin' })

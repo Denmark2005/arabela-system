@@ -24,17 +24,13 @@ from arabela_admin import audit_describe
 from arabela_admin.views import (
     _is_admin_staff,
     _is_owner,
-    _receipt_duplicate_error,
-    _receipt_file_hash,
     _require_admin_staff,
-    _save_receipt_photo,
     _staff_display_name,
-    _validate_receipt_photo,
 )
-from gowns import availability, deposit
+from gowns import availability, deposit, typed_payment
 from gowns.models import TAG_COLOR_HEX, Gown, SiteSettings
 from gowns.photos import sized
-from reservations import staff_booking
+from reservations import ledger, staff_booking
 from reservations.models import Reservation
 
 logger = logging.getLogger(__name__)
@@ -88,7 +84,6 @@ def new_booking_view(request):
         "owner_backdate_days": availability.OWNER_BACKDATE_DAYS,
         "deposit_per_gown": deposit.per_gown(),
         "max_gowns": staff_booking.MAX_GOWNS,
-        "max_receipts": staff_booking.MAX_RECEIPTS,
         "note_max": staff_booking.NOTE_MAX,
         # The picker's category filter: only categories that really have gowns, so the filter never leads to an empty list.
         "gown_categories": sorted(set(Gown.objects.order_by().values_list("category", flat=True))),
@@ -317,7 +312,7 @@ def booking_account_search_view(request):
 @require_http_methods(["POST"])
 @audited("booking.create", "Bookings", audit_describe.booking_create)
 def booking_create_view(request):
-    """Save the booking (multipart: the form's fields, `lines` as JSON, and up to two receipt photos)."""
+    """Save the booking and the payment taken for it (the form's fields, `lines` as JSON, and the payment: choice, method, GCash number, amount)."""
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
     post = request.POST
@@ -334,23 +329,11 @@ def booking_create_view(request):
             raise staff_booking.BookingError("Something in the gown list is wrong. Please refresh the page and try again.")
         lines = staff_booking.parse_lines(raw_lines, today=now.date(), is_owner=is_owner)
         payment = (post.get("payment") or "").strip()      # "full" or "deposit": check_payment refuses anything else
-
-        receipts, hashes = [], set()
-        for index in range(1, staff_booking.MAX_RECEIPTS + 1):
-            photo = request.FILES.get(f"receipt_{index}")
-            if not photo:
-                continue
-            error = _validate_receipt_photo(photo)
-            if error:
-                raise staff_booking.BookingError(error)
-            file_hash = _receipt_file_hash(photo)
-            if file_hash in hashes:
-                raise staff_booking.BookingError("The same receipt photo was attached twice. Attach each receipt once.")
-            duplicate = _receipt_duplicate_error(file_hash)
-            if duplicate:
-                raise staff_booking.BookingError(duplicate, status=409)
-            hashes.add(file_hash)
-            receipts.append((photo, file_hash))
+        method = (post.get("method") or "").strip()         # Cash or GCash: reservations/payments.py refuses anything else
+        reference = (post.get("reference") or "").strip()
+        amount = typed_payment.parse_amount(post.get("amount") or "")
+        if amount is None:
+            raise staff_booking.BookingError("Type the amount received, as numbers only, like 2000 or 5,500.")
 
         reservation = staff_booking.record_booking(
             recorded_by=request.user,
@@ -364,9 +347,11 @@ def booking_create_view(request):
             notebook_number=notebook_number,
             lines=lines,
             payment=payment,
-            receipts=receipts,
+            method=method,
+            reference=reference,
+            amount=amount,
             note=post.get("note") or "",
-            save_receipt_photo=_save_receipt_photo,
+            request_id=(post.get("request_id") or "").strip(),
             now=now,
         )
     except staff_booking.BookingError as exc:
@@ -376,8 +361,14 @@ def booking_create_view(request):
         return JsonResponse({"error": "The booking couldn't be saved just now. Nothing was booked. Please try again."},
                             status=500)
 
-    # A recorded booking always has something paid, so it is confirmed and on the calendar at once.
+    # A recorded booking always has something paid, so it is confirmed and on the calendar at once. The receipt of that payment is ready to print.
+    receipt = reservation.first_payment
+    balance = ledger.statement(Reservation.objects.get(pk=reservation.pk)).balance_due
     return JsonResponse({
+        "receiptUrl": reverse("arabela_admin:payment_receipt_print", args=[receipt.pk]),
+        "receiptNumber": receipt.receipt_number,
+        "balance": f"{balance:,.2f}",
+        "paymentsUrl": reverse("arabela_admin:payments") + "?" + urlencode({"open": reservation.pk}),
         "success": True,
         "reference_code": reservation.reference_code,
         "status": reservation.status,

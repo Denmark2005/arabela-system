@@ -30,6 +30,7 @@ from accounts.models import AuditLog, UserProfile
 from arabela_admin.views import _SCHEDULED_STATUSES, _staff_display_name
 from gowns.models import Gown
 from reservations import cancel_requests as reservation_cancel_requests
+from reservations import ledger as reservation_ledger
 from reservations import owner_check as reservation_owner_check
 from reservations.models import CancelRequest, Reservation, ReservationItem
 
@@ -352,6 +353,32 @@ def build_items(user):
             when=first_day,
             sort=datetime.combine(first_day, time.min),
         ))
+
+    # --- Pick-up today with money still to pay ---------------------------------------
+    # The customer is coming in today and the booking still has a balance (the rental, or part of it): staff collect it at the counter and
+    # record it in Payments. One entry per booking, only for bookings with a balance, so a paid booking never shows up here.
+    due_today_ids = list(dict.fromkeys(
+        ReservationItem.objects.filter(
+            stage=ReservationItem.Stage.PICKUP, rental_date=today, reservation__status__in=_SCHEDULED_STATUSES,
+        ).order_by("id").values_list("reservation_id", flat=True)
+    ))[:10]
+    if due_today_ids:
+        for reservation in Reservation.objects.filter(id__in=due_today_ids).select_related("customer__profile").prefetch_related(
+                "items", "payments", "deductions", "receipt_records"):
+            balance = reservation_ledger.statement(reservation, today).balance_due
+            if balance > 0:
+                items.append(_item(
+                    key=f"payment:balance:{reservation.id}",
+                    kind="payment",
+                    level="warning",
+                    actor=reservation.display_customer_name,
+                    text=f"picks up today and still has {reservation_ledger.peso(balance)} to pay. Record it in Payments:",
+                    subject=reservation.reference_code,
+                    module="Payments",
+                    url=reverse("arabela_admin:payments") + "?" + urlencode({"open": reservation.id}),
+                    when=today,
+                    sort=datetime.combine(today, time.min),
+                ))
 
     # --- Calls to make: bookings with no website account ---------------------------
     # A customer who booked online is reminded automatically (reservations/reminders.py) a day before their pick-up and

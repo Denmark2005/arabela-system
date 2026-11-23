@@ -75,6 +75,9 @@ class Reservation(models.Model):
     gcash_reference = models.CharField(max_length=20, blank=True, default='', db_default='', db_index=True)
     rental_subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     security_deposit = models.DecimalField(max_digits=10, decimal_places=2, default=2000)
+    # The late-return fee for EACH gown, per day late, this booking was made with (the owner's setting then, gowns/late_fee.py): like the
+    # deposit, changing the setting later does not touch a booking that already exists. Used by reservations/ledger.py.
+    late_fee_per_day = models.PositiveIntegerField(default=200, db_default=200)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     notes = models.TextField(blank=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
@@ -337,10 +340,15 @@ class Reservation(models.Model):
         if self.is_staff_recorded:
             covers = ReceiptRecord.Covers
             labels = {r.covers for r in self.receipt_records.all()}
-            if covers.BOTH in labels or {covers.RENTAL, covers.DEPOSIT} <= labels:
+            # What the shop RECORDED (the Payments page): the money received at the counter says what was paid. Old bookings, made when a
+            # shop receipt photo said it instead, keep reading their photos' labels.
+            received = sum((p.amount for p in self.payments.all()
+                            if not p.is_void and p.direction == Payment.Direction.IN
+                            and p.purpose in (Payment.Purpose.DEPOSIT, Payment.Purpose.FULL, Payment.Purpose.BALANCE)), 0)
+            if received >= total or covers.BOTH in labels or {covers.RENTAL, covers.DEPOSIT} <= labels:
                 paid, paid_label, deposit_note, rental_note = total, "Paid at the shop", "paid at the shop", "paid at the shop"
                 sub = f"Gown {_peso_text(rental)} + Deposit {_peso_text(deposit)}"
-            elif covers.DEPOSIT in labels:
+            elif received >= deposit or covers.DEPOSIT in labels:
                 paid, paid_label, deposit_note, rental_note = deposit, "Deposit paid at the shop", "paid at the shop", "still to pay"
                 sub = f"Gown {_peso_text(rental)} still to pay · Total {_peso_text(total)}"
             else:
@@ -1002,3 +1010,142 @@ class CancelRequest(models.Model):
 
     def __str__(self):
         return f'Cancel request for {self.reservation.reference_code} ({self.status})'
+
+
+class ReceiptSequence(models.Model):
+    """One row per year, holding the next Payment Receipt number to hand out for it (PR-2026-000123).
+
+    The same idea as ReservationSequence: the next number is read under a row lock (select_for_update), so two staff saving a payment
+    at the very same moment queue up and get consecutive numbers -- never the same one."""
+
+    year = models.PositiveIntegerField(unique=True)
+    next_value = models.PositiveIntegerField(default=1)
+
+    def __str__(self):
+        return f'{self.year}: next is {self.next_value}'
+
+    @classmethod
+    def next_number(cls, year):
+        """'PR-2026-000123'. Must be called inside the transaction that saves the Payment (so a rolled-back payment hands the number back)."""
+        with transaction.atomic():
+            cls.objects.get_or_create(year=year)
+            row = cls.objects.select_for_update().get(year=year)
+            value = row.next_value
+            row.next_value = value + 1
+            row.save(update_fields=['next_value'])
+        return f'PR-{year}-{value:06d}'
+
+
+class Payment(models.Model):
+    """One movement of money on a booking, recorded by staff (or, later, by the online payment service): money received from the customer,
+    or money handed back to them. The booking's balance, its late fee and the deposit it can refund are all WORKED OUT from these rows
+    (reservations/ledger.py) -- nobody types a balance.
+
+    A saved payment is never edited and never deleted. A mistake is VOIDED with a reason (the row stays, marked void, with who and when),
+    and its receipt prints as VOID. `snapshot` holds what the receipt says as it was the moment it was issued, so a reprint is always the
+    same paper. Rows with is_legacy=True were made by the one-time backfill from what older bookings already carried (an online deposit, a
+    shop receipt photo): they have no receipt number."""
+
+    class Direction(models.TextChoices):
+        IN = 'In', 'Received'
+        OUT = 'Out', 'Returned to the customer'
+
+    class Purpose(models.TextChoices):
+        DEPOSIT = 'Deposit', 'Deposit'
+        FULL = 'Paid in full', 'Paid in full'
+        BALANCE = 'Balance', 'Balance'
+        EXTRA = 'Extra', 'Late fee / extra charge'
+        DEPOSIT_RETURN = 'Deposit return', 'Deposit return'
+
+    class Method(models.TextChoices):
+        CASH = 'Cash', 'Cash'
+        GCASH = 'GCash', 'GCash'
+        ONLINE_GCASH = 'GCash online', 'GCash (online)'          # an online booking's deposit, from the old screenshot flow
+        OLD = 'Before Payments', 'Recorded before the Payments page'
+
+    class Status(models.TextChoices):
+        RECORDED = 'Recorded', 'Recorded'
+        VOID = 'Void', 'Void'
+
+    reservation = models.ForeignKey(Reservation, on_delete=models.CASCADE, related_name='payments')
+    direction = models.CharField(max_length=3, choices=Direction.choices, default=Direction.IN)
+    purpose = models.CharField(max_length=20, choices=Purpose.choices)
+    method = models.CharField(max_length=20, choices=Method.choices, default=Method.CASH)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    # The GCash reference number (digits only) when the method is GCash; empty for cash.
+    reference = models.CharField(max_length=20, blank=True, default='')
+    # NULL (not '') for a legacy row, so the unique rule below allows any number of them.
+    receipt_number = models.CharField(max_length=20, unique=True, null=True, blank=True)
+    paid_at = models.DateTimeField(default=timezone.now, db_index=True)
+    recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    recorded_by_name = models.CharField(max_length=150, blank=True, default='')
+    note = models.CharField(max_length=200, blank=True, default='')
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.RECORDED, db_index=True)
+    void_reason = models.CharField(max_length=200, blank=True, default='')
+    voided_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    voided_by_name = models.CharField(max_length=150, blank=True, default='')
+    voided_at = models.DateTimeField(null=True, blank=True)
+    snapshot = models.JSONField(default=dict, blank=True)
+    # A token the page makes once per "Save": a double click or a retried request that carries the same token returns the payment already
+    # saved instead of recording a second one.
+    request_id = models.CharField(max_length=40, unique=True, null=True, blank=True)
+    is_legacy = models.BooleanField(default=False)
+    first_printed_at = models.DateTimeField(null=True, blank=True)
+    reprint_count = models.PositiveIntegerField(default=0)
+    customer_notified_at = models.DateTimeField(null=True, blank=True)
+    # Reserved for the online payment service (Phase 2): who processed it and its own reference. Unused for now.
+    provider = models.CharField(max_length=20, blank=True, default='')
+    provider_ref = models.CharField(max_length=60, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['paid_at', 'id']
+        indexes = [models.Index(fields=['reference'])]
+
+    @property
+    def is_void(self):
+        return self.status == self.Status.VOID
+
+    @property
+    def is_money_in(self):
+        return self.direction == self.Direction.IN
+
+    @property
+    def title(self):
+        """The receipt's heading."""
+        return 'DEPOSIT RETURN' if self.purpose == self.Purpose.DEPOSIT_RETURN else 'PAYMENT RECEIPT'
+
+    def __str__(self):
+        return f'{self.receipt_number or "legacy"} {self.direction} {self.amount} for {self.reservation.reference_code}'
+
+
+class Deduction(models.Model):
+    """An amount the shop takes off a customer's security deposit besides the late fee (damage, a stain, a missing item), with the reason.
+    It makes the deposit the customer gets back smaller (reservations/ledger.py). Voided, never deleted, like a Payment."""
+
+    class Status(models.TextChoices):
+        RECORDED = 'Recorded', 'Recorded'
+        VOID = 'Void', 'Void'
+
+    reservation = models.ForeignKey(Reservation, on_delete=models.CASCADE, related_name='deductions')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    reason = models.CharField(max_length=200)
+    recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    recorded_by_name = models.CharField(max_length=150, blank=True, default='')
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.RECORDED, db_index=True)
+    void_reason = models.CharField(max_length=200, blank=True, default='')
+    voided_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    voided_by_name = models.CharField(max_length=150, blank=True, default='')
+    voided_at = models.DateTimeField(null=True, blank=True)
+    request_id = models.CharField(max_length=40, unique=True, null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ['created_at', 'id']
+
+    @property
+    def is_void(self):
+        return self.status == self.Status.VOID
+
+    def __str__(self):
+        return f'Deduction {self.amount} on {self.reservation.reference_code}: {self.reason}'

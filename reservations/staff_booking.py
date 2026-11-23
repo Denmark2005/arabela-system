@@ -8,9 +8,10 @@ all treat it exactly like an online one. What is different:
   * it says how it came in (Reservation.channel) and who recorded it (Reservation.recorded_by);
   * staff pick the exact physical gown the customer chose (online, the system picks a free one of the design itself);
   * payment is taken at the shop, and a walk-in always pays something: "Paid in full" (rental + deposit) or "Deposit only". Either
-    one confirms the booking at once and needs the shop's receipt photo. A deposit-only booking is still short of its rental
-    receipt: it is flagged "Payment incomplete" in Reservation Records until staff upload that one there. How the customer paid
-    (cash, GCash...) is the shop's own business and is not recorded.
+    one confirms the booking at once. The payment is RECORDED here, in the same transaction as the booking (reservations/payments.py): how
+    it was paid (Cash or GCash with its reference number), the amount the staff member confirmed, and a numbered Payment Receipt that
+    prints right away. A deposit-only booking shows its rental balance in the Payments page, where the rest is recorded later. There are no
+    receipt photos any more.
 """
 import re
 from datetime import timedelta
@@ -20,13 +21,13 @@ from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from gowns import availability, deposit
+from gowns import availability, deposit, late_fee
 from gowns.models import COOLDOWN_DAYS, Gown, GownUnavailability
-from reservations.models import ReceiptRecord, Reservation, ReservationItem, ReservationStatusEvent
+from reservations import payments
+from reservations.models import Payment, Reservation, ReservationItem, ReservationStatusEvent
 
 DEPOSIT_PER_GOWN = Decimal("2000")          # only the starting default: the amount really used is the owner's setting (gowns/deposit.py)
 MAX_GOWNS = 10
-MAX_RECEIPTS = 1                # one photo here; a second one (the rental receipt) is added later in Reservation Records
 NOTE_MAX = 200
 
 PAYMENT_FULL = "full"           # the rental and the deposit were paid
@@ -187,36 +188,33 @@ def check_line(line, *, now, is_owner):
 
 
 # ---------------------------------------------------------------- payment
-def receipt_covers_for(payment) -> str:
-    """What the receipt attached while booking is for: decided by the Payment choice, never asked for separately."""
-    return ReceiptRecord.Covers.BOTH if payment == PAYMENT_FULL else ReceiptRecord.Covers.DEPOSIT
+def purpose_for(payment) -> str:
+    """What the payment recorded with the booking is for: decided by the Payment choice, never asked for separately."""
+    return Payment.Purpose.FULL if payment == PAYMENT_FULL else Payment.Purpose.DEPOSIT
 
 
-def check_payment(*, payment, receipts, lines):
-    """receipts: [(file, file_hash)]. Raises BookingError when the payment part doesn't add up."""
+def check_payment(*, payment, lines):
+    """Raises BookingError when the payment choice doesn't fit the booking. (The amount, the method and the GCash number are checked by
+    reservations/payments.py when the payment is recorded, inside the booking's transaction.)"""
     if payment not in PAYMENTS:
         raise BookingError("Choose \"Paid in full\" or \"Deposit only\". If this page has been open for a while, refresh it.")
-    if len(receipts) > MAX_RECEIPTS:
-        raise BookingError("Attach one receipt photo. A second one can be added later in Reservation Records.")
     if payment != PAYMENT_FULL and any(line["takes_now"] for line in lines):
         raise BookingError("A gown can only leave the shop once the rental is paid. Choose \"Paid in full\", or untick "
                            "\"Customer takes the gown now\".")
-    if not receipts:
-        raise BookingError("Attach the photo of the shop's receipt.")
 
 
 # ---------------------------------------------------------------- saving
 def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, account, address, notebook_number,
-                   lines, payment, receipts, note, save_receipt_photo, now=None):
-    """Save the booking. Everything is checked again inside one transaction with the gowns locked, so neither another
-    staff member nor an online customer can take the same gown in between: either the whole booking is saved, or nothing.
-    save_receipt_photo(file) -> URL stores one receipt photo (the admin's own helper, so storage works the same way).
-    Returns the new Reservation."""
+                   lines, payment, method, reference, amount, note, request_id="", now=None):
+    """Save the booking AND the payment taken for it. Everything is checked again inside one transaction with the gowns locked, so neither
+    another staff member nor an online customer can take the same gown in between: either the whole booking (with its receipt) is saved,
+    or nothing. `method` is Cash or GCash (with its 13-digit `reference`), `amount` is what the staff member confirmed was received (it must
+    be exactly what the choice asks for). Returns the new Reservation, with the Payment on `reservation.first_payment`."""
     now = now or availability.now_local()
     if channel not in STAFF_CHANNELS:
         raise BookingError("Only walk-in bookings can be recorded here. Bookings from the website come in by themselves.")
     note = re.sub(r"\s+", " ", note or "").strip()[:NOTE_MAX]
-    check_payment(payment=payment, receipts=receipts, lines=lines)
+    check_payment(payment=payment, lines=lines)
     if notebook_number:
         taken = notebook_number_owner(notebook_number)
         if taken:
@@ -246,6 +244,7 @@ def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, a
                 status=Reservation.Status.CONFIRMED,        # something was paid at the shop, so it is confirmed at once
                 rental_subtotal=rental_subtotal,
                 security_deposit=security_deposit,
+                late_fee_per_day=late_fee.per_day(),
                 total_amount=rental_subtotal + security_deposit,
                 reviewed_at=timezone.now(),
                 channel=channel,
@@ -285,12 +284,6 @@ def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, a
                     gown.status = Gown.Status.RESERVED
                     gown.save(update_fields=["status", "updated_at"])
 
-            for photo_file, file_hash in receipts:
-                ReceiptRecord.objects.create(
-                    reservation=reservation, photo_url=save_receipt_photo(photo_file), uploaded_by=recorded_by,
-                    covers=receipt_covers_for(payment), file_hash=file_hash,
-                )
-
             channel_text = reservation.get_channel_display()
             ReservationStatusEvent.record(
                 reservation, RECORDED_LABEL,
@@ -317,6 +310,15 @@ def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, a
                         detail="The gown is now with the customer.",
                         actor=ReservationStatusEvent.Actor.STAFF,
                     )
+
+            # The payment taken at the counter: recorded with its numbered receipt in this same transaction. A refusal (a wrong amount, a GCash
+            # number that was already used) undoes the whole booking, so nothing is half-saved.
+            try:
+                reservation.first_payment = payments.record_payment(
+                    reservation_id=reservation.pk, purpose=purpose_for(payment), amount=amount, method=method, reference=reference,
+                    user=recorded_by, request_id=request_id, now=timezone.now())
+            except payments.PaymentError as exc:
+                raise BookingError(exc.message, status=exc.status)
     except IntegrityError:
         # Two staff typing the same notebook number at the very same moment: the database refuses the second one.
         taken = notebook_number_owner(notebook_number)

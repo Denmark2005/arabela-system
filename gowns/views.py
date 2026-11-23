@@ -11,6 +11,7 @@ from django.core.files.storage import default_storage
 from django.core.paginator import Paginator
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
+from django.views.decorators.cache import never_cache
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
@@ -45,11 +46,11 @@ from gowns.context_processors import (
 from gowns.models import (
     COOLDOWN_DAYS, EXTRA_SMALL_CATEGORY, SIZE_CODES, Gown, GownUnavailability, group_gowns_by_name, pick_representative_gown, size_codes_of,
 )
-from gowns import availability, deposit, proof_image, receipt_check, receipt_tries, reservation_limits, typed_payment
+from gowns import availability, deposit, late_fee, proof_image, receipt_check, receipt_tries, reservation_limits, typed_payment
 from gowns.photos import GRID_WIDTH, PAGE_WIDTH, sized
 from gowns.size_guides import size_guide_for
-from reservations import reminders, timeline
-from reservations.models import ProofRejection, Reservation, ReservationItem, ReservationStatusEvent
+from reservations import ledger, reminders, timeline
+from reservations.models import Payment, ProofRejection, Reservation, ReservationItem, ReservationStatusEvent
 
 
 
@@ -1499,6 +1500,7 @@ def reservation_submit(request):
             payment_proof_url=payment_proof_url,
             rental_subtotal=rental_subtotal,
             security_deposit=security_deposit,
+            late_fee_per_day=late_fee.per_day(),            # the booking keeps the late fee it was made with, like the deposit
             total_amount=total_amount,
             **{**_verdict_fields(verdict), "gcash_reference": (verdict.reference or typed_reference)[:20], **typed_columns},
         )
@@ -1646,8 +1648,33 @@ def reservation_item_detail(request, item_id):
             ),
             "reservation_items": reservation.items.select_related("gown").all(),
             "timeline": timeline.for_item(item),
+            # What the booking owes and has paid, its late fee so far and its Payment Receipts (the system works them out: reservations/ledger.py).
+            "money": ledger.statement(reservation),
+            "receipts": _customer_receipts(reservation),
         },
     )
+
+
+def _customer_receipts(reservation):
+    """This booking's Payment Receipts for the customer, newest first (a voided one stays, shown as voided). Payments from before the Payments
+    page have no receipt, so they are not listed."""
+    rows = [p for p in reservation.payments.all() if p.receipt_number and not p.is_legacy]
+    rows.sort(key=lambda p: (p.paid_at, p.pk), reverse=True)
+    return rows
+
+
+@login_required(login_url='accounts:login')
+@never_cache
+def receipt_view(request, payment_id):
+    """One Payment Receipt, in the same paper look the shop prints. Only the customer the booking belongs to can open it (anyone else gets
+    a plain 404, whatever number they type); it is drawn from the snapshot saved when the receipt was issued."""
+    payment = get_object_or_404(
+        Payment.objects.select_related("reservation"),
+        pk=payment_id, reservation__customer=request.user, is_legacy=False, receipt_number__isnull=False,
+    )
+    first_item = payment.reservation.items.order_by("id").first()
+    back = reverse("gowns:reservation_item_detail", args=[first_item.pk]) + "#payments" if first_item else reverse("gowns:orders")
+    return render(request, "receipt_view.html", {"payment": payment, "r": payment.snapshot, "reprint": 0, "copy_label": "CUSTOMER COPY", "back_url": back})
 
 
 @login_required(login_url='accounts:login')

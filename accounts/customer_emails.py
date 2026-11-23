@@ -56,6 +56,7 @@ REMINDER = "reminder"
 OVERDUE = "overdue"
 ACCOUNT_FLAGGED = "account_flagged"
 ACCOUNT_UNFLAGGED = "account_unflagged"
+PAYMENT_NOTICE = "payment_notice"      # a payment received, a deposit handed back, a deduction, a voided receipt (reservations/payments.py)
 
 KIND_LABELS = {
     RECEIVED: "We received your reservation",
@@ -68,6 +69,7 @@ KIND_LABELS = {
     OVERDUE: "Overdue notice",
     ACCOUNT_FLAGGED: "Account flagged",
     ACCOUNT_UNFLAGGED: "Account unflagged",
+    PAYMENT_NOTICE: "Payment received / deposit returned / receipt",
 }
 
 # The label each timeline entry is written with (arabela_admin/views.py, gowns/views.py). If a label is ever
@@ -297,6 +299,18 @@ def _content(kind, data, shop):
             paragraphs=_paragraphs(data.get("text")),
             button_label="Open my messages", button_url_name="gowns:messages",
         )
+    elif kind == PAYMENT_NOTICE:
+        content.update(
+            subject=data.get("subject") or "A payment update from Arabela",
+            heading=data.get("heading") or "A payment update",
+            preheader=(data.get("text") or "")[:110],
+            paragraphs=_paragraphs(data.get("text")),
+            summary=True,
+        )
+        if data.get("receipt_number"):
+            content["highlight"] = {"label": "Receipt no.", "value": data["receipt_number"]}
+        if data.get("receipt_path"):
+            content.update(button_label="View my receipt", button_path=data["receipt_path"])
     else:
         raise ValueError(f"Unknown email kind: {kind!r}")
     return content
@@ -707,7 +721,12 @@ def sample_data(kind):
                          "You can still browse the collection, but our staff will review your account before your next "
                          "reservation is confirmed. If you think this is a mistake, please contact us.",
         ACCOUNT_UNFLAGGED: "Your account is no longer flagged.",
+        PAYMENT_NOTICE: "Payment received ₱2,000.00 for RSV-2026-0054 (Deposit, Cash). Receipt PR-2026-000123. "
+                        "Balance still to pay at the shop: ₱3,500.00.",
     }.get(kind, "")
+    if kind == PAYMENT_NOTICE:
+        data.update(subject="Payment received PHP 2,000.00 - receipt PR-2026-000123", heading="We received your payment",
+                    receipt_number="PR-2026-000123", receipt_path="/reservations/")
     return data
 
 

@@ -109,7 +109,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -619,6 +619,15 @@
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
                 class="menu-dropdown mt-2 flex flex-col gap-1 pl-9"
               >
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:payments' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'payments' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Payments
+                  </a>
+                </li>
                 <li>
                   <a
                     href="{% url 'arabela_admin:payment_verification' %}"
@@ -1176,6 +1185,7 @@
                         {% if r.cancel_request %}<span class="cr-chip{% if r.cancel_request.overdue %} is-late{% endif %}" title="{{ r.cancel_request.by }} asked to cancel {{ r.cancel_request.what }}. Open the booking to answer.">Cancel requested</span>{% endif %}
                         {% if r.gown_count > 1 %}<span class="ar-count-pill" title="{{ r.gown_count }} gowns in this booking" aria-label="{{ r.gown_count }} gowns in this booking"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0"/></svg>{{ r.gown_count }}</span>{% endif %}
                         {% if r.state == 'overdue' %}<span class="ar-num ar-num--overdue" title="{{ r.overdue_days }} day{{ r.overdue_days|pluralize }} late" aria-label="{{ r.overdue_days }} day{{ r.overdue_days|pluralize }} late">{{ r.overdue_days }}</span>{% endif %}
+                        {% if r.balance_due > 0 %}<a class="ar-bal-chip" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Still to pay at the shop. Open it in Payments." @click.stop>Balance &#8369;{{ r.balance_text }}</a>{% endif %}
                       </div>
                       <div class="ar-phone-cell">
                         {% if r.phone %}<a href="tel:{{ r.phone }}" class="ar-phone" title="Call the customer" @click.stop>{{ r.phone }}</a>{% else %}<span class="ar-none">&mdash;</span>{% endif %}
@@ -1316,7 +1326,7 @@
                               <!-- One click records today as the pick-up. The server only allows it on or after the booking's CURRENT pick-up date (the customer's
                                    changed one if they moved it) and says so if it's too early. -->
                               <button type="button" class="resv-mark-pickedup-btn ar-ib" title="Mark picked up" aria-label="Mark {{ item.gown_name }} picked up"
-                                data-item-id="{{ item.id }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+                                data-item-id="{{ item.id }}"{% if r.balance_due > 0 %} data-balance="{{ r.balance_text }}" data-pay-url="{% url 'arabela_admin:payments' %}?open={{ r.id }}"{% endif %}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
                               {% elif item.stage == "Reserved" or item.stage == "Return" or item.stage == "Overdue" %}
                               <!-- The condition choices open in a floating popover (#row-popover near the end of <body>), not inline: revealing them in the row
                                    would grow it and push every row below it down the page on every click. -->
@@ -1883,7 +1893,22 @@
     // A resize (or the sidebar collapsing) can leave the popover pointing at a stale position.
     window.addEventListener('resize', closeRowPopover);
 
+    // A gown can be marked picked up while the booking still owes money (a trusted customer may pay later), but the page asks first: the balance is
+    // shown, and the staff member either records the payment now (Payments opens on this booking) or picks the gown up anyway.
     function markPickedUp(btn) {
+      var balance = btn.dataset.balance;
+      if (balance && !btn.dataset.paidAsked) {
+        adminConfirm({
+          title: 'This booking still has a balance',
+          message: 'This booking still has \u20b1' + balance + ' to pay. Continue?',
+          confirmText: 'Pick up anyway',
+          cancelText: 'Record payment now'
+        }).then(function (pickUpAnyway) {
+          if (pickUpAnyway) { btn.dataset.paidAsked = '1'; markPickedUp(btn); }
+          else { window.location.href = btn.dataset.payUrl; }
+        });
+        return;
+      }
       btn.disabled = true;
       postJson('/admin-panel/api/reservation-items/' + btn.dataset.itemId + '/mark-picked-up/', {})
         .then(function () { window.location.reload(); })

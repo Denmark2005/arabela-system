@@ -1639,7 +1639,8 @@ class LiveNotificationFeedTests(TestCase):
             self._reserve(f"Query Customer {n}", proof="https://example.test/p.jpg")
         with CaptureQueriesContext(connection) as queries:
             self.assertEqual(self._feed().status_code, 200)
-        self.assertLessEqual(len(queries), 12, [q["sql"][:80] for q in queries])
+        # 13: one more than before for the "pick-ups today with a balance" check (a single query while nobody is due today)
+        self.assertLessEqual(len(queries), 13, [q["sql"][:80] for q in queries])
 
     # ---- the page ---------------------------------------------------------------------------------
     def test_every_admin_page_carries_what_the_bell_script_needs(self):
@@ -2783,19 +2784,17 @@ class ReservationRecordsTests(TestCase):
         self.assertEqual(len(receipts), 1)
         self.assertEqual(receipts[0]["uploadedBy"], "Ana Cruz")
 
-    def test_photo_viewer_can_replace_an_uploaded_receipt(self):
-        """The photo viewer (not just the Upload Receipt modal) can fix a wrong upload
-        in place -- the gap this page used to have next to the old, now-removed
-        Receipt Records page, folded in here instead of keeping a second page for it."""
+    def test_photo_viewer_only_views_old_receipt_photos(self):
+        """Receipt photos are not taken any more (payments are recorded in Payments), so the viewer has no replace button and the page has no file input.
+        Old photos stay viewable."""
         html = self.client.get(reverse("arabela_admin:reservation_records")).content.decode()
-        self.assertIn("replacePhoto(", html)
-        self.assertIn("rrReplaceFileInput", html)
-        self.assertIn('x-if="photo.id"', html)
+        self.assertNotIn("rrReplaceFileInput", html)
+        self.assertNotIn("Replace Photo", html)
+        self.assertIn("viewPhoto(receipt, viewing)", html)
 
-    def test_pending_upload_preview_can_be_viewed_full_size(self):
+    def test_there_is_no_upload_preview_any_more(self):
         html = self.client.get(reverse("arabela_admin:reservation_records")).content.decode()
-        self.assertIn(':href="uploadPreviewUrl"', html)
-        self.assertIn("View full size", html)
+        self.assertNotIn(':href="uploadPreviewUrl"', html)
 
     def test_staff_only(self):
         self.client.logout()
@@ -5012,11 +5011,12 @@ class ReceiptDeleteTests(TestCase):
         response = self.client.get(reverse("arabela_admin:receipt_delete", args=[self.receipt.id]))
         self.assertEqual(response.status_code, 405)
 
-    def test_the_records_page_offers_a_two_step_delete(self):
+    def test_the_records_page_no_longer_offers_a_receipt_photo_delete(self):
+        """Payments are recorded in the Payments page now (a mistaken one is voided, never deleted), so Records has no delete window.
+        The server address above stays for the old Pending Approval window and for old photos."""
         html = self.client.get(reverse("arabela_admin:reservation_records")).content.decode()
-        self.assertIn("Delete Receipt", html)
-        self.assertIn("Yes, delete", html)
-        self.assertIn("deleteReceipt()", html)
+        self.assertNotIn("Delete Receipt", html)
+        self.assertNotIn("Yes, delete", html)
 
 
 class CustomerUnlockTests(TestCase):

@@ -104,8 +104,8 @@ class EveryTipIsBuiltTheSameWayTests(SimpleTestCase):
             counts[name] = len(re.findall(r'<details class="ht-tip"', (ADMIN / name).read_text(encoding="utf8")))
         self.assertGreaterEqual(counts["gown-catalog.html"], 12)
         self.assertEqual({k: v for k, v in counts.items() if k != "gown-catalog.html"}, {
-            "calendar.html": 2, "profile.html": 11, "email-preview.html": 3, "payment-verification.html": 1, "categories.html": 1,
-            "staff-management.html": 4, "reservation-records.html": 1})        # profile: + "Your access", + 6 in the GCash card and the deposit card (Customers pay to, keep accepting the old GCash, QR code, Held by, old number, Test amount); staff management: the choices tip and the per-permission tip, in Add and in Edit
+            "calendar.html": 2, "profile.html": 12, "email-preview.html": 3, "payment-verification.html": 1, "categories.html": 1,
+            "staff-management.html": 4, "reservation-records.html": 0})        # profile: + "Your access", + 6 in the GCash card and the deposit card (Customers pay to, keep accepting the old GCash, QR code, Held by, old number, Test amount); staff management: the choices tip and the per-permission tip, in Add and in Edit
 
 
 class SharedPiecesAreOnEveryPageTests(SimpleTestCase):
@@ -248,9 +248,9 @@ class LongTextIsOnlyInsideAQuestionMarkTests(ActiveDropdownBase):
                 self.assertNotIn("ar-leg-note\">", html)
         records = self.get("arabela_admin:reservation_records")
         self.assertIn("What the circles mean", records)                                        # the key itself stays
-        self.check(records, ["PNG, JPG or WebP. Large phone photos are resized automatically."])
+        self.assertNotIn("PNG, JPG or WebP", records)                                         # the receipt photo upload (and its tip) is gone: payments are recorded in Payments
         self.assertNotIn("No manual receipt attached yet", records)
-        self.assertIn("No receipt attached yet.", records)
+        self.assertIn("Payments are recorded in Payments, with a printed receipt.", records)
 
     def test_the_rental_schedule(self):
         html = self.get("arabela_admin:calendar")

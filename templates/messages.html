@@ -334,6 +334,8 @@
                   <span class="material-symbols-outlined text-amber-600 message-icon">schedule</span>
                 {% elif message.category == "Cancellation Lockout" %}
                   <span class="material-symbols-outlined text-amber-600 message-icon">lock_clock</span>
+                {% elif message.category == "Payment" %}
+                  <span class="material-symbols-outlined vibrant-green message-icon">receipt_long</span>
                 {% else %}
                   <span class="material-symbols-outlined text-neutral-500 message-icon">notifications</span>
                 {% endif %}
@@ -351,6 +353,8 @@
                       <span class="message-label text-amber-600">{{ message.category }}</span>
                     {% elif message.category == "Cancellation Lockout" %}
                       <span class="message-label text-amber-600">{{ message.category }}</span>
+                    {% elif message.category == "Payment" %}
+                      <span class="message-label vibrant-green">Payment</span>
                     {% else %}
                       <span class="message-label text-neutral-600">{{ message.category }}</span>
                     {% endif %}

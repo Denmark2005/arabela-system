@@ -23,6 +23,7 @@ PAGES = {
     "categories": reverse("arabela_admin:categories"),
     "clients": reverse("arabela_admin:clients"),
     "staff-management": reverse("arabela_admin:staff_management"),
+    "payments": reverse("arabela_admin:payments"),
     "payment-verification": reverse("arabela_admin:payment_verification"),
     "security-deposits": reverse("arabela_admin:security_deposits"),
     "reservation-records": reverse("arabela_admin:reservation_records"),
@@ -30,6 +31,7 @@ PAGES = {
 }
 OWNER_ONLY = {"categories", "staff-management"}
 MARK = re.compile(r"<!-- Menu Item (.+?) -->")
+PAY = reverse("arabela_admin:payments")
 PV, SD, RR = (reverse("arabela_admin:payment_verification"), reverse("arabela_admin:security_deposits"),
               reverse("arabela_admin:reservation_records"))
 
@@ -91,7 +93,7 @@ class SidebarModulesTests(TestCase):
                 else:
                     self.assertNotIn("Staff Management", names)
                 by_name = dict(modules)
-                self.assertEqual(hrefs(by_name["Payments & Deposits"]), [PV, SD])
+                self.assertEqual(hrefs(by_name["Payments & Deposits"]), [PAY, PV, SD])               # Payments is the first item
                 self.assertEqual(hrefs(by_name["Financial Report"]), [RR])
                 self.assertNotIn("Financial", by_name["Payments & Deposits"])
                 self.assertIn("Payments & Deposits", by_name["Payments & Deposits"])
@@ -99,9 +101,9 @@ class SidebarModulesTests(TestCase):
                 self.assertNotIn("PaymentsDeposits", by_name["Financial Report"])
                 # which module opens for which page
                 rule = re.search(r'x-init="([^"]*)"', nav_of(html)).group(1)
-                self.assertIn("else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' }", rule)
+                self.assertIn("else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' }", rule)
                 self.assertIn("else if (page === 'reservation-records') { selected = 'FinancialReport' }", rule)
-                self.assertNotIn("page === 'payment-verification' || page === 'security-deposits' || page === 'reservation-records'", rule)
+                self.assertNotIn("page === 'security-deposits' || page === 'reservation-records'", rule)
                 self.assertIn("page === 'active' || page === 'rental-history' || page === 'pending'", rule)         # Rental History opens Bookings & Schedule
 
     def test_every_page_has_the_same_sidebar_structure_for_the_owner(self):

@@ -28,6 +28,7 @@ from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 import json
+import logging
 
 from accounts import audit as audit_log
 from accounts import admin_google
@@ -62,6 +63,8 @@ from gowns.models import (
 )
 from reservations import cancel_requests as reservation_cancel_requests
 from reservations import cancellation as reservation_cancellation
+from reservations import ledger as reservation_ledger
+from reservations import payments as reservation_payments
 from reservations import owner_check as reservation_owner_check
 from reservations import reminders as reservation_reminders
 from reservations import timeline as reservation_timeline
@@ -188,7 +191,7 @@ def dashboard_view(request):
     quick_verify_reservations = reservation_owner_check.annotate_waiting(
         Reservation.objects.filter(status=Reservation.Status.PENDING)
         .select_related("customer__profile")
-        .prefetch_related(_receipts_prefetch(), "items")
+        .prefetch_related(_receipts_prefetch(), "payments", "items")
         .order_by("-created_at")[:5]
     )
     # The booking's first pick-up and last return, for the table's Pick-up / Return columns (the same window Active Reservations and
@@ -748,7 +751,7 @@ def payment_verification_view(request):
     reservations = (
         Reservation.objects.all()
         .select_related("customer__profile")
-        .prefetch_related(_receipts_prefetch(), "items")
+        .prefetch_related(_receipts_prefetch(), "payments", "items")
         .order_by("-created_at")
     )
     now = timezone.now()
@@ -843,7 +846,7 @@ def rental_history_view(request):
         )
         .exclude(stage=ReservationItem.Stage.CANCELLED)
         .select_related("reservation__customer__profile")
-        .prefetch_related(_receipts_prefetch("reservation__receipt_records"))
+        .prefetch_related(_receipts_prefetch("reservation__receipt_records"), "reservation__payments")
         .order_by("-rental_date", "-id")
     )
 
@@ -912,7 +915,7 @@ def security_deposits_view(request):
     reservations = list(
         Reservation.objects.filter(status__in=_SCHEDULED_STATUSES)
         .select_related("customer__profile")
-        .prefetch_related("items", _receipts_prefetch())
+        .prefetch_related("items", _receipts_prefetch(), "payments")
     )
     duplicates = _same_gcash_number_elsewhere(reservations)
 
@@ -1170,6 +1173,7 @@ def reservation_records_view(request):
                 "receipt_records",
                 queryset=ReceiptRecord.objects.select_related("uploaded_by").order_by("-uploaded_at"),
             ),
+            "payments", "deductions",       # what each booking owes (reservations/ledger.py): read from these, so a longer list costs no extra questions
         )
         .order_by("-created_at")
     )
@@ -1194,6 +1198,7 @@ def reservation_records_view(request):
         start, end = _reservation_window(items)
         deposit_status = _deposit_status(r)
         booked = timezone.localtime(r.created_at)
+        money = reservation_ledger.statement(r, today)         # what the booking still owes: worked out by the system (reservations/ledger.py)
         records.append({
             "id": r.id,
             "reference": r.reference_code,
@@ -1288,10 +1293,9 @@ def reservation_records_view(request):
             ),
             "notebookNumber": r.notebook_number,
             "awaitingPayment": r.is_staff_recorded and r.status == Reservation.Status.PENDING,
-            "paymentIncomplete": (
-                r.is_staff_recorded and r.status in _SCHEDULED_STATUSES
-                and not r.receipts_cover_payment(list(r.receipt_records.all()))
-            ),
+            # Something is still to pay (any running booking, online or walk-in): the balance chip. The amount is what the Payments page shows.
+            "paymentIncomplete": money.tracked and not money.cancelled and money.balance_due > 0,
+            "balanceDue": f"{money.balance_due:,.2f}",
             # Everything the search box should match, lower-cased once here.
             "q": " ".join(filter(None, [
                 r.display_customer_name, r.booked_as_name, r.customer.email if r.customer_id else "", r.phone,
@@ -1402,7 +1406,7 @@ def active_reservations_view(request):
     reservations = reservation_timeline.attach_to_reservations(
         Reservation.objects.filter(status__in=_SCHEDULED_STATUSES)
         .select_related("customer__profile")
-        .prefetch_related("items__gown")
+        .prefetch_related("items__gown", "payments", "deductions", "receipt_records")
     )
 
     # The wording staff see pre-filled in the Send Reminder dialog. Computed here rather
@@ -1468,6 +1472,10 @@ def active_reservations_view(request):
         reservation.overdue_days = max(
             (_days_late(i, today) or 0 for i in live_items if i.effective_stage == ReservationItem.Stage.OVERDUE), default=0
         )
+        # What the booking still owes (reservations/ledger.py): the Balance chip, and the warning when a gown is marked picked up before it is paid.
+        money = reservation_ledger.statement(reservation, today)
+        reservation.balance_due = money.balance_due
+        reservation.balance_text = f"{money.balance_due:,.2f}"
         if reservation.has_overdue_item:
             reservation.state = "overdue"
         elif any(i.stage != ReservationItem.Stage.PICKUP for i in live_items):
@@ -1588,7 +1596,7 @@ def pending_approval_view(request):
         .select_related("customer__profile")
         # The receipts come with the staff member who attached each one: the "View payment" window on this page shows them, and this
         # keeps that from costing a query per booking.
-        .prefetch_related("items__gown", _receipts_prefetch())
+        .prefetch_related("items__gown", _receipts_prefetch(), "payments")
         # The booking that has waited longest comes first, so nothing sits forgotten at the bottom of a long list.
         .order_by("created_at", "id")
     )
@@ -3011,6 +3019,13 @@ def reservation_approve_view(request, pk):
         if item.gown_id and item.gown.status == Gown.Status.AVAILABLE:
             item.gown.status = Gown.Status.RESERVED
             item.gown.save(update_fields=["status", "updated_at"])
+
+    # The payment records: an online booking's deposit (paid by GCash, just checked) goes onto the Payments page with a numbered receipt. This can
+    # never undo the approval: if it fails, the Payments page reads the booking from what it already carries.
+    try:
+        reservation_payments.record_approval_payment(reservation.pk, request.user)
+    except Exception:       # noqa: BLE001
+        logging.getLogger(__name__).exception("The deposit of %s could not be put on the Payments page", reservation.reference_code)
 
     return JsonResponse({"success": True, "status": reservation.status})
 

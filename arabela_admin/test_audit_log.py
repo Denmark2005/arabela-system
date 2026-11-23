@@ -267,6 +267,9 @@ class CoverageTests(TestCase):
         "email_preview_render", "admin_notifications_feed", "admin_search", "page", "booking_gown_search", "availability_check",
         "availability_calendar", "booking_customer_hint", "booking_account_search", "receipt_reservation_search", "gown_block_release_preview",
         "category_cover_preview",
+        # Payments: the page, the receipts list, the printable receipt (a print only stamps the receipt's own counter) and one booking's figures are all reads.
+        # Every payments change (record, deposit return, deduction, void, resend, late-fee setting) is @audited.
+        "payments", "payment_receipts", "payment_receipt_print", "payment_detail",
     }
 
     def admin_patterns(self):

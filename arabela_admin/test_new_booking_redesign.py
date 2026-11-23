@@ -145,8 +145,10 @@ class BookingLogicIsUntouchedTests(Base):
     """The form no longer sends a notebook number, and a website account is optional: the booking must save exactly as before."""
 
     def post_without(self, *dropped, lines=None, account=None):
+        total = sum((Decimal(str(line_gown.rental_price)) + Decimal("2000") for line_gown in Gown.objects.filter(id__in=[line["gown"] for line in lines])), Decimal("0"))
         data = {"channel": "Walk-in", "name": "Redesign Walk-in", "phone": "09171234567", "address": "Antipolo", "payment": "full", "note": "",
-                "notebook_number": "", "account": account.id if account else "", "lines": json.dumps(lines), "receipt_1": jpeg("r.jpg", b"redesign")}
+                "notebook_number": "", "account": account.id if account else "", "lines": json.dumps(lines),
+                "method": "Cash", "reference": "", "amount": str(total)}
         for key in dropped:
             data.pop(key)
         return self.client.post(reverse("arabela_admin:booking_create"), data=data)
@@ -196,7 +198,7 @@ class PageMarkupPromisesTests(Base):
 
     def test_the_long_explanations_live_only_inside_question_mark_popovers(self):
         for text in ("The day the customer wears it", "Tick this when the customer pays and leaves", "Only if the customer already has an account on the website",
-                     "One photo of the shop's receipt", "The gown the customer chose. Open the list", "Paid in full:</strong> the rental and the deposit were paid."):
+                     "The gown the customer chose. Open the list", "Paid in full:</strong> the rental and the deposit were paid."):
             with self.subTest(text=text):
                 self.assertEqual(self.form.count(text), 1)
                 self.assertIn("nb-tip-pop", self.form[self.form.index(text) - 90:self.form.index(text)])
@@ -217,7 +219,7 @@ class PageMarkupPromisesTests(Base):
 
     def test_every_icon_button_has_a_tooltip_and_a_screen_reader_label(self):
         icon_buttons = re.findall(r'<button\b[^>]*class="nb-ib[^"]*"[^>]*>', self.form, flags=re.S)
-        self.assertGreaterEqual(len(icon_buttons), 10)
+        self.assertGreaterEqual(len(icon_buttons), 8)
         for tag in icon_buttons:
             with self.subTest(tag=tag[:120]):
                 self.assertRegex(tag, r"(?<![\w-])(:?)title=")
@@ -225,10 +227,17 @@ class PageMarkupPromisesTests(Base):
 
     def test_the_gown_actions_are_the_icons_that_were_asked_for(self):
         for label in ('aria-label="Add another gown"', ':aria-label="\'Edit gown \' + (index + 1)"', ':aria-label="\'Remove gown \' + (index + 1)"',
-                      'aria-label="Done"', 'aria-label="Take a photo of the receipt"', 'aria-label="Choose the receipt photo"',
-                      'aria-label="Remove this photo"'):
+                      'aria-label="Done"'):
             with self.subTest(label=label):
                 self.assertIn(label, self.form)
+
+    def test_there_is_no_receipt_photo_to_take_or_choose_any_more(self):
+        for gone in ("Take a photo of the receipt", "Choose the receipt photo", "Remove this photo", "One photo of the shop's receipt", "nbReceiptCamera"):
+            with self.subTest(gone=gone):
+                self.assertNotIn(gone, self.html)
+        for present in ('id="nb-method-label"', 'for="nb-amount"'):                       # what replaced it: how it was paid and the exact amount
+            with self.subTest(present=present):
+                self.assertIn(present, self.form)
 
     def test_save_booking_and_cancel_keep_an_icon_and_their_word(self):
         tail = self.form[self.form.index('<div class="nb-actions" style="margin-bottom: 1.5rem;">'):]

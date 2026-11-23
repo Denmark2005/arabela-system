@@ -37,6 +37,11 @@ PERMISSIONS = {
         "help": "Delete a receipt photo that has already been attached. (Everyone can delete their own photo within 15 minutes of adding it.)",
         "verb": "delete receipt photos",
     },
+    "void_receipts": {
+        "label": "Void receipts and add deductions",
+        "help": "Void a Payment Receipt that was recorded by mistake, and take an amount off a customer's security deposit (damage, a stain). Both change money, so they stay with the owner unless allowed here.",
+        "verb": "void receipts or add deductions",
+    },
 }
 PERMISSION_KEYS = tuple(PERMISSIONS)
 

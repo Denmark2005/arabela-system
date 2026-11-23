@@ -693,6 +693,9 @@ class SiteSettings(models.Model):
     # (Reservation.security_deposit), so changing this only affects NEW bookings. db_default: an older deployment sharing this
     # database can still insert a row.
     security_deposit_per_gown = models.PositiveIntegerField(default=2000, db_default=2000)
+    # The late-return fee for EACH gown, per day late (whole pesos, 0 to 10,000; 0 = no late fee). Like the deposit, a booking keeps the rate it was
+    # made with (Reservation.late_fee_per_day), so changing this only affects NEW bookings. Terms and FAQ say 200.
+    late_fee_per_day = models.PositiveIntegerField(default=200, db_default=200)
     # Only the tag colors the owner has CHANGED from the defaults, keyed by category --
     # see resolve_tag_colors(), which layers these over DEFAULT_CATEGORY_TAG_COLORS.
     # Storing overrides (not a full copy) means a category added later just picks up

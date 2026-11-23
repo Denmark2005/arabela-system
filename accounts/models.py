@@ -97,6 +97,9 @@ class CustomerMessage(models.Model):
         # the 5- or 10-attempt cancellation/abandoned-hold checkpoint.
         CANCELLATION_LOCKOUT = 'Cancellation Lockout', 'Cancellation Lockout'
         GENERAL = 'General', 'General'
+        # Written by reservations/payments.py when staff record a payment, a deposit return or a deduction (the bell; the email is sent
+        # by that module itself, because it carries a link to the receipt).
+        PAYMENT = 'Payment', 'Payment'
 
     recipient = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='customer_messages'

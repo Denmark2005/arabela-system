@@ -279,10 +279,6 @@ class WalkInBookingUsesTheSettingTests(TestCase):
         cls.gown = make_gown(50, name="Walk In Gown")
 
     def setUp(self):
-        for target in ("arabela_admin.new_booking._save_receipt_photo", "arabela_admin.views._save_receipt_photo"):
-            patcher = patch(target, side_effect=lambda f: f"https://example.test/r/{f.name}")
-            patcher.start()
-            self.addCleanup(patcher.stop)
         self.client.force_login(self.staff)
 
     def book(self):
@@ -291,7 +287,8 @@ class WalkInBookingUsesTheSettingTests(TestCase):
         data = {
             "channel": "Walk-in", "name": "Lorna Reyes", "phone": "0917 123 4567", "address": "Antipolo", "notebook_number": "", "account": "",
             "lines": json.dumps(lines), "payment": "full", "note": "",
-            "receipt_1": SimpleUploadedFile("receipt1.jpg", unique_jpeg(), content_type="image/jpeg"),
+            # Paid in full in cash: the rental plus the deposit the owner has set right now (no receipt photo any more; the system prints the receipt)
+            "method": "Cash", "reference": "", "amount": str(self.gown.rental_price + deposit.for_gowns(1)),
         }
         return self.client.post(reverse("arabela_admin:booking_create"), data=data)
 

@@ -1,0 +1,521 @@
+"""Recording money on a booking: a payment received, a deduction from the deposit, the deposit handed back, and voiding a mistake.
+
+Everything that CHANGES the payment records goes through this module, so the rules live in one place (the pages only ask):
+
+  * Every change runs in one transaction with the booking row LOCKED, so two staff acting on the same booking at the same moment queue
+    up and the second one sees what the first one did.
+  * The DEPOSIT is received exactly (the deposit the booking was made with) -- either on its own ("Deposit") or together with the rental
+    ("Paid in full"). A part of the deposit is refused. After that the rental balance may be paid in parts, never more than what is owed.
+  * A deposit return is never more than the system says is refundable, and only once every gown is back.
+  * Nothing is edited or deleted: a mistake is VOIDED with a reason (who, when), and the booking's numbers follow by themselves.
+  * A request carrying the same `request_id` twice (a double click, a retried request) is answered with the payment already saved.
+  * Each payment gets its Payment Receipt number (PR-2026-000123) and an immutable snapshot of what the receipt says.
+  * The customer (if the booking has a website account) is told: a bell message always, and an email when customer emails are on.
+
+The money arithmetic is reservations/ledger.py; this module only checks a request against it and writes the rows.
+"""
+import logging
+from decimal import Decimal
+
+from django.conf import settings
+from django.db import transaction
+from django.db.models import F, Q
+from django.urls import reverse
+from django.utils import timezone
+
+from accounts.roles import staff_display_name
+from reservations import ledger
+from reservations.ledger import money, peso
+from reservations.models import Deduction, Payment, ReceiptSequence, Reservation, ReservationStatusEvent
+
+logger = logging.getLogger(__name__)
+
+SHOP_NAME = "Arabela Gown Rental"
+REASON_MAX = 200
+METHODS = (Payment.Method.CASH, Payment.Method.GCASH)
+PAYMENT_EVENT = "Payment received"
+RETURN_EVENT = "Security deposit returned"
+VOID_EVENT = "Receipt voided"
+DEDUCTION_EVENT = "Deduction from the security deposit"
+
+
+class PaymentError(Exception):
+    """The request can't be done. `message` is written for staff; nothing has been changed."""
+
+    def __init__(self, message, status=400):
+        super().__init__(message)
+        self.message = message
+        self.status = status
+
+
+# ---------------------------------------------------------------- small helpers
+def _clean_reason(raw, *, what="reason", minimum=3):
+    text = " ".join(str(raw or "").split())
+    if len(text) < minimum:
+        raise PaymentError(f"Please write the {what} (at least {minimum} letters).")
+    return text[:REASON_MAX]
+
+
+def _clean_note(raw):
+    return " ".join(str(raw or "").split())[:REASON_MAX]
+
+
+def _lock(reservation_id):
+    # No select_related here: a nullable relation makes Postgres refuse FOR UPDATE on the joined row.
+    try:
+        return Reservation.objects.select_for_update(of=("self",)).get(pk=reservation_id)
+    except Reservation.DoesNotExist:
+        raise PaymentError("That booking was not found. Please refresh the page.", status=404)
+
+
+def _method_and_reference(method, reference):
+    """(method, digits). Cash has no reference; GCash needs the 13-digit reference number, and it can only be used once."""
+    from gowns import typed_payment
+
+    if method not in METHODS:
+        raise PaymentError("Choose Cash or GCash.")
+    if method == Payment.Method.CASH:
+        return method, ""
+    problem = typed_payment.reference_problem(reference)
+    if problem:
+        raise PaymentError(problem.replace("on your GCash receipt", "from the GCash screen").replace("your receipt", "the GCash screen"))
+    return method, typed_payment.clean_reference(reference)
+
+
+def _reference_in_use(digits, reservation):
+    """The booking code a GCash reference number is already on, or ''. A number is one payment: it can't pay a second time."""
+    other = Payment.objects.filter(reference=digits, status=Payment.Status.RECORDED).select_related("reservation").first()
+    if other is not None:
+        return other.reservation.reference_code
+    taken = Reservation.objects.filter(Q(gcash_reference=digits) | Q(proof_typed_reference=digits)).exclude(pk=reservation.pk).first()
+    return taken.reference_code if taken is not None else ""
+
+
+def ensure_rows(reservation):
+    """Give an OLD booking (no Payment rows) its rows, derived from what it already carries, so a new payment lands next to them. Idempotent;
+    call inside the booking's lock. Returns how many rows it made."""
+    if reservation.payments.exists():
+        return 0
+    made = 0
+    for row in ledger.legacy_rows(reservation):
+        Payment.objects.create(
+            reservation=reservation, direction=row["direction"], purpose=row["purpose"], method=row["method"], amount=row["amount"],
+            reference=row["reference"], paid_at=row["paid_at"], recorded_by_name="Before the Payments page", note=row["note"], is_legacy=True,
+        )
+        made += 1
+    return made
+
+
+def _fresh(reservation_id):
+    return Reservation.objects.get(pk=reservation_id)
+
+
+def _shop():
+    from accounts import customer_emails
+
+    info = customer_emails.shop_info()
+    return {"name": SHOP_NAME, "address": info.get("address", ""), "phone": info.get("phone", "")}
+
+
+def _day(value):
+    return f"{value:%b} {value.day}"
+
+
+def _gown_lines(reservation):
+    items = list(reservation.items.all())
+    kept = [i for i in items if i.stage != i.Stage.CANCELLED] or items
+    return [{"name": i.gown_name, "size": i.size, "pickup": _day(i.rental_date), "return": _day(i.return_date)} for i in kept]
+
+
+def _snapshot(reservation, payment, before, after, *, served_by):
+    """What the receipt says, frozen: a reprint years later is the same paper."""
+    from gowns import typed_payment
+
+    local = timezone.localtime(payment.paid_at)
+    snap = {
+        "title": payment.title,
+        "shop": _shop(),
+        "number": payment.receipt_number,
+        "when": f"{local:%b} {local.day}, {local.year} {local.hour % 12 or 12}:{local:%M} {'AM' if local.hour < 12 else 'PM'}",
+        "booking": reservation.reference_code,
+        "customer": reservation.display_customer_name,
+        "phone": reservation.phone,
+        "served_by": served_by,
+        "gowns": _gown_lines(reservation),
+        "charges": {"rental": f"{before.rental:.2f}", "deposit": f"{before.deposit:.2f}", "total": f"{before.total:.2f}"},
+        "late_rate": f"{before.late_rate:.0f}",
+        "method": payment.get_method_display(),
+        "reference": typed_payment.format_reference(payment.reference) if payment.reference else "",
+        "amount": f"{money(payment.amount):.2f}",
+        "purpose": payment.purpose,
+        "purpose_label": payment.get_purpose_display(),
+        "note": payment.note,
+        "paid_before": f"{before.received:.2f}",
+        "balance_after": f"{after.balance_due:.2f}",
+    }
+    if payment.purpose == Payment.Purpose.DEPOSIT_RETURN:
+        snap["return"] = {
+            "deposit_paid": f"{after.deposit_paid:.2f}",
+            "late_lines": [{"gown": l["gown"], "days": l["days"], "rate": f"{l['rate']:.0f}", "amount": f"{l['amount']:.2f}"} for l in after.late_lines],
+            "late_fee": f"{after.late_fee:.2f}",
+            "deductions": [{"reason": d.reason, "amount": f"{money(d.amount):.2f}"} for d in reservation.deductions.all() if not d.is_void],
+            "deductions_total": f"{after.deductions_total:.2f}",
+            "returned_before": f"{before.refunded:.2f}",
+            "returned_now": f"{money(payment.amount):.2f}",
+            "still_to_return": f"{after.refund_available:.2f}",
+        }
+    return snap
+
+
+def _notify(reservation, payment, text, *, subject, heading):
+    """The bell message always (a customer with a website account), and the email when customer emails are on and the database commits."""
+    from accounts.models import CustomerMessage
+
+    if reservation.customer_id is None:
+        return False
+    CustomerMessage.objects.create(recipient_id=reservation.customer_id, category=CustomerMessage.Category.PAYMENT, body=text[:500])
+    if payment is not None:
+        Payment.objects.filter(pk=payment.pk).update(customer_notified_at=timezone.now())
+    if getattr(settings, "CUSTOMER_EMAILS_ENABLED", False):
+        reservation_id, payment_id = reservation.pk, (payment.pk if payment is not None else None)
+        transaction.on_commit(lambda: _email_guarded(reservation_id, payment_id, text, subject, heading))
+    return True
+
+
+def _email_guarded(reservation_id, payment_id, text, subject, heading):
+    from accounts import customer_emails
+
+    customer_emails._guarded(_send_email, reservation_id, payment_id, text, subject, heading)
+
+
+def _send_email(reservation_id, payment_id, text, subject, heading):
+    from accounts import customer_emails
+
+    reservation = Reservation.objects.select_related("customer").get(pk=reservation_id)
+    data = customer_emails._reservation_data(reservation, text=text)
+    data.update(subject=subject, heading=heading)
+    if payment_id:
+        payment = Payment.objects.get(pk=payment_id)
+        if payment.receipt_number:
+            data.update(receipt_number=payment.receipt_number, receipt_path=reverse("gowns:receipt_view", args=[payment.pk]))
+    customer_emails._deliver(reservation.customer, customer_emails.PAYMENT_NOTICE, data)
+
+
+def send_receipt_again(payment_id):
+    """Staff pressed "Send receipt again": the bell message and the email once more. Returns False for a booking with no website account."""
+    payment = Payment.objects.select_related("reservation").get(pk=payment_id)
+    if payment.is_legacy or not payment.receipt_number:
+        raise PaymentError("This was recorded before the Payments page. It has no receipt to send.")
+    reservation = payment.reservation
+    text = _notice_text(payment)
+    with transaction.atomic():
+        sent = _notify(reservation, payment, text, subject=_subject(payment), heading=_heading(payment))
+    return sent
+
+
+def _php(amount):
+    """'PHP 2,000.00': an email subject stays plain ASCII (every mail app and relay agrees on it), so no peso sign there."""
+    return f"PHP {money(amount):,.2f}"
+
+
+def _subject(payment):
+    if payment.is_void:
+        return f"Receipt {payment.receipt_number} was voided"
+    if payment.direction == Payment.Direction.OUT:
+        return f"Your security deposit was returned - receipt {payment.receipt_number}"
+    return f"Payment received {_php(payment.amount)} - receipt {payment.receipt_number}"
+
+
+def _heading(payment):
+    if payment.is_void:
+        return "A receipt was voided"
+    return "Your security deposit was returned" if payment.direction == Payment.Direction.OUT else "We received your payment"
+
+
+def _notice_text(payment):
+    """The one sentence the bell and the email say about a payment (also used when it is sent again)."""
+    reservation = payment.reservation
+    code = reservation.reference_code
+    how = payment.get_method_display() if payment.method != Payment.Method.OLD else "at the shop"
+    if payment.is_void:
+        return (f"Receipt {payment.receipt_number} ({peso(payment.amount)}) for {code} was voided: {payment.void_reason}. "
+                "Please contact the shop if you have a question.")
+    if payment.direction == Payment.Direction.OUT:
+        return f"Your security deposit of {peso(payment.amount)} for {code} was returned ({how}). Receipt {payment.receipt_number}."
+    snapshot = payment.snapshot or {}
+    balance = snapshot.get("balance_after")
+    tail = f" Balance still to pay at the shop: {peso(balance)}." if balance and money(balance) > 0 else " Nothing is left to pay."
+    return f"Payment received {peso(payment.amount)} for {code} ({payment.get_purpose_display()}, {how}). Receipt {payment.receipt_number}.{tail}"
+
+
+def _event(reservation, label, detail):
+    ReservationStatusEvent.record(reservation, label, detail=detail, actor=ReservationStatusEvent.Actor.STAFF)
+
+
+# ---------------------------------------------------------------- what a window may offer
+def choices(statement):
+    """What the Record payment window should offer for this statement, so the page and the rules can never disagree.
+    {"kind": "deposit", "options": [{"purpose", "label", "amount"}]} while the deposit is unpaid (exact amounts only);
+    {"kind": "balance", "max": ...} for the rental; {"kind": "extra", "max": ...} for a late fee beyond the deposit; {"kind": "none"}."""
+    if not statement.tracked or statement.cancelled:
+        return {"kind": "none"}
+    if statement.deposit_unpaid > 0:
+        options = [{"purpose": Payment.Purpose.DEPOSIT, "label": "Deposit only", "amount": f"{statement.deposit_unpaid:.2f}"}]
+        if statement.rental_unpaid > 0:
+            options.append({"purpose": Payment.Purpose.FULL, "label": "Paid in full", "amount": f"{statement.balance_core:.2f}"})
+        return {"kind": "deposit", "options": options}
+    if statement.rental_unpaid > 0:
+        return {"kind": "balance", "max": f"{statement.rental_unpaid:.2f}"}
+    if statement.extra_owed > 0:
+        return {"kind": "extra", "max": f"{statement.extra_owed:.2f}"}
+    return {"kind": "none"}
+
+
+# ---------------------------------------------------------------- an approved booking
+def record_approval_payment(reservation_id, user=None, now=None):
+    """Called when staff APPROVE a booking, so its payments are on the Payments page from the first day:
+
+      * an ONLINE booking paid its deposit by GCash (the screenshot staff just checked): the deposit is recorded with its numbered receipt,
+        method "GCash (online)". The customer is not told again (the approval already reached them) and it can be printed or seen in their
+        Receipts. (Phase 2 will record the online payment itself.)
+      * a booking staff recorded (an old pending walk-in) gets the rows its labelled receipt photos stand for.
+
+    Never raises into the approval: the caller wraps it, and the Payments page reads a booking with no rows from what it already carries."""
+    now = now or timezone.now()
+    with transaction.atomic():
+        reservation = _lock(reservation_id)
+        if reservation.payments.exists():
+            return None
+        if reservation.channel != Reservation.Channel.ONLINE:
+            ensure_rows(reservation)
+            return None
+        deposit = money(reservation.security_deposit)
+        if deposit <= 0 or reservation.status not in ledger.LIVE_STATUSES:
+            return None
+        served_by = staff_display_name(user) if user is not None else ""
+        before = ledger.statement(_fresh(reservation.pk))
+        payment = Payment.objects.create(
+            reservation=reservation, direction=Payment.Direction.IN, purpose=Payment.Purpose.DEPOSIT, method=Payment.Method.ONLINE_GCASH, amount=deposit,
+            reference=(reservation.proof_typed_reference or reservation.gcash_reference or "")[:20], paid_at=reservation.reviewed_at or now,
+            recorded_by=user if getattr(user, "pk", None) else None, recorded_by_name=served_by,
+            note="Paid online by GCash; checked by staff when the booking was approved.",
+            receipt_number=ReceiptSequence.next_number(timezone.localtime(now).year),
+        )
+        after = ledger.statement(_fresh(reservation.pk))
+        payment.snapshot = _snapshot(reservation, payment, before, after, served_by=served_by)
+        payment.save(update_fields=["snapshot"])
+        return payment
+
+
+# ---------------------------------------------------------------- a payment received
+def record_payment(*, reservation_id, purpose, amount, method, reference="", note="", user=None, request_id="", now=None):
+    """Save a payment received at the shop. Returns the Payment (an earlier one when `request_id` was already used)."""
+    now = now or timezone.now()
+    request_id = (request_id or "")[:40] or None
+    method, digits = _method_and_reference(method, reference)
+    amount = money(amount)
+    if amount <= 0:
+        raise PaymentError("Please type the amount received.")
+    note = _clean_note(note)
+    served_by = staff_display_name(user) if user is not None else ""
+
+    with transaction.atomic():
+        reservation = _lock(reservation_id)
+        if request_id:
+            earlier = Payment.objects.filter(request_id=request_id).first()
+            if earlier is not None:
+                return earlier
+        if not ledger.counts_as_tracked(reservation) or reservation.status == Reservation.Status.CANCELLED:
+            raise PaymentError(f"This booking is {reservation.status.lower()}, so it can't take a payment.", status=409)
+        ensure_rows(reservation)
+        before = ledger.statement(_fresh(reservation.pk))
+
+        if purpose == Payment.Purpose.DEPOSIT:
+            if before.deposit_unpaid <= 0:
+                raise PaymentError("The deposit is already paid. Refresh the page.", status=409)
+            if amount != before.deposit_unpaid:
+                raise PaymentError(f"The deposit is received exactly: {peso(before.deposit_unpaid)}. A part of the deposit can't be received.")
+        elif purpose == Payment.Purpose.FULL:
+            if before.deposit_unpaid <= 0:
+                raise PaymentError("The deposit is already paid, so \"Paid in full\" is no longer a choice. Record the balance instead.", status=409)
+            if amount != before.balance_core:
+                raise PaymentError(f"Paid in full is exactly {peso(before.balance_core)} (the rental and the deposit).")
+        elif purpose == Payment.Purpose.BALANCE:
+            if before.deposit_unpaid > 0:
+                raise PaymentError(f"The deposit ({peso(before.deposit_unpaid)}) has to be paid first.")
+            if before.rental_unpaid <= 0:
+                raise PaymentError("The rental is already paid. Refresh the page.", status=409)
+            if amount > before.rental_unpaid:
+                raise PaymentError(f"Only {peso(before.rental_unpaid)} is left to pay. You can't receive more than that.")
+        elif purpose == Payment.Purpose.EXTRA:
+            if before.extra_owed <= 0:
+                raise PaymentError("Nothing extra is owed on this booking.", status=409)
+            if amount > before.extra_owed:
+                raise PaymentError(f"Only {peso(before.extra_owed)} is owed. You can't receive more than that.")
+        else:
+            raise PaymentError("Choose what this payment is for. If this page has been open for a while, refresh it.")
+
+        if digits:
+            used = _reference_in_use(digits, reservation)
+            if used:
+                raise PaymentError(f"This GCash reference number is already recorded on {used}. A reference number pays only once.", status=409)
+
+        payment = Payment.objects.create(
+            reservation=reservation, direction=Payment.Direction.IN, purpose=purpose, method=method, amount=amount, reference=digits, paid_at=now,
+            recorded_by=user if getattr(user, "pk", None) else None, recorded_by_name=served_by, note=note, request_id=request_id,
+            receipt_number=ReceiptSequence.next_number(timezone.localtime(now).year),
+        )
+        after = ledger.statement(_fresh(reservation.pk))
+        payment.snapshot = _snapshot(reservation, payment, before, after, served_by=served_by)
+        payment.save(update_fields=["snapshot"])
+
+        _event(reservation, PAYMENT_EVENT, f"{peso(amount)} received ({payment.get_purpose_display()}, {payment.get_method_display()}). "
+                                           f"Receipt {payment.receipt_number}.")
+        _notify(reservation, payment, _notice_text(payment), subject=_subject(payment), heading=_heading(payment))
+    return payment
+
+
+# ---------------------------------------------------------------- the deposit handed back
+def return_deposit(*, reservation_id, amount, method, reference="", note="", user=None, request_id="", now=None):
+    """Record the security deposit handed back to the customer (Cash, or GCash sent from the shop's own GCash app)."""
+    now = now or timezone.now()
+    request_id = (request_id or "")[:40] or None
+    method, digits = _method_and_reference(method, reference)
+    amount = money(amount)
+    if amount <= 0:
+        raise PaymentError("Please type the amount handed back.")
+    note = _clean_note(note)
+    served_by = staff_display_name(user) if user is not None else ""
+
+    with transaction.atomic():
+        reservation = _lock(reservation_id)
+        if request_id:
+            earlier = Payment.objects.filter(request_id=request_id).first()
+            if earlier is not None:
+                return earlier
+        if not ledger.counts_as_tracked(reservation) or reservation.status == Reservation.Status.CANCELLED:
+            raise PaymentError("A cancelled booking keeps its deposit, so there is nothing to give back.", status=409)
+        ensure_rows(reservation)
+        before = ledger.statement(_fresh(reservation.pk))
+        if not before.all_returned:
+            raise PaymentError("The deposit can be handed back once every gown of the booking is returned.", status=409)
+        if before.refund_available <= 0:
+            raise PaymentError("There is no deposit left to hand back on this booking.", status=409)
+        if amount > before.refund_available:
+            raise PaymentError(f"Only {peso(before.refund_available)} can be handed back (the deposit less the late fee and deductions).")
+        if digits:
+            used = _reference_in_use(digits, reservation)
+            if used:
+                raise PaymentError(f"This GCash reference number is already recorded on {used}. A reference number is used once.", status=409)
+
+        payment = Payment.objects.create(
+            reservation=reservation, direction=Payment.Direction.OUT, purpose=Payment.Purpose.DEPOSIT_RETURN, method=method, amount=amount,
+            reference=digits, paid_at=now, recorded_by=user if getattr(user, "pk", None) else None, recorded_by_name=served_by, note=note,
+            request_id=request_id, receipt_number=ReceiptSequence.next_number(timezone.localtime(now).year),
+        )
+        after = ledger.statement(_fresh(reservation.pk))
+        payment.snapshot = _snapshot(reservation, payment, before, after, served_by=served_by)
+        payment.save(update_fields=["snapshot"])
+        _event(reservation, RETURN_EVENT, f"{peso(amount)} of the security deposit was handed back ({payment.get_method_display()}). "
+                                          f"Receipt {payment.receipt_number}.")
+        _notify(reservation, payment, _notice_text(payment), subject=_subject(payment), heading=_heading(payment))
+    return payment
+
+
+# ---------------------------------------------------------------- a deduction from the deposit
+def add_deduction(*, reservation_id, amount, reason, user=None, request_id="", now=None):
+    """Take an amount off the customer's deposit (damage, a stain, a missing item). Needs a reason; the customer is told."""
+    now = now or timezone.now()
+    request_id = (request_id or "")[:40] or None
+    amount = money(amount)
+    if amount <= 0:
+        raise PaymentError("Please type the amount of the deduction.")
+    reason = _clean_reason(reason)
+    with transaction.atomic():
+        reservation = _lock(reservation_id)
+        if request_id:
+            earlier = Deduction.objects.filter(request_id=request_id).first()
+            if earlier is not None:
+                return earlier
+        if not ledger.counts_as_tracked(reservation) or reservation.status == Reservation.Status.CANCELLED:
+            raise PaymentError("A cancelled booking keeps its deposit, so there is nothing to deduct from.", status=409)
+        ensure_rows(reservation)
+        deduction = Deduction.objects.create(
+            reservation=reservation, amount=amount, reason=reason, recorded_by=user if getattr(user, "pk", None) else None,
+            recorded_by_name=staff_display_name(user) if user is not None else "", request_id=request_id, created_at=now,
+        )
+        after = ledger.statement(_fresh(reservation.pk))
+        if after.refunded > after.refundable_total:
+            raise PaymentError("The deposit was already handed back. Void the deposit return receipt first, then add the deduction.", status=409)
+        _event(reservation, DEDUCTION_EVENT, f"{peso(amount)} was taken off the security deposit: {reason}.")
+        _notify(reservation, None,
+                f"{peso(amount)} was taken off the security deposit of {reservation.reference_code}: {reason}. "
+                f"Deposit to get back: {peso(after.refundable_total)}.",
+                subject=f"A deduction on your security deposit - {reservation.reference_code}", heading="A deduction on your security deposit")
+    return deduction
+
+
+# ---------------------------------------------------------------- voiding a mistake
+def void_payment(*, payment_id, reason, user=None, now=None):
+    """Void a recorded payment (a mistake). The row stays, marked void with the reason, who and when; the booking's numbers follow."""
+    now = now or timezone.now()
+    reason = _clean_reason(reason, what="reason for voiding it")
+    with transaction.atomic():
+        try:
+            payment = Payment.objects.select_for_update().get(pk=payment_id)
+        except Payment.DoesNotExist:
+            raise PaymentError("That receipt was not found. Please refresh the page.", status=404)
+        reservation = _lock(payment.reservation_id)
+        payment = Payment.objects.select_for_update().get(pk=payment_id)
+        if payment.is_void:
+            raise PaymentError("This receipt is already voided.", status=409)
+        if payment.is_legacy:
+            raise PaymentError("This payment was recorded before the Payments page, so it has no receipt to void.", status=409)
+        payment.status = Payment.Status.VOID
+        payment.void_reason = reason
+        payment.voided_by = user if getattr(user, "pk", None) else None
+        payment.voided_by_name = staff_display_name(user) if user is not None else ""
+        payment.voided_at = now
+        payment.save(update_fields=["status", "void_reason", "voided_by", "voided_by_name", "voided_at"])
+        after = ledger.statement(_fresh(reservation.pk))
+        if after.refunded > after.refundable_total:
+            raise PaymentError("The deposit was already handed back out of this money. Void the deposit return receipt first.", status=409)
+        _event(reservation, VOID_EVENT, f"Receipt {payment.receipt_number} ({peso(payment.amount)}) was voided: {reason}.")
+        _notify(reservation, payment, _notice_text(payment), subject=_subject(payment), heading=_heading(payment))
+    return payment
+
+
+def void_deduction(*, deduction_id, reason, user=None, now=None):
+    now = now or timezone.now()
+    reason = _clean_reason(reason, what="reason for removing it")
+    with transaction.atomic():
+        try:
+            deduction = Deduction.objects.select_for_update().get(pk=deduction_id)
+        except Deduction.DoesNotExist:
+            raise PaymentError("That deduction was not found. Please refresh the page.", status=404)
+        reservation = _lock(deduction.reservation_id)
+        deduction = Deduction.objects.select_for_update().get(pk=deduction_id)
+        if deduction.is_void:
+            raise PaymentError("This deduction is already removed.", status=409)
+        deduction.status = Deduction.Status.VOID
+        deduction.void_reason = reason
+        deduction.voided_by = user if getattr(user, "pk", None) else None
+        deduction.voided_by_name = staff_display_name(user) if user is not None else ""
+        deduction.voided_at = now
+        deduction.save(update_fields=["status", "void_reason", "voided_by", "voided_by_name", "voided_at"])
+        _event(reservation, DEDUCTION_EVENT, f"The {peso(deduction.amount)} deduction was removed: {reason}.")
+        _notify(reservation, None, f"The {peso(deduction.amount)} deduction on the security deposit of {reservation.reference_code} was removed: {reason}.",
+                subject=f"A deduction was removed - {reservation.reference_code}", heading="A deduction was removed")
+    return deduction
+
+
+# ---------------------------------------------------------------- printing
+def mark_printed(payment_id):
+    """Count a staff view of the print page. The first one is the original paper; every later one is a REPRINT (returned as its number)."""
+    with transaction.atomic():
+        payment = Payment.objects.select_for_update().get(pk=payment_id)
+        if payment.first_printed_at is None:
+            Payment.objects.filter(pk=payment.pk).update(first_printed_at=timezone.now())
+            return 0
+        Payment.objects.filter(pk=payment.pk).update(reprint_count=F("reprint_count") + 1)
+        return payment.reprint_count + 1

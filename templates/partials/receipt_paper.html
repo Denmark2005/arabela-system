@@ -1,0 +1,103 @@
+{% comment %}
+  The printed Payment Receipt / Deposit Return, drawn from the snapshot saved when it was issued (so a reprint is always the same paper).
+  Used by the admin's print page and by the customer's receipt page. Context: `r` (the snapshot dict), `payment` (the Payment row: status and void
+  details), `reprint` (0 = the original, n = REPRINT n), `copy_label` ("" for the shop, "CUSTOMER COPY" on the website).
+  Self-contained: its own CSS (class prefix rc-), a narrow 80 mm paper that also prints on any ordinary printer or saves as a PDF.
+{% endcomment %}
+<style>
+  .rc-paper { position: relative; box-sizing: border-box; width: 80mm; max-width: 100%; margin: 0 auto; padding: 14px 12px 18px; background: #fff; color: #111;
+    font-family: "Courier New", Courier, ui-monospace, Menlo, monospace; font-size: 12.5px; line-height: 1.38; overflow: hidden; }
+  .rc-paper * { box-sizing: border-box; }
+  .rc-c { text-align: center; }
+  .rc-shop { font-size: 15px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+  .rc-small { font-size: 11.5px; }
+  .rc-rule { margin: 8px 0; border: 0; border-top: 1px dashed #111; }
+  .rc-title { margin: 4px 0; text-align: center; font-size: 14px; font-weight: 700; letter-spacing: .12em; }
+  .rc-row { display: flex; justify-content: space-between; gap: 8px; }
+  .rc-row > span:first-child { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+  .rc-row > span:last-child { flex: none; text-align: right; white-space: nowrap; }
+  .rc-kv { display: flex; gap: 6px; }
+  .rc-kv > span:first-child { flex: 0 0 84px; }
+  .rc-kv > span:last-child { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+  .rc-bold { font-weight: 700; }
+  .rc-big { font-size: 13.5px; }
+  .rc-sub { padding-left: 10px; font-size: 11.5px; }
+  .rc-note { margin: 8px 0 0; font-size: 11px; line-height: 1.3; text-align: center; }
+  .rc-tag { margin: 4px 0; text-align: center; font-weight: 700; letter-spacing: .08em; }
+  .rc-void { position: absolute; left: 50%; top: 40%; z-index: 2; transform: translate(-50%, -50%) rotate(-18deg); padding: 0 14px; border: 3px double #b42318;
+    color: #b42318; font-size: 34px; font-weight: 700; letter-spacing: .1em; opacity: .55; pointer-events: none; }
+  .rc-voidinfo { margin-top: 6px; padding: 4px 6px; border: 1px solid #b42318; color: #b42318; font-size: 11px; }
+</style>
+<div class="rc-paper" id="rc-paper" role="document" aria-label="{{ r.title|default:'Payment Receipt' }} {{ r.number }}">
+  {% if payment.is_void %}<div class="rc-void" aria-hidden="true">VOID</div>{% endif %}
+  <div class="rc-c">
+    <div class="rc-shop">{{ r.shop.name }}</div>
+    {% if r.shop.address %}<div class="rc-small">{{ r.shop.address }}</div>{% endif %}
+    {% if r.shop.phone %}<div class="rc-small">{{ r.shop.phone }}</div>{% endif %}
+  </div>
+  <hr class="rc-rule">
+  <div class="rc-title">{{ r.title }}</div>
+  {% if payment.is_void %}<div class="rc-tag">*** VOIDED ***</div>{% endif %}
+  {% if reprint %}<div class="rc-tag">*** REPRINT {{ reprint }} ***</div>{% endif %}
+  {% if copy_label %}<div class="rc-tag">{{ copy_label }}</div>{% endif %}
+  <div class="rc-kv"><span>Receipt no.</span><span class="rc-bold">{{ r.number }}</span></div>
+  <div class="rc-kv"><span>Date</span><span>{{ r.when }}</span></div>
+  <div class="rc-kv"><span>Booking</span><span>{{ r.booking }}</span></div>
+  <div class="rc-kv"><span>Customer</span><span>{{ r.customer }}</span></div>
+  {% if r.served_by %}<div class="rc-kv"><span>Served by</span><span>{{ r.served_by }}</span></div>{% endif %}
+  <hr class="rc-rule">
+  {% for g in r.gowns %}
+    <div>{{ g.name }}{% if g.size %} ({{ g.size }}){% endif %}</div>
+    <div class="rc-sub">Pick-up {{ g.pickup }} &nbsp; Return {{ g.return }}</div>
+  {% endfor %}
+  <hr class="rc-rule">
+
+  {% if r.return %}
+    <div class="rc-row"><span>Security deposit paid</span><span>&#8369;{{ r.return.deposit_paid|floatformat:"2g" }}</span></div>
+    <div class="rc-row"><span>Late fee</span><span>-&#8369;{{ r.return.late_fee|floatformat:"2g" }}</span></div>
+    {% for l in r.return.late_lines %}
+      <div class="rc-sub">{{ l.gown }}: {{ l.days }} day{{ l.days|pluralize }} x &#8369;{{ l.rate }}</div>
+    {% endfor %}
+    <div class="rc-row"><span>Deductions</span><span>-&#8369;{{ r.return.deductions_total|floatformat:"2g" }}</span></div>
+    {% for d in r.return.deductions %}
+      <div class="rc-sub">{{ d.reason }}: -&#8369;{{ d.amount|floatformat:"2g" }}</div>
+    {% endfor %}
+    <hr class="rc-rule">
+    <div class="rc-row rc-bold rc-big"><span>DEPOSIT RETURNED</span><span>&#8369;{{ r.return.returned_now|floatformat:"2g" }}</span></div>
+    <div class="rc-kv"><span>Returned by</span><span>{{ r.method }}</span></div>
+    {% if r.reference %}<div class="rc-kv"><span>GCash ref no.</span><span>{{ r.reference }}</span></div>{% endif %}
+    {% if r.return.returned_before and r.return.returned_before != "0.00" %}
+      <div class="rc-row"><span>Handed back before</span><span>&#8369;{{ r.return.returned_before|floatformat:"2g" }}</span></div>
+    {% endif %}
+    {% if r.return.still_to_return and r.return.still_to_return != "0.00" %}
+      <div class="rc-row"><span>Still to hand back</span><span>&#8369;{{ r.return.still_to_return|floatformat:"2g" }}</span></div>
+    {% endif %}
+    <hr class="rc-rule">
+    <p class="rc-note">Thank you for renting with us.</p>
+  {% else %}
+    <div class="rc-row"><span>Gown rental</span><span>&#8369;{{ r.charges.rental|floatformat:"2g" }}</span></div>
+    <div class="rc-row"><span>Security deposit</span><span>&#8369;{{ r.charges.deposit|floatformat:"2g" }}</span></div>
+    <div class="rc-row rc-bold"><span>TOTAL</span><span>&#8369;{{ r.charges.total|floatformat:"2g" }}</span></div>
+    <hr class="rc-rule">
+    <div class="rc-bold">PAID NOW: {{ r.purpose_label }}</div>
+    <div class="rc-kv"><span>Method</span><span>{{ r.method }}</span></div>
+    {% if r.reference %}<div class="rc-kv"><span>GCash ref no.</span><span>{{ r.reference }}</span></div>{% endif %}
+    <div class="rc-row rc-bold rc-big"><span>Amount received</span><span>&#8369;{{ r.amount|floatformat:"2g" }}</span></div>
+    {% if r.paid_before and r.paid_before != "0.00" %}
+      <div class="rc-row"><span>Paid before</span><span>&#8369;{{ r.paid_before|floatformat:"2g" }}</span></div>
+    {% endif %}
+    <hr class="rc-rule">
+    {% if r.balance_after == "0.00" %}
+      <div class="rc-row rc-bold"><span>BALANCE</span><span>&#8369;0.00</span></div>
+      <div class="rc-c rc-bold">PAID IN FULL</div>
+    {% else %}
+      <div class="rc-row rc-bold rc-big"><span>BALANCE TO PAY AT SHOP</span><span>&#8369;{{ r.balance_after|floatformat:"2g" }}</span></div>
+    {% endif %}
+    <hr class="rc-rule">
+    <p class="rc-note">The deposit is returned when the gown is back on time and in good condition.{% if r.late_rate and r.late_rate != "0" %} Late return: &#8369;{{ r.late_rate }} a day for each gown, taken from the deposit.{% endif %}</p>
+    <p class="rc-note rc-bold">Thank you!</p>
+  {% endif %}
+  {% if payment.is_void %}
+    <div class="rc-voidinfo">Voided{% if payment.voided_at %} {{ payment.voided_at|date:"M j, Y" }}{% endif %}{% if payment.voided_by_name %} by {{ payment.voided_by_name }}{% endif %}: {{ payment.void_reason }}</div>
+  {% endif %}
+</div>

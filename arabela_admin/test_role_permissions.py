@@ -319,7 +319,7 @@ class ButtonTests(RoleBase):
         pages = self.pages(self.plain_staff)
         self.assertIn("Mark Picked Up", pages["active"])
         self.assertIn("Remind", pages["active"])
-        self.assertIn("Upload receipt", pages["records"])
+        self.assertIn("Open in Payments", pages["records"])                     # receipts are recorded in Payments now (no photo upload on Records)
         self.assertIn("Mark as checked now", pages["catalog"])
         self.assertIn("bulkStatus('Available')", pages["catalog"])
         self.assertIn("markChecked(selectedGownIds)", pages["catalog"])
@@ -393,7 +393,8 @@ class RuleTests(RoleBase):
         for account in (old, self.legacy_manager):
             profile = UserProfile.objects.get(user=account)
             self.assertEqual(profile.role, UserProfile.Role.STAFF)
-            self.assertEqual(parse_permissions(profile.permissions), list(PERMISSION_KEYS))
+            # the four sensitive actions that existed when that migration ran (later ones, like voiding receipts, are the owner's to allow)
+            self.assertEqual(parse_permissions(profile.permissions), ["delete_gowns", "cancel_bookings", "flag_customers", "delete_receipts"])
         self.assertEqual(UserProfile.objects.get(user=self.plain_staff).permissions, "")                 # nobody else is touched
         self.assertEqual(UserProfile.objects.get(user=self.owner_by_role).role, UserProfile.Role.OWNER)
         module.managers_become_staff(django_apps, None)                                                  # running it twice changes nothing more

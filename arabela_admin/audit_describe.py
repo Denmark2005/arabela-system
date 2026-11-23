@@ -527,3 +527,69 @@ def cancel_request_decline(ctx):
 def cancel_request_withdraw(ctx):
     who, whole, what, ref, res_id, _reason = _cr_facts(ctx)
     return {"summary": f"withdrew their request to cancel {_cr_phrase(whole, what, ref)}", "target": ("booking", res_id, ref)}
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# payments and receipts (the Payments page)
+# ---------------------------------------------------------------------------------------------------------------------------------
+def _payment_summary(payment):
+    return (f"₱{payment.get('amount', '')} ({payment.get('purposeLabel', '')}, {payment.get('method', '')}), "
+            f"receipt {payment.get('receiptNumber', '')}")
+
+
+def payment_record(ctx):
+    reservation = _reservation(ctx.kwargs.get("pk"))
+    payment = ctx.data.get("payment") or {}
+    return {"summary": f"recorded a payment of {_payment_summary(payment)} on {_booking_text(reservation)}", "target": _booking_target(reservation),
+            "details": {"receipt": payment.get("receiptNumber", ""), "method": payment.get("method", ""), "reference": payment.get("reference", "")}}
+
+
+def deposit_return(ctx):
+    reservation = _reservation(ctx.kwargs.get("pk"))
+    payment = ctx.data.get("payment") or {}
+    return {"summary": f"handed back ₱{payment.get('amount', '')} of the security deposit ({payment.get('method', '')}), receipt "
+                       f"{payment.get('receiptNumber', '')}, on {_booking_text(reservation)}",
+            "target": _booking_target(reservation), "sensitive": True,
+            "details": {"receipt": payment.get("receiptNumber", ""), "method": payment.get("method", ""), "reference": payment.get("reference", "")}}
+
+
+def deduction_add(ctx):
+    reservation = _reservation(ctx.kwargs.get("pk"))
+    return {"summary": f"took ₱{(ctx.data.get('deduction') or {}).get('amount', '')} off the security deposit of {_booking_text(reservation)}",
+            "target": _booking_target(reservation), "sensitive": True, "details": _keep(ctx.body, "reason")}
+
+
+def payment_void(ctx):
+    from reservations.models import Payment
+    payment = Payment.objects.select_related("reservation__customer__profile").filter(pk=ctx.kwargs.get("payment_id")).first()
+    reservation = payment.reservation if payment else None
+    return {"summary": f"voided receipt {payment.receipt_number if payment else ''} (₱{payment.amount if payment else ''}) on {_booking_text(reservation)}",
+            "target": _booking_target(reservation), "sensitive": True, "details": _keep(ctx.body, "reason")}
+
+
+def deduction_void(ctx):
+    from reservations.models import Deduction
+    deduction = Deduction.objects.select_related("reservation__customer__profile").filter(pk=ctx.kwargs.get("deduction_id")).first()
+    reservation = deduction.reservation if deduction else None
+    return {"summary": f"removed the ₱{deduction.amount if deduction else ''} deduction on {_booking_text(reservation)}",
+            "target": _booking_target(reservation), "sensitive": True, "details": _keep(ctx.body, "reason")}
+
+
+def receipt_send(ctx):
+    from reservations.models import Payment
+    payment = Payment.objects.select_related("reservation__customer__profile").filter(pk=ctx.kwargs.get("payment_id")).first()
+    reservation = payment.reservation if payment else None
+    return {"summary": f"sent receipt {payment.receipt_number if payment else ''} to the customer again ({_booking_text(reservation)})",
+            "target": _booking_target(reservation)}
+
+
+def late_fee_setting(ctx):
+    from gowns.models import SiteSettings
+    new = SiteSettings.load().late_fee_per_day
+    return {"summary": f"changed the late fee per gown per day from ₱{ctx.before.get('late_fee', '')} to ₱{new}", "sensitive": True,
+            "details": {"late fee per day": [ctx.before.get("late_fee", ""), new]}}
+
+
+def before_settings_late_fee(request, kwargs):
+    from gowns.models import SiteSettings
+    return {"late_fee": SiteSettings.load().late_fee_per_day}

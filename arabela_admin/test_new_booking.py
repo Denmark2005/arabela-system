@@ -21,8 +21,8 @@ from arabela_admin.new_booking import _calendar_why
 from arabela_admin.notifications import build_items
 from gowns import availability
 from gowns.models import COOLDOWN_DAYS, Gown, GownUnavailability
-from reservations import reminders, staff_booking
-from reservations.models import ReceiptRecord, Reservation, ReservationItem, ReservationStatusEvent
+from reservations import ledger, payments, reminders, staff_booking
+from reservations.models import Payment, ReceiptRecord, Reservation, ReservationItem, ReservationStatusEvent
 
 User = get_user_model()
 EMAILS_ON = dict(CUSTOMER_EMAILS_ENABLED=True, CUSTOMER_EMAILS_BACKGROUND=False)
@@ -56,26 +56,32 @@ class Base(TestCase):
         self.today = timezone.localdate()
         self.event = self.today + timedelta(days=20)
         self.client.force_login(self.staff)
-        saver = patch("arabela_admin.new_booking._save_receipt_photo", side_effect=lambda f: f"https://example.test/r/{f.name}")
-        saver.start()
-        self.addCleanup(saver.stop)
         saver2 = patch("arabela_admin.views._save_receipt_photo", side_effect=lambda f: f"https://example.test/r/{f.name}")
         saver2.start()
         self.addCleanup(saver2.stop)
 
-    def post_booking(self, lines, *, payment="full", receipt=b"a", name="Lorna Reyes",
-                     phone="0917 123 4567", channel="Walk-in", account=None, notebook="", note="", user=None):
-        """`payment` is the form's choice ("full" = Paid in full, "deposit" = Deposit only); `receipt` is the photo's salt
-        (None = no photo attached)."""
+    def post_booking(self, lines, *, payment="full", method="Cash", reference="", amount=None, name="Lorna Reyes",
+                     phone="0917 123 4567", channel="Walk-in", account=None, notebook="", note="", user=None, request_id=None):
+        """`payment` is the form's choice ("full" = Paid in full, "deposit" = Deposit only); `method` is Cash or GCash; `amount` is what the staff
+        member confirmed (by default exactly what the choice asks for: the deposit, or the rental and the deposit). No receipt photo any more."""
         if user:
             self.client.force_login(user)
+        if amount is None:
+            gowns = [Gown.objects.get(id=line["gown"]) for line in lines]
+            deposit_total = Decimal("2000") * len(gowns)
+            amount = deposit_total + sum((g.rental_price for g in gowns), Decimal("0")) if payment == "full" else deposit_total
         data = {
             "channel": channel, "name": name, "phone": phone, "address": "Antipolo", "notebook_number": notebook,
-            "account": account.id if account else "", "lines": json.dumps(lines), "payment": payment, "note": note,
+            "account": account.id if account else "", "lines": json.dumps(lines), "payment": payment, "method": method, "reference": reference,
+            "amount": str(amount), "note": note,
         }
-        if receipt is not None:
-            data["receipt_1"] = jpeg("receipt1.jpg", receipt)
+        if request_id:
+            data["request_id"] = request_id
         return self.client.post(reverse("arabela_admin:booking_create"), data=data)
+
+    def legacy_photo(self, reservation, covers, name="receipt1.jpg"):
+        """An OLD receipt photo (made before the Payments page: new bookings take no photos): old data must keep displaying."""
+        return ReceiptRecord.objects.create(reservation=reservation, photo_url=f"https://example.test/r/{name}", covers=covers, uploaded_by=self.staff)
 
     def legacy_pending_walk_in(self, number, receipts=()):
         """A walk-in recorded before "Not paid yet" went away: Pending, holding its gown, no receipt (or the given ones)."""
@@ -258,9 +264,14 @@ class RecordBookingTests(Base):
         block = GownUnavailability.objects.get(auto_for_item=item)
         self.assertEqual((block.start_date, block.end_date),
                          (item.return_date + timedelta(days=1), item.return_date + timedelta(days=COOLDOWN_DAYS)))
-        receipt = reservation.receipt_records.get()
-        self.assertEqual((receipt.covers, receipt.uploaded_by), (ReceiptRecord.Covers.BOTH, self.staff))
-        self.assertEqual(len(receipt.file_hash), 64)
+        payment = reservation.payments.get()
+        self.assertEqual((payment.direction, payment.purpose, payment.method, payment.amount, payment.recorded_by),
+                         (Payment.Direction.IN, Payment.Purpose.FULL, Payment.Method.CASH, Decimal("5000.00"), self.staff))
+        self.assertRegex(payment.receipt_number, r"^PR-\d{4}-\d{6}$")
+        self.assertEqual((data["receiptNumber"], data["balance"]), (payment.receipt_number, "0.00"))
+        self.assertTrue(data["receiptUrl"].endswith(f"/payments/receipt/{payment.pk}/"))
+        self.assertFalse(reservation.receipt_records.exists())               # no receipt photos any more: the system prints the receipt
+        self.assertEqual(ledger.statement(reservation).state, ledger.PAID)
         gown.refresh_from_db()
         self.assertEqual(gown.status, Gown.Status.RESERVED)
         labels = list(reservation.status_events.values_list("label", flat=True))
@@ -282,9 +293,9 @@ class RecordBookingTests(Base):
         self.assertEqual(numbers, [numbers[0], numbers[0] + 1, numbers[0] + 2])
         self.assertEqual(walk_in.reference_code[:9], online.reference_code[:9])
 
-    def test_deposit_only_is_confirmed_at_once_and_still_owes_its_rental_receipt(self):
+    def test_deposit_only_is_confirmed_at_once_and_still_owes_its_rental(self):
         gown = make_gown(22)
-        response = self.post_booking([self.line(gown)], payment="deposit", receipt=b"dep")
+        response = self.post_booking([self.line(gown)], payment="deposit")
         self.assertEqual(response.status_code, 200, response.content)
         data = response.json()
         reservation = Reservation.objects.get(reference_code=data["reference_code"])
@@ -293,8 +304,9 @@ class RecordBookingTests(Base):
         self.assertEqual((data["where"], data["depositOnly"]), ("Active Reservations", True))
         self.assertEqual(reservation.payment_method, "")
         self.assertEqual(reservation.total_amount, Decimal("5000"))      # the booking itself is the same either way
-        receipt = reservation.receipt_records.get()
-        self.assertEqual(receipt.covers, ReceiptRecord.Covers.DEPOSIT)    # the Payment choice labels it; staff are never asked
+        payment = reservation.payments.get()
+        self.assertEqual((payment.purpose, payment.amount), (Payment.Purpose.DEPOSIT, Decimal("2000.00")))     # the Payment choice decides what it is
+        self.assertEqual((data["balance"], ledger.statement(reservation).balance_due), ("3,000.00", Decimal("3000.00")))
         gown.refresh_from_db()
         self.assertEqual(gown.status, Gown.Status.RESERVED)
         self.assertFalse(availability.check_unit(gown, self.event)["ok"])         # holds the gown like any booking
@@ -302,14 +314,12 @@ class RecordBookingTests(Base):
         self.assertIn("Deposit paid; the rental is still to pay.", note.detail)
         self.assertEqual(reservation.status_events.get(label=staff_booking.APPROVED_LABEL).detail,
                          "Deposit paid at the shop. Your booking is confirmed.")
-        self.assertFalse(reservation.receipts_cover_payment())
-        self.assertEqual(reservation.next_receipt_covers(), ReceiptRecord.Covers.RENTAL)
 
-    def test_paid_in_full_is_labelled_by_the_choice_and_owes_nothing(self):
-        response = self.post_booking([self.line(make_gown(19))], payment="full", receipt=b"full")
+    def test_paid_in_full_is_recorded_by_the_choice_and_owes_nothing(self):
+        response = self.post_booking([self.line(make_gown(19))], payment="full")
         reservation = Reservation.objects.get(reference_code=response.json()["reference_code"])
-        self.assertEqual(reservation.receipt_records.get().covers, ReceiptRecord.Covers.BOTH)
-        self.assertTrue(reservation.receipts_cover_payment())
+        self.assertEqual(reservation.payments.get().purpose, Payment.Purpose.FULL)
+        self.assertEqual(ledger.statement(reservation).balance_due, Decimal("0.00"))
         records = self.client.get(reverse("arabela_admin:reservation_records"))
         record = next(r for r in records.context["records"] if r["reference"] == reservation.reference_code)
         self.assertFalse(record["paymentIncomplete"])
@@ -330,19 +340,25 @@ class RecordBookingTests(Base):
             ("an old Not paid yet", dict(lines=[self.line(gown)], payment="0"), "Deposit only"),
             ("a made-up choice", dict(lines=[self.line(gown)], payment="half"), "Deposit only"),
             ("taken now with only the deposit", dict(lines=[self.line(gown, takes_now=True)], payment="deposit"), "once the rental is paid"),
-            ("paid in full with no receipt", dict(lines=[self.line(gown)], receipt=None), "receipt"),
-            ("deposit only with no receipt", dict(lines=[self.line(gown)], payment="deposit", receipt=None), "receipt"),
+            ("no payment method", dict(lines=[self.line(gown)], method=""), "Cash or GCash"),
+            ("an unknown method", dict(lines=[self.line(gown)], method="Cheque"), "Cash or GCash"),
+            ("paid in full with the wrong amount", dict(lines=[self.line(gown)], amount="4000"), "exactly"),
+            ("half the deposit", dict(lines=[self.line(gown)], payment="deposit", amount="1000"), "received exactly"),
+            ("GCash with no reference number", dict(lines=[self.line(gown)], method="GCash"), "13"),
+            ("GCash with a short reference number", dict(lines=[self.line(gown)], method="GCash", reference="12345"), "13 digits"),
+            ("an amount that is not a number", dict(lines=[self.line(gown)], amount="abc"), "amount"),
         ]
         for label, kwargs, words in cases:
             response = self.post_booking(**kwargs)
             self.assertEqual(response.status_code, 400, label)
             self.assertIn(words, response.json()["error"], label)
         self.assertFalse(Reservation.objects.exists())
+        self.assertFalse(Payment.objects.exists())
         self.assertFalse(ReceiptRecord.objects.exists())
 
-    def test_the_old_form_fields_are_gone_and_a_second_photo_is_not_taken(self):
+    def test_the_old_form_fields_are_gone_and_no_photo_is_taken(self):
         gown = make_gown(18)
-        data = {"name": "Lorna Reyes", "phone": "0917 123 4567", "lines": json.dumps([self.line(gown)]), "payment": "full",
+        data = {"name": "Lorna Reyes", "phone": "0917 123 4567", "lines": json.dumps([self.line(gown)]), "payment": "full", "method": "Cash", "amount": "5000",
                 "paid": "0", "payment_method": "GCash", "receipt_1": jpeg("one.jpg", b"o1"), "receipt_1_covers": "Rental",
                 "receipt_2": jpeg("two.jpg", b"o2"), "receipt_2_covers": "Deposit"}
         response = self.client.post(reverse("arabela_admin:booking_create"), data=data)
@@ -350,18 +366,17 @@ class RecordBookingTests(Base):
         reservation = Reservation.objects.get(reference_code=response.json()["reference_code"])
         self.assertEqual(reservation.status, Reservation.Status.CONFIRMED)         # `paid=0` means nothing any more
         self.assertEqual(reservation.payment_method, "")                              # nor does a payment method
-        receipt = reservation.receipt_records.get()                                    # only the first photo is read
-        self.assertEqual((receipt.photo_url, receipt.covers), ("https://example.test/r/one.jpg", ReceiptRecord.Covers.BOTH))
-        self.assertEqual(staff_booking.MAX_RECEIPTS, 1)
+        self.assertFalse(reservation.receipt_records.exists())                         # a photo that is still sent is ignored: nothing is stored
+        self.assertEqual(reservation.payments.get().method, Payment.Method.CASH)       # the method that counts is `method`, not the old `payment_method`
 
     def test_a_gown_already_taken_is_refused_and_nothing_is_saved(self):
         gown = make_gown(25)
         online, _ = self.online_booking(gown, self.event - timedelta(days=1), self.event + timedelta(days=1))
-        before = (Reservation.objects.count(), ReceiptRecord.objects.count(), GownUnavailability.objects.count())
+        before = (Reservation.objects.count(), Payment.objects.count(), GownUnavailability.objects.count())
         response = self.post_booking([self.line(gown)])
         self.assertEqual(response.status_code, 409)
         self.assertIn(online.reference_code, response.json()["error"])
-        self.assertEqual((Reservation.objects.count(), ReceiptRecord.objects.count(), GownUnavailability.objects.count()), before)
+        self.assertEqual((Reservation.objects.count(), Payment.objects.count(), GownUnavailability.objects.count()), before)
         # The refused try used no booking number: the next booking still gets the very next one.
         nxt = Reservation.objects.create(customer=self.customer, customer_name="x")
         self.assertEqual(int(nxt.reference_code.rsplit("-", 1)[1]), int(online.reference_code.rsplit("-", 1)[1]) + 1)
@@ -374,7 +389,7 @@ class RecordBookingTests(Base):
         self.assertEqual(reservation.items.count(), 2)
         self.assertEqual(reservation.security_deposit, Decimal("4000"))
         third = make_gown(28)
-        twice = self.post_booking([self.line(third), self.line(third)], receipt=b"t")
+        twice = self.post_booking([self.line(third), self.line(third)])
         self.assertEqual(twice.status_code, 400)
         self.assertIn("twice", twice.json()["error"])
 
@@ -392,15 +407,28 @@ class RecordBookingTests(Base):
         self.assertEqual((reservation.phone, reservation.channel, reservation.notebook_number),
                          ("09177654321", Reservation.Channel.WALK_IN, "0457"))
 
-    def test_a_notebook_number_and_a_receipt_photo_can_be_used_only_once(self):
-        first = self.post_booking([self.line(make_gown(30))], notebook="A-12", receipt=b"same")
+    def test_a_notebook_number_and_a_gcash_reference_can_be_used_only_once(self):
+        first = self.post_booking([self.line(make_gown(30))], notebook="A-12")
         self.assertEqual(first.status_code, 200, first.content)
-        again = self.post_booking([self.line(make_gown(31))], notebook="a-12", receipt=b"other")
+        again = self.post_booking([self.line(make_gown(31))], notebook="a-12")
         self.assertEqual(again.status_code, 409)
         self.assertIn(first.json()["reference_code"], again.json()["error"])
-        photo = self.post_booking([self.line(make_gown(32))], receipt=b"same")
-        self.assertEqual(photo.status_code, 409)
-        self.assertIn("already attached", photo.json()["error"])
+        paid = self.post_booking([self.line(make_gown(32))], method="GCash", reference="5046 933 479702")
+        self.assertEqual(paid.status_code, 200, paid.content)
+        self.assertEqual(Payment.objects.get(reservation__reference_code=paid.json()["reference_code"]).reference, "5046933479702")
+        before = (Reservation.objects.count(), Payment.objects.count())
+        reused = self.post_booking([self.line(make_gown(33))], method="GCash", reference="5046933479702")
+        self.assertEqual(reused.status_code, 409)
+        self.assertIn("already recorded on " + paid.json()["reference_code"], reused.json()["error"])
+        self.assertEqual((Reservation.objects.count(), Payment.objects.count()), before)          # the refused payment undid the whole booking
+
+    def test_a_double_click_with_the_same_request_saves_one_booking_and_one_receipt(self):
+        gown = make_gown(34 + 60)
+        first = self.post_booking([self.line(gown)], request_id="click-1")
+        self.assertEqual(first.status_code, 200, first.content)
+        second = self.post_booking([self.line(gown)], request_id="click-1")
+        self.assertEqual(second.status_code, 409)                                  # the gown is taken now: nothing else is saved
+        self.assertEqual((Reservation.objects.count(), Payment.objects.count()), (1, 1))
 
     def test_only_the_owner_can_record_an_earlier_pick_up(self):
         gown = make_gown(34)
@@ -423,7 +451,7 @@ class RecordBookingTests(Base):
         page = self.client.get(reverse("gowns:orders"))
         self.assertIn(reservation, list(page.context["reservations"]))      # on the customer's own Reservations page
         self.assertContains(page, gown.name)
-        staff_account = self.post_booking([self.line(make_gown(36))], account=self.staff, receipt=b"s", user=self.staff)
+        staff_account = self.post_booking([self.line(make_gown(36))], account=self.staff, user=self.staff)
         self.assertEqual(staff_account.status_code, 400)
 
     def test_the_customer_hint_and_account_search(self):
@@ -437,9 +465,9 @@ class RecordBookingTests(Base):
 
 # ======================================================================= the rest of the system with a no-account booking
 class EverywhereElseTests(Base):
-    def walk_in(self, *, payment="full", event=None, takes_now=False, salt=b"w"):
+    def walk_in(self, *, payment="full", event=None, takes_now=False):
         gown = make_gown(40 + Reservation.objects.count())
-        response = self.post_booking([self.line(gown, event=event, takes_now=takes_now)], payment=payment, receipt=salt)
+        response = self.post_booking([self.line(gown, event=event, takes_now=takes_now)], payment=payment)
         self.assertEqual(response.status_code, 200, response.content)
         return Reservation.objects.get(reference_code=response.json()["reference_code"]), gown
 
@@ -506,7 +534,7 @@ class EverywhereElseTests(Base):
         dashboard = self.client.get(reverse("arabela_admin:dashboard"))
         self.assertEqual(dashboard.context["active_rentals"], 1)
 
-    def test_a_deposit_only_booking_is_payment_incomplete_until_the_rental_receipt_is_uploaded(self):
+    def test_a_deposit_only_booking_has_a_balance_until_the_rental_is_recorded_in_payments(self):
         reservation, _ = self.walk_in(payment="deposit")
 
         def record():
@@ -514,14 +542,10 @@ class EverywhereElseTests(Base):
             return next(r for r in records.context["records"] if r["reference"] == reservation.reference_code)
 
         self.assertTrue(record()["paymentIncomplete"])
-        upload = self.upload(reservation, b"rental-later")                 # the Records page sends no label at all
-        self.assertEqual(upload.status_code, 200, upload.content)
-        self.assertEqual((upload.json()["receipt"]["covers"], upload.json()["receipt"]["coversName"]), ("Rental", "Rental"))
-        self.assertFalse(record()["paymentIncomplete"])                     # Deposit + Rental = paid in full
-        extra = self.upload(reservation, b"another-copy")                    # nothing more can be added once Deposit + Rental are both there:
-        self.assertEqual(extra.status_code, 409)                             # a wrong photo is fixed with Replace (2026-11-12 receipt rules)
-        self.assertEqual(reservation.receipt_records.count(), 2)
-        self.assertFalse(record()["paymentIncomplete"])
+        self.assertEqual(record()["balanceDue"], "3,000.00")
+        payments.record_payment(reservation_id=reservation.pk, purpose=Payment.Purpose.BALANCE, amount=Decimal("3000"), method=Payment.Method.CASH, user=self.staff)
+        self.assertFalse(record()["paymentIncomplete"])                     # the deposit + the rental = paid in full
+        self.assertEqual(record()["balanceDue"], "0.00")
 
     def test_pick_up_return_and_the_deposit_with_no_account(self):
         reservation, gown = self.walk_in(event=self.today, takes_now=True)
@@ -588,9 +612,10 @@ class EverywhereElseTests(Base):
     def test_a_linked_account_gets_the_approval_email(self):
         gown = make_gown(90)
         with self.captureOnCommitCallbacks(execute=True):
-            response = self.post_booking([self.line(gown)], account=self.customer, receipt=b"le")
+            response = self.post_booking([self.line(gown)], account=self.customer)
         self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(len(mail.outbox), 2)                                        # the approval, and the payment received with its receipt
+        self.assertEqual(sorted(m.subject.split(" ")[0] for m in mail.outbox), sorted(["Your", "Payment"]))
         self.assertEqual(mail.outbox[0].to, ["nb.customer@gmail.com"])
 
 
@@ -629,7 +654,7 @@ class WalkInOnlyTests(Base):
     def test_a_booking_sent_without_a_channel_is_a_walk_in(self):
         gown = make_gown(120)
         data = {"name": "Lorna Reyes", "phone": "0917 123 4567", "address": "Antipolo", "lines": json.dumps([self.line(gown)]),
-                "payment": "full", "note": "", "receipt_1": jpeg("only.jpg", b"w1")}
+                "payment": "full", "method": "Cash", "amount": "5000", "note": ""}
         response = self.client.post(reverse("arabela_admin:booking_create"), data=data)
         self.assertEqual(response.status_code, 200, response.content)
         reservation = Reservation.objects.get(reference_code=response.json()["reference_code"])
@@ -638,20 +663,23 @@ class WalkInOnlyTests(Base):
     def test_facebook_phone_and_online_bookings_are_refused_and_nothing_is_saved(self):
         gown = make_gown(121)
         for channel in ("Facebook", "Phone", "Online"):
-            response = self.post_booking([self.line(gown)], channel=channel, receipt=channel.encode())
+            response = self.post_booking([self.line(gown)], channel=channel)
             self.assertEqual(response.status_code, 400, channel)
             self.assertIn("Only walk-in", response.json()["error"], channel)
         self.assertFalse(Reservation.objects.exists())
-        self.assertFalse(ReceiptRecord.objects.exists())
+        self.assertFalse(Payment.objects.exists())
 
 
 class ReceiptPhotosInProofPopupsTests(Base):
     """A booking recorded at the counter has no customer GCash screenshot: the shop's receipt photos are its proof."""
 
     def paid_booking(self, number, payment="full", salt=b"p", **kwargs):
-        response = self.post_booking([self.line(make_gown(number))], payment=payment, receipt=salt, **kwargs)
+        """A walk-in booking that also carries an OLD receipt photo (receipt1.jpg), like one made before the Payments page."""
+        response = self.post_booking([self.line(make_gown(number))], payment=payment, **kwargs)
         self.assertEqual(response.status_code, 200, response.content)
-        return Reservation.objects.get(reference_code=response.json()["reference_code"])
+        reservation = Reservation.objects.get(reference_code=response.json()["reference_code"])
+        self.legacy_photo(reservation, ReceiptRecord.Covers.BOTH if payment == "full" else ReceiptRecord.Covers.DEPOSIT)
+        return reservation
 
     def deposit_then_rental(self, number, salt):
         """A deposit-only walk-in (receipt1.jpg = Deposit) whose rental receipt was uploaded later (receipt2.jpg = Rental)."""
@@ -884,7 +912,7 @@ class EventDateCalendarTests(Base):
         gown = make_gown(307)
         month = self.event.strftime("%Y-%m")
         self.assertTrue(self.client.get(self.url(gown, month)).json()["days"][self.event.isoformat()]["ok"])
-        saved = self.post_booking([self.line(gown)], receipt=b"cal1")
+        saved = self.post_booking([self.line(gown)])
         self.assertEqual(saved.status_code, 200, saved.content)
         day = self.client.get(self.url(gown, month)).json()["days"][self.event.isoformat()]
         self.assertFalse(day["ok"])
@@ -938,9 +966,12 @@ class PaymentChoiceAndReceiptLabelTests(Base):
         self.assertIn('name="nb-payment" value="deposit"', html)
         self.assertIn("Paid in full</label>", html)
         self.assertIn("Deposit only</label>", html)
-        for gone in ("Not paid yet", "Paid by", 'name="nb-method"', "This receipt is for", "Rental only", "Cash</label>",
-                     "GCash</label>", "payment_method"):
+        for gone in ("Not paid yet", "This receipt is for", "Rental only", "payment_method", "receipt_1", "Attach the photo", "nbReceiptFile", "pickReceipt"):
             self.assertNotIn(gone, html, gone)
+        for here in ('name="nb-method" value="Cash"', 'name="nb-method" value="GCash"', "Cash</label>", "GCash</label>", "Amount received (pesos)",
+                     "GCash reference number", "form.append('method', this.method)", "form.append('amount', this.amountText)",
+                     "form.append('request_id', this.requestId)", "Print receipt"):
+            self.assertIn(here, html, here)
         self.assertIn("form.append('payment', this.payment)", html)
         self.assertEqual(html.count("name=\"nb-payment\""), 2)
 
@@ -956,11 +987,13 @@ class PaymentChoiceAndReceiptLabelTests(Base):
 
     def test_a_walk_ins_receipt_is_what_its_payment_is_missing_whatever_is_sent(self):
         deposit = Reservation.objects.get(reference_code=self.post_booking(
-            [self.line(make_gown(401))], payment="deposit", receipt=b"d401").json()["reference_code"])
+            [self.line(make_gown(401))], payment="deposit").json()["reference_code"])
+        self.legacy_photo(deposit, ReceiptRecord.Covers.DEPOSIT)                  # an old booking: its deposit receipt photo is on file
         first = self.upload(deposit, b"r401", covers="Deposit")            # tampered: still the missing one
         self.assertEqual(first.json()["receipt"]["covers"], ReceiptRecord.Covers.RENTAL)
         full = Reservation.objects.get(reference_code=self.post_booking(
-            [self.line(make_gown(402))], payment="full", receipt=b"f402").json()["reference_code"])
+            [self.line(make_gown(402))], payment="full").json()["reference_code"])
+        self.legacy_photo(full, ReceiptRecord.Covers.BOTH)
         again = self.upload(full, b"x402", covers="Rental")
         self.assertEqual(again.status_code, 409)                           # paid in full already has its receipt: a further photo is refused
         self.assertEqual(full.receipt_records.count(), 1)
@@ -977,13 +1010,13 @@ class PaymentChoiceAndReceiptLabelTests(Base):
             reservation, _ = self.legacy_pending_walk_in(number, receipts=[(f"n{number}-{i}.jpg", label) for i, label in enumerate(labels)])
             self.assertEqual(reservation.next_receipt_covers(), expected, labels)
 
-    def test_the_records_page_has_no_dropdown_and_tells_a_deposit_only_walk_in_what_the_upload_is(self):
+    def test_the_records_page_has_no_receipt_upload_or_dropdown_at_all(self):
+        """Receipts are no longer photos: the Records page takes no upload, so there is no "this receipt is for" question either."""
         html = self.client.get(reverse("arabela_admin:reservation_records")).content.decode()
-        for gone in ("rr-upload-covers", "Not specified", "uploadCovers", "This receipt is for</label>"):
+        # (Some old, unused upload script is still in the page source on purpose; what must be gone is everything a person can see or press.)
+        for gone in ("rr-upload-covers", "Not specified", "uploadCovers", "This receipt is for</label>", "nextReceiptCovers(uploadFor)",
+                     "Upload Receipt</h4>", 'x-ref="rrFileInput"', 'x-ref="rrCameraInput"', 'title="Upload receipt"'):
             self.assertNotIn(gone, html, gone)
-        self.assertIn("nextReceiptCovers(uploadFor)", html)
-        self.assertIn("form.append('photo', this.uploadFile);", html)
-        self.assertNotIn("form.append('covers'", html)
 
     def test_the_names_staff_read(self):
         covers = ReceiptRecord.Covers
@@ -1037,15 +1070,15 @@ class PaymentBreakdownTests(Base):
         self.assertNotIn("Gown ₱", html)
 
     def test_a_walk_in_shows_what_the_shops_receipts_say(self):
-        full = Reservation.objects.get(reference_code=self.post_booking([self.line(make_gown(503))], payment="full", receipt=b"b1").json()["reference_code"])
+        full = Reservation.objects.get(reference_code=self.post_booking([self.line(make_gown(503))], payment="full").json()["reference_code"])
         self.assertEqual((full.payment_breakdown["headline"], full.payment_breakdown["sub"], full.payment_breakdown["paidLabel"]),
                          ("₱5,000", "Gown ₱3,000 + Deposit ₱2,000", "Paid at the shop"))
         self.assertEqual([line["note"] for line in full.payment_breakdown["lines"]], ["paid at the shop", "paid at the shop"])
-        part = Reservation.objects.get(reference_code=self.post_booking([self.line(make_gown(504))], payment="deposit", receipt=b"b2").json()["reference_code"])
+        part = Reservation.objects.get(reference_code=self.post_booking([self.line(make_gown(504))], payment="deposit").json()["reference_code"])
         self.assertEqual((part.payment_breakdown["headline"], part.payment_breakdown["sub"], part.payment_breakdown["paidLabel"]),
                          ("₱2,000", "Gown ₱3,000 still to pay · Total ₱5,000", "Deposit paid at the shop"))
         self.assertEqual([line["note"] for line in part.payment_breakdown["lines"]], ["paid at the shop", "still to pay"])
-        self.upload(part, b"b2-rental")                                          # the rental receipt arrives: now it is paid in full
+        payments.record_payment(reservation_id=part.pk, purpose=Payment.Purpose.BALANCE, amount=Decimal("3000"), method=Payment.Method.CASH, user=self.staff)  # the rental is paid: paid in full
         done = Reservation.objects.get(id=part.id).payment_breakdown
         self.assertEqual((done["headline"], done["paidLabel"]), ("₱5,000", "Paid at the shop"))
         waiting, _ = self.legacy_pending_walk_in(505)                            # nothing paid, no receipt: the single total, as before

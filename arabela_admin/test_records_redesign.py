@@ -49,7 +49,7 @@ class StripTests(RecordsBase):
         _, html = self.page()
         strip = html[html.index('<div class="rr-strip">'):html.index('<div class="rr-card">')]
         self.assertEqual(strip.count("<button"), 5)
-        for mode, label in (("all", "All Reservations"), ("week", "This Week"), ("month", "This Month"), ("cancelled", "Cancelled"), ("needs", "Needs a Receipt")):
+        for mode, label in (("all", "All Reservations"), ("week", "This Week"), ("month", "This Month"), ("cancelled", "Cancelled"), ("needs", "Balance Due")):
             with self.subTest(mode=mode):
                 self.assertIn(f'@click="applyCard(\'{mode}\')"', strip)                       # the same filter as before
                 self.assertIn(f":class=\"cardActive('{mode}') && 'is-on'\"", strip)
@@ -67,7 +67,7 @@ class StripTests(RecordsBase):
     def test_the_two_rules_that_matter_are_a_hover_tooltip(self):
         self.book("Tips", "09170000003", [(3, 6, P, {})])
         _, html = self.page()
-        for tip in ('title="Rentals out on any day this week"', 'title="Rentals out on any day this month"', 'title="Confirmed bookings that have no receipt from the shop yet"'):
+        for tip in ('title="Rentals out on any day this week"', 'title="Rentals out on any day this month"', 'title="Confirmed bookings that still have money to pay"'):
             self.assertIn(tip, html)
 
     def test_the_strip_has_its_own_styles_and_a_phone_layout(self):
@@ -99,7 +99,7 @@ class CardTests(RecordsBase):
                        'x-for="option in progressOptions"', 'x-for="m in pickupMonthOptions"', 'clearCustomerFilter()', '@click="resetFilters()"'):
             with self.subTest(needle=needle):
                 self.assertIn(needle, html)
-        for words in ("All statuses", "All receipts", "Has a receipt", "Needs a receipt", "All channels", ">Online</option>", ">Walk-in</option>", "All months",
+        for words in ("All statuses", "All payments", "Nothing to pay", "Balance due", "All channels", ">Online</option>", ">Walk-in</option>", "All months",
                       "Rental dates:", "All time", "Pick dates", 'placeholder="Any year"', "No reservations match these filters."):
             self.assertIn(words, html)
 
@@ -146,16 +146,16 @@ class RowTests(RecordsBase):
         _, html = self.page()
         row = row_template(html)
         panel = row[row.index('<div class="ar-panel"'):]
-        for needle in ("<dt>Status</dt>", "<dt>Deposit</dt>", "<dt>Receipts</dt>", "<dt>Booked</dt>", 'progressClass(r.progress)', 'depositClass(r.depositStatus)', 'x-text="receiptsText(r)"',
-                       'x-text="r.channelLabel"', "Not paid yet", "Payment incomplete", 'x-for="(item, n) in r.items"', "shortRange(item.pickup, item.ret)", "stageLabel(item.stage)",
+        for needle in ("<dt>Status</dt>", "<dt>Deposit</dt>", "<dt>Payment</dt>", "<dt>Booked</dt>", 'progressClass(r.progress)', 'depositClass(r.depositStatus)', 'x-text="receiptsText(r)"',
+                       'x-text="r.channelLabel"', "Not paid yet", "r.paymentIncomplete", 'x-for="(item, n) in r.items"', "shortRange(item.pickup, item.ret)", "stageLabel(item.stage)",
                        "stageTone(item.stage)", "No gowns on this booking."):
             with self.subTest(needle=needle):
                 self.assertIn(needle, panel)
         eye = re.search(r'<button[^>]*title="View details"[^>]*>(.*?)</button>', panel, re.S)
-        upload = re.search(r'<button[^>]*title="Upload receipt"[^>]*>(.*?)</button>', panel, re.S)
         self.assertIn('@click.stop="openRecord(r)"', eye.group(0))
-        self.assertIn('@click.stop="startUpload(r)"', upload.group(0))
-        for button in (eye, upload):
+        self.assertNotIn("startUpload", panel)                       # no receipt photo upload any more: payments are recorded in Payments
+        self.assertNotIn("Upload receipt", panel)
+        for button in (eye,):
             self.assertEqual(re.sub(r"<[^>]+>", "", button.group(1)).strip(), "")             # an icon, no words
             self.assertIn('class="ar-ib"', button.group(0))
             self.assertIn(":aria-label=", button.group(0))
@@ -233,12 +233,14 @@ class UnchangedLogicTests(RecordsBase):
         self.assertIn("this.statusFilter = 'Cancelled';", text)
         self.assertIn("this.receiptFilter = 'needs';", text)
 
-    def test_the_view_window_and_the_upload_window_are_still_there(self):
+    def test_the_view_window_is_still_there_and_the_receipt_upload_window_is_gone(self):
         text = source()
-        for needle in ('role="dialog" aria-modal="true" aria-label="Booking details"', "Upload Receipt</h4>", 'x-ref="rrFileInput"', 'x-ref="rrCameraInput"',
-                       "closeTopModal()", "timelineHtml(viewing)"):
+        for needle in ('role="dialog" aria-modal="true" aria-label="Booking details"', "closeTopModal()", "timelineHtml(viewing)"):
             with self.subTest(needle=needle):
                 self.assertIn(needle, text)
+        for gone in ("Upload Receipt</h4>", 'x-ref="rrFileInput"', 'x-ref="rrCameraInput"', 'x-ref="rrReplaceFileInput"', "Delete Receipt", "Yes, delete"):
+            with self.subTest(gone=gone):
+                self.assertNotIn(gone, text)
 
     def test_the_data_the_rows_are_drawn_from_is_unchanged(self):
         self.book("Data", "09170000041", [(3, 6, P, {})])

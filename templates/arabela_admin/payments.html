@@ -1,0 +1,1626 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0"
+    />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <title>Payments | Arabela System Admin Panel</title>
+    <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
+  <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet">
+  {% include "arabela_admin/partials/photo_viewer_styles.html" %}
+  {% include "arabela_admin/partials/ar_list_styles.html" %}
+  <style>
+    /* Payments: the same look as Active Reservations and Security Deposits (partials/ar_list_styles.html); its own classes start with pm-. */
+    .pm-card { margin-bottom: 1.25rem; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; }
+    .dark .pm-card { background: rgba(255,255,255,.03); border-color: #1d2939; }
+    .pm-tabs { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+    .pm-tab { display: inline-flex; align-items: center; padding: .4rem 1rem; border: 1px solid #d0d5dd; border-radius: 999px; color: #475467; font-size: .875rem; font-weight: 500; text-decoration: none; }
+    .pm-tab:hover { background: rgba(152,162,179,.12); }
+    .pm-tab.is-on { background: #101828; border-color: #101828; color: #fff; }
+    .dark .pm-tab { border-color: #344054; color: #d0d5dd; }
+    .dark .pm-tab.is-on { background: #fff; border-color: #fff; color: #101828; }
+    .pm-countrow { display: flex; flex-wrap: wrap; align-items: center; gap: .1rem .75rem; }
+    .pm-collect { margin-left: auto; font-weight: 600; color: #b42318; }
+    .dark .pm-collect { color: #fda29b; }
+
+    /* customer | booking no. | total | paid | balance | deposit | status | arrow. Every column is fixed or has a minimum (never "auto"). */
+    .pm-head, .pm-line { display: grid; grid-template-columns: minmax(9rem, 1.7fr) minmax(7.5rem, 1fr) 5.5rem 5.5rem 6rem minmax(7rem, .9fr) minmax(7.5rem, .9fr) 2rem; align-items: center; column-gap: .75rem; }
+    .pm-head { padding: .7rem 1.25rem; background: #f9fafb; border-top: 1px solid #f2f4f7; border-bottom: 1px solid #f2f4f7; font-size: .75rem; font-weight: 500; color: #667085; }
+    .dark .pm-head { background: rgba(255,255,255,.025); border-color: #1d2939; color: #98a2b3; }
+    .pm-head > span.r, .pm-line > .pm-amt { text-align: right; }
+    .pm-row { border-bottom: 1px solid #f2f4f7; }
+    .dark .pm-row { border-color: #1d2939; }
+    .pm-line { padding: .75rem 1.25rem; cursor: pointer; }
+    .pm-line:hover { background: rgba(152,162,179,.08); }
+    .pm-line:focus-visible { outline: 2px solid #465fff; outline-offset: -2px; }
+    .pm-who { display: flex; flex-direction: column; min-width: 0; }
+    .pm-sub { margin-top: .1rem; font-size: .75rem; color: #98a2b3; overflow-wrap: anywhere; }
+    .pm-amt { font-size: .875rem; font-weight: 500; font-variant-numeric: tabular-nums; color: #344054; white-space: nowrap; }
+    .dark .pm-amt { color: #d0d5dd; }
+    .pm-bal.is-due { font-weight: 700; color: #b42318; }
+    .dark .pm-bal.is-due { color: #fda29b; }
+    .pm-dep { font-size: .8125rem; color: #475467; }
+    .dark .pm-dep { color: #98a2b3; }
+    .pm-stat { display: flex; flex-wrap: wrap; gap: .3rem; }
+    .pm-chev { justify-self: end; color: #98a2b3; }
+    .pm-chev svg { width: 1rem; height: 1rem; display: block; }
+    .pm-chip { display: inline-flex; align-items: center; padding: .12rem .6rem; border-radius: 999px; font-size: .72rem; font-weight: 600; white-space: nowrap; }
+    .pm-chip--balance { background: #fee4e2; color: #b42318; }
+    .pm-chip--refund { background: #fef0c7; color: #b54708; }
+    .pm-chip--paid { background: #d1fadf; color: #067647; }
+    .pm-chip--settled { background: #f2f4f7; color: #475467; }
+    .pm-chip--cancelled { background: #f2f4f7; color: #667085; }
+    .pm-chip--late { background: #fee4e2; color: #b42318; }
+    .pm-chip--void { background: #f2f4f7; color: #b42318; text-decoration: line-through; }
+    .dark .pm-chip--balance, .dark .pm-chip--late { background: rgba(240,68,56,.18); color: #fda29b; }
+    .dark .pm-chip--refund { background: rgba(247,144,9,.18); color: #fdb022; }
+    .dark .pm-chip--paid { background: rgba(18,183,106,.16); color: #32d583; }
+    .dark .pm-chip--settled, .dark .pm-chip--cancelled, .dark .pm-chip--void { background: #1d2939; color: #98a2b3; }
+    .pm-dot--balance { background: #d92d20; }
+    .pm-dot--refund { background: #f79009; }
+    .pm-dot--paid { background: #039855; }
+    .pm-dot--settled, .pm-dot--cancelled { background: #667085; }
+    .pm-empty { padding: 2.5rem 1.25rem; text-align: center; color: #667085; font-size: .9rem; }
+
+    /* A laptop or smaller: two lines per booking, each value with its small label above it. */
+    @media (max-width: 1279px) {
+      .pm-head { display: none; }
+      .pm-line { grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-areas: "who who who stat stat" "ref total paid bal dep"; row-gap: .55rem; column-gap: .75rem; }
+      .pm-line > .ar-who { grid-area: who; }
+      .pm-line > .pm-stat { grid-area: stat; justify-content: flex-end; }
+      .pm-line > .ar-ref { grid-area: ref; }
+      .pm-line > .pm-amt[data-label="Total"] { grid-area: total; }
+      .pm-line > .pm-amt[data-label="Paid"] { grid-area: paid; }
+      .pm-line > .pm-bal { grid-area: bal; }
+      .pm-line > .pm-dep { grid-area: dep; }
+      .pm-chev { display: none; }
+      .pm-line > [data-label]:not(.pm-stat)::before { content: attr(data-label); display: block; flex: 0 0 100%; margin-bottom: .12rem; font-size: .6875rem; font-weight: 500; color: #98a2b3; white-space: nowrap; }
+      .pm-line > .pm-amt { text-align: left; }
+    }
+    @media (max-width: 760px) {
+      .pm-line { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "who stat" "ref total" "paid bal" "dep dep"; padding: .7rem 1rem; }
+    }
+
+    /* the window */
+    .pm-win { position: fixed; inset: 0; z-index: 99999; display: flex; align-items: flex-start; justify-content: center; padding: 1.25rem; overflow-y: auto; background: rgba(16,24,40,.5); }
+    .pm-sheet { position: relative; width: 100%; max-width: 46rem; margin: auto; border-radius: 1.25rem; background: #fff; box-shadow: 0 24px 48px -12px rgba(16,24,40,.3); }
+    .dark .pm-sheet { background: #101828; border: 1px solid #1d2939; }
+    .pm-wh { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1.25rem 1.5rem 1rem; border-bottom: 1px solid #f2f4f7; }
+    .dark .pm-wh { border-color: #1d2939; }
+    .pm-wt { margin: 0; font-size: 1.15rem; font-weight: 600; color: #1d2939; overflow-wrap: anywhere; }
+    .dark .pm-wt { color: rgba(255,255,255,.92); }
+    .pm-ws { margin-top: .2rem; font-size: .8125rem; color: #667085; }
+    .pm-x { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; border: 0; border-radius: 999px; background: #f2f4f7; color: #475467; cursor: pointer; }
+    .pm-x:hover { background: #e4e7ec; }
+    .pm-x:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+    .dark .pm-x { background: #1d2939; color: #d0d5dd; }
+    .pm-wb { padding: 1.1rem 1.5rem 1.5rem; display: grid; gap: 1.1rem; }
+    .pm-sum { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .6rem; }
+    .pm-sum > div { padding: .7rem .85rem; border: 1px solid #e4e7ec; border-radius: .8rem; }
+    .dark .pm-sum > div { border-color: #1d2939; }
+    .pm-sum span { display: block; font-size: .72rem; color: #667085; }
+    .pm-sum b { display: block; margin-top: .15rem; font-size: 1.1rem; font-variant-numeric: tabular-nums; color: #101828; }
+    .dark .pm-sum b { color: #f2f4f7; }
+    .pm-sum .is-due b { color: #b42318; }
+    .dark .pm-sum .is-due b { color: #fda29b; }
+    .pm-sec { margin: 0 0 .45rem; font-size: .8125rem; font-weight: 600; letter-spacing: .02em; color: #475467; }
+    .dark .pm-sec { color: #98a2b3; }
+    .pm-lines { border: 1px solid #e4e7ec; border-radius: .8rem; overflow: hidden; }
+    .dark .pm-lines { border-color: #1d2939; }
+    .pm-l { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .55rem .85rem; font-size: .875rem; color: #344054; }
+    .pm-l + .pm-l { border-top: 1px solid #f2f4f7; }
+    .dark .pm-l { color: #d0d5dd; }
+    .dark .pm-l + .pm-l { border-color: #1d2939; }
+    .pm-l small { display: block; font-size: .72rem; color: #98a2b3; }
+    .pm-l b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .pm-l.is-total { background: #f9fafb; font-weight: 700; }
+    .dark .pm-l.is-total { background: rgba(255,255,255,.03); }
+    .pm-l.is-void { opacity: .6; text-decoration: line-through; }
+    .pm-minus b { color: #b42318; }
+    .pm-btns { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+    .pm-b { display: inline-flex; align-items: center; justify-content: center; min-height: 2.25rem; padding: 0 .95rem; border: 1px solid #d0d5dd; border-radius: .6rem; background: #fff; color: #344054; font: 600 .8125rem system-ui, sans-serif; text-decoration: none; cursor: pointer; }
+    .pm-b:hover:not(:disabled) { background: #f2f4f7; }
+    .pm-b:disabled { opacity: .55; cursor: not-allowed; }
+    .pm-b:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+    .pm-b--main { background: #465fff; border-color: #465fff; color: #fff; }
+    .pm-b--main:hover:not(:disabled) { background: #3641f5; }
+    .pm-b--small { min-height: 1.9rem; padding: 0 .65rem; font-size: .75rem; }
+    .pm-b--danger { border-color: #fda29b; color: #b42318; }
+    .dark .pm-b { background: transparent; border-color: #344054; color: #d0d5dd; }
+    .dark .pm-b:hover:not(:disabled) { background: rgba(255,255,255,.06); }
+    .dark .pm-b--main { background: #465fff; border-color: #465fff; color: #fff; }
+    .pm-form { display: grid; gap: .7rem; padding: .9rem; border: 1px solid #e4e7ec; border-radius: .8rem; background: #f9fafb; }
+    .dark .pm-form { border-color: #1d2939; background: rgba(255,255,255,.02); }
+    .pm-form label { display: block; margin-bottom: .25rem; font-size: .75rem; font-weight: 500; color: #475467; }
+    .dark .pm-form label { color: #98a2b3; }
+    .pm-in { display: block; width: 100%; height: 2.5rem; box-sizing: border-box; padding: .4rem .75rem; border: 1px solid #d0d5dd; border-radius: .55rem; background: #fff; color: #1d2939; font: inherit; font-size: .9rem; }
+    .pm-in:focus { outline: 2px solid #465fff; outline-offset: 1px; border-color: #465fff; }
+    .dark .pm-in { background: #0c111d; border-color: #344054; color: #f2f4f7; }
+    .pm-radios { display: flex; flex-wrap: wrap; gap: .5rem; }
+    .pm-radios label { display: inline-flex; align-items: center; gap: .45rem; margin: 0; padding: .45rem .8rem; border: 1px solid #d0d5dd; border-radius: .6rem; background: #fff; color: #344054; font-size: .85rem; font-weight: 500; cursor: pointer; }
+    .pm-radios label.is-on { border-color: #465fff; background: #eef4ff; color: #3538cd; }
+    .dark .pm-radios label { background: transparent; border-color: #344054; color: #d0d5dd; }
+    .dark .pm-radios label.is-on { border-color: #6172f3; background: rgba(70,95,255,.16); color: #c7d2fe; }
+    .pm-hint { margin: 0; font-size: .75rem; color: #667085; }
+    .pm-err { margin: 0; padding: .55rem .8rem; border-radius: .6rem; background: #fef3f2; color: #b42318; font-size: .8125rem; }
+    .dark .pm-err { background: rgba(240,68,56,.14); color: #fda29b; }
+    .pm-ok { padding: .75rem .9rem; border-radius: .8rem; background: #ecfdf3; color: #067647; font-size: .875rem; }
+    .dark .pm-ok { background: rgba(18,183,106,.14); color: #32d583; }
+    .pm-ok .pm-btns { margin-top: .5rem; }
+    .pm-legacy { font-size: .72rem; color: #98a2b3; }
+    .pm-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    .pm-table th { padding: .6rem 1rem; background: #f9fafb; border-bottom: 1px solid #f2f4f7; font-size: .72rem; font-weight: 500; color: #667085; text-align: left; white-space: nowrap; }
+    .pm-table td { padding: .6rem 1rem; border-bottom: 1px solid #f2f4f7; color: #344054; vertical-align: top; }
+    .pm-table td.r, .pm-table th.r { text-align: right; }
+    .pm-table tr.is-void td { color: #98a2b3; }
+    .dark .pm-table th { background: rgba(255,255,255,.025); border-color: #1d2939; color: #98a2b3; }
+    .dark .pm-table td { border-color: #1d2939; color: #d0d5dd; }
+    .pm-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .6rem; padding: .85rem 1.25rem; }
+    .pm-filters .pm-in { width: auto; min-width: 9rem; }
+    .pm-pages { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .6rem; padding: .85rem 1rem 1.1rem; font-size: .85rem; color: #667085; }
+    @media (max-width: 640px) { .pm-sum { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pm-win { padding: .5rem; } .pm-wh, .pm-wb { padding-left: 1rem; padding-right: 1rem; } .pm-table { display: block; overflow-x: auto; } }
+  </style>
+</head>
+  <body
+    x-data="paymentsApp()"
+    x-init="
+         darkMode = JSON.parse(localStorage.getItem('darkMode'));
+         $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)));"
+    :class="{'dark bg-gray-900': darkMode === true}"
+  >
+    <!-- ===== Preloader Start ===== -->
+    <script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('admin-dark-boot');}catch(e){}</script>
+    <div
+  x-show="loaded"
+  x-init="window.addEventListener('DOMContentLoaded', () => {setTimeout(() => loaded = false, 500)})"
+  class="admin-preloader fixed left-0 top-0 z-999999 flex h-screen w-screen items-center justify-center"
+>
+  <div
+    class="admin-preloader-spinner h-16 w-16 animate-spin rounded-full border-4 border-solid"
+  ></div>
+</div>
+
+    <!-- ===== Preloader End ===== -->
+
+    <!-- ===== Page Wrapper Start ===== -->
+    <div class="flex h-screen overflow-hidden">
+      <!-- ===== Sidebar Start ===== -->
+      <aside
+  :class="sidebarToggle ? 'translate-x-0 lg:w-[90px]' : '-translate-x-full'"
+  class="sidebar fixed left-0 top-0 z-9999 flex h-screen w-[290px] flex-col overflow-y-hidden border-r border-gray-200 bg-white px-5 dark:border-gray-800 dark:bg-black lg:static lg:translate-x-0"
+>
+  <!-- SIDEBAR HEADER -->
+  <div
+    :class="sidebarToggle ? 'justify-center' : 'justify-between'"
+    class="flex items-center gap-2 pt-8 sidebar-header pb-7"
+  >
+    <a href="{% url 'arabela_admin:dashboard' %}">
+      <span class="logo" :class="sidebarToggle ? 'hidden' : ''">
+        <img class="dark:hidden" src="{% static 'arabela_admin/images/logo/logo.svg' %}" alt="Logo" />
+        <img
+          class="hidden dark:block"
+          src="{% static 'arabela_admin/images/logo/logo-dark.svg' %}"
+          alt="Logo"
+        />
+      </span>
+
+      </a>
+  </div>
+  <!-- SIDEBAR HEADER -->
+
+  <div
+    class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
+  >
+    <!-- Sidebar Menu -->
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
+      <!-- Menu Group -->
+      <div>
+        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
+          <span
+            class="menu-group-title"
+            :class="sidebarToggle ? 'lg:hidden' : ''"
+          >
+            MENU
+          </span>
+
+          <svg
+            :class="sidebarToggle ? 'lg:block hidden' : 'hidden'"
+            class="mx-auto fill-current menu-group-icon"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              fill-rule="evenodd"
+              clip-rule="evenodd"
+              d="M5.99915 10.2451C6.96564 10.2451 7.74915 11.0286 7.74915 11.9951V12.0051C7.74915 12.9716 6.96564 13.7551 5.99915 13.7551C5.03265 13.7551 4.24915 12.9716 4.24915 12.0051V11.9951C4.24915 11.0286 5.03265 10.2451 5.99915 10.2451ZM17.9991 10.2451C18.9656 10.2451 19.7491 11.0286 19.7491 11.9951V12.0051C19.7491 12.9716 18.9656 13.7551 17.9991 13.7551C17.0326 13.7551 16.2491 12.9716 16.2491 12.0051V11.9951C16.2491 11.0286 17.0326 10.2451 17.9991 10.2451ZM13.7491 11.9951C13.7491 11.0286 12.9656 10.2451 11.9991 10.2451C11.0326 10.2451 10.2491 11.0286 10.2491 11.9951V12.0051C10.2491 12.9716 11.0326 13.7551 11.9991 13.7551C12.9656 13.7551 13.7491 12.9716 13.7491 12.0051V11.9951Z"
+              fill=""
+            />
+          </svg>
+        </h3>
+
+        <ul class="flex flex-col gap-4 mb-6">
+          <!-- Menu Item Dashboard -->
+          <li>
+            <a
+              href="#"
+              @click.prevent="selected = (selected === 'Dashboard' ? '':'Dashboard')"
+              class="menu-item group"
+              :class=" (selected === 'Dashboard') || (page === 'ecommerce' || page === 'analytics' || page === 'marketing' || page === 'crm' || page === 'stocks') ? 'menu-item-active' : 'menu-item-inactive'"
+            >
+              <svg
+                :class="(selected === 'Dashboard') || (page === 'ecommerce' || page === 'analytics' || page === 'marketing' || page === 'crm' || page === 'stocks') ? 'menu-item-icon-active'  :'menu-item-icon-inactive'"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  fill-rule="evenodd"
+                  clip-rule="evenodd"
+                  d="M5.5 3.25C4.25736 3.25 3.25 4.25736 3.25 5.5V8.99998C3.25 10.2426 4.25736 11.25 5.5 11.25H9C10.2426 11.25 11.25 10.2426 11.25 8.99998V5.5C11.25 4.25736 10.2426 3.25 9 3.25H5.5ZM4.75 5.5C4.75 5.08579 5.08579 4.75 5.5 4.75H9C9.41421 4.75 9.75 5.08579 9.75 5.5V8.99998C9.75 9.41419 9.41421 9.74998 9 9.74998H5.5C5.08579 9.74998 4.75 9.41419 4.75 8.99998V5.5ZM5.5 12.75C4.25736 12.75 3.25 13.7574 3.25 15V18.5C3.25 19.7426 4.25736 20.75 5.5 20.75H9C10.2426 20.75 11.25 19.7427 11.25 18.5V15C11.25 13.7574 10.2426 12.75 9 12.75H5.5ZM4.75 15C4.75 14.5858 5.08579 14.25 5.5 14.25H9C9.41421 14.25 9.75 14.5858 9.75 15V18.5C9.75 18.9142 9.41421 19.25 9 19.25H5.5C5.08579 19.25 4.75 18.9142 4.75 18.5V15ZM12.75 5.5C12.75 4.25736 13.7574 3.25 15 3.25H18.5C19.7426 3.25 20.75 4.25736 20.75 5.5V8.99998C20.75 10.2426 19.7426 11.25 18.5 11.25H15C13.7574 11.25 12.75 10.2426 12.75 8.99998V5.5ZM15 4.75C14.5858 4.75 14.25 5.08579 14.25 5.5V8.99998C14.25 9.41419 14.5858 9.74998 15 9.74998H18.5C18.9142 9.74998 19.25 9.41419 19.25 8.99998V5.5C19.25 5.08579 18.9142 4.75 18.5 4.75H15ZM15 12.75C13.7574 12.75 12.75 13.7574 12.75 15V18.5C12.75 19.7426 13.7574 20.75 15 20.75H18.5C19.7426 20.75 20.75 19.7427 20.75 18.5V15C20.75 13.7574 19.7426 12.75 18.5 12.75H15ZM14.25 15C14.25 14.5858 14.5858 14.25 15 14.25H18.5C18.9142 14.25 19.25 14.5858 19.25 15V18.5C19.25 18.9142 18.9142 19.25 18.5 19.25H15C14.5858 19.25 14.25 18.9142 14.25 18.5V15Z"
+                  fill=""
+                />
+              </svg>
+
+              <span
+                class="menu-item-text"
+                :class="sidebarToggle ? 'lg:hidden' : ''"
+              >
+                Dashboard
+              </span>
+
+              <svg
+                class="menu-item-arrow"
+                :class="[(selected === 'Dashboard') ? 'menu-item-arrow-active' : 'menu-item-arrow-inactive', sidebarToggle ? 'lg:hidden' : '' ]"
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M4.79175 7.39584L10.0001 12.6042L15.2084 7.39585"
+                  stroke=""
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </a>
+
+            <!-- Dropdown Menu Start -->
+            <div
+              class="overflow-hidden transform translate"
+              :class="(selected === 'Dashboard') ? 'block' :'hidden'"
+            >
+              <ul
+                :class="sidebarToggle ? 'lg:hidden' : 'flex'"
+                class="flex flex-col gap-1 mt-2 menu-dropdown pl-9"
+              >
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:dashboard' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'ecommerce' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Rental Overview
+                  </a>
+                </li>
+              </ul>
+            </div>
+            <!-- Dropdown Menu End -->
+          </li>
+          <!-- Menu Item Dashboard -->
+
+          <!-- Menu Item Bookings & Schedule -->
+          <li>
+            <a
+              href="#"
+              @click.prevent="selected = (selected === 'BookingsSchedule' ? '':'BookingsSchedule')"
+              class="menu-item group"
+              :class=" (selected === 'BookingsSchedule') ? 'menu-item-active' : 'menu-item-inactive'"
+            >
+              <svg
+                :class="(selected === 'BookingsSchedule') ? 'menu-item-icon-active'  :'menu-item-icon-inactive'"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  fill-rule="evenodd"
+                  clip-rule="evenodd"
+                  d="M8 2C8.41421 2 8.75 2.33579 8.75 2.75V3.75H15.25V2.75C15.25 2.33579 15.5858 2 16 2C16.4142 2 16.75 2.33579 16.75 2.75V3.75H18.5C19.7426 3.75 20.75 4.75736 20.75 6V9V19C20.75 20.2426 19.7426 21.25 18.5 21.25H5.5C4.25736 21.25 3.25 20.2426 3.25 19V9V6C3.25 4.75736 4.25736 3.75 5.5 3.75H7.25V2.75C7.25 2.33579 7.58579 2 8 2ZM8 5.25H5.5C5.08579 5.25 4.75 5.58579 4.75 6V8.25H19.25V6C19.25 5.58579 18.9142 5.25 18.5 5.25H16H8ZM19.25 9.75H4.75V19C4.75 19.4142 5.08579 19.75 5.5 19.75H18.5C18.9142 19.75 19.25 19.4142 19.25 19V9.75Z"
+                  fill=""
+                />
+              </svg>
+
+              <span
+                class="menu-item-text"
+                :class="sidebarToggle ? 'lg:hidden' : ''"
+              >
+                Bookings & Schedule
+              </span>
+
+              <svg
+                class="menu-item-arrow"
+                :class="[(selected === 'BookingsSchedule') ? 'menu-item-arrow-active' : 'menu-item-arrow-inactive', sidebarToggle ? 'lg:hidden' : '' ]"
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M4.79175 7.39584L10.0001 12.6042L15.2084 7.39585"
+                  stroke=""
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </a>
+
+            <!-- Dropdown Menu Start -->
+            <div
+              class="transform overflow-hidden translate"
+              :class="(selected === 'BookingsSchedule') ? 'block' :'hidden'"
+            >
+              <ul
+                :class="sidebarToggle ? 'lg:hidden' : 'flex'"
+                class="menu-dropdown mt-2 flex flex-col gap-1 pl-9"
+              >
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:new_booking' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'new-booking' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    New Booking
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:calendar' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'rental' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Rental Schedule
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:active_reservations' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'active' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Active Reservations
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:rental_history' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'rental-history' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Rental History
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:pending_approval' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'pending' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Pending Approval
+                  </a>
+                </li>
+              </ul>
+            </div>
+            <!-- Dropdown Menu End -->
+          </li>
+          <!-- Menu Item Bookings & Schedule -->
+
+          <!-- Menu Item Inventory Management -->
+          <li>
+            <a
+              href="#"
+              @click.prevent="selected = (selected === 'InventoryManagement' ? '':'InventoryManagement')"
+              class="menu-item group"
+              :class=" (selected === 'InventoryManagement') ? 'menu-item-active' : 'menu-item-inactive'"
+            >
+              <svg
+                :class="(selected === 'InventoryManagement') ? 'menu-item-icon-active'  :'menu-item-icon-inactive'"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  fill-rule="evenodd"
+                  clip-rule="evenodd"
+                  d="M7.25 3.5C6.84579 3.5 6.5 3.84579 6.5 4.25V19.75C6.5 20.1642 6.84579 20.5 7.25 20.5H16.75C17.1642 20.5 17.5 20.1642 17.5 19.75V4.25C17.5 3.84579 17.1642 3.5 16.75 3.5H7.25ZM5 4.25C5 2.8955 6.1193 1.78125 7.57422 1.75L16.75 1.75C18.1542 1.75 19.25 2.84579 19.25 4.25V19.75C19.25 21.1542 18.1542 22.25 16.75 22.25H7.25C5.84579 22.25 4.75 21.1542 4.75 19.75V4.25C4.75 4.25 4.75 4.25 5 4.25ZM9 6C8.58579 6 8.25 6.33579 8.25 6.75C8.25 7.16421 8.58579 7.5 9 7.5H15C15.4142 7.5 15.75 7.16421 15.75 6.75C15.75 6.33579 15.4142 6 15 6H9ZM8.25 10C8.25 9.58579 8.58579 9.25 9 9.25H15C15.4142 9.25 15.75 9.58579 15.75 10C15.75 10.4142 15.4142 10.75 15 10.75H9C8.58579 10.75 8.25 10.4142 8.25 10ZM9 12C8.58579 12 8.25 12.3358 8.25 12.75C8.25 13.1642 8.58579 13.5 9 13.5H15C15.4142 13.5 15.75 13.1642 15.75 12.75C15.75 12.3358 15.4142 12 15 12H9ZM8.25 15C8.25 14.5858 8.58579 14.25 9 14.25H15C15.4142 14.25 15.75 14.5858 15.75 15C15.75 15.4142 15.4142 15.75 15 15.75H9C8.58579 15.75 8.25 15.4142 8.25 15Z"
+                  fill=""
+                />
+              </svg>
+
+              <span
+                class="menu-item-text"
+                :class="sidebarToggle ? 'lg:hidden' : ''"
+              >
+                Inventory Management
+              </span>
+
+              <svg
+                class="menu-item-arrow"
+                :class="[(selected === 'InventoryManagement') ? 'menu-item-arrow-active' : 'menu-item-arrow-inactive', sidebarToggle ? 'lg:hidden' : '' ]"
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M4.79175 7.39584L10.0001 12.6042L15.2084 7.39585"
+                  stroke=""
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </a>
+
+            <!-- Dropdown Menu Start -->
+            <div
+              class="transform overflow-hidden translate"
+              :class="(selected === 'InventoryManagement') ? 'block' :'hidden'"
+            >
+              <ul
+                :class="sidebarToggle ? 'lg:hidden' : 'flex'"
+                class="menu-dropdown mt-2 flex flex-col gap-1 pl-9"
+              >
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:gown_catalog' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'gown' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Gown Catalog
+                  </a>
+                </li>
+                {% if admin_is_owner %}
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:categories' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'categories' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Categories
+                  </a>
+                </li>
+                {% endif %}
+              </ul>
+            </div>
+            <!-- Dropdown Menu End -->
+          </li>
+          <!-- Menu Item Inventory Management -->
+
+          <!-- Menu Item Customer Management -->
+          <li>
+            <a
+              href="#"
+              @click.prevent="selected = (selected === 'CustomerManagement' ? '':'CustomerManagement')"
+              class="menu-item group"
+              :class=" (selected === 'CustomerManagement') ? 'menu-item-active' : 'menu-item-inactive'"
+            >
+              <svg
+                :class="(selected === 'CustomerManagement') ? 'menu-item-icon-active'  :'menu-item-icon-inactive'"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path d="M9 11C11.2091 11 13 9.20914 13 7C13 4.79086 11.2091 3 9 3C6.79086 3 5 4.79086 5 7C5 9.20914 6.79086 11 9 11Z" fill=""/>
+                <path d="M17 13C18.6569 13 20 11.6569 20 10C20 8.34315 18.6569 7 17 7C15.3431 7 14 8.34315 14 10C14 11.6569 15.3431 13 17 13Z" fill=""/>
+                <path d="M21 20C21 16.134 18.4183 13 15 13C14.3538 13 13.7356 13.1071 13.1585 13.3073C13.8854 14.0645 14.5 15.0484 14.5 16.1667C14.5 18.0081 13.5675 19.6126 12.1255 20.4617C12.7035 20.786 13.3743 21 14.1 21H21Z" fill=""/>
+                <path d="M11 20C11 15.5817 8.08172 12 4.5 12C0.918282 12 -2 15.5817 -2 20V21H11V20Z" fill=""/>
+              </svg>
+
+              <span
+                class="menu-item-text"
+                :class="sidebarToggle ? 'lg:hidden' : ''"
+              >
+                Customer Management
+              </span>
+
+              <svg
+                class="menu-item-arrow"
+                :class="[(selected === 'CustomerManagement') ? 'menu-item-arrow-active' : 'menu-item-arrow-inactive', sidebarToggle ? 'lg:hidden' : '' ]"
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M4.79175 7.39584L10.0001 12.6042L15.2084 7.39585"
+                  stroke=""
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </a>
+
+            <!-- Dropdown Menu Start -->
+            <div
+              class="transform overflow-hidden translate"
+              :class="(selected === 'CustomerManagement') ? 'block' :'hidden'"
+            >
+              <ul
+                :class="sidebarToggle ? 'lg:hidden' : 'flex'"
+                class="menu-dropdown mt-2 flex flex-col gap-1 pl-9"
+              >
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:clients' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'clients' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Client List
+                  </a>
+                </li>
+              </ul>
+            </div>
+            <!-- Dropdown Menu End -->
+          </li>
+          <!-- Menu Item Customer Management -->
+
+          {% if admin_is_owner %}
+          <!-- Menu Item Staff Management -->
+          <li>
+            <a
+              href="#"
+              @click.prevent="selected = (selected === 'StaffManagement' ? '':'StaffManagement')"
+              class="menu-item group"
+              :class=" (selected === 'StaffManagement') ? 'menu-item-active' : 'menu-item-inactive'"
+            >
+              <svg
+                :class="(selected === 'StaffManagement') ? 'menu-item-icon-active'  :'menu-item-icon-inactive'"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  fill-rule="evenodd"
+                  clip-rule="evenodd"
+                  d="M6.75 7.5V6a3.75 3.75 0 0 1 3.75-3.75h3a3.75 3.75 0 0 1 3.75 3.75v1.5h1.875c1.036 0 1.875.84 1.875 1.875v11.25c0 1.035-.84 1.875-1.875 1.875H4.875C3.839 21.75 3 20.91 3 19.875V9.375c0-1.036.84-1.875 1.875-1.875H6.75Zm7.5 0v-1.5a2.25 2.25 0 0 0-2.25-2.25h-3a2.25 2.25 0 0 0-2.25 2.25v1.5h7.5Z"
+                  fill=""
+                />
+              </svg>
+
+              <span
+                class="menu-item-text"
+                :class="sidebarToggle ? 'lg:hidden' : ''"
+              >
+                Staff Management
+              </span>
+
+              <svg
+                class="menu-item-arrow"
+                :class="[(selected === 'StaffManagement') ? 'menu-item-arrow-active' : 'menu-item-arrow-inactive', sidebarToggle ? 'lg:hidden' : '' ]"
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M4.79175 7.39584L10.0001 12.6042L15.2084 7.39585"
+                  stroke=""
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </a>
+
+            <!-- Dropdown Menu Start -->
+            <div
+              class="transform overflow-hidden translate"
+              :class="(selected === 'StaffManagement') ? 'block' :'hidden'"
+            >
+              <ul
+                :class="sidebarToggle ? 'lg:hidden' : 'flex'"
+                class="menu-dropdown mt-2 flex flex-col gap-1 pl-9"
+              >
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:staff_management' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'staff-management' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Staff Accounts
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:audit_log' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'audit-log' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Audit Log
+                  </a>
+                </li>
+              </ul>
+            </div>
+            <!-- Dropdown Menu End -->
+          </li>
+          <!-- Menu Item Staff Management -->
+          {% endif %}
+
+          <!-- Menu Item Payments & Deposits -->
+          <li>
+            <a
+              href="#"
+              @click.prevent="selected = (selected === 'PaymentsDeposits' ? '' : 'PaymentsDeposits')"
+              class="menu-item group"
+              :class=" (selected === 'PaymentsDeposits') ? 'menu-item-active' : 'menu-item-inactive'"
+            >
+              <svg
+                :class="(selected === 'PaymentsDeposits') ? 'menu-item-icon-active'  :'menu-item-icon-inactive'"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path fill-rule="evenodd" clip-rule="evenodd" d="M5 5a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3V8a3 3 0 0 0-3-3H5Zm-1 5h16v2H4v-2Zm2 5.5a.75.75 0 0 1 .75-.75h3.5a.75.75 0 0 1 0 1.5h-3.5A.75.75 0 0 1 6 15.5Z" fill=""/>
+              </svg>
+
+              <span
+                class="menu-item-text"
+                :class="sidebarToggle ? 'lg:hidden' : ''"
+              >
+                Payments & Deposits
+              </span>
+
+              <svg
+                class="menu-item-arrow"
+                :class="[(selected === 'PaymentsDeposits') ? 'menu-item-arrow-active' : 'menu-item-arrow-inactive', sidebarToggle ? 'lg:hidden' : '' ]"
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M4.79175 7.39584L10.0001 12.6042L15.2084 7.39585"
+                  stroke=""
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </a>
+
+            <!-- Dropdown Menu Start -->
+            <div
+              class="transform overflow-hidden translate"
+              :class="(selected === 'PaymentsDeposits') ? 'block' :'hidden'"
+            >
+              <ul
+                :class="sidebarToggle ? 'lg:hidden' : 'flex'"
+                class="menu-dropdown mt-2 flex flex-col gap-1 pl-9"
+              >
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:payments' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'payments' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Payments
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:payment_verification' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'payment-verification' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Payment Verification
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:security_deposits' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'security-deposits' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Security Deposits
+                  </a>
+                </li>
+              </ul>
+            </div>
+            <!-- Dropdown Menu End -->
+          </li>
+          <!-- Menu Item Payments & Deposits -->
+
+          <!-- Menu Item Financial Report -->
+          <li>
+            <a
+              href="#"
+              @click.prevent="selected = (selected === 'FinancialReport' ? '' : 'FinancialReport')"
+              class="menu-item group"
+              :class=" (selected === 'FinancialReport') ? 'menu-item-active' : 'menu-item-inactive'"
+            >
+              <svg
+                :class="(selected === 'FinancialReport') ? 'menu-item-icon-active'  :'menu-item-icon-inactive'"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path d="M20 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2Zm-9 7.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Zm7-1a.5.5 0 0 1-.5.5H15.5v1a.5.5 0 0 1-1 0v-1H11a.5.5 0 0 1 0-1h3.5v-1H14.5a.5.5 0 0 1 0-1H17.5a.5.5 0 0 1 .5.5v1h1a.5.5 0 0 1 .5.5Z" fill=""/>
+              </svg>
+
+              <span
+                class="menu-item-text"
+                :class="sidebarToggle ? 'lg:hidden' : ''"
+              >
+                Financial Report
+              </span>
+
+              <svg
+                class="menu-item-arrow"
+                :class="[(selected === 'FinancialReport') ? 'menu-item-arrow-active' : 'menu-item-arrow-inactive', sidebarToggle ? 'lg:hidden' : '' ]"
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M4.79175 7.39584L10.0001 12.6042L15.2084 7.39585"
+                  stroke=""
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </a>
+
+            <!-- Dropdown Menu Start -->
+            <div
+              class="transform overflow-hidden translate"
+              :class="(selected === 'FinancialReport') ? 'block' :'hidden'"
+            >
+              <ul
+                :class="sidebarToggle ? 'lg:hidden' : 'flex'"
+                class="menu-dropdown mt-2 flex flex-col gap-1 pl-9"
+              >
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:reservation_records' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'reservation-records' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Reservation Records
+                  </a>
+                </li>
+              </ul>
+            </div>
+            <!-- Dropdown Menu End -->
+          </li>
+          <!-- Menu Item Financial Report -->
+
+          <!-- Menu Item Profile -->
+          <li>
+            <a
+              href="{% url 'arabela_admin:page' page='profile' %}"
+              @click="selected = (selected === 'Profile' ? '':'Profile')"
+              class="menu-item group"
+              :class=" (selected === 'Profile') && (page === 'profile') ? 'menu-item-active' : 'menu-item-inactive'"
+            >
+              <svg
+                :class="(selected === 'Profile') && (page === 'profile') ?  'menu-item-icon-active'  :'menu-item-icon-inactive'"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  fill-rule="evenodd"
+                  clip-rule="evenodd"
+                  d="M12 3.5C7.30558 3.5 3.5 7.30558 3.5 12C3.5 14.1526 4.3002 16.1184 5.61936 17.616C6.17279 15.3096 8.24852 13.5955 10.7246 13.5955H13.2746C15.7509 13.5955 17.8268 15.31 18.38 17.6167C19.6996 16.119 20.5 14.153 20.5 12C20.5 7.30558 16.6944 3.5 12 3.5ZM17.0246 18.8566V18.8455C17.0246 16.7744 15.3457 15.0955 13.2746 15.0955H10.7246C8.65354 15.0955 6.97461 16.7744 6.97461 18.8455V18.856C8.38223 19.8895 10.1198 20.5 12 20.5C13.8798 20.5 15.6171 19.8898 17.0246 18.8566ZM2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12ZM11.9991 7.25C10.8847 7.25 9.98126 8.15342 9.98126 9.26784C9.98126 10.3823 10.8847 11.2857 11.9991 11.2857C13.1135 11.2857 14.0169 10.3823 14.0169 9.26784C14.0169 8.15342 13.1135 7.25 11.9991 7.25ZM8.48126 9.26784C8.48126 7.32499 10.0563 5.75 11.9991 5.75C13.9419 5.75 15.5169 7.32499 15.5169 9.26784C15.5169 11.2107 13.9419 12.7857 11.9991 12.7857C10.0563 12.7857 8.48126 11.2107 8.48126 9.26784Z"
+                  fill=""
+                />
+              </svg>
+
+              <span
+                class="menu-item-text"
+                :class="sidebarToggle ? 'lg:hidden' : ''"
+              >
+                User Profile
+              </span>
+            </a>
+          </li>
+          <!-- Menu Item Profile -->
+                  </ul>
+      </div>
+
+    </nav>
+    <!-- Sidebar Menu --></div>
+</aside>
+
+      <!-- ===== Sidebar End ===== -->
+
+      <!-- ===== Content Area Start ===== -->
+      <div
+        class="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden"
+      >
+        <!-- Small Device Overlay Start -->
+        <div
+  @click="sidebarToggle = false"
+  :class="sidebarToggle ? 'block lg:hidden' : 'hidden'"
+  class="fixed w-full h-screen z-9 bg-gray-900/50"
+></div>
+<!-- Small Device Overlay End -->
+
+        <!-- ===== Header Start ===== -->
+        <header
+  x-data="{menuToggle: false}"
+  class="sticky top-0 z-99999 flex w-full border-gray-200 bg-white lg:border-b dark:border-gray-800 dark:bg-gray-900"
+>
+  <div
+    class="flex grow flex-col items-center justify-between lg:flex-row lg:px-6"
+  >
+    <div
+      class="flex w-full items-center justify-between gap-2 border-b border-gray-200 px-3 py-3 sm:gap-4 lg:justify-normal lg:border-b-0 lg:px-0 lg:py-4 dark:border-gray-800"
+    >
+      <!-- Hamburger Toggle BTN -->
+      <button
+        :class="sidebarToggle ? 'lg:bg-transparent dark:lg:bg-transparent bg-gray-100 dark:bg-gray-800' : ''"
+        class="z-99999 flex h-10 w-10 items-center justify-center rounded-lg border-gray-200 text-gray-500 lg:h-11 lg:w-11 lg:border dark:border-gray-800 dark:text-gray-400"
+        @click.stop="sidebarToggle = !sidebarToggle"
+      >
+        <svg
+          class="hidden fill-current lg:block"
+          width="16"
+          height="12"
+          viewBox="0 0 16 12"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            fill-rule="evenodd"
+            clip-rule="evenodd"
+            d="M0.583252 1C0.583252 0.585788 0.919038 0.25 1.33325 0.25H14.6666C15.0808 0.25 15.4166 0.585786 15.4166 1C15.4166 1.41421 15.0808 1.75 14.6666 1.75L1.33325 1.75C0.919038 1.75 0.583252 1.41422 0.583252 1ZM0.583252 11C0.583252 10.5858 0.919038 10.25 1.33325 10.25L14.6666 10.25C15.0808 10.25 15.4166 10.5858 15.4166 11C15.4166 11.4142 15.0808 11.75 14.6666 11.75L1.33325 11.75C0.919038 11.75 0.583252 11.4142 0.583252 11ZM1.33325 5.25C0.919038 5.25 0.583252 5.58579 0.583252 6C0.583252 6.41421 0.919038 6.75 1.33325 6.75L7.99992 6.75C8.41413 6.75 8.74992 6.41421 8.74992 6C8.74992 5.58579 8.41413 5.25 7.99992 5.25L1.33325 5.25Z"
+            fill=""
+          />
+        </svg>
+
+        <svg
+          :class="sidebarToggle ? 'hidden' : 'block lg:hidden'"
+          class="fill-current lg:hidden"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            fill-rule="evenodd"
+            clip-rule="evenodd"
+            d="M3.25 6C3.25 5.58579 3.58579 5.25 4 5.25L20 5.25C20.4142 5.25 20.75 5.58579 20.75 6C20.75 6.41421 20.4142 6.75 20 6.75L4 6.75C3.58579 6.75 3.25 6.41422 3.25 6ZM3.25 18C3.25 17.5858 3.58579 17.25 4 17.25L20 17.25C20.4142 17.25 20.75 17.5858 20.75 18C20.75 18.4142 20.4142 18.75 20 18.75L4 18.75C3.58579 18.75 3.25 18.4142 3.25 18ZM4 11.25C3.58579 11.25 3.25 11.5858 3.25 12C3.25 12.4142 3.58579 12.75 4 12.75L12 12.75C12.4142 12.75 12.75 12.4142 12.75 12C12.75 11.5858 12.4142 11.25 12 11.25L4 11.25Z"
+            fill=""
+          />
+        </svg>
+
+        <!-- cross icon -->
+        <svg
+          :class="sidebarToggle ? 'block lg:hidden' : 'hidden'"
+          class="fill-current"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            fill-rule="evenodd"
+            clip-rule="evenodd"
+            d="M6.21967 7.28131C5.92678 6.98841 5.92678 6.51354 6.21967 6.22065C6.51256 5.92775 6.98744 5.92775 7.28033 6.22065L11.999 10.9393L16.7176 6.22078C17.0105 5.92789 17.4854 5.92788 17.7782 6.22078C18.0711 6.51367 18.0711 6.98855 17.7782 7.28144L13.0597 12L17.7782 16.7186C18.0711 17.0115 18.0711 17.4863 17.7782 17.7792C17.4854 18.0721 17.0105 18.0721 16.7176 17.7792L11.999 13.0607L7.28033 17.7794C6.98744 18.0722 6.51256 18.0722 6.21967 17.7794C5.92678 17.4865 5.92678 17.0116 6.21967 16.7187L10.9384 12L6.21967 7.28131Z"
+            fill=""
+          />
+        </svg>
+      </button>
+      <!-- Hamburger Toggle BTN -->
+
+      <a href="{% url 'arabela_admin:dashboard' %}" class="lg:hidden">
+        <img class="dark:hidden" src="{% static 'arabela_admin/images/logo/logo.svg' %}" alt="Logo" />
+        <img
+          class="hidden dark:block"
+          src="{% static 'arabela_admin/images/logo/logo-dark.svg' %}"
+          alt="Logo"
+        />
+      </a>
+
+      <!-- Application nav menu button -->
+      <button
+        class="z-99999 flex h-10 w-10 items-center justify-center rounded-lg text-gray-700 hover:bg-gray-100 lg:hidden dark:text-gray-400 dark:hover:bg-gray-800"
+        :class="menuToggle ? 'bg-gray-100 dark:bg-gray-800' : ''"
+        @click.stop="menuToggle = !menuToggle"
+      >
+        <svg
+          class="fill-current"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            fill-rule="evenodd"
+            clip-rule="evenodd"
+            d="M5.99902 10.4951C6.82745 10.4951 7.49902 11.1667 7.49902 11.9951V12.0051C7.49902 12.8335 6.82745 13.5051 5.99902 13.5051C5.1706 13.5051 4.49902 12.8335 4.49902 12.0051V11.9951C4.49902 11.1667 5.1706 10.4951 5.99902 10.4951ZM17.999 10.4951C18.8275 10.4951 19.499 11.1667 19.499 11.9951V12.0051C19.499 12.8335 18.8275 13.5051 17.999 13.5051C17.1706 13.5051 16.499 12.8335 16.499 12.0051V11.9951C16.499 11.1667 17.1706 10.4951 17.999 10.4951ZM13.499 11.9951C13.499 11.1667 12.8275 10.4951 11.999 10.4951C11.1706 10.4951 10.499 11.1667 10.499 11.9951V12.0051C10.499 12.8335 11.1706 13.5051 11.999 13.5051C12.8275 13.5051 13.499 12.8335 13.499 12.0051V11.9951Z"
+            fill=""
+          />
+        </svg>
+      </button>
+      <!-- Application nav menu button -->
+
+      <div class="hidden lg:block">
+        <form>
+          <div class="relative">
+            <span class="absolute top-1/2 left-4 -translate-y-1/2">
+              <svg
+                class="fill-gray-500 dark:fill-gray-400"
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  fill-rule="evenodd"
+                  clip-rule="evenodd"
+                  d="M3.04175 9.37363C3.04175 5.87693 5.87711 3.04199 9.37508 3.04199C12.8731 3.04199 15.7084 5.87693 15.7084 9.37363C15.7084 12.8703 12.8731 15.7053 9.37508 15.7053C5.87711 15.7053 3.04175 12.8703 3.04175 9.37363ZM9.37508 1.54199C5.04902 1.54199 1.54175 5.04817 1.54175 9.37363C1.54175 13.6991 5.04902 17.2053 9.37508 17.2053C11.2674 17.2053 13.003 16.5344 14.357 15.4176L17.177 18.238C17.4699 18.5309 17.9448 18.5309 18.2377 18.238C18.5306 17.9451 18.5306 17.4703 18.2377 17.1774L15.418 14.3573C16.5365 13.0033 17.2084 11.2669 17.2084 9.37363C17.2084 5.04817 13.7011 1.54199 9.37508 1.54199Z"
+                  fill=""
+                />
+              </svg>
+            </span>
+            <input
+              type="text"
+              placeholder="Search or type command..."
+              id="search-input"
+              class="dark:bg-dark-900 shadow-theme-xs focus:border-brand-300 focus:ring-brand-500/10 dark:focus:border-brand-800 h-11 w-full rounded-lg border border-gray-200 bg-transparent py-2.5 pr-14 pl-12 text-sm text-gray-800 placeholder:text-gray-400 focus:ring-3 focus:outline-hidden xl:w-[430px] dark:border-gray-800 dark:bg-gray-900 dark:bg-white/[0.03] dark:text-white/90 dark:placeholder:text-white/30"
+            />
+
+            <button
+              id="search-button"
+              class="absolute top-1/2 right-2.5 inline-flex -translate-y-1/2 items-center gap-0.5 rounded-lg border border-gray-200 bg-gray-50 px-[7px] py-[4.5px] text-xs -tracking-[0.2px] text-gray-500 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-400"
+            >
+              <span> ⌘ </span>
+              <span> K </span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div
+      :class="menuToggle ? 'flex' : 'hidden'"
+      class="shadow-theme-md w-full items-center justify-between gap-4 px-5 py-4 lg:flex lg:justify-end lg:px-0 lg:shadow-none"
+    >
+      <div class="2xsm:gap-3 flex items-center gap-2">
+        <!-- Dark Mode Toggler -->
+        <button
+          class="hover:text-dark-900 relative flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
+          @click.prevent="darkMode = !darkMode"
+        >
+          <svg
+            class="hidden dark:block"
+            width="20"
+            height="20"
+            viewBox="0 0 20 20"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              fill-rule="evenodd"
+              clip-rule="evenodd"
+              d="M9.99998 1.5415C10.4142 1.5415 10.75 1.87729 10.75 2.2915V3.5415C10.75 3.95572 10.4142 4.2915 9.99998 4.2915C9.58577 4.2915 9.24998 3.95572 9.24998 3.5415V2.2915C9.24998 1.87729 9.58577 1.5415 9.99998 1.5415ZM10.0009 6.79327C8.22978 6.79327 6.79402 8.22904 6.79402 10.0001C6.79402 11.7712 8.22978 13.207 10.0009 13.207C11.772 13.207 13.2078 11.7712 13.2078 10.0001C13.2078 8.22904 11.772 6.79327 10.0009 6.79327ZM5.29402 10.0001C5.29402 7.40061 7.40135 5.29327 10.0009 5.29327C12.6004 5.29327 14.7078 7.40061 14.7078 10.0001C14.7078 12.5997 12.6004 14.707 10.0009 14.707C7.40135 14.707 5.29402 12.5997 5.29402 10.0001ZM15.9813 5.08035C16.2742 4.78746 16.2742 4.31258 15.9813 4.01969C15.6884 3.7268 15.2135 3.7268 14.9207 4.01969L14.0368 4.90357C13.7439 5.19647 13.7439 5.67134 14.0368 5.96423C14.3297 6.25713 14.8045 6.25713 15.0974 5.96423L15.9813 5.08035ZM18.4577 10.0001C18.4577 10.4143 18.1219 10.7501 17.7077 10.7501H16.4577C16.0435 10.7501 15.7077 10.4143 15.7077 10.0001C15.7077 9.58592 16.0435 9.25013 16.4577 9.25013H17.7077C18.1219 9.25013 18.4577 9.58592 18.4577 10.0001ZM14.9207 15.9806C15.2135 16.2735 15.6884 16.2735 15.9813 15.9806C16.2742 15.6877 16.2742 15.2128 15.9813 14.9199L15.0974 14.036C14.8045 13.7431 14.3297 13.7431 14.0368 14.036C13.7439 14.3289 13.7439 14.8038 14.0368 15.0967L14.9207 15.9806ZM9.99998 15.7088C10.4142 15.7088 10.75 16.0445 10.75 16.4588V17.7088C10.75 18.123 10.4142 18.4588 9.99998 18.4588C9.58577 18.4588 9.24998 18.123 9.24998 17.7088V16.4588C9.24998 16.0445 9.58577 15.7088 9.99998 15.7088ZM5.96356 15.0972C6.25646 14.8043 6.25646 14.3295 5.96356 14.0366C5.67067 13.7437 5.1958 13.7437 4.9029 14.0366L4.01902 14.9204C3.72613 15.2133 3.72613 15.6882 4.01902 15.9811C4.31191 16.274 4.78679 16.274 5.07968 15.9811L5.96356 15.0972ZM4.29224 10.0001C4.29224 10.4143 3.95645 10.7501 3.54224 10.7501H2.29224C1.87802 10.7501 1.54224 10.4143 1.54224 10.0001C1.54224 9.58592 1.87802 9.25013 2.29224 9.25013H3.54224C3.95645 9.25013 4.29224 9.58592 4.29224 10.0001ZM4.9029 5.9637C5.1958 6.25659 5.67067 6.25659 5.96356 5.9637C6.25646 5.6708 6.25646 5.19593 5.96356 4.90303L5.07968 4.01915C4.78679 3.72626 4.31191 3.72626 4.01902 4.01915C3.72613 4.31204 3.72613 4.78692 4.01902 5.07981L4.9029 5.9637Z"
+              fill="currentColor"
+            />
+          </svg>
+          <svg
+            class="dark:hidden"
+            width="20"
+            height="20"
+            viewBox="0 0 20 20"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M17.4547 11.97L18.1799 12.1611C18.265 11.8383 18.1265 11.4982 17.8401 11.3266C17.5538 11.1551 17.1885 11.1934 16.944 11.4207L17.4547 11.97ZM8.0306 2.5459L8.57989 3.05657C8.80718 2.81209 8.84554 2.44682 8.67398 2.16046C8.50243 1.8741 8.16227 1.73559 7.83948 1.82066L8.0306 2.5459ZM12.9154 13.0035C9.64678 13.0035 6.99707 10.3538 6.99707 7.08524H5.49707C5.49707 11.1823 8.81835 14.5035 12.9154 14.5035V13.0035ZM16.944 11.4207C15.8869 12.4035 14.4721 13.0035 12.9154 13.0035V14.5035C14.8657 14.5035 16.6418 13.7499 17.9654 12.5193L16.944 11.4207ZM16.7295 11.7789C15.9437 14.7607 13.2277 16.9586 10.0003 16.9586V18.4586C13.9257 18.4586 17.2249 15.7853 18.1799 12.1611L16.7295 11.7789ZM10.0003 16.9586C6.15734 16.9586 3.04199 13.8433 3.04199 10.0003H1.54199C1.54199 14.6717 5.32892 18.4586 10.0003 18.4586V16.9586ZM3.04199 10.0003C3.04199 6.77289 5.23988 4.05695 8.22173 3.27114L7.83948 1.82066C4.21532 2.77574 1.54199 6.07486 1.54199 10.0003H3.04199ZM6.99707 7.08524C6.99707 5.52854 7.5971 4.11366 8.57989 3.05657L7.48132 2.03522C6.25073 3.35885 5.49707 5.13487 5.49707 7.08524H6.99707Z"
+              fill="currentColor"
+            />
+          </svg>
+        </button>
+        <!-- Dark Mode Toggler -->
+
+        {% include "arabela_admin/partials/notifications.html" %}
+      </div>
+
+      <!-- User Area -->
+      <div
+        class="relative"
+        x-data="{ dropdownOpen: false }"
+        @click.outside="dropdownOpen = false"
+      >
+        <a
+          class="flex items-center text-gray-700 dark:text-gray-400"
+          href="#"
+          @click.prevent="dropdownOpen = ! dropdownOpen"
+        >
+          <span class="mr-3 flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border border-gray-200 bg-gray-100 text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
+            {% if admin_avatar_url %}
+            <img src="{{ admin_avatar_url }}" alt="{{ admin_full_name }}" class="h-full w-full object-cover" style="object-position: {{ admin_avatar_position }};" />
+            {% else %}
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+            </svg>
+            {% endif %}
+          </span>
+
+          <span class="text-theme-sm mr-1 block font-medium"> {{ admin_display_name }} </span>
+
+          <svg
+            :class="dropdownOpen && 'rotate-180'"
+            class="stroke-gray-500 dark:stroke-gray-400"
+            width="18"
+            height="20"
+            viewBox="0 0 18 20"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M4.3125 8.65625L9 13.3437L13.6875 8.65625"
+              stroke=""
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </a>
+
+        <!-- Dropdown Start -->
+        <div
+          x-show="dropdownOpen"
+          class="shadow-theme-lg dark:bg-gray-dark absolute right-0 mt-[17px] flex w-[260px] flex-col rounded-2xl border border-gray-200 bg-white p-3 dark:border-gray-800"
+        >
+          <div>
+            <span
+              class="text-theme-sm block font-medium text-gray-700 dark:text-gray-400"
+            >
+              {{ admin_full_name }}
+            </span>
+            <span
+              class="text-theme-xs mt-0.5 block text-gray-500 dark:text-gray-400"
+            >
+              {{ admin_email }}
+            </span>
+          </div>
+
+          <ul
+            class="flex flex-col gap-1 border-b border-gray-200 pt-4 pb-3 dark:border-gray-800"
+          >
+            <li>
+              <a
+                href="{% url 'arabela_admin:page' page='profile' %}"
+                class="group text-theme-sm flex items-center gap-3 rounded-lg px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
+              >
+                <svg
+                  class="fill-gray-500 group-hover:fill-gray-700 dark:fill-gray-400 dark:group-hover:fill-gray-300"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    fill-rule="evenodd"
+                    clip-rule="evenodd"
+                    d="M12 3.5C7.30558 3.5 3.5 7.30558 3.5 12C3.5 14.1526 4.3002 16.1184 5.61936 17.616C6.17279 15.3096 8.24852 13.5955 10.7246 13.5955H13.2746C15.7509 13.5955 17.8268 15.31 18.38 17.6167C19.6996 16.119 20.5 14.153 20.5 12C20.5 7.30558 16.6944 3.5 12 3.5ZM17.0246 18.8566V18.8455C17.0246 16.7744 15.3457 15.0955 13.2746 15.0955H10.7246C8.65354 15.0955 6.97461 16.7744 6.97461 18.8455V18.856C8.38223 19.8895 10.1198 20.5 12 20.5C13.8798 20.5 15.6171 19.8898 17.0246 18.8566ZM2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12ZM11.9991 7.25C10.8847 7.25 9.98126 8.15342 9.98126 9.26784C9.98126 10.3823 10.8847 11.2857 11.9991 11.2857C13.1135 11.2857 14.0169 10.3823 14.0169 9.26784C14.0169 8.15342 13.1135 7.25 11.9991 7.25ZM8.48126 9.26784C8.48126 7.32499 10.0563 5.75 11.9991 5.75C13.9419 5.75 15.5169 7.32499 15.5169 9.26784C15.5169 11.2107 13.9419 12.7857 11.9991 12.7857C10.0563 12.7857 8.48126 11.2107 8.48126 9.26784Z"
+                    fill=""
+                  />
+                </svg>
+                Edit profile
+              </a>
+            </li>
+          </ul>
+          <form method="POST" action="{% url 'arabela_admin:admin_logout' %}" class="mt-3">
+            {% csrf_token %}
+            <button
+              type="submit"
+              class="group text-theme-sm flex w-full items-center gap-3 rounded-lg px-3 py-2 font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
+            >
+              <svg
+                class="fill-gray-500 group-hover:fill-gray-700 dark:group-hover:fill-gray-300"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  fill-rule="evenodd"
+                  clip-rule="evenodd"
+                  d="M15.1007 19.247C14.6865 19.247 14.3507 18.9112 14.3507 18.497L14.3507 14.245H12.8507V18.497C12.8507 19.7396 13.8581 20.747 15.1007 20.747H18.5007C19.7434 20.747 20.7507 19.7396 20.7507 18.497L20.7507 5.49609C20.7507 4.25345 19.7433 3.24609 18.5007 3.24609H15.1007C13.8581 3.24609 12.8507 4.25345 12.8507 5.49609V9.74501L14.3507 9.74501V5.49609C14.3507 5.08188 14.6865 4.74609 15.1007 4.74609L18.5007 4.74609C18.9149 4.74609 19.2507 5.08188 19.2507 5.49609L19.2507 18.497C19.2507 18.9112 18.9149 19.247 18.5007 19.247H15.1007ZM3.25073 11.9984C3.25073 12.2144 3.34204 12.4091 3.48817 12.546L8.09483 17.1556C8.38763 17.4485 8.86251 17.4487 9.15549 17.1559C9.44848 16.8631 9.44863 16.3882 9.15583 16.0952L5.81116 12.7484L16.0007 12.7484C16.4149 12.7484 16.7507 12.4127 16.7507 11.9984C16.7507 11.5842 16.4149 11.2484 16.0007 11.2484L5.81528 11.2484L9.15585 7.90554C9.44864 7.61255 9.44847 7.13767 9.15547 6.84488C8.86248 6.55209 8.3876 6.55226 8.09481 6.84525L3.52309 11.4202C3.35673 11.5577 3.25073 11.7657 3.25073 11.9984Z"
+                  fill=""
+                />
+              </svg>
+
+              Sign out
+            </button>
+          </form>
+        </div>
+        <!-- Dropdown End -->
+      </div>
+      <!-- User Area -->
+    </div>
+  </div>
+</header>
+<!-- ===== Header End ===== -->
+
+        <!-- ===== Main Content Start ===== -->
+        <main>
+          <div class="mx-auto max-w-(--breakpoint-2xl) p-4 md:p-6">
+            <!-- Breadcrumb Start -->
+            <div x-data="{ pageName: `Payments`}">
+              <div class="mb-4 flex flex-wrap items-center justify-end gap-3">
+  <nav>
+    <ol class="flex items-center gap-1.5">
+      <li>
+        <a
+          class="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400"
+          href="{% url 'arabela_admin:dashboard' %}"
+        >
+          Home
+          <svg
+            class="stroke-current"
+            width="17"
+            height="16"
+            viewBox="0 0 17 16"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M6.0765 12.667L10.2432 8.50033L6.0765 4.33366"
+              stroke=""
+              stroke-width="1.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </a>
+      </li>
+      <li
+        class="text-sm text-gray-800 dark:text-white/90"
+        x-text="pageName"
+      ></li>
+    </ol>
+  </nav>
+</div>
+</div>
+            <!-- Breadcrumb End -->
+            {% if is_owner %}
+            <div class="pm-tabs" role="navigation" aria-label="Payments sections">
+              <a class="pm-tab{% if mode == 'bookings' %} is-on{% endif %}" href="{% url 'arabela_admin:payments' %}"{% if mode == 'bookings' %} aria-current="page"{% endif %}>Bookings</a>
+              <a class="pm-tab{% if mode == 'receipts' %} is-on{% endif %}" href="{% url 'arabela_admin:payment_receipts' %}"{% if mode == 'receipts' %} aria-current="page"{% endif %}>All receipts</a>
+            </div>
+            {% endif %}
+
+            {% if mode == "bookings" %}
+            <!-- What every booking still owes, its late fee and the deposit it can give back: all worked out by the system (reservations/ledger.py). Click a booking to open its payments. -->
+            <div class="pm-card">
+              <div class="ar-toolbar">
+                <div class="ar-search">
+                  <svg class="ar-search-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                  <input type="text" class="ar-search-input" x-model="search" placeholder="Search by customer, booking number or gown..." aria-label="Search payments">
+                </div>
+                <div class="ar-filters" role="group" aria-label="Show bookings by payment status">
+                  <button type="button" class="ar-filter" :class="statusFilter === 'All' ? 'is-on' : ''" :aria-pressed="statusFilter === 'All' ? 'true' : 'false'" @click="statusFilter = 'All'">All <span class="ar-n">{{ counts.all }}</span></button>
+                  <button type="button" class="ar-filter{% if counts.balance %} ar-filter--hot{% endif %}" :class="statusFilter === 'balance' ? 'is-on' : ''" :aria-pressed="statusFilter === 'balance' ? 'true' : 'false'" @click="statusFilter = 'balance'" title="Something is still to pay"><span class="ar-dot pm-dot--balance"></span>Balance due <span class="ar-n">{{ counts.balance }}</span></button>
+                  <button type="button" class="ar-filter" :class="statusFilter === 'late' ? 'is-on' : ''" :aria-pressed="statusFilter === 'late' ? 'true' : 'false'" @click="statusFilter = 'late'" title="A gown is late: the late fee is growing each day"><span class="ar-dot ar-dot--overdue"></span>Late fee <span class="ar-n">{{ counts.late }}</span></button>
+                  <button type="button" class="ar-filter" :class="statusFilter === 'refund' ? 'is-on' : ''" :aria-pressed="statusFilter === 'refund' ? 'true' : 'false'" @click="statusFilter = 'refund'" title="Every gown is back: there is deposit to hand back"><span class="ar-dot pm-dot--refund"></span>Refund due <span class="ar-n">{{ counts.refund }}</span></button>
+                  <button type="button" class="ar-filter" :class="statusFilter === 'done' ? 'is-on' : ''" :aria-pressed="statusFilter === 'done' ? 'true' : 'false'" @click="statusFilter = 'done'" title="Paid in full or settled"><span class="ar-dot pm-dot--paid"></span>Paid / settled</button>
+                </div>
+              </div>
+              <div class="ar-count pm-countrow"><span id="ar-count" aria-live="polite"></span>{% if balance_total %}<span class="pm-collect">Still to collect: &#8369;{{ balance_total|floatformat:"2g" }}</span>{% endif %}</div>
+
+              <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg=".pm-row" data-arpg-noun="bookings" data-arpg-top="off" data-arpg-count="#ar-count">
+                <div class="pm-head">
+                  <span>Customer</span>
+                  <span>Booking no.</span>
+                  <span class="r">Total</span>
+                  <span class="r">Paid</span>
+                  <span class="r">Balance</span>
+                  <span>Deposit</span>
+                  <span>Status</span>
+                  <span></span>
+                </div>
+                {% for r in rows %}
+                <div class="ar-booking pm-row" data-booking-id="{{ r.id }}" data-state="{{ r.stmt.state }}" data-late="{% if r.stmt.late_now %}1{% else %}0{% endif %}" data-search="{{ r.search_text }}" x-show="matches($el)">
+                  <div class="pm-line" role="button" tabindex="0" @click="open({{ r.id }})" @keydown.enter.prevent="open({{ r.id }})" aria-label="Open the payments of {{ r.display_customer_name }}, {{ r.reference_code }}">
+                    <div class="ar-who">
+                      <span class="ar-dot pm-dot--{{ r.stmt.state }}" role="img" aria-label="{{ r.stmt.state_label }}" title="{{ r.stmt.state_label }}"></span>
+                      <div class="pm-who"><span class="ar-name">{{ r.display_customer_name }}</span><span class="pm-sub">{{ r.gown_text }}{% if r.span_start %} &middot; {{ r.span_start|date:"M j" }} &ndash; {{ r.span_end|date:"M j" }}{% endif %}</span></div>
+                    </div>
+                    <div class="ar-ref" data-label="Booking no."><b>{{ r.reference_code }}</b></div>
+                    <div class="pm-amt" data-label="Total">&#8369;{{ r.stmt.total|floatformat:"2g" }}</div>
+                    <div class="pm-amt" data-label="Paid">&#8369;{{ r.stmt.received|floatformat:"2g" }}</div>
+                    <div class="pm-amt pm-bal{% if r.stmt.balance_due > 0 %} is-due{% endif %}" data-label="Balance">&#8369;{{ r.stmt.balance_due|floatformat:"2g" }}</div>
+                    <div class="pm-dep" data-label="Deposit">{{ r.deposit_text }}</div>
+                    <div class="pm-stat" data-label="Status"><span class="pm-chip pm-chip--{{ r.stmt.state }}">{{ r.stmt.state_label }}</span>{% if r.stmt.late_now %}<span class="pm-chip pm-chip--late" title="{{ r.stmt.late_days_total }} day{{ r.stmt.late_days_total|pluralize }} late so far">Late &#8369;{{ r.stmt.late_fee|floatformat:"0g" }}</span>{% endif %}</div>
+                    <div class="pm-chev" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 5l5 5-5 5"/></svg></div>
+                  </div>
+                </div>
+                {% empty %}
+                <p class="pm-empty">No booking has been approved yet, so there is nothing to collect or hand back.</p>
+                {% endfor %}
+              </div>
+            </div>
+            {% else %}
+            <!-- Every Payment Receipt, newest first (owner only). The paper itself opens in its own page; a void keeps the line and shows the reason. -->
+            <div class="pm-card">
+              <form method="get" class="pm-filters" role="search" aria-label="Find a receipt">
+                <div style="flex: 1 1 14rem; min-width: 12rem;">
+                  <label class="pm-hint" for="pm-q">Receipt, booking, customer or GCash number</label>
+                  <input id="pm-q" type="text" name="q" value="{{ q }}" class="pm-in" style="width: 100%;" placeholder="PR-2026-000123, RSV-2026-0112, Juan...">
+                </div>
+                <div><label class="pm-hint" for="pm-kind">Type</label>
+                  <select id="pm-kind" name="kind" class="pm-in"><option value="all"{% if kind == "all" %} selected{% endif %}>All</option><option value="in"{% if kind == "in" %} selected{% endif %}>Payments received</option><option value="out"{% if kind == "out" %} selected{% endif %}>Deposit returns</option></select></div>
+                <div><label class="pm-hint" for="pm-status">Status</label>
+                  <select id="pm-status" name="status" class="pm-in"><option value="all"{% if status == "all" %} selected{% endif %}>All</option><option value="ok"{% if status == "ok" %} selected{% endif %}>Not voided</option><option value="void"{% if status == "void" %} selected{% endif %}>Voided</option></select></div>
+                <div><label class="pm-hint" for="pm-from">From</label><input id="pm-from" type="date" name="from" value="{{ from }}" class="pm-in"></div>
+                <div><label class="pm-hint" for="pm-to">To</label><input id="pm-to" type="date" name="to" value="{{ to }}" class="pm-in"></div>
+                <button type="submit" class="pm-b pm-b--main">Search</button>
+                <a href="{% url 'arabela_admin:payment_receipts' %}" class="pm-b">Clear</a>
+              </form>
+              <div style="overflow-x: auto;">
+                <table class="pm-table">
+                  <thead><tr><th>Receipt no.</th><th>Date</th><th>Booking</th><th>Customer</th><th>For</th><th>Method</th><th class="r">Amount</th><th>Served by</th><th></th></tr></thead>
+                  <tbody>
+                  {% for p in receipts %}
+                    <tr{% if p.is_void %} class="is-void"{% endif %}>
+                      <td><b>{{ p.receipt_number }}</b>{% if p.is_void %}<div><span class="pm-chip pm-chip--void">VOID</span></div>{% endif %}</td>
+                      <td>{{ p.paid_at|date:"M j, Y" }}<div class="pm-legacy">{{ p.paid_at|date:"g:i A" }}</div></td>
+                      <td>{{ p.reservation.reference_code }}</td>
+                      <td>{{ p.customer_name }}</td>
+                      <td>{% if p.direction == "Out" %}Deposit returned{% else %}{{ p.get_purpose_display }}{% endif %}</td>
+                      <td>{{ p.get_method_display }}{% if p.reference %}<div class="pm-legacy">ref {{ p.reference }}</div>{% endif %}</td>
+                      <td class="r">{% if p.direction == "Out" %}-{% endif %}&#8369;{{ p.amount|floatformat:"2g" }}</td>
+                      <td>{{ p.recorded_by_name|default:"-" }}</td>
+                      <td style="white-space: nowrap;">
+                        <a class="pm-b pm-b--small" href="{% url 'arabela_admin:payment_receipt_print' p.id %}?look=1" target="_blank" rel="noopener">View</a>
+                        <a class="pm-b pm-b--small" href="{% url 'arabela_admin:payment_receipt_print' p.id %}" target="_blank" rel="noopener">Print</a>
+                        <a class="pm-b pm-b--small" href="{% url 'arabela_admin:payments' %}?open={{ p.reservation_id }}" title="Open the booking: send again, void">Booking</a>
+                      </td>
+                    </tr>
+                  {% empty %}
+                    <tr><td colspan="9" class="pm-empty">No receipt matches.</td></tr>
+                  {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+              {% if receipts.paginator.num_pages > 1 %}
+              <div class="pm-pages">
+                {% if receipts.has_previous %}<a class="pm-b pm-b--small" href="?q={{ q|urlencode }}&amp;kind={{ kind }}&amp;status={{ status }}&amp;from={{ from }}&amp;to={{ to }}&amp;page={{ receipts.previous_page_number }}">Back</a>{% endif %}
+                <span>Page {{ receipts.number }} of {{ receipts.paginator.num_pages }}</span>
+                {% if receipts.has_next %}<a class="pm-b pm-b--small" href="?q={{ q|urlencode }}&amp;kind={{ kind }}&amp;status={{ status }}&amp;from={{ from }}&amp;to={{ to }}&amp;page={{ receipts.next_page_number }}">Next</a>{% endif %}
+              </div>
+              {% endif %}
+            </div>
+            {% endif %}
+          </div>
+
+          {% if mode == "bookings" %}
+          <!-- The booking's window: what it owes, its payments and receipts, and the three actions. Everything shown comes from the server (api/payments/booking/<id>/). -->
+          <div class="pm-win" x-show="openId" x-cloak @click.self="close()" role="dialog" aria-modal="true" aria-labelledby="pm-title" data-overlay-root :aria-hidden="openId ? 'false' : 'true'">
+            <div class="pm-sheet">
+              <div class="pm-wh">
+                <div>
+                  <h2 class="pm-wt" id="pm-title" x-text="d ? d.customer : 'Loading...'"></h2>
+                  <div class="pm-ws" x-show="d"><span x-text="d ? d.code : ''"></span> &middot; <span x-text="d ? d.channel : ''"></span><span x-show="d && d.phone"> &middot; <span x-text="d ? d.phone : ''"></span></span></div>
+                </div>
+                <button type="button" class="pm-x" @click="close()" aria-label="Close" title="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+              </div>
+              <div class="pm-wb">
+                <p class="pm-hint" x-show="loading && !d">Loading...</p>
+                <p class="pm-err" x-show="loadError" x-text="loadError"></p>
+                <template x-if="d">
+                  <div style="display: grid; gap: 1.1rem;">
+                    <div class="pm-ok" x-show="last" x-cloak>
+                      <span x-text="last ? last.message : ''"></span>
+                      <div class="pm-btns"><a class="pm-b pm-b--main" :href="last ? last.printUrl : '#'" target="_blank" rel="noopener" x-show="last && last.printUrl">Print receipt</a></div>
+                    </div>
+
+                    <div class="pm-sum">
+                      <div><span>Total to pay</span><b x-text="peso(d.peso.total)"></b></div>
+                      <div><span>Paid so far</span><b x-text="peso(d.peso.received)"></b></div>
+                      <div :class="d.s.balance_due !== '0.00' ? 'is-due' : ''"><span>Balance to pay</span><b x-text="peso(d.peso.balance_due)"></b></div>
+                      <div><span>Status</span><b style="font-size: .9rem;" x-text="d.s.state_label"></b></div>
+                    </div>
+
+                    <div>
+                      <p class="pm-sec">Gowns</p>
+                      <div class="pm-lines">
+                        <template x-for="(g, gi) in d.gowns" :key="gi">
+                          <div class="pm-l"><span><span x-text="g.name"></span><small x-text="(g.size ? g.size + ' - ' : '') + 'Pick-up ' + g.pickup + ' - Return ' + g.return"></small></span></div>
+                        </template>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p class="pm-sec">What is owed</p>
+                      <div class="pm-lines">
+                        <div class="pm-l"><span>Gown rental<small x-text="d.s.rental_unpaid === '0.00' ? 'paid' : (d.s.rental_paid === '0.00' ? 'not paid yet' : peso(d.peso.rental_paid) + ' paid')"></small></span><b x-text="peso(d.peso.rental)"></b></div>
+                        <div class="pm-l"><span>Security deposit<small x-text="d.s.deposit_unpaid === '0.00' ? 'paid' : 'not paid yet'"></small></span><b x-text="peso(d.peso.deposit)"></b></div>
+                        <div class="pm-l is-total"><span>Total</span><b x-text="peso(d.peso.total)"></b></div>
+                        <template x-for="(l, li) in d.lateLines" :key="'late' + li">
+                          <div class="pm-l pm-minus"><span>Late fee: <span x-text="l.gown"></span><small x-text="l.days + ' day' + (l.days === 1 ? '' : 's') + ' x ' + peso(l.rate) + (l.back ? '' : ' so far (still out)')"></small></span><b x-text="'-' + peso(l.amount)"></b></div>
+                        </template>
+                        <template x-for="x in d.deductions" :key="'ded' + x.id">
+                          <div class="pm-l pm-minus" :class="x.void ? 'is-void' : ''">
+                            <span>Deduction: <span x-text="x.reason"></span><small><span x-text="x.when"></span><span x-show="x.by"> - <span x-text="x.by"></span></span><span x-show="x.void"> - removed: <span x-text="x.voidReason"></span></span></small></span>
+                            <span style="display: flex; align-items: center; gap: .5rem;"><b x-text="'-' + peso(x.amount)"></b><button type="button" class="pm-b pm-b--small pm-b--danger" x-show="d.canVoid && !x.void" @click="startVoid('deduction', x.id, 'the ' + peso(x.amount) + ' deduction')">Remove</button></span>
+                          </div>
+                        </template>
+                        <div class="pm-l is-total" x-show="d.s.deposit_paid !== '0.00'"><span>Deposit to hand back<small x-text="d.s.all_returned ? (d.s.refunded !== '0.00' ? peso(d.peso.refunded) + ' already handed back' : 'every gown is back') : 'once every gown is back'"></small></span><b x-text="peso(d.s.all_returned ? d.peso.refund_available : d.peso.refundable_total)"></b></div>
+                        <div class="pm-l pm-minus" x-show="d.s.extra_owed !== '0.00'"><span>Still owed beyond the deposit<small>the late fee and deductions are more than the deposit</small></span><b x-text="peso(d.peso.extra_owed)"></b></div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p class="pm-sec">Payments and receipts</p>
+                      <div class="pm-lines">
+                        <p class="pm-hint" style="padding: .7rem .85rem;" x-show="!d.payments.length">Nothing recorded yet.</p>
+                        <template x-for="(p, pi) in d.payments" :key="'pay' + pi + '-' + p.id">
+                          <div class="pm-l" :class="p.void ? 'is-void' : ''">
+                            <span><span x-text="(p.direction === 'Out' ? 'Handed back: ' : '') + p.purposeLabel + ' - ' + p.method"></span>
+                              <small><span x-text="p.receiptNumber || 'before the Payments page'"></span><span x-show="p.when"> - <span x-text="p.when"></span></span><span x-show="p.by"> - <span x-text="p.by"></span></span><span x-show="p.reference"> - ref <span x-text="p.reference"></span></span><span x-show="p.void"> - VOIDED: <span x-text="p.voidReason"></span></span></small></span>
+                            <span style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .45rem;">
+                              <b x-text="(p.direction === 'Out' ? '-' : '') + peso(p.amount)"></b>
+                              <a class="pm-b pm-b--small" :href="p.printUrl" target="_blank" rel="noopener" x-show="p.printUrl">Print</a>
+                              <button type="button" class="pm-b pm-b--small" x-show="p.printUrl && d.hasAccount && !p.void" @click="send(p)" :disabled="busy" title="Send the receipt to the customer's account and email again">Send</button>
+                              <button type="button" class="pm-b pm-b--small pm-b--danger" x-show="d.canVoid && !p.legacy && !p.void && p.printUrl" @click="startVoid('payment', p.id, 'receipt ' + p.receiptNumber)">Void</button>
+                            </span>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+
+                    <template x-if="voiding">
+                      <div class="pm-form">
+                        <p class="pm-sec" style="margin: 0;" x-text="'Void ' + voiding.label + '?'"></p>
+                        <p class="pm-hint">It stays in the records marked VOID with your name and the reason, and the booking's numbers go back as they were.</p>
+                        <div><label for="pm-void-reason">Why? (required)</label><input id="pm-void-reason" type="text" class="pm-in" x-model="voiding.reason" maxlength="200" placeholder="For example: typed on the wrong booking" @keydown.enter.prevent="doVoid()"></div>
+                        <p class="pm-err" x-show="formError" x-text="formError"></p>
+                        <div class="pm-btns"><button type="button" class="pm-b pm-b--danger" @click="doVoid()" :disabled="busy" x-text="busy ? 'Saving...' : 'Yes, void it'"></button><button type="button" class="pm-b" @click="voiding = null; formError = ''">Cancel</button></div>
+                      </div>
+                    </template>
+
+                    <div class="pm-form" x-show="d.choices.kind !== 'none'">
+                      <p class="pm-sec" style="margin: 0;">Record a payment received</p>
+                      <template x-if="d.choices.kind === 'deposit'">
+                        <div>
+                          <div class="pm-radios" role="radiogroup" aria-label="What is being paid">
+                            <template x-for="o in d.choices.options" :key="o.purpose">
+                              <label :class="rec.purpose === o.purpose ? 'is-on' : ''"><input type="radio" name="pm-purpose" :value="o.purpose" x-model="rec.purpose" @change="rec.amount = o.amount" style="accent-color: #465fff;"> <span x-text="o.label + ' - ' + peso(fmt(o.amount))"></span></label>
+                            </template>
+                          </div>
+                          <p class="pm-hint" style="margin-top: .45rem;">The deposit is received exactly, never in parts. Check the amount against what the customer handed over.</p>
+                        </div>
+                      </template>
+                      <p class="pm-hint" x-show="d.choices.kind === 'balance'">Rental balance: up to <b x-text="peso(fmt(d.choices.max))"></b>. It can be paid in parts. <button type="button" class="pm-b pm-b--small" @click="rec.amount = d.choices.max">Pay the full balance</button></p>
+                      <p class="pm-hint" x-show="d.choices.kind === 'extra'">The late fee and deductions are more than the deposit. Still owed: up to <b x-text="peso(fmt(d.choices.max))"></b>. <button type="button" class="pm-b pm-b--small" @click="rec.amount = d.choices.max">Receive all of it</button></p>
+                      <div><label for="pm-rec-amount">Amount received (pesos)</label><input id="pm-rec-amount" type="text" inputmode="decimal" class="pm-in" x-model="rec.amount" placeholder="0.00" autocomplete="off"></div>
+                      <div><label>Paid by</label>
+                        <div class="pm-radios" role="radiogroup" aria-label="How it was paid">
+                          <label :class="rec.method === 'Cash' ? 'is-on' : ''"><input type="radio" name="pm-rec-method" value="Cash" x-model="rec.method" style="accent-color: #465fff;"> Cash</label>
+                          <label :class="rec.method === 'GCash' ? 'is-on' : ''"><input type="radio" name="pm-rec-method" value="GCash" x-model="rec.method" style="accent-color: #465fff;"> GCash</label>
+                        </div></div>
+                      <div x-show="rec.method === 'GCash'"><label for="pm-rec-ref">GCash reference number (13 digits, from the customer's GCash screen)</label><input id="pm-rec-ref" type="text" inputmode="numeric" class="pm-in" x-model="rec.reference" maxlength="24" placeholder="5046 933 479702" autocomplete="off"></div>
+                      <div><label for="pm-rec-note">Note (optional)</label><input id="pm-rec-note" type="text" class="pm-in" x-model="rec.note" maxlength="200"></div>
+                      <p class="pm-err" x-show="formError && formWhere === 'rec'" x-text="formError"></p>
+                      <div class="pm-btns"><button type="button" class="pm-b pm-b--main" @click="record()" :disabled="busy" x-text="busy && formWhere === 'rec' ? 'Saving...' : 'Record payment'"></button></div>
+                    </div>
+
+                    <div class="pm-form" x-show="d.canReturn">
+                      <p class="pm-sec" style="margin: 0;">Hand the security deposit back</p>
+                      <p class="pm-hint">Up to <b x-text="peso(d.peso.refund_available)"></b>: the deposit less the late fee and any deductions. Every gown is back.</p>
+                      <div><label for="pm-ret-amount">Amount handed back (pesos)</label><input id="pm-ret-amount" type="text" inputmode="decimal" class="pm-in" x-model="ret.amount" autocomplete="off"></div>
+                      <div><label>Handed back by</label>
+                        <div class="pm-radios" role="radiogroup" aria-label="How it was handed back">
+                          <label :class="ret.method === 'Cash' ? 'is-on' : ''"><input type="radio" name="pm-ret-method" value="Cash" x-model="ret.method" style="accent-color: #465fff;"> Cash</label>
+                          <label :class="ret.method === 'GCash' ? 'is-on' : ''"><input type="radio" name="pm-ret-method" value="GCash" x-model="ret.method" style="accent-color: #465fff;"> GCash (sent from the shop's GCash app)</label>
+                        </div></div>
+                      <div x-show="ret.method === 'GCash'"><label for="pm-ret-ref">GCash reference number of the transfer you sent (13 digits)</label><input id="pm-ret-ref" type="text" inputmode="numeric" class="pm-in" x-model="ret.reference" maxlength="24" autocomplete="off"></div>
+                      <div><label for="pm-ret-note">Note (optional)</label><input id="pm-ret-note" type="text" class="pm-in" x-model="ret.note" maxlength="200"></div>
+                      <p class="pm-err" x-show="formError && formWhere === 'ret'" x-text="formError"></p>
+                      <div class="pm-btns"><button type="button" class="pm-b pm-b--main" @click="giveBack()" :disabled="busy" x-text="busy && formWhere === 'ret' ? 'Saving...' : 'Record deposit return'"></button></div>
+                    </div>
+
+                    <details class="pm-form" x-show="d.canVoid && d.canDeduct">
+                      <summary style="cursor: pointer; font-size: .8125rem; font-weight: 600; color: #475467;">Take an amount off the deposit (damage, a stain, a missing item)</summary>
+                      <div style="display: grid; gap: .7rem; margin-top: .7rem;">
+                        <div><label for="pm-ded-amount">Amount (pesos)</label><input id="pm-ded-amount" type="text" inputmode="decimal" class="pm-in" x-model="ded.amount" autocomplete="off"></div>
+                        <div><label for="pm-ded-reason">Reason (required, the customer is told)</label><input id="pm-ded-reason" type="text" class="pm-in" x-model="ded.reason" maxlength="200" placeholder="For example: stain on the skirt"></div>
+                        <p class="pm-err" x-show="formError && formWhere === 'ded'" x-text="formError"></p>
+                        <div class="pm-btns"><button type="button" class="pm-b pm-b--main" @click="deduct()" :disabled="busy" x-text="busy && formWhere === 'ded' ? 'Saving...' : 'Add deduction'"></button></div>
+                      </div>
+                    </details>
+                    <p class="pm-hint" x-show="d.canDeduct && !d.canVoid">Voiding a receipt or adding a deduction needs the owner's permission. Ask the owner.</p>
+                    <p class="pm-hint" x-show="d.s.legacy">This booking was made before the Payments page. Its payments above are read from what it already carried.</p>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+          {% endif %}
+        </main>
+        <!-- ===== Main Content End ===== -->
+      </div>
+      <!-- ===== Content Area End ===== -->
+    </div>
+    <!-- ===== Page Wrapper End ===== -->
+
+  <script defer src="{% static 'arabela_admin/bundle.js' %}?v={{ admin_asset_version }}"></script>
+  <script defer src="{% static 'arabela_admin/global-search.js' %}"></script>
+  <script defer src="{% static 'arabela_admin/pager.js' %}"></script>
+  <script>
+    function getCsrfToken() {
+      var match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+      return match ? decodeURIComponent(match[1]) : '';
+    }
+    function pmUid() {
+      if (window.crypto && window.crypto.randomUUID) { return window.crypto.randomUUID(); }
+      return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+    }
+
+    // The booking's window. Every number shown comes from the server (reservations/ledger.py); nothing is worked out here except what to
+    // pre-fill. A fresh request_id goes with every Save, so a double click or a retried request can never record a payment twice.
+    window.paymentsApp = function () {
+      var DETAIL = '{% url "arabela_admin:payment_detail" 999999 %}';
+      var RECORD = '{% url "arabela_admin:payment_record" 999999 %}';
+      var RETURN = '{% url "arabela_admin:deposit_return" 999999 %}';
+      var DEDUCT = '{% url "arabela_admin:deduction_add" 999999 %}';
+      var VOID_PAYMENT = '{% url "arabela_admin:payment_void" 999999 %}';
+      var VOID_DEDUCTION = '{% url "arabela_admin:deduction_void" 999999 %}';
+      var SEND = '{% url "arabela_admin:payment_send" 999999 %}';
+      var OPEN_ID = '{{ open_id|escapejs }}';
+      return {
+        page: 'payments', loaded: true, darkMode: false, stickyMenu: false, sidebarToggle: false, scrollTop: false,
+        search: '', statusFilter: 'All',
+        openId: 0, d: null, loading: false, loadError: '', changed: false, last: null,
+        busy: false, formError: '', formWhere: '', voiding: null,
+        rec: { purpose: '', amount: '', method: 'Cash', reference: '', note: '', rid: '' },
+        ret: { amount: '', method: 'Cash', reference: '', note: '', rid: '' },
+        ded: { amount: '', reason: '', rid: '' },
+
+        peso: function (v) { return '₱' + v; },
+        fmt: function (v) { return Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); },
+        url: function (base, id) { return base.replace('999999', id); },
+
+        matches: function (el) {
+          var state = el.getAttribute('data-state'), late = el.getAttribute('data-late') === '1';
+          var okFilter = this.statusFilter === 'All'
+            || (this.statusFilter === 'balance' && state === 'balance')
+            || (this.statusFilter === 'refund' && state === 'refund')
+            || (this.statusFilter === 'late' && late)
+            || (this.statusFilter === 'done' && (state === 'paid' || state === 'settled'));
+          return okFilter && (this.search === '' || (el.getAttribute('data-search') || '').indexOf(String(this.search).toLowerCase()) !== -1);
+        },
+
+        api: function (url, method, body) {
+          var options = { method: method, headers: { 'X-CSRFToken': getCsrfToken() }, credentials: 'same-origin' };
+          if (method === 'POST') { options.headers['Content-Type'] = 'application/json'; options.body = JSON.stringify(body || {}); }
+          return fetch(url, options).then(function (res) {
+            return res.json().catch(function () { return {}; }).then(function (data) {
+              if (!res.ok || data.error) { throw new Error(data.error || 'That did not work. Please try again.'); }
+              return data;
+            });
+          });
+        },
+
+        open: function (id) {
+          this.openId = id; this.d = null; this.loadError = ''; this.last = null; this.voiding = null; this.formError = ''; this.loading = true;
+          var self = this;
+          this.api(this.url(DETAIL, id), 'GET').then(function (data) { self.show(data); self.loading = false; })
+            .catch(function (e) { self.loading = false; self.loadError = e.message; });
+        },
+        show: function (data) {
+          this.d = data;
+          var c = data.choices || { kind: 'none' };
+          this.rec = { purpose: '', amount: '', method: 'Cash', reference: '', note: '', rid: pmUid() };
+          if (c.kind === 'deposit') { this.rec.purpose = c.options[0].purpose; this.rec.amount = c.options[0].amount; }
+          else if (c.kind === 'balance') { this.rec.purpose = 'Balance'; }
+          else if (c.kind === 'extra') { this.rec.purpose = 'Extra'; }
+          this.ret = { amount: data.canReturn ? data.peso.refund_available.replace(/,/g, '') : '', method: 'Cash', reference: '', note: '', rid: pmUid() };
+          this.ded = { amount: '', reason: '', rid: pmUid() };
+          this.formError = ''; this.voiding = null;
+        },
+        close: function () {
+          var wasOpen = !!this.openId;
+          this.openId = 0; this.d = null;
+          if (wasOpen && this.changed) { window.location.href = window.location.pathname; }
+        },
+
+        run: function (where, url, body, message) {
+          if (this.busy) { return; }
+          this.busy = true; this.formError = ''; this.formWhere = where;
+          var self = this;
+          this.api(url, 'POST', body).then(function (data) {
+            self.busy = false; self.changed = true;
+            var printUrl = data.payment && data.payment.printUrl ? data.payment.printUrl : '';
+            var shown = typeof message === 'function' ? message(data) : message;
+            self.show(data.detail);
+            self.last = { message: shown, printUrl: printUrl };
+          }).catch(function (e) { self.busy = false; self.formError = e.message; });
+        },
+        record: function () {
+          this.run('rec', this.url(RECORD, this.d.id), {
+            purpose: this.rec.purpose, amount: this.rec.amount, method: this.rec.method, reference: this.rec.reference, note: this.rec.note, request_id: this.rec.rid
+          }, function (data) { return 'Payment recorded. Receipt ' + data.payment.receiptNumber + ' is ready to print.'; });
+        },
+        giveBack: function () {
+          this.run('ret', this.url(RETURN, this.d.id), {
+            amount: this.ret.amount, method: this.ret.method, reference: this.ret.reference, note: this.ret.note, request_id: this.ret.rid
+          }, function (data) { return 'Deposit return recorded. Receipt ' + data.payment.receiptNumber + ' is ready to print.'; });
+        },
+        deduct: function () {
+          this.run('ded', this.url(DEDUCT, this.d.id), { amount: this.ded.amount, reason: this.ded.reason, request_id: this.ded.rid }, 'Deduction added. The customer has been told.');
+        },
+        startVoid: function (kind, id, label) { this.voiding = { kind: kind, id: id, label: label, reason: '' }; this.formError = ''; this.formWhere = 'void'; },
+        doVoid: function () {
+          var v = this.voiding;
+          if (!v) { return; }
+          this.run('void', this.url(v.kind === 'payment' ? VOID_PAYMENT : VOID_DEDUCTION, v.id), { reason: v.reason }, v.kind === 'payment' ? 'The receipt was voided.' : 'The deduction was removed.');
+        },
+        send: function (p) {
+          if (this.busy) { return; }
+          this.busy = true; this.formError = '';
+          var self = this;
+          this.api(this.url(SEND, p.id), 'POST', {}).then(function () {
+            self.busy = false; self.last = { message: 'Receipt ' + p.receiptNumber + ' was sent to the customer again.', printUrl: '' };
+          }).catch(function (e) { self.busy = false; self.last = null; self.loadError = e.message; setTimeout(function () { self.loadError = ''; }, 6000); });
+        },
+        init: function () {
+          var self = this;
+          window.addEventListener('keydown', function (e) { if (e.key === 'Escape' && self.openId) { self.close(); } });
+          if (OPEN_ID && /^[0-9]+$/.test(OPEN_ID)) { this.open(Number(OPEN_ID)); }
+        }
+      };
+    };
+  </script>
+
+{% include "arabela_admin/partials/dialog.html" %}
+</body>
+</html>

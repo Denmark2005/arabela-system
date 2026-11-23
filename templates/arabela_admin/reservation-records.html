@@ -734,9 +734,10 @@
             return this.shortRange(r.startDisplay, r.endDisplay);
           },
 
+          // The Payment cell: what the booking still owes (worked out by the system, the same number the Payments page shows).
           receiptsText(r) {
-            if (r.receipts.length) { return r.receipts.length + (r.receipts.length === 1 ? ' receipt' : ' receipts'); }
-            return this.needsReceipt(r) ? 'None yet' : '\u2014';
+            if (this.needsReceipt(r)) { return 'Balance \u20b1' + r.balanceDue; }
+            return (r.depositStatus === 'Held' || r.depositStatus === 'Returned') ? 'Paid' : '\u2014';
           },
 
           getCsrfToken() {
@@ -767,8 +768,9 @@
             return !range || (r.start <= range[1] && r.end >= range[0]);
           },
 
+          // "Needs a receipt" used to mean no shop receipt photo. Payments are recorded by the system now, so it means: money is still to pay.
           needsReceipt(r) {
-            return r.receipts.length === 0 && (r.depositStatus === 'Held' || r.depositStatus === 'Returned');
+            return !!r.paymentIncomplete;
           },
 
           inCustomerScope(r) {
@@ -778,7 +780,7 @@
           matches(r) {
             if (!this.inCustomerScope(r)) { return false; }
             if (this.statusFilter !== 'All' && r.progress !== this.statusFilter) { return false; }
-            if (this.receiptFilter === 'has' && r.receipts.length === 0) { return false; }
+            if (this.receiptFilter === 'has' && (r.paymentIncomplete || !(r.depositStatus === 'Held' || r.depositStatus === 'Returned'))) { return false; }
             if (this.receiptFilter === 'needs' && !this.needsReceipt(r)) { return false; }
             if (this.channelFilter !== 'All' && r.channel !== this.channelFilter) { return false; }
             if (!this.inRange(r, this.dateRange(this.dateFilter))) { return false; }
@@ -1353,7 +1355,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -1863,6 +1865,15 @@
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
                 class="menu-dropdown mt-2 flex flex-col gap-1 pl-9"
               >
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:payments' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'payments' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Payments
+                  </a>
+                </li>
                 <li>
                   <a
                     href="{% url 'arabela_admin:payment_verification' %}"
@@ -2377,8 +2388,8 @@
                 <span class="rr-tile-l">Cancelled</span>
                 <span class="rr-tile-n" x-text="countFor('cancelled')"></span>
               </button>
-              <button type="button" @click="applyCard('needs')" class="rr-tile" :class="cardActive('needs') && 'is-on'" :aria-pressed="cardActive('needs') ? 'true' : 'false'" title="Confirmed bookings that have no receipt from the shop yet">
-                <span class="rr-tile-l">Needs a Receipt</span>
+              <button type="button" @click="applyCard('needs')" class="rr-tile" :class="cardActive('needs') && 'is-on'" :aria-pressed="cardActive('needs') ? 'true' : 'false'" title="Confirmed bookings that still have money to pay">
+                <span class="rr-tile-l">Balance Due</span>
                 <span class="rr-tile-n" x-text="countFor('needs')"></span>
               </button>
             </div>
@@ -2398,10 +2409,10 @@
                     <option :value="option" x-text="option"></option>
                   </template>
                 </select>
-                <select x-model="receiptFilter" class="ar-search-input rr-select" aria-label="Show bookings by receipt">
-                  <option value="All">All receipts</option>
-                  <option value="has">Has a receipt</option>
-                  <option value="needs">Needs a receipt</option>
+                <select x-model="receiptFilter" class="ar-search-input rr-select" aria-label="Show bookings by payment">
+                  <option value="All">All payments</option>
+                  <option value="has">Nothing to pay</option>
+                  <option value="needs">Balance due</option>
                 </select>
                 <!-- How the booking came in: online, or recorded by staff in New Booking (a walk-in). -->
                 <select x-model="channelFilter" class="ar-search-input rr-select" aria-label="How the booking came in">
@@ -2511,8 +2522,8 @@
                         <div class="ar-who">
                           <span class="ar-dot" :class="'rr-dot--' + statusKind(r.progress)" role="img" :aria-label="r.progress" :title="statusTip(r.progress)"></span>
                           <span class="ar-name" x-text="r.customer"></span>
-                          <span class="rr-warn" x-show="r.awaitingPayment || r.paymentIncomplete" role="img" :aria-label="r.awaitingPayment ? 'Not paid yet' : 'Payment incomplete'"
-                            :title="r.awaitingPayment ? 'Not paid yet: the booking is waiting for the payment' : 'Payment incomplete: the shop\'s receipts do not cover both the rental and the deposit'">!</span>
+                          <span class="rr-warn" x-show="r.awaitingPayment || r.paymentIncomplete" role="img" :aria-label="r.awaitingPayment ? 'Not paid yet' : 'Balance to pay'"
+                            :title="r.awaitingPayment ? 'Not paid yet: the booking is waiting for the payment' : ('Balance to pay: \u20b1' + r.balanceDue)">!</span>
                         </div>
                         <div class="ar-ref rr-sub">
                           <b x-text="r.reference"></b>
@@ -2546,8 +2557,8 @@
                             </dd>
                           </div>
                           <div>
-                            <dt>Receipts</dt>
-                            <dd><span :class="!r.receipts.length && needsReceipt(r) ? 'rr-need' : ''" x-text="receiptsText(r)"></span></dd>
+                            <dt>Payment</dt>
+                            <dd><span :class="needsReceipt(r) ? 'rr-need' : ''" x-text="receiptsText(r)"></span></dd>
                           </div>
                           <div>
                             <dt>Booked</dt>
@@ -2555,16 +2566,13 @@
                               <span x-text="r.booked"></span>
                               <span class="rr-channel" x-show="r.staffRecorded" x-text="r.channelLabel"></span>
                               <span class="rr-channel rr-channel--warn" x-show="r.awaitingPayment">Not paid yet</span>
-                              <span class="rr-channel rr-channel--warn" x-show="r.paymentIncomplete" title="The shop's receipts don't cover both the rental and the deposit">Payment incomplete</span>
+                              <span class="rr-channel rr-channel--warn" x-show="r.paymentIncomplete" title="Still to pay at the shop. Record it in Payments." x-text="'Balance \u20b1' + r.balanceDue"></span>
                             </dd>
                           </div>
                         </dl>
                         <div class="rr-iconbtns">
                           <button type="button" class="ar-ib" @click.stop="openRecord(r)" title="View details" :aria-label="'View the details of ' + r.customer + ', ' + r.reference">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                          </button>
-                          <button type="button" class="ar-ib" x-show="!receiptsComplete(r)" @click.stop="startUpload(r)" title="Upload receipt" :aria-label="'Upload a receipt for ' + r.customer + ', ' + r.reference">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
                           </button>
                         </div>
                       </div>
@@ -2638,7 +2646,7 @@
               </div>
               <div x-show="viewing.paymentIncomplete" class="rrd-alert rrd-warn">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4m0 4h.01M10.3 3.9L2.4 17.5A2 2 0 004.1 20.5h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>
-                <p style="margin: 0;" x-text="nextReceiptCovers(viewing) === 'Rental' ? 'Payment incomplete: only the deposit was paid so far. Upload the rental receipt below.' : 'Payment incomplete: the shop\'s receipts here don\'t cover both the rental and the deposit. Upload the missing receipt below.'"></p>
+                <p style="margin: 0;">Balance to pay: <strong x-text="'\u20b1' + viewing.balanceDue"></strong>. It is recorded in <a :href="'{% url 'arabela_admin:payments' %}?open=' + viewing.id" class="rr-link">Payments</a> when the customer pays it.</p>
               </div>
               <div x-show="viewing.cancel" class="rrd-alert rrd-bad">
                 <p class="rrd-alert-title">Cancelled</p>
@@ -2770,9 +2778,9 @@
               <!-- Manual receipts: one header line with an upload icon; one short line per receipt only when there are some -->
               <section>
                 <div class="rrd-rech">
-                  <h3 class="rrd-h">Manual Receipts <small x-text="'(' + viewing.receipts.length + ')'"></small></h3>
-                  <p class="rrd-recnone" x-show="viewing.receipts.length === 0">No receipt attached yet.</p>
-                  <button type="button" x-show="!receiptsComplete(viewing)" @click="startUpload(viewing)" class="rrd-ib" :class="(viewing.paymentIncomplete || viewing.awaitingPayment) ? 'is-primary' : ''" title="Upload Receipt" aria-label="Upload Receipt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+                  <h3 class="rrd-h">Old receipt photos <small x-text="'(' + viewing.receipts.length + ')'"></small></h3>
+                  <p class="rrd-recnone" x-show="viewing.receipts.length === 0">None. Payments are recorded in Payments, with a printed receipt.</p>
+                  <a :href="'{% url 'arabela_admin:payments' %}?open=' + viewing.id" class="rr-link" style="margin-left: auto; font-size: .8125rem; white-space: nowrap;">Open in Payments</a>
                 </div>
                 <div class="rrd-reclist" x-show="viewing.receipts.length">
                   <template x-for="receipt in viewing.receipts" :key="receipt.id">
@@ -2833,134 +2841,7 @@
           </div>
         </template>
 
-        <!-- Fix a wrong photo without leaving this booking -- only for an already-
-             uploaded receipt (photo.id set); a pending pre-upload preview has nothing
-             to replace yet, it's just "Remove" back in the Upload Receipt modal. -->
-        <template x-if="photo.id">
-          <div>
-            <p x-show="photoReplaceError" x-cloak x-text="photoReplaceError" class="mt-4 rounded-lg bg-error-50 px-4 py-2.5 text-sm text-error-700 dark:bg-error-500/15 dark:text-error-500"></p>
-            <div class="mt-4 flex flex-wrap items-center gap-3">
-              <input type="file" x-ref="rrReplaceFileInput" class="hidden" accept="image/png,image/jpeg,image/webp" @change="replacePhoto($event.target.files[0]); $refs.rrReplaceFileInput.value = ''" />
-              <input type="file" x-ref="rrReplaceCameraInput" class="hidden" accept="image/png,image/jpeg,image/webp" capture="environment" @change="replacePhoto($event.target.files[0]); $refs.rrReplaceCameraInput.value = ''" />
-              <button type="button" @click="$refs.rrReplaceCameraInput.click()" :class="photoReplaceBusy && 'pointer-events-none opacity-60'"
-                class="touch-only inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">
-                Take Photo
-              </button>
-              <button type="button" @click="$refs.rrReplaceFileInput.click()" :class="photoReplaceBusy && 'pointer-events-none opacity-60'"
-                class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">
-                <span x-show="photoReplaceBusy" x-cloak class="animate-spin rounded-full" style="width: 0.875rem; height: 0.875rem; border: 2px solid currentColor; border-top-color: transparent;"></span>
-                <span class="touch-only" x-text="photoReplaceBusy ? 'Uploading...' : 'Choose from Gallery'"></span>
-                <span class="pc-only" x-text="photoReplaceBusy ? 'Uploading...' : 'Choose Photo'"></span>
-              </button>
-            </div>
-
-            <!-- Delete: two clicks (Delete Receipt, then Yes, delete) so it can't happen by accident. Only with the "Delete receipt photos" permission,
-                 or for the staff member who attached this photo in the last 15 minutes (the server makes the same test). -->
-            <div x-show="photo.canDelete" x-cloak class="mt-5 border-t border-gray-100 pt-4 dark:border-gray-800">
-              <template x-if="!confirmingReceiptDelete">
-                <button type="button" @click="confirmingReceiptDelete = true" style="color: #F04438;"
-                  class="inline-flex items-center gap-2 rounded-lg border border-error-300 bg-error-50 px-4 py-2.5 text-sm font-medium shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-white/[0.03]">
-                  Delete Receipt
-                </button>
-              </template>
-              <template x-if="confirmingReceiptDelete">
-                <div>
-                  <p class="text-sm font-medium text-gray-800 dark:text-white/90">Delete this receipt photo?</p>
-                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">This can't be undone. The booking itself is not changed.</p>
-                  <div class="mt-3 flex flex-wrap items-center gap-3">
-                    <button type="button" @click="deleteReceipt()" :disabled="receiptDeleteBusy" :style="receiptDeleteBusy ? 'color: #F04438; opacity: 0.6; cursor: not-allowed;' : 'color: #F04438;'"
-                      class="rounded-lg border border-error-300 bg-error-50 px-4 py-2.5 text-sm font-medium shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-white/[0.03]"
-                      x-text="receiptDeleteBusy ? 'Deleting...' : 'Yes, delete'"></button>
-                    <button type="button" @click="confirmingReceiptDelete = false" :disabled="receiptDeleteBusy"
-                      class="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">Keep it</button>
-                  </div>
-                </div>
-              </template>
-            </div>
-          </div>
-        </template>
       </div>
-    </div>
-
-    <!-- ===== Upload receipt (pre-filled: staff are already on the right booking) ===== -->
-    <div x-show="openUpload" x-cloak class="rr-overlay rr-z2">
-      <div class="rr-backdrop" @click="closeUpload()"></div>
-      <div class="no-scrollbar relative w-full overflow-y-auto rounded-3xl bg-white p-5 dark:bg-gray-900 lg:p-8" style="max-width: 620px; max-height: calc(100vh - 2.5rem);">
-        <template x-if="uploadFor">
-          <div>
-            <h4 class="text-2xl font-semibold text-gray-800 dark:text-white/90">Upload Receipt</h4>
-            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400" x-text="'For ' + uploadFor.customer + ' · ' + uploadFor.reference"></p>
-            <p class="mb-5 text-theme-xs text-gray-400" x-text="uploadFor.gownSummary + ' · ' + uploadFor.startDisplay + ' → ' + uploadFor.endDisplay"></p>
-
-            <input type="file" x-ref="rrFileInput" class="hidden" accept="image/png,image/jpeg,image/webp" @change="handleUploadFile($event.target.files[0])" />
-            <input type="file" x-ref="rrCameraInput" class="hidden" accept="image/png,image/jpeg,image/webp" capture="environment" @change="handleUploadFile($event.target.files[0])" />
-
-            <div
-              class="rr-dropzone"
-              :class="uploadDragOver && 'is-over'"
-              @dragover.prevent="uploadDragOver = true"
-              @dragleave.prevent="uploadDragOver = false"
-              @drop.prevent="uploadDragOver = false; handleUploadFile($event.dataTransfer.files[0])"
-            >
-              <template x-if="uploadPreparing">
-                <p class="text-sm text-gray-600 dark:text-gray-400"><span class="rr-spinner" style="margin-right: .5rem; vertical-align: -2px;"></span>Preparing photo...</p>
-              </template>
-              <template x-if="!uploadPreparing && !uploadFile">
-                <div>
-                  <p class="mb-4 flex items-center justify-center text-base font-semibold text-gray-800 dark:text-white/90">Drop the receipt photo here<details class="ht-tip"><summary aria-label="About the receipt photo" title="About the receipt photo">?</summary><div class="ht-tip-pop">PNG, JPG or WebP. Large phone photos are resized automatically.</div></details></p>
-                  <div class="flex flex-wrap items-center justify-center gap-3">
-                    <button type="button" @click="$refs.rrCameraInput.click()"
-                      class="touch-only inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">
-                      Take Photo
-                    </button>
-                    <button type="button" @click="$refs.rrFileInput.click()"
-                      class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">
-                      <span class="touch-only">Choose from Gallery</span><span class="pc-only">Choose Photo</span>
-                    </button>
-                  </div>
-                </div>
-              </template>
-              <template x-if="!uploadPreparing && uploadFile">
-                <div>
-                  <img :src="uploadPreviewUrl" alt="Selected receipt" style="display: block; margin: 0 auto .75rem; max-height: 220px; max-width: 100%; border-radius: .5rem;" />
-                  <p class="text-sm font-medium text-gray-800 dark:text-white/90" style="overflow-wrap: anywhere;" x-text="uploadFileName"></p>
-                  <a :href="uploadPreviewUrl" target="_blank" rel="noopener" class="mt-2 inline-block text-theme-sm font-medium text-brand-500 underline">View full size</a>
-                  <span class="mx-1 text-gray-300 dark:text-gray-700">&middot;</span>
-                  <button type="button" @click="clearUploadFile()" class="mt-2 text-theme-sm font-medium text-error-500 underline">Remove</button>
-                </div>
-              </template>
-            </div>
-
-            <p x-show="uploadFor && uploadFor.staffRecorded && nextReceiptCovers(uploadFor) !== 'Rental + deposit'" x-cloak class="rr-upload-note"
-              x-text="uploadFor ? ('This receipt is for: ' + nextReceiptCovers(uploadFor) + '. It completes the payment.') : ''"></p>
-
-            <p x-show="uploadError" x-cloak x-text="uploadError" class="mt-3 rounded-lg bg-error-50 px-4 py-2.5 text-sm text-error-700 dark:bg-error-500/15 dark:text-error-500"></p>
-
-            <div class="mt-6 flex flex-wrap items-center justify-end gap-3">
-              <button type="button" @click="closeUpload()" :class="uploadBusy && 'pointer-events-none opacity-60'"
-                class="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">
-                Cancel
-              </button>
-              <button type="button" @click="submitUpload()" :class="(uploadBusy || uploadPreparing) && 'pointer-events-none opacity-60'"
-                class="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs hover:bg-brand-600">
-                <span x-show="uploadBusy" x-cloak class="rr-spinner"></span>
-                <span x-text="uploadBusy ? 'Uploading...' : 'Upload Receipt'"></span>
-              </button>
-            </div>
-          </div>
-        </template>
-      </div>
-    </div>
-
-    <!-- Receipt Uploaded Toast -->
-    <div
-      x-show="showUploadToast"
-      x-cloak
-      class="fixed bottom-6 right-6 z-99999 flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-theme-lg dark:border-gray-800 dark:bg-gray-900"
-      style="z-index: 100001;"
-    >
-      <span class="h-2 w-2 rounded-full bg-success-500"></span>
-      <p class="text-sm font-medium text-gray-700 dark:text-gray-300">Receipt uploaded successfully</p>
     </div>
 
   <script defer src="{% static 'arabela_admin/bundle.js' %}?v={{ admin_asset_version }}"></script>

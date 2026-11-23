@@ -52,7 +52,7 @@ class EveryCameraButtonIsMarkedTests(SimpleTestCase):
                     self.assertGreaterEqual(len(buttons), 1, "a camera input nobody can press")
                     for button in buttons:
                         self.assertRegex(button, r'class="(?:[^"]* )?touch-only[ "]')
-        self.assertEqual(total, 4)                                    # Attach receipt, New Booking, Upload Receipt, Replace photo
+        self.assertEqual(total, 1)                                    # only the old Pending Approval "Attach receipt" window: New Booking and Records record payments now, with no receipt photo
 
     def test_the_customer_pages_never_open_a_camera(self):
         for path in sorted(ROOT.glob("*.html")):
@@ -100,16 +100,15 @@ class LabelsAndFocusTests(SimpleTestCase):
 
     def test_reservation_records_labels(self):
         text = read(ADMIN / "reservation-records.html")
-        self.assertEqual(text.count('<span class="touch-only">Choose from Gallery</span><span class="pc-only">Choose Photo</span>'), 1)
-        self.assertEqual(text.count("""<span class="touch-only" x-text="photoReplaceBusy ? 'Uploading...' : 'Choose from Gallery'"></span>"""), 1)
-        self.assertEqual(text.count("""<span class="pc-only" x-text="photoReplaceBusy ? 'Uploading...' : 'Choose Photo'"></span>"""), 1)
-        self.assertEqual(text.count("Take Photo"), 2)                                                              # both camera buttons still say it (on a phone)
+        for gone in ("Choose from Gallery", "Choose Photo", "Take Photo", "capture="):                           # Records no longer takes receipt photos
+            with self.subTest(gone=gone):
+                self.assertNotIn(gone, text)
 
     def test_new_booking_gallery_icon_has_a_wording_true_on_every_device(self):
         text = read(ADMIN / "new-booking.html")
-        self.assertIn('title="Choose the receipt photo" aria-label="Choose the receipt photo"', text)
-        self.assertNotIn("from the gallery", text)
-        self.assertIn('class="nb-ib touch-only" @click="$refs.nbReceiptCamera.click()"', text)
+        for gone in ("Choose the receipt photo", "Take a photo of the receipt", "nbReceiptCamera", "from the gallery", "capture="):   # a walk-in pays in the system now: no receipt photo
+            with self.subTest(gone=gone):
+                self.assertNotIn(gone, text)
 
 
 class RenderedPagesTests(TestCase):

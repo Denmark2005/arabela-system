@@ -60,11 +60,14 @@ class ViewWindowStructureTests(SimpleTestCase):
 
     def test_the_window_still_calls_the_same_actions(self):
         markup = window_markup()
-        for needle in ("startUpload(viewing)", "viewPhoto(receipt, viewing)", "timelineHtml(viewing)", "nextReceiptCovers(viewing)",
-                       "progressClass(viewing.progress)", "depositClass(viewing.depositStatus)", "openDetail = false", "Upload Receipt",
+        for needle in ("viewPhoto(receipt, viewing)", "timelineHtml(viewing)",
+                       "progressClass(viewing.progress)", "depositClass(viewing.depositStatus)", "openDetail = false",
                        "viewing.paymentProofUrl", "viewing.depositLink", "viewing.cancel", "viewing.awaitingPayment", "viewing.paymentIncomplete"):
             with self.subTest(needle=needle):
                 self.assertIn(needle, markup)
+        for gone in ("startUpload(viewing)", "nextReceiptCovers(viewing)", "Upload Receipt"):     # no receipt photo upload any more: payments are recorded in Payments
+            with self.subTest(gone=gone):
+                self.assertNotIn(gone, markup)
 
     def test_the_new_helpers_exist_and_history_starts_collapsed(self):
         html = page_text()
@@ -105,7 +108,7 @@ def function_body(name):
 
 class DropdownLayoutTests(SimpleTestCase):
     """The View window is short: Contact is one line, each gown is one short line that opens its own dates (first 5, then "Show all N gowns"),
-    Payment and History are closed rows with a one-line summary, Manual Receipts is one header line with an upload icon."""
+    Payment and History are closed rows with a one-line summary, Old receipt photos is one header line (no upload: payments are recorded in Payments)."""
 
     def css(self):
         return page_text().split("/* ===== Booking details window (View)")[1].split("</style>")[0]
@@ -113,7 +116,7 @@ class DropdownLayoutTests(SimpleTestCase):
     def test_the_sections_come_in_the_planned_order(self):
         markup = window_markup()
         spots = [markup.index(piece) for piece in ('class="rrd-summary"', 'class="rrd-contactline"', "Gowns <small", '<span class="rrd-acct">Payment</span>',
-                                                   "Manual Receipts <small", '<span class="rrd-acct">History')]
+                                                   "Old receipt photos <small", '<span class="rrd-acct">History')]
         self.assertEqual(spots, sorted(spots))
 
     def test_each_gown_is_one_line_that_opens_its_own_dates(self):
@@ -175,14 +178,14 @@ class DropdownLayoutTests(SimpleTestCase):
 
     def test_the_buttons_that_were_words_are_icons_with_hover_and_screen_reader_words(self):
         markup = window_markup()
-        for words in ("View customer's payment proof", "Upload Receipt", "View receipt photo"):
+        for words in ("View customer's payment proof", "View receipt photo"):
             with self.subTest(words=words):
                 self.assertIn('title="%s"' % words, markup)
                 self.assertIn('aria-label="%s"' % words, markup)
         self.assertNotRegex(markup, r">\s*Upload Receipt\s*</button>")
         self.assertNotRegex(markup, r">\s*View\s*</button>")
         self.assertIn(':title="viewing.depositLinkLabel"', markup)
-        self.assertIn("No receipt attached yet.", markup)                      # kept as a small grey line (test_help_tips_and_dates needs the words)
+        self.assertIn("Payments are recorded in Payments, with a printed receipt.", markup)   # the small grey line where the receipt photos used to be
 
     def test_the_new_buttons_rows_and_circles_have_a_dark_twin_and_the_phone_has_its_own_layout(self):
         css = self.css()

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{{ r.title }} {{ r.number }}</title>
+  <style>
+    html, body { margin: 0; padding: 0; }
+    body { min-height: 100vh; background: #e4e7ec; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    .rp-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .6rem; padding: .8rem 1rem; background: #101828; }
+    .rp-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 2.5rem; padding: 0 1.1rem; border: 0; border-radius: .55rem; background: #fff;
+      color: #101828; font: 600 .9rem system-ui, sans-serif; text-decoration: none; cursor: pointer; }
+    .rp-btn--main { background: #465fff; color: #fff; }
+    .rp-btn:focus-visible { outline: 3px solid #9bb0ff; outline-offset: 2px; }
+    .rp-hint { color: #d0d5dd; font-size: .8rem; }
+    .rp-wrap { padding: 1.25rem .75rem 2rem; }
+    .rp-wrap .rc-paper { box-shadow: 0 2px 14px rgba(16, 24, 40, .18); }
+    @page { margin: 4mm; }
+    @media print {
+      body { background: #fff; min-height: 0; }
+      .rp-bar { display: none; }
+      .rp-wrap { padding: 0; }
+      .rp-wrap .rc-paper { box-shadow: none; margin: 0 auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="rp-bar">
+    <button type="button" class="rp-btn rp-btn--main" onclick="window.print()">Print receipt</button>
+    <a class="rp-btn" href="{{ back_url }}">Back to Payments</a>
+    <span class="rp-hint">{% if reprint %}This is reprint {{ reprint }}. {% endif %}Narrow 80 mm paper; it also prints on any ordinary printer or saves as a PDF.</span>
+  </div>
+  <div class="rp-wrap">
+    {% include "partials/receipt_paper.html" %}
+  </div>
+</body>
+</html>

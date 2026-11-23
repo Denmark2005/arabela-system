@@ -72,6 +72,7 @@ urlpatterns = [
     path("reservations/<int:item_id>/", views.reservation_item_detail, name="reservation_item_detail"),
     path("reservations/<int:item_id>/cancel/", views.reservation_item_cancel, name="reservation_item_cancel"),
     path("reservations/<int:item_id>/upload-proof/", views.reservation_upload_proof, name="reservation_upload_proof"),
+    path("receipts/<int:payment_id>/", views.receipt_view, name="receipt_view"),
     path("messages/", views.messages_view, name="messages"),
     path("messages/delete/", views.messages_delete, name="messages_delete"),
     path("notifications/badges/", views.notification_badges, name="notification_badges"),

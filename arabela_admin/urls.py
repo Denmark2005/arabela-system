@@ -16,6 +16,19 @@ from .new_booking import (
     booking_gown_search_view,
     new_booking_view,
 )
+from .payments_views import (
+    deduction_add_view,
+    deduction_void_view,
+    deposit_return_view,
+    late_fee_setting_update_view,
+    payment_detail_view,
+    payment_receipt_print_view,
+    payment_receipts_view,
+    payment_record_view,
+    payment_void_view,
+    payments_view,
+    receipt_send_view,
+)
 from .views import (
     rental_schedule_view,
     dashboard_view,
@@ -175,5 +188,16 @@ urlpatterns = [
     path("api/gcash/qr/remove/", gcash_qr_remove_view, name="gcash_qr_remove"),
     path("api/profile-picture/position/", update_avatar_position_view, name="update_avatar_position"),
     path("api/search/", admin_search_view, name="admin_search"),
+    path("payments/", payments_view, name="payments"),
+    path("payments/receipts/", payment_receipts_view, name="payment_receipts"),
+    path("payments/receipt/<int:payment_id>/", payment_receipt_print_view, name="payment_receipt_print"),
+    path("api/payments/booking/<int:pk>/", payment_detail_view, name="payment_detail"),
+    path("api/payments/booking/<int:pk>/record/", payment_record_view, name="payment_record"),
+    path("api/payments/booking/<int:pk>/return-deposit/", deposit_return_view, name="deposit_return"),
+    path("api/payments/booking/<int:pk>/deduction/", deduction_add_view, name="deduction_add"),
+    path("api/payments/<int:payment_id>/void/", payment_void_view, name="payment_void"),
+    path("api/payments/<int:payment_id>/send/", receipt_send_view, name="payment_send"),
+    path("api/deductions/<int:deduction_id>/void/", deduction_void_view, name="deduction_void"),
+    path("api/late-fee/", late_fee_setting_update_view, name="late_fee_setting_update"),
     path("<str:page>.html", page_view, name="page"),
 ]

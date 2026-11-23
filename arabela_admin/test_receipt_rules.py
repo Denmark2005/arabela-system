@@ -121,14 +121,17 @@ class CompleteBookingTests(ReceiptBase):
         self.assertEqual((response.status_code, response.json()["error"]), (409, RECEIPTS_COMPLETE_MESSAGE))
         self.assertEqual(ReceiptRecord.objects.filter(reservation=reservation).count(), 0)
 
-    def test_the_records_page_hands_the_screen_the_completeness_and_hides_the_upload_buttons_by_it(self):
+    def test_the_records_page_still_hands_over_the_completeness_but_has_no_upload_buttons_any_more(self):
+        """Receipt photos are no longer added from Reservation Records (payments are recorded in Payments, with a printed receipt); the rules above still
+        guard the server endpoints, and the page keeps showing the OLD photos."""
         reservation, _ = self.booking(number_from=next(self.serial))
         self.attach(reservation, self.maria, covers="Rental + deposit")
         self.client.force_login(self.maria)
         html = self.client.get(reverse("arabela_admin:reservation_records")).content.decode()
         self.assertIn('"receiptsComplete": true', html.replace('"receiptsComplete":true', '"receiptsComplete": true'))
-        self.assertIn('x-show="!receiptsComplete(r)"', html)
-        self.assertIn('x-show="!receiptsComplete(viewing)"', html)
+        self.assertNotIn('x-show="!receiptsComplete(r)"', html)
+        self.assertNotIn('x-show="!receiptsComplete(viewing)"', html)
+        self.assertNotIn("startUpload(r)", html)
 
     def test_pending_approval_hides_attach_receipt_once_the_walk_in_has_all_its_receipts(self):
         reservation = self.walk_in(status=Reservation.Status.PENDING)

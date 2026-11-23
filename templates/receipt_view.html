@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{{ r.title }} {{ r.number }} | Arabela</title>
+  <style>
+    html, body { margin: 0; padding: 0; }
+    body { min-height: 100vh; background: #efeeeb; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    .rv-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .6rem; padding: .8rem 1rem; background: #1b1c1c; }
+    .rv-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 2.75rem; padding: 0 1.2rem; border: 0; border-radius: 6px; background: #fff;
+      color: #1b1c1c; font: 600 .875rem system-ui, sans-serif; text-decoration: none; cursor: pointer; }
+    .rv-btn--main { background: #dc2626; color: #fff; }
+    .rv-btn:focus-visible { outline: 3px solid #f2a1a1; outline-offset: 2px; }
+    .rv-hint { color: #d6d3cd; font-size: .8rem; }
+    .rv-wrap { padding: 1.25rem .75rem 2rem; }
+    .rv-wrap .rc-paper { box-shadow: 0 2px 14px rgba(27, 28, 28, .2); }
+    @page { margin: 4mm; }
+    @media print {
+      body { background: #fff; min-height: 0; }
+      .rv-bar { display: none; }
+      .rv-wrap { padding: 0; }
+      .rv-wrap .rc-paper { box-shadow: none; margin: 0 auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="rv-bar">
+    <button type="button" class="rv-btn rv-btn--main" onclick="window.print()">Print or save as PDF</button>
+    <a class="rv-btn" href="{{ back_url }}">Back to my reservation</a>
+    <span class="rv-hint">On a phone, choose "Save as PDF" in the print window to keep a copy.</span>
+  </div>
+  <div class="rv-wrap">
+    {% include "partials/receipt_paper.html" %}
+  </div>
+</body>
+</html>
