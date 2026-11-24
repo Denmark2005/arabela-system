@@ -184,6 +184,54 @@
       </div>
     </section>
 
+    {% if paymongo_enabled %}
+    <!-- Payment: pay on PayMongo's own page (GCash, Maya or QR Ph). The two tiles are the same look as the older payment-method tile. -->
+    <section id="pay-section" class="bg-white border border-black/10 rounded-[12px] editorial-shadow overflow-hidden res-reveal res-delay-200">
+      <div class="flex items-center gap-3 px-6 sm:px-8 py-5 border-b border-black/5">
+        <span class="font-headline text-sm font-semibold text-secondary">02</span>
+        <h2 class="font-headline text-base font-semibold text-on-surface">Payment</h2>
+      </div>
+      <div class="p-6 sm:p-8 space-y-5">
+        {% if payment_cancelled %}
+        <div id="pay-cancelled-note" class="rounded-[6px] px-4 py-3" style="border-left: 2px solid #b45309; background-color: rgba(180, 83, 9, 0.07);">
+          <p class="flex items-start gap-2 text-[0.8125rem] leading-relaxed text-[#7c3d06]">
+            <span class="material-symbols-outlined shrink-0" style="font-size: 1rem;">info</span>
+            <span>Your payment was not completed and nothing was charged. Choose how to pay and press Pay again.</span>
+          </p>
+        </div>
+        {% endif %}
+
+        <div role="radiogroup" aria-label="How much to pay now" class="space-y-3">
+          <label data-pay-tile class="w-full cursor-pointer text-left rounded-[8px] border-2 border-primary bg-white px-5 py-4 flex items-start gap-4 transition-colors hover:bg-gray-50">
+            <input type="radio" name="pay_option" value="deposit" checked class="sr-only">
+            <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[9999px] border-[1.5px] border-primary"><span data-pay-dot class="h-2.5 w-2.5 rounded-[9999px] bg-primary"></span></span>
+            <span class="min-w-0 flex-1">
+              <span class="block font-medium text-sm text-on-surface">Pay Security Deposit Only</span>
+              <span class="block mt-1 text-[0.8rem] text-secondary leading-relaxed">Pay the deposit now. The rental fee (<span id="pay-rest-amount">&#8369;0</span>) is paid at the shop.</span>
+            </span>
+            <span id="pay-amount-deposit" class="shrink-0 font-headline text-sm font-semibold text-on-surface tabular-nums">&#8369;0</span>
+          </label>
+          <label data-pay-tile class="w-full cursor-pointer text-left rounded-[8px] border-2 border-black/10 bg-white px-5 py-4 flex items-start gap-4 transition-colors hover:bg-gray-50">
+            <input type="radio" name="pay_option" value="full" class="sr-only">
+            <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[9999px] border-[1.5px] border-black/25"><span data-pay-dot class="h-2.5 w-2.5 rounded-[9999px] bg-primary hidden"></span></span>
+            <span class="min-w-0 flex-1">
+              <span class="block font-medium text-sm text-on-surface">Pay in Full</span>
+              <span class="block mt-1 text-[0.8rem] text-secondary leading-relaxed">Pay the rental fee and the deposit now. Nothing is left to pay at the shop.</span>
+            </span>
+            <span id="pay-amount-full" class="shrink-0 font-headline text-sm font-semibold text-on-surface tabular-nums">&#8369;0</span>
+          </label>
+        </div>
+
+        <div class="flex items-start gap-3 rounded-[8px] bg-gray-50 px-4 py-3">
+          <span class="material-symbols-outlined shrink-0 text-secondary" style="font-size: 1.1rem;">lock</span>
+          <p class="text-[0.8rem] text-secondary leading-relaxed">You will choose <b class="font-medium text-on-surface">GCash, Maya or QR Ph</b> on PayMongo&rsquo;s secure payment page. Your booking is confirmed the moment the payment is received. The security deposit is fully refundable when you return the gown.</p>
+        </div>
+        {% if paymongo_test %}
+        <p id="pay-test-note" class="text-[0.75rem] leading-relaxed text-secondary">Test mode: the payment page is a simulation. No real money is charged.</p>
+        {% endif %}
+      </div>
+    </section>
+    {% else %}
     <!-- Payment Details Section -->
     <section class="bg-white border border-black/10 rounded-[12px] editorial-shadow overflow-hidden res-reveal res-delay-200">
       <div class="flex items-center gap-3 px-6 sm:px-8 py-5 border-b border-black/5">
@@ -258,6 +306,7 @@
         </div>
       </div>
     </section>
+    {% endif %}
   </div>
 
   <!-- Right Column: Order Summary (Sticky) -->
@@ -316,8 +365,9 @@
 
           <button type="button" id="confirm-rental-btn"
                   class="w-full bg-primary py-4 text-white text-sm font-semibold hover:opacity-90 active:scale-[0.99] transition-all duration-200 rounded-[6px] flex items-center justify-center gap-2">
-            Confirm Rental
-            <span class="material-symbols-outlined text-sm">arrow_forward</span>
+            {% if paymongo_enabled %}<span id="pay-btn-label">Pay Now</span>
+            <span class="material-symbols-outlined text-sm">lock</span>{% else %}Confirm Rental
+            <span class="material-symbols-outlined text-sm">arrow_forward</span>{% endif %}
           </button>
 
           <p class="text-center mt-4 text-[0.75rem] text-secondary leading-relaxed">
@@ -338,6 +388,7 @@
   </aside>
 </div>
 
+{% if not paymongo_enabled %}
 <!-- GCash Modal (Required Deposit): a short step-by-step guide for people who have never paid by QR.
      The QR picture, account name and number come from the shop settings (owner sets them in the admin's
      Edit Profile). #gcash-deposit-amount is filled by reservation-flow.js with the deposit for the bag. -->
@@ -418,8 +469,10 @@
   </div>
 </div>
 
+{% endif %}
+
 <!-- Loading Overlay -->
-<div id="loading-overlay" role="status" aria-label="Checking your receipt">
+{% if paymongo_enabled %}<div id="loading-overlay" role="status" aria-label="Opening the payment page">{% else %}<div id="loading-overlay" role="status" aria-label="Checking your receipt">{% endif %}
     <div class="loading-spinner animate-spin"></div>
 </div>
 
@@ -450,6 +503,27 @@
         var PROFILE_DISPLAY_NAME = "{{ profile_display_name|default:''|escapejs }}";
         var SUBMIT_URL = "{% url 'gowns:reservation_submit' %}";
         var CONFIRMATION_URL = "{% url 'gowns:confirmation' %}";
+        // Paying through PayMongo (the server turns this on while a PayMongo key is set). The selection is NOT cleared when Pay is pressed: the
+        // customer may come back without paying, and only the confirmed payment turns it into a booking (templates/payment_return.html).
+        var PAYMONGO = {{ paymongo_enabled|yesno:"true,false" }};
+        var PAY_START_URL = "{% url 'gowns:pay_start' %}";
+        var CONFIRM_WORD = PAYMONGO ? 'Pay' : 'Confirm Rental';
+        // One id per press of Pay: pressing twice (or retrying after a dropped connection) is the same payment, never a second one.
+        function newPayRequestId() {
+            return (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : ('p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12));
+        }
+        var payRequestId = newPayRequestId();
+        function pesoText(n) { return '\u20b1' + (Number(n) || 0).toLocaleString('en-PH', { maximumFractionDigits: 2 }); }
+        // The order summary tells this page its totals (static/js/reservation-flow.js setTotals): the two choices and the button show what each costs.
+        window.onReservationTotals = function (subtotal, deposit, total) {
+            if (!PAYMONGO) return;
+            var pay = function (id, value) { var el = document.getElementById(id); if (el) el.textContent = pesoText(value); };
+            pay('pay-amount-deposit', deposit);
+            pay('pay-amount-full', Number(subtotal || 0) + Number(deposit || 0));
+            pay('pay-rest-amount', subtotal);
+            window.arabelaPayTotals = { deposit: Number(deposit) || 0, full: (Number(subtotal) || 0) + (Number(deposit) || 0) };
+            if (typeof window.arabelaRefreshPayLabel === 'function') window.arabelaRefreshPayLabel();
+        };
         var LOCKED_TITLE = 'Your account is temporarily locked';
 
         // Set before reservation-flow.js draws the Order Summary, which is what switches Confirm on again.
@@ -874,17 +948,65 @@
                 arabelaAlert({ title: 'Your account changed', message: err.data.error, danger: true }).then(refresh, refresh);
                 return;
             }
-            var fallback = 'Unable to submit your reservation. Please try again.';
+            var fallback = PAYMONGO ? 'We could not start your payment. Nothing was charged. Please try again.' : 'Unable to submit your reservation. Please try again.';
             var described = window.arabelaDescribeRequestError
                 ? window.arabelaDescribeRequestError(err, fallback)
                 : { kind: 'message', message: (err && err.message) || fallback };
             var titles = { network: 'Connection problem', server: 'Server busy', photo: 'Receipt photo problem' };
             var message = described.message;
             if (described.kind === 'network' || described.kind === 'server') {
-                message += ' If you are not sure, check My Reservations first. If your booking is not there, your details are still filled in, so just tap Confirm Rental again. You will not be booked twice.';
+                message += PAYMONGO
+                    ? ' If you are not sure, check My Reservations first. Your details are still filled in, so just tap Pay again. You will not be charged twice.'
+                    : ' If you are not sure, check My Reservations first. If your booking is not there, your details are still filled in, so just tap Confirm Rental again. You will not be booked twice.';
             }
-            arabelaAlert({ title: titles[described.kind] || 'Reservation not submitted', message: message, danger: true });
+            arabelaAlert({ title: titles[described.kind] || (PAYMONGO ? 'Payment not started' : 'Reservation not submitted'), message: message, danger: true });
         }
+
+        // Pay: the server checks everything the older checkout checked, keeps the selection, and opens PayMongo's page; the browser goes there.
+        function startOnlinePayment(payload, submitItems, btn) {
+            var overlay = document.getElementById('loading-overlay');
+            if (overlay) overlay.classList.add('show');
+            btn.disabled = true;
+            var chosen = document.querySelector('input[name="pay_option"]:checked');
+            var formData = new FormData();
+            formData.append('items', JSON.stringify(submitItems));
+            formData.append('expected_user', (document.body && document.body.dataset && document.body.dataset.userKey) || '');
+            formData.append('expected_deposit', String((Number(payload.itemCount) || 0) * (Number(document.body.dataset.depositPerGown) || 2000)));
+            formData.append('pay_option', chosen ? chosen.value : 'deposit');
+            formData.append('request_id', payRequestId);
+            formData.append('first_name', document.getElementById('first_name').value.trim());
+            formData.append('last_name', document.getElementById('last_name').value.trim());
+            formData.append('address', document.getElementById('address').value.trim());
+            formData.append('city', document.getElementById('city').value.trim());
+            formData.append('postal_code', document.getElementById('postal').value.trim());
+            formData.append('phone', document.getElementById('phone').value.trim());
+            fetch(PAY_START_URL, { method: 'POST', headers: { 'X-CSRFToken': getCsrfToken() }, body: formData })
+                .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+                .then(function (result) {
+                    if (!result.ok || !result.data.success || !result.data.checkout_url) {
+                        var startErr = new Error(result.data.error || 'We could not start your payment. Nothing was charged. Please try again.');
+                        startErr.data = result.data;
+                        throw startErr;
+                    }
+                    window.location.href = result.data.checkout_url;          // the overlay stays up while the browser leaves
+                })
+                .catch(function (err) {
+                    if (overlay) overlay.classList.remove('show');
+                    btn.disabled = !!window.arabelaCheckoutLocked;
+                    payRequestId = newPayRequestId();                          // a failed press must never block the next one
+                    showSubmitError(err);
+                });
+        }
+
+        // Coming back with the browser's Back button from PayMongo's page restores this page as it was left: the overlay and the disabled button
+        // must not come back with it.
+        window.addEventListener('pageshow', function (event) {
+            if (!PAYMONGO || !event.persisted) return;
+            var overlay = document.getElementById('loading-overlay');
+            if (overlay) overlay.classList.remove('show');
+            var again = document.getElementById('confirm-rental-btn');
+            if (again) again.disabled = !!window.arabelaCheckoutLocked;
+        });
 
         function saveCheckoutDraft() {
             try {
@@ -950,6 +1072,35 @@
 
             var btn = document.getElementById('confirm-rental-btn');
 
+            // The two payment tiles (deposit only / pay in full): the chosen one is outlined, and the button says what pressing it pays.
+            var payTiles = document.querySelectorAll('[data-pay-tile]');
+            window.arabelaRefreshPayLabel = function () {
+                var label = document.getElementById('pay-btn-label');
+                if (!label) return;
+                var chosenNow = document.querySelector('input[name="pay_option"]:checked');
+                var totals = window.arabelaPayTotals || { deposit: 0, full: 0 };
+                var due = chosenNow && chosenNow.value === 'full' ? totals.full : totals.deposit;
+                label.textContent = due > 0 ? 'Pay ' + pesoText(due) : 'Pay Now';
+            };
+            function refreshPayTiles() {
+                Array.prototype.forEach.call(payTiles, function (tile) {
+                    var input = tile.querySelector('input[name="pay_option"]');
+                    var on = !!(input && input.checked);
+                    tile.classList.toggle('border-primary', on);
+                    tile.classList.toggle('border-black/10', !on);
+                    var ring = tile.querySelector('span.rounded-\\[9999px\\]');
+                    if (ring) { ring.classList.toggle('border-primary', on); ring.classList.toggle('border-black/25', !on); }
+                    var dot = tile.querySelector('[data-pay-dot]');
+                    if (dot) dot.classList.toggle('hidden', !on);
+                });
+                window.arabelaRefreshPayLabel();
+            }
+            Array.prototype.forEach.call(payTiles, function (tile) {
+                var input = tile.querySelector('input[name="pay_option"]');
+                if (input) input.addEventListener('change', refreshPayTiles);
+            });
+            if (payTiles.length) refreshPayTiles();
+
             if (lockoutNotice) {
                 if (btn) btn.disabled = true;
                 // When the lock runs out, the notice goes and Confirm follows the usual rules again.
@@ -1004,6 +1155,8 @@
                         });
                         return;
                     }
+
+                    if (PAYMONGO) { startOnlinePayment(payload, submitItems, btn); return; }
 
                     var loadingOverlay = document.getElementById('loading-overlay');
                     if (loadingOverlay) loadingOverlay.classList.add('show'); if (window.arabelaReceiptChecking) window.arabelaReceiptChecking.start();

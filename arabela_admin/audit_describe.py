@@ -575,6 +575,25 @@ def deduction_void(ctx):
             "target": _booking_target(reservation), "sensitive": True, "details": _keep(ctx.body, "reason")}
 
 
+def _online_attempt_text(attempt_id):
+    from reservations.models import PaymentAttempt
+    attempt = PaymentAttempt.objects.filter(pk=attempt_id).first()
+    if attempt is None:
+        return "an online payment", ("online payment", attempt_id, "")
+    return (f"the online payment of \u20b1{attempt.paid_amount or attempt.amount} from {attempt.customer_name or 'a customer'}",
+            ("online payment", attempt.pk, attempt.provider_payment_id or attempt.token[:8]))
+
+
+def online_refund(ctx):
+    text, target = _online_attempt_text(ctx.kwargs.get("attempt_id"))
+    return {"summary": f"sent {text} back through PayMongo", "target": target, "sensitive": True, "details": _keep(ctx.body, "reason")}
+
+
+def online_handled(ctx):
+    text, target = _online_attempt_text(ctx.kwargs.get("attempt_id"))
+    return {"summary": f"marked {text} as handled", "target": target, "sensitive": True, "details": _keep(ctx.body, "note")}
+
+
 def receipt_send(ctx):
     from reservations.models import Payment
     payment = Payment.objects.select_related("reservation__customer__profile").filter(pk=ctx.kwargs.get("payment_id")).first()

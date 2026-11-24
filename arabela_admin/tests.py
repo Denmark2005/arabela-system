@@ -1639,8 +1639,9 @@ class LiveNotificationFeedTests(TestCase):
             self._reserve(f"Query Customer {n}", proof="https://example.test/p.jpg")
         with CaptureQueriesContext(connection) as queries:
             self.assertEqual(self._feed().status_code, 200)
-        # 13: one more than before for the "pick-ups today with a balance" check (a single query while nobody is due today)
-        self.assertLessEqual(len(queries), 13, [q["sql"][:80] for q in queries])
+        # 15: one more than before for the "pick-ups today with a balance" check, one for the online payments that need a look and one for
+        # deposit refunds PayMongo could not send (each a single query however many bookings there are)
+        self.assertLessEqual(len(queries), 15, [q["sql"][:80] for q in queries])
 
     # ---- the page ---------------------------------------------------------------------------------
     def test_every_admin_page_carries_what_the_bell_script_needs(self):

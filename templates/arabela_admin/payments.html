@@ -21,6 +21,11 @@
     .pm-tab { display: inline-flex; align-items: center; padding: .4rem 1rem; border: 1px solid #d0d5dd; border-radius: 999px; color: #475467; font-size: .875rem; font-weight: 500; text-decoration: none; }
     .pm-tab:hover { background: rgba(152,162,179,.12); }
     .pm-tab.is-on { background: #101828; border-color: #101828; color: #fff; }
+    .pm-badge { margin-left: .45rem; min-width: 1.15rem; padding: 0 .4rem; border-radius: 999px; background: #d92d20; color: #fff; font-size: .7rem; font-weight: 700; line-height: 1.15rem; text-align: center; }
+    .pm-table tr.is-hot td { background: rgba(254, 228, 226, .45); }
+    .dark .pm-table tr.is-hot td { background: rgba(240, 68, 56, .1); }
+    .pm-note { margin: 0 0 .9rem; padding: .6rem .8rem; border-radius: .6rem; background: #f2f4f7; color: #475467; font-size: .8125rem; line-height: 1.45; }
+    .dark .pm-note { background: #1d2939; color: #98a2b3; }
     .dark .pm-tab { border-color: #344054; color: #d0d5dd; }
     .dark .pm-tab.is-on { background: #fff; border-color: #fff; color: #101828; }
     .pm-countrow { display: flex; flex-wrap: wrap; align-items: center; gap: .1rem .75rem; }
@@ -1230,12 +1235,12 @@
 </div>
 </div>
             <!-- Breadcrumb End -->
-            {% if is_owner %}
             <div class="pm-tabs" role="navigation" aria-label="Payments sections">
               <a class="pm-tab{% if mode == 'bookings' %} is-on{% endif %}" href="{% url 'arabela_admin:payments' %}"{% if mode == 'bookings' %} aria-current="page"{% endif %}>Bookings</a>
-              <a class="pm-tab{% if mode == 'receipts' %} is-on{% endif %}" href="{% url 'arabela_admin:payment_receipts' %}"{% if mode == 'receipts' %} aria-current="page"{% endif %}>All receipts</a>
+              {% if is_owner %}<a class="pm-tab{% if mode == 'receipts' %} is-on{% endif %}" href="{% url 'arabela_admin:payment_receipts' %}"{% if mode == 'receipts' %} aria-current="page"{% endif %}>All receipts</a>{% endif %}
+              <a class="pm-tab{% if mode == 'online' %} is-on{% endif %}" href="{% url 'arabela_admin:payment_online' %}"{% if mode == 'online' %} aria-current="page"{% endif %}>Online payments{% if online_attention %}<span class="pm-badge" title="{{ online_attention }} need a look">{{ online_attention }}</span>{% endif %}</a>
             </div>
-            {% endif %}
+            {% if paymongo_mode == "test" and mode != "online" %}<p class="pm-note">PayMongo is in TEST mode: online payments are simulated and no real money moves, but the bookings they make are real bookings.</p>{% endif %}
 
             {% if mode == "bookings" %}
             <!-- What every booking still owes, its late fee and the deposit it can give back: all worked out by the system (reservations/ledger.py). Click a booking to open its payments. -->
@@ -1287,6 +1292,95 @@
                 {% endfor %}
               </div>
             </div>
+            {% elif mode == "online" %}
+            <!-- Payments customers made on PayMongo's page. The system makes the booking the moment PayMongo confirms the money, so what is listed
+                 here as "Needs a look" is money that arrived WITHOUT a booking behind it, or a refund that did not go through. -->
+            <div class="pm-card">
+              {% if paymongo_mode == "test" %}<p class="pm-note">Test mode: these payments were made on PayMongo's simulated page. No real money moved.</p>{% endif %}
+              <form method="get" class="pm-filters" role="search" aria-label="Find an online payment">
+                <div style="flex: 1 1 14rem; min-width: 12rem;">
+                  <label class="pm-hint" for="pm-q">Customer, booking or PayMongo payment number</label>
+                  <input id="pm-q" type="text" name="q" value="{{ q }}" class="pm-in" style="width: 100%;" placeholder="Juan, RSV-2026-0112, pay_...">
+                </div>
+                <div><label class="pm-hint" for="pm-show">Show</label>
+                  <select id="pm-show" name="show" class="pm-in"><option value="attention"{% if show == "attention" %} selected{% endif %}>Needs a look</option><option value="all"{% if show == "all" %} selected{% endif %}>All online payments</option></select></div>
+                <button type="submit" class="pm-b pm-b--main">Search</button>
+                <a href="{% url 'arabela_admin:payment_online' %}" class="pm-b">Clear</a>
+              </form>
+              <div style="overflow-x: auto;">
+                <table class="pm-table" id="pm-online-table">
+                  <thead><tr><th>Date</th><th>Customer</th><th>For</th><th class="r">Amount</th><th>Paid with</th><th>Status</th><th>Booking</th><th>Note</th><th></th></tr></thead>
+                  <tbody>
+                  {% for a in attempts %}
+                    <tr data-attempt-id="{{ a.id }}"{% if a.attention %} class="is-hot"{% endif %}>
+                      <td>{{ a.created_at|date:"M j, Y" }}<div class="pm-legacy">{{ a.created_at|date:"g:i A" }}</div></td>
+                      <td>{{ a.who }}</td>
+                      <td>{{ a.kind_label }}</td>
+                      <td class="r">&#8369;{{ a.amount|floatformat:"2g" }}</td>
+                      <td>{{ a.channel_label }}{% if not a.livemode %}<div class="pm-legacy">test</div>{% endif %}</td>
+                      <td><span class="pm-chip pm-chip--{{ a.chip }}">{{ a.chip_words }}</span></td>
+                      <td>{% if a.booking_code %}<a href="{% url 'arabela_admin:payments' %}?open={{ a.reservation_id }}">{{ a.booking_code }}</a>{% else %}-{% endif %}</td>
+                      <td>{{ a.note|default:"-" }}{% if a.provider_payment_id %}<div class="pm-legacy">{{ a.provider_payment_id }}</div>{% endif %}</td>
+                      <td style="white-space: nowrap;">
+                        {% if can_void and a.can_refund %}<button type="button" class="pm-b pm-b--small" data-online-action="refund" data-id="{{ a.id }}" data-url="{% url 'arabela_admin:payment_online_refund' a.id %}">Send money back</button>{% endif %}
+                        {% if can_void and a.can_handle %}<button type="button" class="pm-b pm-b--small" data-online-action="handled" data-id="{{ a.id }}" data-url="{% url 'arabela_admin:payment_online_handled' a.id %}">Mark as handled</button>{% endif %}
+                      </td>
+                    </tr>
+                  {% empty %}
+                    <tr><td colspan="9" class="pm-empty">{% if show == "attention" %}Nothing needs a look. Every online payment became a booking or went back to the customer.{% else %}No online payment matches.{% endif %}</td></tr>
+                  {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+              {% if attempts.paginator.num_pages > 1 %}
+              <div class="pm-pages">
+                {% if attempts.has_previous %}<a class="pm-b pm-b--small" href="?q={{ q|urlencode }}&amp;show={{ show }}&amp;page={{ attempts.previous_page_number }}">Back</a>{% endif %}
+                <span>Page {{ attempts.number }} of {{ attempts.paginator.num_pages }}</span>
+                {% if attempts.has_next %}<a class="pm-b pm-b--small" href="?q={{ q|urlencode }}&amp;show={{ show }}&amp;page={{ attempts.next_page_number }}">Next</a>{% endif %}
+              </div>
+              {% endif %}
+            </div>
+            <script>
+              (function () {
+                var table = document.getElementById('pm-online-table');
+                if (!table) return;
+                function csrf() { var m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/); return m ? decodeURIComponent(m[1]) : ''; }
+                function post(url, body) {
+                  return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() }, body: JSON.stringify(body || {}) })
+                    .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); });
+                }
+                function failed(result) { adminAlert({ title: 'That did not work', message: (result.data && result.data.error) || 'Please try again.', danger: true }); }
+                table.addEventListener('click', function (event) {
+                  var button = event.target.closest('[data-online-action]');
+                  if (!button || button.disabled) return;
+                  var url = button.getAttribute('data-url');
+                  if (button.getAttribute('data-online-action') === 'refund') {
+                    adminConfirm({
+                      title: 'Send this payment back?',
+                      message: 'The whole payment goes back to the customer through PayMongo (to the GCash, Maya or bank account they paid with). This cannot be undone.',
+                      confirmText: 'Send it back', danger: true
+                    }).then(function (ok) {
+                      if (!ok) return;
+                      button.disabled = true;
+                      post(url, {}).then(function (result) {
+                        if (result.ok) { window.location.reload(); } else { button.disabled = false; failed(result); }
+                      }, function () { button.disabled = false; adminAlert({ title: 'Connection problem', message: 'Please try again.', danger: true }); });
+                    });
+                  } else {
+                    adminPrompt({
+                      title: 'Mark as handled', message: 'What did you do? For example: refunded in PayMongo\u2019s dashboard, or booked the gown by hand.',
+                      multiline: true, confirmText: 'Save'
+                    }).then(function (text) {
+                      if (text === null) return;
+                      button.disabled = true;
+                      post(url, { note: text }).then(function (result) {
+                        if (result.ok) { window.location.reload(); } else { button.disabled = false; failed(result); }
+                      }, function () { button.disabled = false; adminAlert({ title: 'Connection problem', message: 'Please try again.', danger: true }); });
+                    });
+                  }
+                });
+              })();
+            </script>
             {% else %}
             <!-- Every Payment Receipt, newest first (owner only). The paper itself opens in its own page; a void keeps the line and shows the reason. -->
             <div class="pm-card">
@@ -1461,11 +1555,14 @@
                         <div class="pm-radios" role="radiogroup" aria-label="How it was handed back">
                           <label :class="ret.method === 'Cash' ? 'is-on' : ''"><input type="radio" name="pm-ret-method" value="Cash" x-model="ret.method" style="accent-color: #465fff;"> Cash</label>
                           <label :class="ret.method === 'GCash' ? 'is-on' : ''"><input type="radio" name="pm-ret-method" value="GCash" x-model="ret.method" style="accent-color: #465fff;"> GCash (sent from the shop's GCash app)</label>
+                          <label x-show="d.onlineRefund && d.onlineRefund.offered && d.onlineRefund.available" :class="ret.method === 'PayMongo' ? 'is-on' : ''"><input type="radio" name="pm-ret-method" value="PayMongo" x-model="ret.method" style="accent-color: #465fff;"> <span x-text="'Automatically to the customer ' + (d.onlineRefund ? d.onlineRefund.label : '') + ' account (through PayMongo)'"></span></label>
                         </div></div>
+                      <p class="pm-hint" x-show="ret.method === 'PayMongo'">The money goes back to the account the customer paid with, usually within a day. It is sent as soon as you press the button and cannot be undone.</p>
+                      <p class="pm-hint" x-show="d.onlineRefund && d.onlineRefund.offered && !d.onlineRefund.available" x-text="'It cannot be sent back automatically: ' + (d.onlineRefund ? d.onlineRefund.reason : '')"></p>
                       <div x-show="ret.method === 'GCash'"><label for="pm-ret-ref">GCash reference number of the transfer you sent (13 digits)</label><input id="pm-ret-ref" type="text" inputmode="numeric" class="pm-in" x-model="ret.reference" maxlength="24" autocomplete="off"></div>
                       <div><label for="pm-ret-note">Note (optional)</label><input id="pm-ret-note" type="text" class="pm-in" x-model="ret.note" maxlength="200"></div>
                       <p class="pm-err" x-show="formError && formWhere === 'ret'" x-text="formError"></p>
-                      <div class="pm-btns"><button type="button" class="pm-b pm-b--main" @click="giveBack()" :disabled="busy" x-text="busy && formWhere === 'ret' ? 'Saving...' : 'Record deposit return'"></button></div>
+                      <div class="pm-btns"><button type="button" class="pm-b pm-b--main" @click="giveBack()" :disabled="busy" x-text="busy && formWhere === 'ret' ? 'Saving...' : (ret.method === 'PayMongo' ? 'Send deposit back' : 'Record deposit return')"></button></div>
                     </div>
 
                     <details class="pm-form" x-show="d.canVoid && d.canDeduct">
@@ -1563,7 +1660,7 @@
           if (c.kind === 'deposit') { this.rec.purpose = c.options[0].purpose; this.rec.amount = c.options[0].amount; }
           else if (c.kind === 'balance') { this.rec.purpose = 'Balance'; }
           else if (c.kind === 'extra') { this.rec.purpose = 'Extra'; }
-          this.ret = { amount: data.canReturn ? data.peso.refund_available.replace(/,/g, '') : '', method: 'Cash', reference: '', note: '', rid: pmUid() };
+          this.ret = { amount: data.canReturn ? data.peso.refund_available.replace(/,/g, '') : '', method: (data.onlineRefund && data.onlineRefund.available) ? 'PayMongo' : 'Cash', reference: '', note: '', rid: pmUid() };
           this.ded = { amount: '', reason: '', rid: pmUid() };
           this.formError = ''; this.voiding = null;
         },
@@ -1591,9 +1688,19 @@
           }, function (data) { return 'Payment recorded. Receipt ' + data.payment.receiptNumber + ' is ready to print.'; });
         },
         giveBack: function () {
-          this.run('ret', this.url(RETURN, this.d.id), {
-            amount: this.ret.amount, method: this.ret.method, reference: this.ret.reference, note: this.ret.note, request_id: this.ret.rid
-          }, function (data) { return 'Deposit return recorded. Receipt ' + data.payment.receiptNumber + ' is ready to print.'; });
+          var self = this;
+          var send = function () {
+            self.run('ret', self.url(RETURN, self.d.id), {
+              amount: self.ret.amount, method: self.ret.method, reference: self.ret.reference, note: self.ret.note, request_id: self.ret.rid
+            }, function (data) { return 'Deposit return recorded. Receipt ' + data.payment.receiptNumber + ' is ready to print.'; });
+          };
+          if (this.ret.method !== 'PayMongo') { send(); return; }
+          // Money leaves at once and cannot be called back: ask first.
+          adminConfirm({
+            title: 'Send the deposit back now?',
+            message: '₱' + this.ret.amount + ' goes back to the ' + (this.d.onlineRefund ? this.d.onlineRefund.label : 'account') + ' the customer paid with, through PayMongo. This cannot be undone.',
+            confirmText: 'Send it back', danger: true
+          }).then(function (ok) { if (ok) send(); });
         },
         deduct: function () {
           this.run('ded', this.url(DEDUCT, this.d.id), { amount: this.ded.amount, reason: this.ded.reason, request_id: this.ded.rid }, 'Deduction added. The customer has been told.');

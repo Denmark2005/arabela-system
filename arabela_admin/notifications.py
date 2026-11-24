@@ -32,7 +32,7 @@ from gowns.models import Gown
 from reservations import cancel_requests as reservation_cancel_requests
 from reservations import ledger as reservation_ledger
 from reservations import owner_check as reservation_owner_check
-from reservations.models import CancelRequest, Reservation, ReservationItem
+from reservations.models import CancelRequest, Payment, PaymentAttempt, Reservation, ReservationItem
 
 # What each part of the bell is drawn from. The page includes these templates; the live feed
 # renders the same ones and hands the HTML to the script to swap in.
@@ -379,6 +379,49 @@ def build_items(user):
                     when=today,
                     sort=datetime.combine(today, time.min),
                 ))
+
+    # --- Online payments that need a person ----------------------------------------------------------------------------------------------
+    # Money that arrived on PayMongo's page with no booking behind it, or a refund that did not go through (PaymentAttempt.needs_a_look). It stays
+    # until someone sends it back or marks it handled on the Payments page's Online payments tab.
+    for attempt in PaymentAttempt.objects.filter(PaymentAttempt.attention_filter()).order_by("-created_at")[:10]:
+        refund_failed = attempt.status == PaymentAttempt.Status.REFUNDED
+        items.append(_item(
+            key=f"online:{attempt.id}",
+            kind="payment",
+            level="warning",
+            actor=attempt.customer_name or "A customer",
+            text=("has an online payment whose refund did not go through:" if refund_failed else "paid online but has no booking yet:"),
+            subject=f"₱{attempt.paid_amount or attempt.amount:,.2f}",
+            module="Payments",
+            url=reverse("arabela_admin:payment_online") + "?show=attention",
+            when=attempt.paid_at or attempt.created_at,
+            sort=attempt.paid_at or attempt.created_at,
+        ))
+
+    # --- A deposit refund PayMongo accepted and then could not send ------------------------------------------------------------------------
+    # reservations/payments.py on_online_refund_updated cancels such a deposit return, so the deposit is again "still to hand back". It stays here
+    # until staff hand it back another way (the booking's deposit shows nothing left to return) -- derived, like every entry on this bell.
+    failed_returns = (
+        Payment.objects.filter(direction=Payment.Direction.OUT, provider="paymongo", status=Payment.Status.VOID, voided_by_name="PayMongo",
+                               voided_at__gte=timezone.now() - timedelta(days=30))
+        .select_related("reservation__customer__profile").order_by("-voided_at")[:5]
+    )
+    for failed in failed_returns:
+        reservation = failed.reservation
+        if reservation_ledger.statement(reservation).refund_available <= 0:
+            continue
+        items.append(_item(
+            key=f"refundfailed:{failed.id}",
+            kind="payment",
+            level="warning",
+            actor=reservation.display_customer_name,
+            text="has a deposit PayMongo could not send back automatically. Hand it back for",
+            subject=reservation.reference_code,
+            module="Payments",
+            url=reverse("arabela_admin:payments") + "?" + urlencode({"open": reservation.id}),
+            when=failed.voided_at,
+            sort=failed.voided_at,
+        ))
 
     # --- Calls to make: bookings with no website account ---------------------------
     # A customer who booked online is reminded automatically (reservations/reminders.py) a day before their pick-up and

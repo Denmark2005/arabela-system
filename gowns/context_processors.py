@@ -17,6 +17,7 @@ from gowns.models import (
 )
 from gowns.covers import cover_for, owner_cover_urls
 from gowns.photos import GRID_WIDTH, sized
+from reservations import paymongo
 from reservations.models import Reservation, ReservationItem
 
 _PRICE_RE = re.compile(r"[^\d]")
@@ -360,6 +361,8 @@ def site_settings(request):
         # all read these, so changing the setting changes every place at once.
         "site_deposit_per_gown": deposit_per_gown,
         "site_late_fee_per_day": late_fee_per_day,
+        # True while the checkout pays through PayMongo (a key is set): the pages that explain how to pay say so (How it works, FAQs, the product page).
+        "paymongo_enabled": paymongo.enabled(),
         "site_deposit_php": deposit.php_text(deposit_per_gown),
         "site_deposit_php_short": deposit.php_short(deposit_per_gown),
     }
@@ -429,6 +432,12 @@ def expire_reservation_hold_if_lapsed(request):
     if get_reservation_hold_deadline(request):
         return  # still live
     clear_reservation_hold(request)
+    # A customer who PAID on PayMongo's page and never came back to this site has not abandoned anything: their booking exists (or the money went back).
+    from reservations.models import PaymentAttempt
+    if PaymentAttempt.objects.filter(
+            customer=request.user, status__in=(PaymentAttempt.Status.PAID, PaymentAttempt.Status.BOOKED, PaymentAttempt.Status.REFUNDED),
+            paid_at__gte=timezone.now() - timedelta(hours=2)).exists():
+        return
     from accounts.services import record_abandoned_hold
 
     record_abandoned_hold(request.user)

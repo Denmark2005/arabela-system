@@ -12,6 +12,10 @@ reservations/payments.py (what is accepted); this file is only the web side.
                           POST api/payments/booking/<id>/deduction/   take an amount off the deposit
                           POST api/payments/<id>/void/                void a receipt that was a mistake
                           POST api/deductions/<id>/void/              remove a deduction
+  staff, manager, owner   GET  payments/online/                       payments made on PayMongo's page that need a look (and all of them)
+  owner, or staff allowed "Void receipts and add deductions":
+                          POST api/payments/online/<id>/refund/       send a paid-but-not-booked online payment back to the customer
+                          POST api/payments/online/<id>/handled/      note that a person sorted such a payment out by hand
   owner only              GET  payments/receipts/                     every receipt, with search
                           POST api/late-fee/                          the late fee per gown per day (profile page)
 
@@ -28,10 +32,10 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from accounts.audit import audited
-from gowns import late_fee, typed_payment
+from gowns import late_fee, online_checkout, typed_payment
 from gowns.models import SiteSettings
-from reservations import ledger, payments
-from reservations.models import Deduction, Payment, Reservation, ReservationItem
+from reservations import ledger, payments, paymongo
+from reservations.models import Deduction, Payment, PaymentAttempt, Reservation, ReservationItem
 
 from . import audit_describe
 from .views import _can, _is_admin_staff, _is_owner, _permission_error, _require_admin_staff, _require_owner
@@ -110,7 +114,8 @@ def payments_view(request):
     return render(request, "arabela_admin/payments.html", {
         "page": "payments", "mode": "bookings", "rows": rows, "counts": counts, "balance_total": balance_total,
         "is_owner": _is_owner(request), "can_void": _can(request, "void_receipts"),
-        "late_fee_per_day": late_fee.per_day(), "open_id": request.GET.get("open", ""),
+        "late_fee_per_day": late_fee.per_day(), "open_id": request.GET.get("open", ""), "online_attention": online_attention_count(),
+        "paymongo_mode": paymongo.mode(),
     })
 
 
@@ -153,6 +158,7 @@ def _detail(reservation, request):
                                                        "deductions_total", "refundable_total", "refund_available", "balance_due", "extra_owed")},
         "lateLines": [{"gown": l["gown"], "days": l["days"], "rate": f"{l['rate']:,.0f}", "amount": f"{l['amount']:,.2f}", "back": l["back"]} for l in s.late_lines],
         "choices": payments.choices(s),
+        "onlineRefund": payments.online_refund_choice(reservation, s),
         "payments": rows,
         "deductions": [{"id": d.pk, "amount": f"{ledger.money(d.amount):,.2f}", "reason": d.reason, "by": d.recorded_by_name, "void": d.is_void,
                         "voidReason": d.void_reason, "when": timezone.localtime(d.created_at).strftime("%b %d, %Y").replace(" 0", " ")}
@@ -230,9 +236,15 @@ def deposit_return_view(request, pk):
     if data is None:
         return JsonResponse({"error": "Invalid request."}, status=400)
     try:
-        payment = payments.return_deposit(
-            reservation_id=pk, amount=_amount(data.get("amount")), method=str(data.get("method") or ""), reference=str(data.get("reference") or ""),
-            note=str(data.get("note") or ""), user=request.user, request_id=str(data.get("request_id") or ""))
+        if str(data.get("method") or "") == "PayMongo":
+            # Sent back automatically, through PayMongo, to the account the customer paid with.
+            payment = payments.return_deposit_online(
+                reservation_id=pk, amount=_amount(data.get("amount")), note=str(data.get("note") or ""), user=request.user,
+                request_id=str(data.get("request_id") or ""))
+        else:
+            payment = payments.return_deposit(
+                reservation_id=pk, amount=_amount(data.get("amount")), method=str(data.get("method") or ""), reference=str(data.get("reference") or ""),
+                note=str(data.get("note") or ""), user=request.user, request_id=str(data.get("request_id") or ""))
     except payments.PaymentError as exc:
         return _fail(exc)
     return _answer(pk, request, payment=_payment_json(payment, request))
@@ -351,8 +363,111 @@ def payment_receipts_view(request):
         p.customer_name = p.reservation.display_customer_name
     return render(request, "arabela_admin/payments.html", {
         "page": "payments", "mode": "receipts", "receipts": page, "q": q, "kind": kind, "status": status, "from": start, "to": end,
-        "is_owner": True, "can_void": True,
+        "is_owner": True, "can_void": True, "online_attention": online_attention_count(), "paymongo_mode": paymongo.mode(),
     })
+
+
+# ---------------------------------------------------------------- payments made on PayMongo's page
+ONLINE_PER_PAGE = 25
+_CHIP = {                       # attempt status -> (the Payments page's chip colour, its words)
+    PaymentAttempt.Status.CREATED: ("refund", "Waiting for payment"),
+    PaymentAttempt.Status.PAID: ("refund", "Making the booking"),
+    PaymentAttempt.Status.BOOKED: ("paid", "Booked"),
+    PaymentAttempt.Status.REFUNDED: ("settled", "Sent back"),
+    PaymentAttempt.Status.FLAGGED: ("balance", "Needs a look"),
+    PaymentAttempt.Status.HANDLED: ("settled", "Handled"),
+    PaymentAttempt.Status.EXPIRED: ("cancelled", "Not paid"),
+    PaymentAttempt.Status.CANCELLED: ("cancelled", "Not paid"),
+}
+
+
+def online_attention_count():
+    """How many online payments need a person (the tab's badge and the bell)."""
+    return PaymentAttempt.objects.filter(PaymentAttempt.attention_filter()).count()
+
+
+def _online_row(attempt, now):
+    chip, words = _CHIP.get(attempt.status, ("settled", attempt.get_status_display()))
+    attention = attempt.needs_a_look
+    if attention:
+        chip, words = "balance", ("Refund failed" if attempt.status == PaymentAttempt.Status.REFUNDED else "Needs a look")
+    elif attempt.status == PaymentAttempt.Status.REFUNDED:
+        words = "Sent back" if attempt.refund_status in ("succeeded", "") else f"Sent back ({attempt.refund_status})"
+    elif attempt.status == PaymentAttempt.Status.CREATED and attempt.expires_at < now - online_checkout.SWEEP_GRACE:
+        chip, words = "cancelled", "Not paid"
+    attempt.chip, attempt.chip_words, attempt.attention = chip, words, attention
+    attempt.kind_label = attempt.get_purpose_display()
+    attempt.channel_label = paymongo.CHANNEL_LABELS.get(attempt.channel, attempt.channel or "-")
+    attempt.who = attempt.customer_name or (attempt.customer.get_username() if attempt.customer_id else "-")
+    attempt.booking_code = attempt.reservation.reference_code if attempt.reservation_id else ""
+    attempt.can_refund = attempt.attention and attempt.refund_can_be_asked
+    attempt.can_handle = attempt.attention
+    return attempt
+
+
+@_require_admin_staff
+def payment_online_view(request):
+    q = (request.GET.get("q") or "").strip()
+    show = "all" if request.GET.get("show") == "all" else "attention"
+    now = timezone.now()
+    rows = PaymentAttempt.objects.select_related("reservation", "customer")
+    if show == "attention":
+        rows = rows.filter(PaymentAttempt.attention_filter(now))
+    if q:
+        rows = rows.filter(Q(customer_name__icontains=q) | Q(reservation__reference_code__icontains=q) | Q(provider_payment_id__icontains=q)
+                           | Q(session_id__icontains=q) | Q(token__startswith=q) | Q(note__icontains=q))
+    page = Paginator(rows.order_by("-created_at", "-id"), ONLINE_PER_PAGE).get_page(request.GET.get("page"))
+    for attempt in page:
+        _online_row(attempt, now)
+    return render(request, "arabela_admin/payments.html", {
+        "page": "payments", "mode": "online", "attempts": page, "q": q, "show": show, "online_attention": online_attention_count(),
+        "paymongo_mode": paymongo.mode(), "is_owner": _is_owner(request), "can_void": _can(request, "void_receipts"),
+    })
+
+
+def _online_attempt(attempt_id):
+    attempt = PaymentAttempt.objects.select_related("reservation", "customer").filter(pk=attempt_id).first()
+    if attempt is None:
+        raise Http404("That online payment was not found.")
+    return attempt
+
+
+@require_http_methods(["POST"])
+@audited("payment.online_refund", "Payments", audit_describe.online_refund, sensitive=True)
+def payment_online_refund_view(request, attempt_id):
+    refused = _permission_error(request, "void_receipts")
+    if refused:
+        return refused
+    attempt = _online_attempt(attempt_id)
+    if not attempt.refund_can_be_asked or not attempt.needs_a_look:
+        return JsonResponse({"error": "This payment can't be sent back from here. Refresh the page."}, status=409)
+    data = _body(request) or {}
+    reason = (str(data.get("reason") or "").strip() or "The shop sent it back.")[:200]
+    result = online_checkout.refund_attempt(attempt.pk, f"The shop checked this payment: {reason}")
+    if result.refund_id:
+        return JsonResponse({"success": True, "message": "The money is on its way back to the customer."})
+    return JsonResponse({"error": "PayMongo would not send it back right now. Try again later, or refund it in PayMongo's dashboard and press Mark as handled."}, status=502)
+
+
+@require_http_methods(["POST"])
+@audited("payment.online_handled", "Payments", audit_describe.online_handled, sensitive=True)
+def payment_online_handled_view(request, attempt_id):
+    refused = _permission_error(request, "void_receipts")
+    if refused:
+        return refused
+    attempt = _online_attempt(attempt_id)
+    data = _body(request)
+    if data is None:
+        return JsonResponse({"error": "Invalid request."}, status=400)
+    note = str(data.get("note") or "").strip()
+    if len(note) < 3:
+        return JsonResponse({"error": "Please write what was done, so the record explains itself."}, status=400)
+    who = payments.staff_display_name(request.user)
+    updated = PaymentAttempt.objects.filter(pk=attempt.pk).filter(PaymentAttempt.attention_filter()).update(
+        status=PaymentAttempt.Status.HANDLED, note=f"{who}: {note}"[:300], finished_at=timezone.now())
+    if not updated:
+        return JsonResponse({"error": "This payment no longer needs a look. Refresh the page."}, status=409)
+    return JsonResponse({"success": True})
 
 
 # ---------------------------------------------------------------- the late fee setting (owner, on the profile page)

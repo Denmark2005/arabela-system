@@ -674,6 +674,8 @@
                 else countEl.textContent = n + ' items reserved';
             }
             if (gcashDep) gcashDep.textContent = 'Amount: ' + formatPesoInt(deposit);
+            // The checkout page (templates/reservation.html) shows what each way of paying costs, so it is told the same numbers.
+            if (typeof window.onReservationTotals === 'function') window.onReservationTotals(subtotal, deposit, total, itemCount);
         }
 
         var data = null;

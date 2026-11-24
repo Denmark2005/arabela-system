@@ -440,6 +440,19 @@ GEMINI_FALLBACK_MODEL = os.getenv('GEMINI_FALLBACK_MODEL', 'gemini-flash-lite-la
 # that second reading (one short try, then the usual models take over). The free gemini-3.6-flash was tried and timed out every time, so none is set.
 GEMINI_VERIFY_MODEL = os.getenv('GEMINI_VERIFY_MODEL', '').strip()
 
+# Online payments through PayMongo (reservations/paymongo.py, reservations/online_payment.py). The checkout uses PayMongo ONLY while the secret key
+# below is set; with no key the older GCash-screenshot checkout keeps working untouched. A TEST key (sk_test_...) moves no real money: customers pay
+# on PayMongo's own test page (the panel's "simulation"). A LIVE key (sk_live_...) is refused on a laptop copy of the database.
+PAYMONGO_SECRET_KEY = os.getenv('PAYMONGO_SECRET_KEY', '').strip()
+# The secret PayMongo shows after you add the webhook endpoint (whsk_...): the webhook is only believed when its signature matches this.
+PAYMONGO_WEBHOOK_SECRET = os.getenv('PAYMONGO_WEBHOOK_SECRET', '').strip()
+# The payment methods PayMongo's page offers, as PayMongo names them: GCash, Maya, QR Ph. (Cards are left off on purpose.)
+PAYMONGO_METHODS = [m.strip() for m in os.getenv('PAYMONGO_METHODS', 'gcash,paymaya,qrph').split(',') if m.strip()]
+PAYMONGO_API_BASE = os.getenv('PAYMONGO_API_BASE', 'https://api.paymongo.com').strip().rstrip('/')    # only changed to a local stand-in in the browser tests
+PAYMONGO_TIMEOUT = int(os.getenv('PAYMONGO_TIMEOUT', '15'))
+# Hand a returned security deposit back to the customer's own GCash / Maya / QR Ph automatically (only for payments made through PayMongo).
+PAYMONGO_AUTO_REFUND = os.getenv('PAYMONGO_AUTO_REFUND', 'true').strip().lower() == 'true'
+
 # True while `manage.py test` runs: nothing in the test suite may reach the network, and the sweeps that normally run on page visits stay quiet
 # (tests call them directly).
 TESTING = len(sys.argv) > 1 and sys.argv[1] == 'test'

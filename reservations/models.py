@@ -39,6 +39,8 @@ class Reservation(models.Model):
     class PaymentMethod(models.TextChoices):
         GCASH = 'GCash', 'GCash'
         CASH = 'Cash', 'Cash'
+        MAYA = 'Maya', 'Maya'                    # paid online through PayMongo (reservations/online_payment.py)
+        QRPH = 'QR Ph', 'QR Ph'
 
     class Channel(models.TextChoices):
         """How the booking reached the shop. Online = the customer booked on the website; Walk-in = recorded by staff in the
@@ -354,6 +356,30 @@ class Reservation(models.Model):
             else:
                 return None
         else:
+            # Paid on PayMongo's checkout page: the recorded payments say what was paid (the deposit alone, or everything), not the old assumption that
+            # an online customer only ever pays the deposit.
+            online = [p for p in self.payments.all() if p.provider == 'paymongo' and p.direction == Payment.Direction.IN and not p.is_void]
+            if online:
+                how = (online[0].get_method_display() or '').replace(' (PayMongo)', '')
+                core = (Payment.Purpose.DEPOSIT, Payment.Purpose.FULL, Payment.Purpose.BALANCE)
+                received = sum((p.amount for p in self.payments.all() if not p.is_void and p.direction == Payment.Direction.IN and p.purpose in core), 0)
+                if received >= total:
+                    everything_online = any(p.purpose == Payment.Purpose.FULL for p in online)
+                    paid_label = f"Paid in full online ({how})" if everything_online else "Paid in full (deposit online, rental at the shop)"
+                    deposit_note = f"paid online ({how})"
+                    rental_note = f"paid online ({how})" if everything_online else "paid at the shop"
+                    paid, sub = total, f"Gown {_peso_text(rental)} + Deposit {_peso_text(deposit)}"
+                else:
+                    paid, paid_label, deposit_note, rental_note = deposit, f"Deposit paid online ({how})", f"paid online ({how})", "to pay at the shop"
+                    sub = f"Gown {_peso_text(rental)} still to pay · Total {_peso_text(total)}"
+                return {
+                    "paidLabel": paid_label, "headline": _peso_text(paid), "sub": sub,
+                    "lines": [
+                        {"label": "Security deposit", "note": deposit_note, "amount": _peso_text(deposit)},
+                        {"label": "Gown rental", "note": rental_note, "amount": _peso_text(rental)},
+                    ],
+                    "total": _peso_text(total),
+                }
             by = " by GCash" if self.payment_method == self.PaymentMethod.GCASH else ""
             paid, paid_label, deposit_note = deposit, f"Paid online{by}", f"paid online{by}"
             if self.status == self.Status.REJECTED:
@@ -1061,6 +1087,10 @@ class Payment(models.Model):
         CASH = 'Cash', 'Cash'
         GCASH = 'GCash', 'GCash'
         ONLINE_GCASH = 'GCash online', 'GCash (online)'          # an online booking's deposit, from the old screenshot flow
+        PM_GCASH = 'PayMongo GCash', 'GCash (PayMongo)'          # paid on PayMongo's checkout page (reservations/online_payment.py)
+        PM_MAYA = 'PayMongo Maya', 'Maya (PayMongo)'
+        PM_QRPH = 'PayMongo QR Ph', 'QR Ph (PayMongo)'
+        PM_OTHER = 'PayMongo other', 'Online (PayMongo)'          # a way of paying the shop did not offer (never expected; recorded honestly)
         OLD = 'Before Payments', 'Recorded before the Payments page'
 
     class Status(models.TextChoices):
@@ -1093,7 +1123,8 @@ class Payment(models.Model):
     first_printed_at = models.DateTimeField(null=True, blank=True)
     reprint_count = models.PositiveIntegerField(default=0)
     customer_notified_at = models.DateTimeField(null=True, blank=True)
-    # Reserved for the online payment service (Phase 2): who processed it and its own reference. Unused for now.
+    # The online payment service that moved this money ('paymongo') and its own reference (the pay_... of a payment, the ref_... of a refund).
+    # Empty for money handled at the shop.
     provider = models.CharField(max_length=20, blank=True, default='')
     provider_ref = models.CharField(max_length=60, blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -1149,3 +1180,93 @@ class Deduction(models.Model):
 
     def __str__(self):
         return f'Deduction {self.amount} on {self.reservation.reference_code}: {self.reason}'
+
+
+class PaymentAttempt(models.Model):
+    """One try to pay online through PayMongo, from the moment the customer presses Pay to the moment it ends.
+
+    The BOOKING DOES NOT EXIST while an attempt is waiting: the checkout page sends the whole selection (gowns, dates, the prices the customer
+    saw, their details) to the server, which checks everything exactly as the old checkout did, keeps it here in `payload`, and opens a PayMongo
+    checkout for the exact amount. Only when PayMongo confirms the money does reservations/online_payment.py make the booking (confirmed at
+    once, with its Payment Receipt). If the gown was taken while the customer paid, the whole payment is refunded instead.
+
+    So nothing half-made ever shows in Pending Approval, the calendar or the account's booking limits, and an abandoned checkout leaves only
+    this row (and a PayMongo session the sweep closes)."""
+
+    class Status(models.TextChoices):
+        CREATED = 'created', 'Waiting for the customer to pay'
+        PAID = 'paid', 'Paid, making the booking'                    # PayMongo confirmed the money; the booking is being made (or will be tried again)
+        BOOKED = 'booked', 'Paid, booking made'
+        REFUNDED = 'refunded', 'Paid, booking not possible, money sent back'
+        FLAGGED = 'flagged', 'Paid, needs a person to look'
+        HANDLED = 'handled', 'A person sorted it out'              # staff took care of a flagged payment by hand (refunded in PayMongo's dashboard, booked by hand, ...)
+        EXPIRED = 'expired', 'Not paid, closed'
+        CANCELLED = 'cancelled', 'The customer went back without paying'
+
+    class Purpose(models.TextChoices):
+        DEPOSIT = 'deposit', 'Deposit only'
+        FULL = 'full', 'Paid in full'
+
+    token = models.CharField(max_length=43, unique=True)          # the secret the success and cancel addresses carry (never PayMongo's own query)
+    customer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='payment_attempts')
+    customer_name = models.CharField(max_length=120, blank=True, default='')
+    purpose = models.CharField(max_length=10, choices=Purpose.choices)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)                     # exactly what the customer is asked to pay
+    payload = models.JSONField(default=dict, blank=True)                              # the booking to make once it is paid (items, prices, details)
+    request_id = models.CharField(max_length=40, blank=True, default='')              # one per press of Pay: pressing twice gives the same attempt
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.CREATED, db_index=True)
+    session_id = models.CharField(max_length=60, blank=True, default='')              # PayMongo's cs_...
+    checkout_url = models.URLField(max_length=500, blank=True, default='')
+    livemode = models.BooleanField(default=False)                                      # False = a test payment: no real money moved
+    channel = models.CharField(max_length=20, blank=True, default='')                 # how the customer paid, as PayMongo names it (gcash, paymaya, qrph)
+    provider_payment_id = models.CharField(max_length=60, blank=True, default='')     # PayMongo's pay_... of the paid payment
+    paid_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    reservation = models.ForeignKey(Reservation, on_delete=models.SET_NULL, null=True, blank=True, related_name='payment_attempts')
+    refund_id = models.CharField(max_length=60, blank=True, default='')                # when the money was sent back (the booking could not be made)
+    refund_status = models.CharField(max_length=12, blank=True, default='')
+    refund_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    note = models.CharField(max_length=300, blank=True, default='')                   # why it needs a look / why it was refunded (staff read this)
+    webhook_at = models.DateTimeField(null=True, blank=True)                           # the last time PayMongo's webhook told us about it
+    last_checked_at = models.DateTimeField(null=True, blank=True)                      # the last time we asked PayMongo (so polling cannot hammer it)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    expires_at = models.DateTimeField()                                                # when we close the session (the checkout's own 20 minutes)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+        constraints = [
+            models.UniqueConstraint(fields=['customer', 'request_id'], condition=~models.Q(request_id=''), name='paymentattempt_one_per_press'),
+            models.UniqueConstraint(fields=['session_id'], condition=~models.Q(session_id=''), name='paymentattempt_session_unique'),
+            models.UniqueConstraint(fields=['provider_payment_id'], condition=~models.Q(provider_payment_id=''), name='paymentattempt_payment_unique'),
+        ]
+
+    @property
+    def is_final(self):
+        return self.status not in (self.Status.CREATED, self.Status.PAID)
+
+    @property
+    def refund_can_be_asked(self):
+        """True while the money can still be sent back from here: paid, no booking, and PayMongo was never asked for the refund (or refused it)."""
+        return (self.status in (self.Status.PAID, self.Status.FLAGGED, self.Status.REFUNDED) and bool(self.provider_payment_id)
+                and not self.refund_id and self.refund_status in ('', 'failed'))
+
+    UNMADE_AFTER = timedelta(minutes=5)         # a paid attempt whose booking is still not made after this long needs a person
+
+    @classmethod
+    def attention_filter(cls, now=None):
+        """The rows that need a person, as a query filter (the same rule as `needs_a_look`, which a test keeps in step)."""
+        now = now or timezone.now()
+        return (Q(status=cls.Status.FLAGGED) | Q(status=cls.Status.REFUNDED, refund_status='failed')
+                | Q(status=cls.Status.PAID, paid_at__lt=now - cls.UNMADE_AFTER))
+
+    @property
+    def needs_a_look(self):
+        """True while a person has to do something: paid money no booking stands behind (flagged, or a booking that has stayed unmade for
+        minutes), or a refund that did not go through."""
+        if self.status == self.Status.FLAGGED or (self.status == self.Status.REFUNDED and self.refund_status == 'failed'):
+            return True
+        return self.status == self.Status.PAID and bool(self.paid_at) and timezone.now() - self.paid_at > self.UNMADE_AFTER
+
+    def __str__(self):
+        return f'{self.token[:8]} {self.get_status_display()} {self.amount}'

@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% comment %}
+  Where PayMongo sends the customer after they pay (gowns/online_views.py payment_return). The page itself does nothing: its script asks the status
+  address right away and every second or two, and shows what the server says (gowns/online_checkout.py attempt_state). The look is the older
+  confirmation page's (templates/confirmation.html), so the two feel like one flow.
+{% endcomment %}
+
+{% block title %}ARABELA | Payment{% endblock %}
+
+{% block body_class %}min-h-screen flex flex-col{% endblock %}
+
+{% block extra_head %}
+  <style>
+    .editorial-shadow { box-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.05); }
+    @keyframes success-pop {
+      0% { transform: scale(0.5); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    @keyframes fade-in-up {
+      0% { transform: translateY(20px); opacity: 0; }
+      100% { transform: translateY(0); opacity: 1; }
+    }
+    @keyframes pay-spin { to { transform: rotate(360deg); } }
+    .animate-success-pop { animation: success-pop 1s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+    .animate-fade-in-up { animation: fade-in-up 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards 0.3s; }
+    .pay-spinner { width: 2.25rem; height: 2.25rem; border-radius: 9999px; border: 2px solid rgba(0, 0, 0, 0.12); border-top-color: #0b0c0c; animation: pay-spin 0.9s linear infinite; }
+    [data-pay-state][hidden] { display: none; }
+    @media (prefers-reduced-motion: reduce) {
+      .animate-success-pop, .animate-fade-in-up { animation: none; opacity: 1; transform: none; }
+      .pay-spinner { animation-duration: 2.4s; }
+    }
+  </style>
+{% endblock %}
+
+{% block main_class %}flex-grow flex items-center justify-center pt-32 pb-24 px-6{% endblock %}
+
+{% block content %}
+  <div id="pay-return" data-status-url="{{ status_url }}" data-checkout-url="{{ checkout_url }}" data-orders-url="{{ orders_url }}"
+       class="max-w-3xl w-full bg-white border border-[#E5E2E1]/50 editorial-shadow p-10 md:p-24 text-center animate-fade-in-up opacity-0" aria-live="polite">
+
+    <!-- Waiting for PayMongo / making the booking -->
+    <div data-pay-state="confirming">
+      <div class="inline-flex items-center justify-center w-20 h-20 mb-8"><div class="pay-spinner" role="status" aria-label="Confirming your payment"></div></div>
+      <h1 class="font-headline text-3xl md:text-5xl font-light tracking-tight text-primary leading-[1.1] mb-4">Confirming your payment.</h1>
+      <h2 class="font-headline text-[0.7rem] md:text-[0.8rem] tracking-[0.3em] uppercase text-secondary/60 font-medium">Please keep this page open</h2>
+      <p class="font-body text-base leading-relaxed font-light mt-10 text-primary max-w-lg mx-auto">
+        This only takes a moment. Your booking is made as soon as PayMongo confirms the payment. You will not be charged twice.
+      </p>
+    </div>
+
+    <!-- Paid, booking made -->
+    <div data-pay-state="booked" hidden>
+      <div class="inline-flex items-center justify-center w-20 h-20 rounded-full border mb-8 animate-success-pop opacity-0 border-green-500/20">
+        <span class="material-symbols-outlined text-4xl font-light text-green-500">check</span>
+      </div>
+      <h1 class="font-headline text-4xl md:text-6xl font-light tracking-tight text-primary leading-[1.1] mb-4">Payment Received.</h1>
+      <h2 class="font-headline text-[0.7rem] md:text-[0.8rem] tracking-[0.3em] uppercase text-secondary/60 font-medium">Reservation Confirmed</h2>
+      <div class="max-w-lg mx-auto mt-10">
+        <p class="font-body text-base leading-relaxed font-light text-primary">
+          Your booking <b data-pay-field="reference"></b> is confirmed. We received <b data-pay-field="amount"></b>.
+          Receipt <span data-pay-field="receipt"></span> is saved with your booking, and we will remind you before your pick-up date.
+        </p>
+        <p data-pay-field="testnote" hidden class="font-body text-[0.8rem] leading-relaxed text-secondary mt-4">This was a test payment. No real money was charged.</p>
+      </div>
+      <div class="flex flex-col items-center gap-8 mt-12">
+        <a data-pay-field="booking_link" href="{{ orders_url }}" class="w-full md:w-64 px-10 py-5 bg-primary text-white text-[0.65rem] uppercase tracking-[0.3em] font-medium hover:bg-secondary transition-all duration-500 rounded-[6px] flex items-center justify-center no-underline text-center">
+          View My Booking
+        </a>
+        <a data-pay-field="receipt_link" href="#" hidden class="font-label text-[0.6rem] uppercase tracking-[0.3em] text-secondary hover:text-primary transition-colors border-b border-transparent hover:border-primary/20 pb-1">
+          View Receipt
+        </a>
+        <a class="font-label text-[0.6rem] uppercase tracking-[0.3em] text-secondary hover:text-primary transition-colors border-b border-transparent hover:border-primary/20 pb-1" href="{% url 'gowns:homepage' %}">
+          Back to Home
+        </a>
+      </div>
+    </div>
+
+    <!-- Still waiting after a while: the money may be on its way (QR Ph from a banking app can take a minute) -->
+    <div data-pay-state="slow" hidden>
+      <div class="inline-flex items-center justify-center w-20 h-20 rounded-full border mb-8 border-black/10">
+        <span class="material-symbols-outlined text-4xl font-light text-secondary">hourglass_top</span>
+      </div>
+      <h1 class="font-headline text-3xl md:text-5xl font-light tracking-tight text-primary leading-[1.1] mb-4">Still waiting for PayMongo.</h1>
+      <h2 class="font-headline text-[0.7rem] md:text-[0.8rem] tracking-[0.3em] uppercase text-secondary/60 font-medium">Do not pay again</h2>
+      <p class="font-body text-base leading-relaxed font-light mt-10 text-primary max-w-lg mx-auto">
+        If you already paid, your booking will be made on its own as soon as PayMongo confirms it, and we will message you. If you did not finish paying, you can go back and try again.
+      </p>
+      <div class="flex flex-col items-center gap-8 mt-12">
+        <a href="{{ orders_url }}" class="w-full md:w-64 px-10 py-5 bg-primary text-white text-[0.65rem] uppercase tracking-[0.3em] font-medium hover:bg-secondary transition-all duration-500 rounded-[6px] flex items-center justify-center no-underline text-center">View My Orders</a>
+        <button type="button" data-pay-retry class="font-label text-[0.6rem] uppercase tracking-[0.3em] text-secondary hover:text-primary transition-colors border-b border-transparent hover:border-primary/20 pb-1">Check again</button>
+      </div>
+    </div>
+
+    <!-- The gown was taken while the customer paid: the money is going back -->
+    <div data-pay-state="refunded" hidden>
+      <div class="inline-flex items-center justify-center w-20 h-20 rounded-full border mb-8 border-black/10">
+        <span class="material-symbols-outlined text-4xl font-light text-secondary">undo</span>
+      </div>
+      <h1 class="font-headline text-3xl md:text-5xl font-light tracking-tight text-primary leading-[1.1] mb-4">We could not reserve it.</h1>
+      <h2 class="font-headline text-[0.7rem] md:text-[0.8rem] tracking-[0.3em] uppercase text-secondary/60 font-medium">Your payment is going back to you</h2>
+      <p class="font-body text-base leading-relaxed font-light mt-10 text-primary max-w-lg mx-auto" data-pay-field="refund_message"></p>
+      <p class="font-body text-[0.8rem] leading-relaxed text-secondary mt-4">The full <b data-pay-field="refund_amount"></b> is being sent back to the account you paid with, usually within a day.</p>
+      <div class="flex flex-col items-center gap-8 mt-12">
+        <a href="{{ checkout_url }}" class="w-full md:w-64 px-10 py-5 bg-primary text-white text-[0.65rem] uppercase tracking-[0.3em] font-medium hover:bg-secondary transition-all duration-500 rounded-[6px] flex items-center justify-center no-underline text-center">Choose Another Date</a>
+        <a class="font-label text-[0.6rem] uppercase tracking-[0.3em] text-secondary hover:text-primary transition-colors border-b border-transparent hover:border-primary/20 pb-1" href="{% url 'gowns:homepage' %}">Back to Home</a>
+      </div>
+    </div>
+
+    <!-- The shop has to look at this payment -->
+    <div data-pay-state="flagged" hidden>
+      <div class="inline-flex items-center justify-center w-20 h-20 rounded-full border mb-8 border-black/10">
+        <span class="material-symbols-outlined text-4xl font-light text-secondary">support_agent</span>
+      </div>
+      <h1 class="font-headline text-3xl md:text-5xl font-light tracking-tight text-primary leading-[1.1] mb-4">The shop will check this.</h1>
+      <h2 class="font-headline text-[0.7rem] md:text-[0.8rem] tracking-[0.3em] uppercase text-secondary/60 font-medium">Do not pay again</h2>
+      <p class="font-body text-base leading-relaxed font-light mt-10 text-primary max-w-lg mx-auto">
+        Your payment went through, but we need to check one thing before your booking is made. The shop has been told and will message you shortly. You will not be charged again.
+      </p>
+      <div class="flex flex-col items-center gap-8 mt-12">
+        <a href="{{ orders_url }}" class="w-full md:w-64 px-10 py-5 bg-primary text-white text-[0.65rem] uppercase tracking-[0.3em] font-medium hover:bg-secondary transition-all duration-500 rounded-[6px] flex items-center justify-center no-underline text-center">View My Orders</a>
+        <a class="font-label text-[0.6rem] uppercase tracking-[0.3em] text-secondary hover:text-primary transition-colors border-b border-transparent hover:border-primary/20 pb-1" href="{% url 'gowns:messages' %}">Open My Messages</a>
+      </div>
+    </div>
+
+    <!-- The shop checked a flagged payment and took care of it -->
+    <div data-pay-state="handled" hidden>
+      <div class="inline-flex items-center justify-center w-20 h-20 rounded-full border mb-8 border-black/10">
+        <span class="material-symbols-outlined text-4xl font-light text-secondary">task_alt</span>
+      </div>
+      <h1 class="font-headline text-3xl md:text-5xl font-light tracking-tight text-primary leading-[1.1] mb-4">The shop took care of it.</h1>
+      <h2 class="font-headline text-[0.7rem] md:text-[0.8rem] tracking-[0.3em] uppercase text-secondary/60 font-medium">Please check your messages</h2>
+      <p class="font-body text-base leading-relaxed font-light mt-10 text-primary max-w-lg mx-auto">The shop looked at your payment and sorted it out. Your messages and reservations show what was done.</p>
+      <div class="flex flex-col items-center gap-8 mt-12">
+        <a href="{{ orders_url }}" class="w-full md:w-64 px-10 py-5 bg-primary text-white text-[0.65rem] uppercase tracking-[0.3em] font-medium hover:bg-secondary transition-all duration-500 rounded-[6px] flex items-center justify-center no-underline text-center">View My Orders</a>
+        <a class="font-label text-[0.6rem] uppercase tracking-[0.3em] text-secondary hover:text-primary transition-colors border-b border-transparent hover:border-primary/20 pb-1" href="{% url 'gowns:messages' %}">Open My Messages</a>
+      </div>
+    </div>
+
+    <!-- Closed without paying -->
+    <div data-pay-state="ended" hidden>
+      <div class="inline-flex items-center justify-center w-20 h-20 rounded-full border mb-8 border-black/10">
+        <span class="material-symbols-outlined text-4xl font-light text-secondary">credit_card_off</span>
+      </div>
+      <h1 class="font-headline text-3xl md:text-5xl font-light tracking-tight text-primary leading-[1.1] mb-4">Payment not completed.</h1>
+      <h2 class="font-headline text-[0.7rem] md:text-[0.8rem] tracking-[0.3em] uppercase text-secondary/60 font-medium">Nothing was charged</h2>
+      <p class="font-body text-base leading-relaxed font-light mt-10 text-primary max-w-lg mx-auto">Your selection is still saved. You can go back and pay when you are ready.</p>
+      <div class="flex flex-col items-center gap-8 mt-12">
+        <a href="{{ checkout_url }}" class="w-full md:w-64 px-10 py-5 bg-primary text-white text-[0.65rem] uppercase tracking-[0.3em] font-medium hover:bg-secondary transition-all duration-500 rounded-[6px] flex items-center justify-center no-underline text-center">Back to Checkout</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  (function () {
+    var root = document.getElementById('pay-return');
+    if (!root) return;
+    var statusUrl = root.getAttribute('data-status-url');
+    var panels = {};
+    Array.prototype.forEach.call(root.querySelectorAll('[data-pay-state]'), function (el) { panels[el.getAttribute('data-pay-state')] = el; });
+    var started = Date.now();
+    var SLOW_AFTER_MS = 60000;      // after a minute: stop saying "please keep this page open" and say it can continue by itself
+    var timer = null;
+    var shown = '';
+
+    function show(name) {
+      if (shown === name) return;
+      shown = name;
+      Object.keys(panels).forEach(function (key) { panels[key].hidden = key !== name; });
+    }
+    function field(name) { return root.querySelector('[data-pay-field="' + name + '"]'); }
+    function setText(name, text) { var el = field(name); if (el) el.textContent = text; }
+
+    function cleanUpTheBag() {
+      // The same cleanup the older confirmation page does: the selection has become a booking, so the saved bag is emptied.
+      var userKey = (document.body && document.body.dataset && document.body.dataset.userKey) ? document.body.dataset.userKey : 'guest';
+      try {
+        localStorage.removeItem('arabela_cart_' + userKey);
+        localStorage.removeItem('arabela_book_now_context');
+        localStorage.removeItem('arabela_reservation_backup_' + userKey);
+        if (typeof syncCartToServer === 'function') syncCartToServer([]);
+      } catch (e1) {}
+      try { sessionStorage.removeItem('arabela_reservation_cart_' + userKey); } catch (e2) {}
+    }
+
+    function apply(data) {
+      if (data.state === 'booked') {
+        setText('reference', data.reference_code || '');
+        setText('amount', '₱' + (data.amount || ''));
+        setText('receipt', data.receipt_number || '');
+        var link = field('booking_link'); if (link && data.booking_url) link.setAttribute('href', data.booking_url);
+        var rl = field('receipt_link'); if (rl && data.receipt_url) { rl.setAttribute('href', data.receipt_url); rl.hidden = false; }
+        var tn = field('testnote'); if (tn) tn.hidden = !data.test;
+        cleanUpTheBag();
+        show('booked');
+        return true;
+      }
+      if (data.state === 'refunded') {
+        setText('refund_message', data.message || 'The gown you chose could not be reserved.');
+        setText('refund_amount', '₱' + (data.amount || ''));
+        cleanUpTheBag();
+        show('refunded');
+        return true;
+      }
+      if (data.state === 'flagged') { show('flagged'); return true; }
+      if (data.state === 'handled') { show('handled'); return true; }
+      if (data.state === 'ended') { show('ended'); return true; }
+      return false;                  // waiting / confirming: keep asking
+    }
+
+    function ask() {
+      window.clearTimeout(timer);
+      fetch(statusUrl, { credentials: 'same-origin', headers: { 'Accept': 'application/json' }, cache: 'no-store' })
+        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+        .then(function (result) {
+          if (result.ok && result.data && apply(result.data)) return;
+          if (Date.now() - started > SLOW_AFTER_MS) show('slow'); else show('confirming');
+          timer = window.setTimeout(ask, Date.now() - started > SLOW_AFTER_MS ? 6000 : 1800);
+        })
+        .catch(function () {
+          // A dropped connection is not a failed payment: keep asking.
+          if (Date.now() - started > SLOW_AFTER_MS) show('slow');
+          timer = window.setTimeout(ask, 4000);
+        });
+    }
+
+    var retry = root.querySelector('[data-pay-retry]');
+    if (retry) retry.addEventListener('click', function () { started = Date.now(); show('confirming'); ask(); });
+    ask();
+  })();
+</script>
+{% endblock %}

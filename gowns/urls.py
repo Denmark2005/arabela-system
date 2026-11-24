@@ -1,7 +1,7 @@
 from django.urls import path
 from django.views.generic import RedirectView
 
-from . import views
+from . import online_views, views
 
 app_name = 'gowns'
 
@@ -63,6 +63,12 @@ urlpatterns = [
     path("reservation/", views.reservation, name="reservation"),
     path("reservation/submit/", views.reservation_submit, name="reservation_submit"),
     path("gcash-qr/", views.gcash_qr, name="gcash_qr"),
+    # Online payment through PayMongo (gowns/online_checkout.py, gowns/online_views.py)
+    path("reservation/pay/start/", online_views.pay_start, name="pay_start"),
+    path("reservation/pay/return/<str:token>/", online_views.payment_return, name="payment_return"),
+    path("reservation/pay/status/<str:token>/", online_views.payment_status, name="payment_status"),
+    path("reservation/pay/cancel/<str:token>/", online_views.payment_cancel, name="payment_cancel"),
+    path("paymongo/webhook/", online_views.paymongo_webhook, name="paymongo_webhook"),
     path("reservation/hold/start/", views.reservation_hold_start, name="reservation_hold_start"),
     path("reservation/hold/release/", views.reservation_hold_release, name="reservation_hold_release"),
     path("cart/fetch/", views.cart_fetch_view, name="cart_fetch"),
