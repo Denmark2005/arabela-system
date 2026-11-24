@@ -411,12 +411,13 @@ class DashboardPageTests(Base):
         _, html = self.page()
         self.assertEqual(self.card(html).count('class="lt-line'), 5)
 
-    def test_a_practice_payment_carries_the_test_tag(self):
+    def test_a_practice_payment_shows_no_test_tag(self):
+        # The panel knows the payments are practice ones, so the list does not label them.
         booking = make_booking(pickup=5, ret=9, channel=Reservation.Channel.ONLINE)
         payments.record_online_payment(reservation=booking, purpose=P.FULL, amount=D("5500"), channel="gcash", provider_ref="pay_p", livemode=False)
         _, html = self.page()
-        self.assertIn('class="lt-test"', self.card(html))
-        self.assertIn("A practice or test payment: no real money moved", self.card(html))
+        self.assertNotIn('class="lt-test"', self.card(html))
+        self.assertNotIn("no real money moved", self.card(html))
 
     def test_a_voided_line_is_struck_and_says_void(self):
         booking = make_booking(pickup=5, ret=9)

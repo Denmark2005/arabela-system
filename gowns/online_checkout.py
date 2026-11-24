@@ -37,6 +37,7 @@ from gowns import views as checkout
 from gowns.context_processors import RESERVATION_HOLD_MINUTES
 from gowns.models import COOLDOWN_DAYS, Gown, GownUnavailability
 from reservations import gateway, payments
+from reservations import ledger
 from reservations.ledger import money, peso
 from reservations.models import Payment, PaymentAttempt, Reservation, ReservationItem, ReservationStatusEvent
 from reservations.staff_booking import APPROVED_LABEL
@@ -538,6 +539,40 @@ def expire_stale(limit=SWEEP_BATCH, now=None):
 
 
 # ---------------------------------------------------------------- what the return page shows
+def _day(value):
+    return f"{value:%b} {value.day}, {value.year}" if value else ""
+
+
+def booked_details(reservation, payment, attempt):
+    """The thank-you page's facts about a booking that was just made: who, which gowns and dates, how it was paid and what is still to pay at the shop.
+    Plain text (the page puts every value on screen as text, never as markup)."""
+    from gowns.photos import sized
+
+    statement = ledger.statement(reservation)
+    gowns = []
+    for item in reservation.items.select_related("gown").order_by("id"):
+        if item.stage == ReservationItem.Stage.CANCELLED:
+            continue
+        photo = item.gown.photo_url if item.gown_id else item.gown_photo_url
+        gowns.append({
+            "name": item.gown_name, "size": item.size or "", "photo": sized(photo, 240) if photo else "", "price": f"{money(item.rental_price):,.2f}",
+            "pickup": _day(item.rental_date), "return": _day(item.return_date), "event": _day(item.effective_event_date),
+        })
+    way = payment.get_method_display().replace(" (online payment)", "") if payment else gateway.CHANNEL_LABELS.get(attempt.channel, "")
+    when = timezone.localtime(attempt.paid_at) if attempt.paid_at else None
+    return {
+        "customer": {
+            "name": reservation.display_customer_name, "phone": reservation.phone or "",
+            "address": ", ".join(part for part in (reservation.address, reservation.city, reservation.postal_code) if part),
+        },
+        "gowns": gowns,
+        "paid_with": way, "paid_on": f"{_day(when)}, {when.strftime('%I:%M %p').lstrip('0')}" if when else "",
+        "rental": f"{statement.rental:,.2f}", "deposit": f"{statement.deposit:,.2f}", "total": f"{statement.total:,.2f}",
+        "paid": f"{money(attempt.paid_amount):,.2f}", "balance": f"{statement.balance_due:,.2f}", "owes": statement.balance_due > 0,
+        "paid_in_full": attempt.purpose == PaymentAttempt.Purpose.FULL,
+    }
+
+
 def attempt_state(attempt, *, request=None):
     """What the customer's return page should say about an attempt, as plain JSON:
     {"state": "waiting" | "confirming" | "booked" | "refunded" | "flagged" | "ended", "message": ..., "reference_code": ..., "receipt_url": ...}"""
@@ -551,6 +586,7 @@ def attempt_state(attempt, *, request=None):
             "receipt_url": reverse("gowns:receipt_view", args=[payment.pk]) if payment else "",
             "receipt_number": payment.receipt_number if payment else "",
             "booking_url": reverse("gowns:reservation_item_detail", args=[item.pk]) if item else reverse("gowns:orders"),
+            "details": booked_details(reservation, payment, attempt),
         }
     if attempt.status == S.PAID:
         return {"state": "confirming"}

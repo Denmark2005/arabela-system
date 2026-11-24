@@ -26,6 +26,35 @@
     .animate-fade-in-up { animation: fade-in-up 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards 0.3s; }
     .pay-spinner { width: 2.25rem; height: 2.25rem; border-radius: 9999px; border: 2px solid rgba(0, 0, 0, 0.12); border-top-color: #0b0c0c; animation: pay-spin 0.9s linear infinite; }
     [data-pay-state][hidden] { display: none; }
+    /* The confirmed state is a thank-you page: a wide card with the booking details and a rental summary side by side (stacked on a phone). */
+    #pay-return.pay-wide { max-width: 62rem; padding: 2.5rem 1.25rem; text-align: left; }
+    @media (min-width: 768px) { #pay-return.pay-wide { padding: 4rem 3.5rem; } }
+    .pay-hero { text-align: center; }
+    .pay-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.25rem; margin-top: 2.75rem; }
+    @media (min-width: 900px) { .pay-grid { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 1.75rem; align-items: start; } }
+    .pay-card { border: 1px solid #E5E2E1; background: #fff; padding: 1.5rem; }
+    .pay-summary { border: 1px solid #E5E2E1; background: #F6F4F3; padding: 1.5rem; }
+    .pay-h { margin: 0 0 1.1rem; font-size: 0.65rem; letter-spacing: 0.3em; text-transform: uppercase; font-weight: 500; color: #615E57; }
+    .pay-rows { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: 0.6rem 1rem; margin: 0; font-size: 0.875rem; line-height: 1.45; }
+    .pay-rows dt { color: #8d8982; }
+    .pay-rows dd { margin: 0; color: #615E57; overflow-wrap: anywhere; }
+    .pay-sep { margin: 1.35rem 0; border: 0; border-top: 1px solid #E5E2E1; }
+    .pay-note { margin: 0; font-size: 0.8125rem; line-height: 1.6; color: #615E57; }
+    .pay-gown { display: flex; gap: 0.9rem; padding: 0.9rem 0; border-top: 1px solid #E5E2E1; }
+    .pay-gown:first-of-type { border-top: 0; padding-top: 0; }
+    .pay-gown img, .pay-gown .pay-nophoto { flex: none; width: 4.25rem; height: 5.5rem; object-fit: cover; background: #E5E2E1; }
+    .pay-gown-t { min-width: 0; font-size: 0.8125rem; line-height: 1.5; color: #615E57; }
+    .pay-gown-t b { display: block; font-size: 0.9rem; font-weight: 500; color: #1b1c1c; overflow-wrap: anywhere; }
+    .pay-line { display: flex; justify-content: space-between; gap: 1rem; padding: 0.3rem 0; font-size: 0.875rem; color: #615E57; }
+    .pay-line.pay-total { margin-top: 0.5rem; padding-top: 0.8rem; border-top: 1px solid #D4D0CD; font-weight: 500; color: #1b1c1c; }
+    .pay-actions { display: flex; flex-direction: column; align-items: center; gap: 1.4rem; margin-top: 2.5rem; }
+    .pay-actions-row { display: flex; flex-direction: column; gap: 0.9rem; width: 100%; }
+    @media (min-width: 640px) { .pay-actions-row { flex-direction: row; justify-content: center; width: auto; } }
+    .pay-btn { display: flex; align-items: center; justify-content: center; padding: 1.15rem 2.5rem; border-radius: 6px; border: 1px solid #0b0c0c; font-size: 0.65rem; letter-spacing: 0.3em; text-transform: uppercase; font-weight: 500; text-decoration: none; text-align: center; transition: all 0.4s; }
+    .pay-btn--main { background: #0b0c0c; color: #fff; }
+    .pay-btn--main:hover { background: #615E57; border-color: #615E57; }
+    .pay-btn--ghost { background: transparent; color: #0b0c0c; border-color: rgba(0, 0, 0, 0.25); }
+    .pay-btn--ghost:hover { border-color: #0b0c0c; }
     @media (prefers-reduced-motion: reduce) {
       .animate-success-pop, .animate-fade-in-up { animation: none; opacity: 1; transform: none; }
       .pay-spinner { animation-duration: 2.4s; }
@@ -36,7 +65,7 @@
 {% block main_class %}flex-grow flex items-center justify-center pt-32 pb-24 px-6{% endblock %}
 
 {% block content %}
-  <div id="pay-return" data-status-url="{{ status_url }}" data-checkout-url="{{ checkout_url }}" data-orders-url="{{ orders_url }}"
+  <div id="pay-return" data-status-url="{{ status_url }}" data-checkout-url="{{ checkout_url }}" data-orders-url="{{ orders_url }}" data-all-url="{{ all_url }}"
        class="max-w-3xl w-full bg-white border border-[#E5E2E1]/50 editorial-shadow p-10 md:p-24 text-center animate-fade-in-up opacity-0" aria-live="polite">
 
     <!-- Waiting for {{ payment_provider_label }} / making the booking -->
@@ -49,29 +78,50 @@
       </p>
     </div>
 
-    <!-- Paid, booking made -->
+    <!-- Paid, booking made: the thank-you page -->
     <div data-pay-state="booked" hidden>
-      <div class="inline-flex items-center justify-center w-20 h-20 rounded-full border mb-8 animate-success-pop opacity-0 border-green-500/20">
-        <span class="material-symbols-outlined text-4xl font-light text-green-500">check</span>
-      </div>
-      <h1 class="font-headline text-4xl md:text-6xl font-light tracking-tight text-primary leading-[1.1] mb-4">Payment Received.</h1>
-      <h2 class="font-headline text-[0.7rem] md:text-[0.8rem] tracking-[0.3em] uppercase text-secondary/60 font-medium">Reservation Confirmed</h2>
-      <div class="max-w-lg mx-auto mt-10">
-        <p class="font-body text-base leading-relaxed font-light text-primary">
-          Your booking <b data-pay-field="reference"></b> is confirmed. We received <b data-pay-field="amount"></b>.
-          Receipt <span data-pay-field="receipt"></span> is saved with your booking, and we will remind you before your pick-up date.
+      <div class="pay-hero">
+        <div class="inline-flex items-center justify-center w-20 h-20 rounded-full border mb-8 animate-success-pop opacity-0 border-green-500/20">
+          <span class="material-symbols-outlined text-4xl font-light text-green-500">check</span>
+        </div>
+        <h1 class="font-headline text-4xl md:text-6xl font-light tracking-tight text-primary leading-[1.1] mb-4">Thank you for your rent.</h1>
+        <h2 class="font-headline text-[0.7rem] md:text-[0.8rem] tracking-[0.3em] uppercase text-secondary/60 font-medium">Payment received &middot; Reservation confirmed</h2>
+        <p class="font-body text-base leading-relaxed font-light text-primary max-w-xl mx-auto mt-8">
+          Your booking <b data-pay-field="reference"></b> is confirmed and we received <b data-pay-field="amount"></b>.
+          Your receipt <span data-pay-field="receipt"></span> is saved with your booking, and we will remind you before your pick-up date.
         </p>
         <p data-pay-field="testnote" hidden class="font-body text-[0.8rem] leading-relaxed text-secondary mt-4">This was a test payment. No real money was charged.</p>
       </div>
-      <div class="flex flex-col items-center gap-8 mt-12">
-        <a data-pay-field="booking_link" href="{{ orders_url }}" class="w-full md:w-64 px-10 py-5 bg-primary text-white text-[0.65rem] uppercase tracking-[0.3em] font-medium hover:bg-secondary transition-all duration-500 rounded-[6px] flex items-center justify-center no-underline text-center">
-          View My Booking
-        </a>
+
+      <div class="pay-grid" data-pay-details hidden>
+        <div class="pay-card">
+          <h3 class="pay-h">Booking details</h3>
+          <dl class="pay-rows" data-pay-rows="booking"></dl>
+          <hr class="pay-sep">
+          <h3 class="pay-h">Customer</h3>
+          <dl class="pay-rows" data-pay-rows="customer"></dl>
+          <hr class="pay-sep">
+          <h3 class="pay-h">Payment</h3>
+          <dl class="pay-rows" data-pay-rows="payment"></dl>
+          <hr class="pay-sep">
+          <h3 class="pay-h">What happens next</h3>
+          <p class="pay-note">Come to the shop on your pick-up day between {{ pickup_hours }}. <span data-pay-field="next_balance"></span></p>
+        </div>
+        <aside class="pay-summary">
+          <h3 class="pay-h">Rental summary</h3>
+          <div data-pay-items></div>
+          <hr class="pay-sep">
+          <div data-pay-totals></div>
+        </aside>
+      </div>
+
+      <div class="pay-actions">
+        <div class="pay-actions-row">
+          <a data-pay-field="continue_link" href="{{ all_url }}" class="pay-btn pay-btn--main">Continue Renting</a>
+          <a data-pay-field="booking_link" href="{{ orders_url }}" class="pay-btn pay-btn--ghost">View My Booking</a>
+        </div>
         <a data-pay-field="receipt_link" href="#" hidden class="font-label text-[0.6rem] uppercase tracking-[0.3em] text-secondary hover:text-primary transition-colors border-b border-transparent hover:border-primary/20 pb-1">
           View Receipt
-        </a>
-        <a class="font-label text-[0.6rem] uppercase tracking-[0.3em] text-secondary hover:text-primary transition-colors border-b border-transparent hover:border-primary/20 pb-1" href="{% url 'gowns:homepage' %}">
-          Back to Home
         </a>
       </div>
     </div>
@@ -150,6 +200,7 @@
       </div>
     </div>
   </div>
+  {{ continue_links|json_script:"continue-links" }}
 {% endblock %}
 
 {% block extra_scripts %}
@@ -173,6 +224,58 @@
     function field(name) { return root.querySelector('[data-pay-field="' + name + '"]'); }
     function setText(name, text) { var el = field(name); if (el) el.textContent = text; }
 
+    var CONTINUE_LINKS = {};
+    try { CONTINUE_LINKS = JSON.parse(document.getElementById('continue-links').textContent) || {}; } catch (e0) {}
+    function userKey() { return (document.body && document.body.dataset && document.body.dataset.userKey) ? document.body.dataset.userKey : 'guest'; }
+    // Where "Continue Renting" goes: the category of the gown added last (the bag, before it is emptied), else the All page.
+    function continueUrl() {
+      var cart = [];
+      try { cart = JSON.parse(localStorage.getItem('arabela_cart_' + userKey()) || '[]'); } catch (e1) {}
+      var last = Array.isArray(cart) && cart.length ? cart[cart.length - 1] : null;
+      var key = last && last.collection ? String(last.collection).trim().toLowerCase() : '';
+      return key && Object.prototype.hasOwnProperty.call(CONTINUE_LINKS, key) ? CONTINUE_LINKS[key] : (root.getAttribute('data-all-url') || '/');
+    }
+    function mk(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+    function rows(name, pairs) {
+      var dl = root.querySelector('[data-pay-rows="' + name + '"]');
+      if (!dl) return;
+      dl.textContent = '';
+      pairs.forEach(function (p) { if (p[1]) { dl.appendChild(mk('dt', '', p[0])); dl.appendChild(mk('dd', '', p[1])); } });
+    }
+    function line(label, value, cls) { var d = mk('div', 'pay-line' + (cls ? ' ' + cls : '')); d.appendChild(mk('span', '', label)); d.appendChild(mk('span', '', value)); return d; }
+    // Every value below comes from the server as plain text and goes on the page as text, never as markup.
+    function drawDetails(data) {
+      var d = data.details, box = root.querySelector('[data-pay-details]');
+      if (!d || !box) return;
+      rows('booking', [['Booking no.', data.reference_code || ''], ['Receipt no.', data.receipt_number || '']]);
+      rows('customer', [['Name', d.customer.name], ['Phone', d.customer.phone], ['Address', d.customer.address]]);
+      rows('payment', [['Paid with', d.paid_with], ['Paid on', d.paid_on], ['Amount paid', '\u20b1' + d.paid]]);
+      var next = field('next_balance');
+      if (next) next.textContent = d.owes ? 'The remaining \u20b1' + d.balance + ' is paid at the shop when you pick up.' : 'Everything is paid, so there is nothing to pay at the shop.';
+      var list = root.querySelector('[data-pay-items]');
+      list.textContent = '';
+      (d.gowns || []).forEach(function (g) {
+        var row = mk('div', 'pay-gown');
+        if (g.photo) { var img = mk('img'); img.src = g.photo; img.alt = g.name; img.loading = 'lazy'; row.appendChild(img); } else { row.appendChild(mk('div', 'pay-nophoto')); }
+        var text = mk('div', 'pay-gown-t');
+        text.appendChild(mk('b', '', g.name));
+        if (g.size) { text.appendChild(mk('span', '', 'Size ' + g.size)); text.appendChild(document.createElement('br')); }
+        text.appendChild(mk('span', '', 'Pick-up ' + g.pickup)); text.appendChild(document.createElement('br'));
+        text.appendChild(mk('span', '', 'Return ' + g.return)); text.appendChild(document.createElement('br'));
+        text.appendChild(mk('span', '', '\u20b1' + g.price));
+        row.appendChild(text);
+        list.appendChild(row);
+      });
+      var totals = root.querySelector('[data-pay-totals]');
+      totals.textContent = '';
+      totals.appendChild(line('Gown rental', '\u20b1' + d.rental));
+      totals.appendChild(line('Security deposit', '\u20b1' + d.deposit));
+      totals.appendChild(line('Total', '\u20b1' + d.total, 'pay-total'));
+      totals.appendChild(line('Paid now', '\u20b1' + d.paid));
+      if (d.owes) totals.appendChild(line('Still to pay at the shop', '\u20b1' + d.balance));
+      box.hidden = false;
+    }
+
     function cleanUpTheBag() {
       // The same cleanup the older confirmation page does: the selection has become a booking, so the saved bag is emptied.
       var userKey = (document.body && document.body.dataset && document.body.dataset.userKey) ? document.body.dataset.userKey : 'guest';
@@ -193,6 +296,9 @@
         var link = field('booking_link'); if (link && data.booking_url) link.setAttribute('href', data.booking_url);
         var rl = field('receipt_link'); if (rl && data.receipt_url) { rl.setAttribute('href', data.receipt_url); rl.hidden = false; }
         var tn = field('testnote'); if (tn) tn.hidden = !data.test;
+        var cont = field('continue_link'); if (cont) cont.setAttribute('href', continueUrl());      // read the bag BEFORE it is emptied
+        drawDetails(data);
+        root.classList.add('pay-wide');
         cleanUpTheBag();
         show('booked');
         return true;

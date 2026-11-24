@@ -21,7 +21,8 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from gowns import online_checkout
-from gowns.context_processors import clear_reservation_hold
+from gowns import availability
+from gowns.context_processors import clear_reservation_hold, continue_shopping_links
 from gowns.views import _signed_in_or_json
 from reservations import gateway, payments
 from reservations.models import PaymentAttempt
@@ -51,6 +52,10 @@ def payment_return(request, token):
         "orders_url": reverse("gowns:orders"),
         "amount": attempt.amount,
         "test_mode": not attempt.livemode,
+        # "Continue Renting": back to the category of the gown added last (the bag still knows it in this browser), else the All page.
+        "continue_links": continue_shopping_links(),
+        "all_url": reverse("gowns:collection_all"),
+        "pickup_hours": availability.PICKUP_HOURS_TEXT,
     })
 
 

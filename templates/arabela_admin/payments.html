@@ -1253,7 +1253,6 @@
               {% if is_owner %}<a class="pm-tab{% if mode == 'receipts' %} is-on{% endif %}" href="{% url 'arabela_admin:payment_receipts' %}"{% if mode == 'receipts' %} aria-current="page"{% endif %}>All receipts</a>{% endif %}
               <a class="pm-tab{% if mode == 'online' %} is-on{% endif %}" href="{% url 'arabela_admin:payment_online' %}"{% if mode == 'online' %} aria-current="page"{% endif %}>Online payments{% if online_attention %}<span class="pm-badge" title="{{ online_attention }} need a look">{{ online_attention }}</span>{% endif %}</a>
             </div>
-            {% if paymongo_mode == "test" and mode != "online" %}<p class="pm-note">{% if paymongo_demo %}PRACTICE mode: online payments are made on a practice payment page on this computer (not {{ payment_provider }}). No real money moves.{% else %}{{ payment_provider }} is in TEST mode: online payments are simulated and no real money moves, but the bookings they make are real bookings.{% endif %}</p>{% endif %}
 
             {% if mode == "bookings" %}
             <!-- What every booking still owes, its late fee and the deposit it can give back: all worked out by the system (reservations/ledger.py). Click a booking to open its payments. -->
@@ -1309,7 +1308,6 @@
             <!-- Payments customers made on {{ payment_provider }}'s page. The system makes the booking the moment {{ payment_provider }} confirms the money, so what is listed
                  here as "Needs a look" is money that arrived WITHOUT a booking behind it, or a refund that did not go through. -->
             <div class="pm-card">
-              {% if paymongo_mode == "test" %}<p class="pm-note">{% if paymongo_demo %}Practice mode: these payments were made on the practice payment page on this computer (not {{ payment_provider }}). No real money moved.{% else %}Test mode: these payments were made on {{ payment_provider }}'s simulated page. No real money moved.{% endif %}</p>{% endif %}
               <form method="get" class="pm-filters" role="search" aria-label="Find an online payment">
                 <div style="flex: 1 1 14rem; min-width: 12rem;">
                   <label class="pm-hint" for="pm-q">Customer, booking or {{ payment_provider }} payment number</label>
@@ -1330,7 +1328,7 @@
                       <td>{{ a.who }}</td>
                       <td>{{ a.kind_label }}</td>
                       <td class="r">&#8369;{{ a.amount|floatformat:"2g" }}</td>
-                      <td>{{ a.channel_label }}{% if not a.livemode %}<div class="pm-legacy">test</div>{% endif %}</td>
+                      <td>{{ a.channel_label }}</td>
                       <td><span class="pm-chip pm-chip--{{ a.chip }}">{{ a.chip_words }}</span></td>
                       <td>{% if a.booking_code %}<a href="{% url 'arabela_admin:payments' %}?open={{ a.reservation_id }}">{{ a.booking_code }}</a>{% else %}-{% endif %}</td>
                       <td>{{ a.note|default:"-" }}{% if a.provider_payment_id %}<div class="pm-legacy">{{ a.provider_payment_id }}</div>{% endif %}</td>

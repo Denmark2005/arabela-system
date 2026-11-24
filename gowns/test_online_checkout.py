@@ -320,6 +320,40 @@ class ConfirmTests(Base):
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, payment.receipt_number)
 
+    def test_the_thank_you_page_gets_the_customer_gowns_and_money_of_the_booking(self):
+        attempt, _ = self.started()
+        state = self.pay_and_confirm(attempt, channel="paymaya")
+        details = state["details"]
+        self.assertEqual(details["customer"]["name"], "Ana Cruz")
+        self.assertEqual(details["customer"]["phone"], "09171234567")
+        self.assertIn("Antipolo", details["customer"]["address"])
+        self.assertEqual(details["paid_with"], "Maya")                                    # no "(online payment)" tail
+        self.assertTrue(details["paid_on"])
+        self.assertEqual((details["rental"], details["deposit"], details["total"]), ("3,500.00", "2,000.00", "5,500.00"))
+        self.assertEqual((details["paid"], details["balance"], details["owes"], details["paid_in_full"]), ("2,000.00", "3,500.00", True, False))
+        self.assertEqual(len(details["gowns"]), 1)
+        gown = details["gowns"][0]
+        self.assertEqual((gown["name"], gown["price"]), (self.gown.name, "3,500.00"))
+        self.assertTrue(gown["pickup"] and gown["return"])
+
+    def test_a_paid_in_full_thank_you_page_says_nothing_is_owed(self):
+        attempt, _ = self.started(option="full")
+        details = self.pay_and_confirm(attempt, channel="qrph")["details"]
+        self.assertEqual((details["balance"], details["owes"], details["paid_in_full"], details["paid"]), ("0.00", False, True, "5,500.00"))
+
+    def test_the_thank_you_page_has_continue_renting_view_booking_and_a_receipt_link_but_no_receipt_paper(self):
+        attempt, _ = self.started()
+        self.pay_and_confirm(attempt)
+        page = self.client.get(reverse("gowns:payment_return", args=[attempt.token]))
+        self.assertContains(page, "Thank you for your rent.")
+        self.assertContains(page, "Continue Renting")
+        self.assertContains(page, "View My Booking")
+        self.assertContains(page, 'data-pay-field="receipt_link"')
+        self.assertContains(page, 'id="continue-links"')
+        self.assertContains(page, reverse("gowns:collection_all"))
+        self.assertContains(page, "1:00 PM to 5:00 PM")
+        self.assertNotIn("PAYMENT RECEIPT", page.content.decode())
+
     def test_a_paid_in_full_booking_has_nothing_left_to_pay(self):
         from reservations import ledger
         attempt, _ = self.started(option="full")

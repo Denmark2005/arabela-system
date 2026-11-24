@@ -94,7 +94,7 @@ class OnlineTabTests(Base):
         self.assertIn("Booked", everything)
         self.assertIn("GCash", everything)
         self.assertIn("RSV-", everything)
-        self.assertIn("Test mode", everything)
+        self.assertNotIn("Test mode", everything)                                       # the panel does not label practice payments
 
     def test_a_flagged_payment_is_listed_with_its_note_and_the_badge_counts_it(self):
         flagged = attempt(self.ana, status=PaymentAttempt.Status.FLAGGED, note="PayMongo says P1,000.00 was paid but P2,000.00 was asked.",
