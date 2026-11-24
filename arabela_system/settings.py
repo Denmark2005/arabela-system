@@ -14,6 +14,8 @@ import os
 import sys
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 import cloudinary
 
 from arabela_system import laptop_db
@@ -452,6 +454,19 @@ PAYMONGO_API_BASE = os.getenv('PAYMONGO_API_BASE', 'https://api.paymongo.com').s
 PAYMONGO_TIMEOUT = int(os.getenv('PAYMONGO_TIMEOUT', '15'))
 # Hand a returned security deposit back to the customer's own GCash / Maya / QR Ph automatically (only for payments made through PayMongo).
 PAYMONGO_AUTO_REFUND = os.getenv('PAYMONGO_AUTO_REFUND', 'true').strip().lower() == 'true'
+# Only for the browser checks that run a practice gateway against an isolated test database (see reservations/paymongo.py api_base_allowed).
+PAYMONGO_ALLOW_LOCAL_GATEWAY = os.getenv('PAYMONGO_ALLOW_LOCAL_GATEWAY', '').strip() == '1'
+
+# The practice shop (`python demo.py`): a separate throwaway database file, a practice payment gateway on this computer and sign-in links for a demo
+# customer and a demo owner, so the online payments can be shown without a PayMongo account. It can NEVER run against the live shop: it always uses
+# its own SQLite file (never the Postgres settings above) and refuses to start on Render. See demo.py and arabela_system/demo.py.
+DEMO_MODE = os.getenv('ARABELA_DEMO', '') == '1'
+if DEMO_MODE:
+    if os.getenv('RENDER'):
+        raise ImproperlyConfigured('ARABELA_DEMO=1 is for a practice copy on one computer. It is refused on Render.')
+    DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': BASE_DIR / 'demo.sqlite3'}}
+    CUSTOMER_EMAILS_ENABLED = False
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 # True while `manage.py test` runs: nothing in the test suite may reach the network, and the sweeps that normally run on page visits stay quiet
 # (tests call them directly).

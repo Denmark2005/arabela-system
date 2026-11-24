@@ -227,7 +227,7 @@
           <p class="text-[0.8rem] text-secondary leading-relaxed">You will choose <b class="font-medium text-on-surface">GCash, Maya or QR Ph</b> on PayMongo&rsquo;s secure payment page. Your booking is confirmed the moment the payment is received. The security deposit is fully refundable when you return the gown.</p>
         </div>
         {% if paymongo_test %}
-        <p id="pay-test-note" class="text-[0.75rem] leading-relaxed text-secondary">Test mode: the payment page is a simulation. No real money is charged.</p>
+        <p id="pay-test-note" class="text-[0.75rem] leading-relaxed text-secondary">{% if paymongo_demo %}Practice mode: the payment page is a practice page running on this computer, not PayMongo. No real money is charged.{% else %}Test mode: the payment page is a simulation. No real money is charged.{% endif %}</p>
         {% endif %}
       </div>
     </section>

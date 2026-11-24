@@ -115,7 +115,7 @@ def payments_view(request):
         "page": "payments", "mode": "bookings", "rows": rows, "counts": counts, "balance_total": balance_total,
         "is_owner": _is_owner(request), "can_void": _can(request, "void_receipts"),
         "late_fee_per_day": late_fee.per_day(), "open_id": request.GET.get("open", ""), "online_attention": online_attention_count(),
-        "paymongo_mode": paymongo.mode(),
+        "paymongo_mode": paymongo.mode(), "paymongo_demo": paymongo.is_demo(),
     })
 
 
@@ -364,6 +364,7 @@ def payment_receipts_view(request):
     return render(request, "arabela_admin/payments.html", {
         "page": "payments", "mode": "receipts", "receipts": page, "q": q, "kind": kind, "status": status, "from": start, "to": end,
         "is_owner": True, "can_void": True, "online_attention": online_attention_count(), "paymongo_mode": paymongo.mode(),
+        "paymongo_demo": paymongo.is_demo(),
     })
 
 
@@ -421,7 +422,7 @@ def payment_online_view(request):
         _online_row(attempt, now)
     return render(request, "arabela_admin/payments.html", {
         "page": "payments", "mode": "online", "attempts": page, "q": q, "show": show, "online_attention": online_attention_count(),
-        "paymongo_mode": paymongo.mode(), "is_owner": _is_owner(request), "can_void": _can(request, "void_receipts"),
+        "paymongo_mode": paymongo.mode(), "paymongo_demo": paymongo.is_demo(), "is_owner": _is_owner(request), "can_void": _can(request, "void_receipts"),
     })
 
 

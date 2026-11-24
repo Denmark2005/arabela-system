@@ -6,3 +6,5 @@ media/
 staticfiles/
 venv/
 env/
+demo.sqlite3
+

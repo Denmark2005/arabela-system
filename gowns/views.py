@@ -894,6 +894,7 @@ def reservation(request):
             # Pay through PayMongo while a key is set (gowns/online_checkout.py); with none the older GCash-screenshot section is shown.
             "paymongo_enabled": paymongo.enabled(),
             "paymongo_test": paymongo.is_test(),
+            "paymongo_demo": paymongo.is_demo(),
             "payment_cancelled": request.GET.get("payment") == "cancelled",
         },
     )

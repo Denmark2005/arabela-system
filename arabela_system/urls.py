@@ -45,3 +45,12 @@ urlpatterns = [
     path('ai/', include('ai_recommendation.urls')),
     path('admin-panel/', include('arabela_admin.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+# The practice shop (`python demo.py`): its start page and two sign-in links. They are added ONLY when ARABELA_DEMO=1; on the real shop they do not exist.
+if getattr(settings, 'DEMO_MODE', False):
+    from arabela_system import demo as _demo
+
+    urlpatterns.insert(0, path('admin-panel/demo-signin/', _demo.signin_owner, name='demo_signin_owner'))
+    urlpatterns.insert(0, path('demo/signin/customer/', _demo.signin_customer, name='demo_signin_customer'))
+    urlpatterns.insert(0, path('demo/', _demo.start_page, name='demo_start'))
+

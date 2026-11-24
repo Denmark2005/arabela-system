@@ -60,12 +60,41 @@ def is_test():
     return mode() == "test"
 
 
+REAL_API = "https://api.paymongo.com"
+
+
+def is_demo():
+    """True when the shop talks to a practice gateway on this computer (the demo tool) instead of PayMongo."""
+    return (getattr(settings, "PAYMONGO_API_BASE", REAL_API) or REAL_API) != REAL_API
+
+
+def _is_loopback(url):
+    return bool(re.match(r"^http://(127\.0\.0\.1|localhost)(:\d+)?$", url or ""))
+
+
+def api_base_allowed():
+    """PayMongo's real address is always fine. Anything else (the demo tool's practice gateway) is accepted ONLY for a local address, and ONLY where
+    it cannot make bookings in the live shop: the demo's own throwaway database, a laptop copy of the database, the test suite, or when it is asked
+    for on purpose (PAYMONGO_ALLOW_LOCAL_GATEWAY=1, used by the browser checks against an isolated test database). So a practice payment can never
+    create a booking in the live database, however the settings are mixed up."""
+    base = getattr(settings, "PAYMONGO_API_BASE", REAL_API) or REAL_API
+    if base == REAL_API:
+        return True
+    if not _is_loopback(base):
+        return False
+    return bool(getattr(settings, "DEMO_MODE", False) or getattr(settings, "USING_LAPTOP_DB", False) or getattr(settings, "TESTING", False)
+                or getattr(settings, "PAYMONGO_ALLOW_LOCAL_GATEWAY", False))
+
+
 def enabled():
-    """True when the checkout should use PayMongo: a key is set, and a LIVE key is never used against a laptop copy of the database."""
+    """True when the checkout should use PayMongo: a key is set, a LIVE key is never used against a laptop copy of the database, and the gateway
+    address is PayMongo's own (or, for the demo tool, a safe local one: see api_base_allowed)."""
     key = secret_key()
     if not key:
         return False
     if key.startswith("sk_live_") and getattr(settings, "USING_LAPTOP_DB", False):
+        return False
+    if not api_base_allowed():
         return False
     return True
 
