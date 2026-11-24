@@ -65,8 +65,8 @@ def payment_status(request, token):
     attempt = _own_attempt(request, token)
     attempt = online_checkout.confirm_attempt(attempt.pk, source="poll") or attempt
     state = online_checkout.attempt_state(attempt)
-    if state["state"] in ("booked", "refunded"):
-        clear_reservation_hold(request)             # the checkout's countdown is over: the booking exists (or the money went back)
+    if state["state"] in ("booked", "refunded", "flagged", "handled"):
+        clear_reservation_hold(request)             # the checkout's countdown is over: the booking exists, the money went back, or the shop has the payment
     return JsonResponse({"success": True, **state})
 
 

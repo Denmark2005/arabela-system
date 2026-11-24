@@ -200,6 +200,15 @@
       });
     }
 
+    // The hold ended for a reason other than the clock (the payment page found the booking made, or the money going back): the server has already
+    // dropped the hold, so just stop counting and go away. Nothing is released or cleared here, so a new selection started since stays untouched.
+    function holdEnded() {
+      stopTicking();
+      hideBanner();
+    }
+    window.addEventListener('arabela:hold-ended', holdEnded);
+    if (window.__arabelaHoldEnded) holdEnded();
+
     if (cancelBtn) {
       cancelBtn.addEventListener('click', function () {
         arabelaConfirm({

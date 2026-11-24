@@ -127,6 +127,13 @@ class Base(TestCase):
         return {"gown_name": gown.name, "gown_slug": gown.slug, "size": "Medium", "rental_date": (self.event - timedelta(days=2)).isoformat(),
                 "return_date": (self.event + timedelta(days=2)).isoformat()}
 
+    def ben_client(self):
+        """Ben, signed in and past the Terms pop-up (a second customer)."""
+        client = Client()
+        client.force_login(self.ben)
+        agreed(self.ben)
+        return client
+
     def start(self, items=None, *, option="deposit", client=None, **extra):
         items = [self.item()] if items is None else items
         data = {"items": json.dumps(items), "pay_option": option, "first_name": "Ana", "last_name": "Cruz", "phone": "09171234567",
@@ -146,6 +153,163 @@ class Base(TestCase):
         self.assertEqual(response.status_code, 200)
         attempt.refresh_from_db()
         return response.json()
+
+
+class BackButtonTests(Base):
+    """The Back button, a reloaded checkout, a second tab and Pay pressed again must never leave two payable pages, double a payment or lose one."""
+
+    def open_attempts(self):
+        return PaymentAttempt.objects.filter(customer=self.ana, status=PaymentAttempt.Status.CREATED).count()
+
+    def test_pay_pressed_again_with_nothing_changed_is_the_same_open_page(self):
+        first, body1 = self.started(request_id="req-back-0001")
+        again, body2 = self.started(request_id="req-back-0001")
+        self.assertEqual((again.pk, body2["checkout_url"]), (first.pk, body1["checkout_url"]))
+        self.assertEqual((PaymentAttempt.objects.count(), self.fake.count("create_session")), (1, 1))
+
+    def test_a_freshly_loaded_checkout_closes_the_page_left_open_behind_the_back_button(self):
+        first, _ = self.started(request_id="req-back-0002")                          # the customer went to the payment page and came Back...
+        second, _ = self.started(request_id="req-back-0003")                         # ...the checkout was reloaded (a new id), and Pay pressed again
+        first.refresh_from_db()
+        self.assertNotEqual(first.pk, second.pk)
+        self.assertEqual((first.status, second.status), (PaymentAttempt.Status.CANCELLED, PaymentAttempt.Status.CREATED))
+        self.assertEqual(self.fake.sessions[first.session_id]["status"], "CANCELED")        # the old page can no longer be paid
+        self.assertEqual(self.open_attempts(), 1)
+
+    def test_a_second_tab_pressing_pay_also_leaves_only_one_open_page(self):
+        self.started(request_id="req-back-0004")
+        self.started(request_id="req-back-0005", option="full")
+        self.started(request_id="req-back-0006")
+        self.assertEqual(self.open_attempts(), 1)
+
+    def test_pay_pressed_again_after_the_page_ran_out_opens_a_new_one_not_the_dead_one(self):
+        first, body1 = self.started(request_id="req-back-0007")
+        PaymentAttempt.objects.filter(pk=first.pk).update(expires_at=timezone.now() - timedelta(minutes=1))
+        again, body2 = self.started(request_id="req-back-0007")
+        first.refresh_from_db()
+        self.assertNotEqual(again.pk, first.pk)
+        self.assertNotEqual(body2["checkout_url"], body1["checkout_url"])
+        self.assertEqual((first.status, again.status), (PaymentAttempt.Status.CANCELLED, PaymentAttempt.Status.CREATED))
+
+    def test_pay_pressed_again_after_the_customer_came_back_cancelled_opens_a_new_page(self):
+        first, _ = self.started(request_id="req-back-0008")
+        self.client.get(reverse("gowns:payment_cancel", args=[first.token]))                  # the payment page's "back to the shop" link
+        first.refresh_from_db()
+        self.assertEqual(first.status, PaymentAttempt.Status.CANCELLED)
+        again, body = self.started(request_id="req-back-0008")                               # a page restored by Back still has the same id
+        self.assertNotEqual(again.pk, first.pk)
+        self.assertTrue(body["checkout_url"].startswith("https://checkout-staging.xendit.co/session/"))
+
+    def test_a_restored_page_with_a_changed_choice_never_doubles_a_booked_payment(self):
+        first, _ = self.started(request_id="req-back-0009")
+        self.assertEqual(self.pay_and_confirm(first)["state"], "booked")
+        body = self.start(request_id="req-back-0009", option="full").json()                  # Back to the old checkout, choice switched, Pay
+        self.assertTrue(body["success"])
+        self.assertEqual(body["checkout_url"], reverse("gowns:payment_return", args=[first.token]))
+        self.assertEqual((PaymentAttempt.objects.count(), Reservation.objects.count(), Payment.objects.count()), (1, 1, 1))
+
+    def test_if_the_old_page_was_paid_in_the_meantime_the_customer_is_shown_it_not_a_second_payment(self):
+        first, _ = self.started(request_id="req-back-0010")
+        self.fake.paid(first.session_id)                                                     # paid on the old page, the return page never opened
+        body = self.start(request_id="req-back-0011").json()                                 # a fresh checkout, Pay pressed
+        self.assertTrue(body["success"])
+        self.assertEqual(body["checkout_url"], reverse("gowns:payment_return", args=[first.token]))
+        first.refresh_from_db()
+        self.assertEqual(first.status, PaymentAttempt.Status.BOOKED)
+        self.assertEqual((PaymentAttempt.objects.count(), Reservation.objects.count(), self.fake.count("create_session")), (1, 1, 1))
+
+    def test_a_payment_that_is_being_turned_into_a_booking_blocks_a_second_one(self):
+        first, _ = self.started(request_id="req-back-0012")
+        with patch("gowns.online_checkout._create_booking", side_effect=RuntimeError("boom")):
+            self.pay_and_confirm(first)
+        first.refresh_from_db()
+        self.assertEqual(first.status, PaymentAttempt.Status.PAID)
+        body = self.start(items=[self.item(self.gown2)], request_id="req-back-0013").json()
+        self.assertEqual(body["checkout_url"], reverse("gowns:payment_return", args=[first.token]))
+        self.assertEqual(PaymentAttempt.objects.count(), 1)
+
+    def test_another_customers_open_page_is_never_touched(self):
+        ben_client = self.ben_client()
+        theirs, _ = self.started(items=[self.item(self.gown2)], request_id="req-back-0014", client=ben_client)
+        self.started(request_id="req-back-0015")
+        theirs.refresh_from_db()
+        self.assertEqual(theirs.status, PaymentAttempt.Status.CREATED)
+
+    def test_spamming_pay_never_opens_more_than_one_page(self):
+        for _ in range(6):
+            self.start(request_id="req-back-0016")
+        self.assertEqual((PaymentAttempt.objects.count(), self.fake.count("create_session")), (1, 1))
+
+    def test_an_old_page_that_cannot_be_reached_does_not_stop_the_new_one_from_opening(self):
+        first, _ = self.started(request_id="req-back-0017")
+        self.fake.fail["read_session"] = xendit.XenditError("down", status=503)
+        try:
+            self.start(request_id="req-back-0018")
+        finally:
+            self.fake.fail.pop("read_session", None)
+        first.refresh_from_db()
+        self.assertIn(first.status, (PaymentAttempt.Status.CREATED, PaymentAttempt.Status.CANCELLED))
+
+
+class HoldBarAfterPayingTests(Base):
+    """The "Your selection is held" bar goes as soon as the customer's money is in, wherever they are on the site."""
+
+    def hold(self, minutes_left=15):
+        from gowns.context_processors import RESERVATION_HOLD_SESSION_KEY
+        session = self.client.session
+        session[RESERVATION_HOLD_SESSION_KEY] = (timezone.now() + timedelta(minutes=minutes_left)).isoformat()
+        session.save()
+        return RESERVATION_HOLD_SESSION_KEY
+
+    def page(self):
+        return self.client.get(reverse("gowns:homepage")).content.decode()
+
+    def test_the_bar_shows_while_nothing_is_paid(self):
+        self.hold()
+        self.started()
+        self.assertIn('id="hold-banner"', self.page())
+
+    def test_a_customer_who_paid_and_never_came_back_to_the_return_page_sees_no_bar(self):
+        key = self.hold()
+        attempt, _ = self.started()
+        self.fake.paid(attempt.session_id)
+        online_checkout.confirm_attempt(attempt.pk, source="webhook")                        # the webhook books it; the browser never returned
+        html = self.page()
+        self.assertNotIn('id="hold-banner"', html)
+        self.assertNotIn(key, self.client.session)
+        self.assertEqual(UserProfile.objects.get(user=self.ana).hold_abandon_count, 0)
+
+    def test_a_payment_the_shop_has_to_check_also_ends_the_bar(self):
+        key = self.hold()
+        attempt, _ = self.started()
+        self.fake.paid(attempt.session_id, amount=1000)                                      # the wrong amount: flagged for a person
+        online_checkout.confirm_attempt(attempt.pk, source="webhook")
+        attempt.refresh_from_db()
+        self.assertEqual(attempt.status, PaymentAttempt.Status.FLAGGED)
+        self.assertNotIn('id="hold-banner"', self.page())
+        self.assertNotIn(key, self.client.session)
+
+    def test_the_status_poll_ends_the_hold_for_a_flagged_payment_too(self):
+        key = self.hold()
+        attempt, _ = self.started()
+        self.fake.paid(attempt.session_id, amount=1000)
+        PaymentAttempt.objects.filter(pk=attempt.pk).update(last_checked_at=None)
+        state = self.client.get(reverse("gowns:payment_status", args=[attempt.token])).json()
+        self.assertEqual(state["state"], "flagged")
+        self.assertNotIn(key, self.client.session)
+
+    def test_an_older_payment_does_not_end_a_hold_that_began_after_it(self):
+        attempt, _ = self.started()
+        self.pay_and_confirm(attempt)
+        PaymentAttempt.objects.filter(pk=attempt.pk).update(paid_at=timezone.now() - timedelta(minutes=40))
+        self.hold(minutes_left=15)                                                           # a new selection, held after that payment
+        self.assertIn('id="hold-banner"', self.page())
+
+    def test_someone_who_never_paid_keeps_the_bar_after_closing_a_page(self):
+        self.hold()
+        first, _ = self.started()
+        self.client.get(reverse("gowns:payment_cancel", args=[first.token]))
+        self.assertIn('id="hold-banner"', self.page())
 
 
 class SwitchTests(TestCase):
@@ -392,7 +556,7 @@ class CancelAndSweepTests(Base):
 
     def test_the_sweep_closes_old_unpaid_attempts_and_books_one_that_was_paid(self):
         old, _ = self.started(request_id="req-xo-old-0001")
-        paid, _ = self.started(items=[self.item(self.gown2)], request_id="req-xo-new-0001")
+        paid, _ = self.started(items=[self.item(self.gown2)], request_id="req-xo-new-0001", client=self.ben_client())          # another customer: one customer has one open page
         self.fake.paid(paid.session_id)
         PaymentAttempt.objects.filter(pk__in=[old.pk, paid.pk]).update(expires_at=timezone.now() - timedelta(minutes=5))
         self.assertEqual(online_checkout.expire_stale(), 2)

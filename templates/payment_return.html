@@ -81,8 +81,8 @@
     <!-- Paid, booking made: the thank-you page -->
     <div data-pay-state="booked" hidden>
       <div class="pay-hero">
-        <div class="inline-flex items-center justify-center w-20 h-20 rounded-full border mb-8 animate-success-pop opacity-0 border-green-500/20">
-          <span class="material-symbols-outlined text-4xl font-light text-green-500">check</span>
+        <div class="inline-flex items-center justify-center w-20 h-20 rounded-full mb-8 animate-success-pop opacity-0" style="background-color: #22c55e;">
+          <span class="material-symbols-outlined text-4xl" style="color: #ffffff; font-weight: 500;">check</span>
         </div>
         <h1 class="font-headline text-4xl md:text-6xl font-light tracking-tight text-primary leading-[1.1] mb-4">Thank you for your rent.</h1>
         <h2 class="font-headline text-[0.7rem] md:text-[0.8rem] tracking-[0.3em] uppercase text-secondary/60 font-medium">Payment received &middot; Reservation confirmed</h2>
@@ -276,6 +276,13 @@
       box.hidden = false;
     }
 
+    // The booking exists (or the money is going back): the server has already ended the checkout's hold, so the "Your selection is held" bar,
+    // drawn when this page opened, must go too (it would otherwise keep counting and offer a "Pay now" for a paid booking).
+    function endTheHoldBar() {
+      window.__arabelaHoldEnded = true;
+      try { window.dispatchEvent(new CustomEvent('arabela:hold-ended')); } catch (e3) {}
+    }
+
     function cleanUpTheBag() {
       // The same cleanup the older confirmation page does: the selection has become a booking, so the saved bag is emptied.
       var userKey = (document.body && document.body.dataset && document.body.dataset.userKey) ? document.body.dataset.userKey : 'guest';
@@ -300,6 +307,7 @@
         drawDetails(data);
         root.classList.add('pay-wide');
         cleanUpTheBag();
+        endTheHoldBar();
         show('booked');
         return true;
       }
@@ -307,11 +315,12 @@
         setText('refund_message', data.message || 'The gown you chose could not be reserved.');
         setText('refund_amount', '₱' + (data.amount || ''));
         cleanUpTheBag();
+        endTheHoldBar();
         show('refunded');
         return true;
       }
-      if (data.state === 'flagged') { show('flagged'); return true; }
-      if (data.state === 'handled') { show('handled'); return true; }
+      if (data.state === 'flagged') { endTheHoldBar(); show('flagged'); return true; }
+      if (data.state === 'handled') { endTheHoldBar(); show('handled'); return true; }
       if (data.state === 'ended') { show('ended'); return true; }
       return false;                  // waiting / confirming: keep asking
     }

@@ -124,6 +124,13 @@ class Base(TestCase):
         return {"gown_name": gown.name, "gown_slug": gown.slug, "size": "Medium", "rental_date": (event - timedelta(days=2)).isoformat(),
                 "return_date": (event + timedelta(days=2)).isoformat()}
 
+    def ben_client(self):
+        """Ben, signed in and past the Terms pop-up (a second customer)."""
+        client = Client()
+        client.force_login(self.ben)
+        agreed(self.ben)
+        return client
+
     def start(self, items=None, *, option="deposit", request_id=None, client=None, **extra):
         items = [self.item()] if items is None else items
         data = {"items": json.dumps(items), "pay_option": option, "first_name": "Ana", "last_name": "Cruz", "phone": "09171234567",
@@ -573,7 +580,7 @@ class CancelAndSweepTests(Base):
 
     def test_the_sweep_closes_old_unpaid_attempts_and_leaves_fresh_ones_alone(self):
         old, _ = self.started(request_id="req-old-0001")
-        fresh, _ = self.started(items=[self.item(self.gown2)], request_id="req-new-0001")
+        fresh, _ = self.started(items=[self.item(self.gown2)], request_id="req-new-0001", client=self.ben_client())          # another customer: one customer has one open page
         PaymentAttempt.objects.filter(pk=old.pk).update(expires_at=timezone.now() - timedelta(minutes=5))
         self.assertEqual(online_checkout.expire_stale(), 1)
         old.refresh_from_db()
@@ -784,6 +791,28 @@ class PaidCustomerHoldTests(Base):
         self.lapse(self.client)
         self.client.get(reverse("gowns:homepage"))
         self.assertEqual(self.abandoned(), before)
+
+    def test_the_held_bar_listens_for_the_hold_ending_and_the_return_page_says_so_only_for_booked_and_refunded(self):
+        import re
+        from gowns.context_processors import RESERVATION_HOLD_SESSION_KEY
+        session = self.client.session
+        session[RESERVATION_HOLD_SESSION_KEY] = (timezone.now() + timedelta(minutes=15)).isoformat()
+        session.save()
+        bar = self.client.get(reverse("gowns:homepage")).content.decode()
+        self.assertIn('id="hold-banner"', bar)
+        self.assertIn("addEventListener('arabela:hold-ended'", bar)
+        attempt, _ = self.started()
+        page = self.client.get(reverse("gowns:payment_return", args=[attempt.token])).content.decode()
+        self.assertIn("function endTheHoldBar()", page)
+        script = page[page.index("function apply(data)"):page.index("function ask()")]
+        for state in ("booked", "refunded"):
+            block = script[script.index(f"data.state === '{state}'"):]
+            self.assertIn("endTheHoldBar();", block[:block.index("return true;")])
+        for state in ("flagged", "handled"):
+            line = re.search(rf"data.state === '{state}'\).*", script).group(0)
+            self.assertIn("endTheHoldBar", line)                                 # the shop has their money: the bar goes too
+        line = re.search(r"data.state === 'ended'\).*", script).group(0)
+        self.assertNotIn("endTheHoldBar", line)                                  # a customer who did not pay keeps the hold running
 
     def test_the_status_page_ends_the_hold_when_the_booking_is_made(self):
         from gowns.context_processors import RESERVATION_HOLD_SESSION_KEY

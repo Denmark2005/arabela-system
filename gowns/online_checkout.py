@@ -46,6 +46,7 @@ logger = logging.getLogger(__name__)
 
 START_LIMIT = (10, 10 * 60)             # Pay presses per account per 10 minutes (a real customer presses it once or twice)
 POLL_GAP = timedelta(seconds=2)         # the return page may ask PayMongo about one attempt at most this often
+PAID_WAIT = timedelta(minutes=10)       # a payment that came in but is not booked yet blocks a second one for this long (it is being finished)
 SWEEP_GRACE = timedelta(minutes=1)      # an attempt is stale this long after its own 20 minutes
 SWEEP_BATCH = 5
 MAX_ONLINE_AMOUNT = Decimal("100000")   # PayMongo's e-wallet limit per payment; a larger booking is paid at the shop instead
@@ -200,24 +201,42 @@ def start_payment(request):
     request_id = (request.POST.get("request_id") or "").strip()
     if request_id and not _REQUEST_ID.fullmatch(request_id):
         request_id = ""
+    S = PaymentAttempt.Status
+
+    def show_result(attempt):
+        return JsonResponse({"success": True, "checkout_url": reverse("gowns:payment_return", args=[attempt.token]), "token": attempt.token})
+
     if request_id:
         earlier = PaymentAttempt.objects.filter(customer=user, request_id=request_id).first()
         if earlier is not None:
             same = earlier.purpose == purpose and _selection_key(earlier.payload.get("items", [])) == _selection_key(
                 [{"gown_name": i["gown_name"], "gown_slug": i["gown_slug"], "size": i["size"], "return_date": i["return_date"].isoformat()} for i in items])
-            # Pressing Pay again (a double tap, a retry after a dropped connection, the Back button from PayMongo's page) is the SAME attempt when
-            # nothing has changed: no second checkout is opened.
-            if same and earlier.status == PaymentAttempt.Status.CREATED and earlier.checkout_url:
+            # A payment that already went through (or was sorted out) is never thrown away or doubled, whatever the page now says (a page restored by
+            # the Back button can show an old choice): the customer is shown what happened to it.
+            if earlier.status not in (S.CREATED, S.CANCELLED, S.EXPIRED):
+                return show_result(earlier)
+            # Pressing Pay again (a double tap, a retry after a dropped connection, the Back button from the payment page) is the SAME attempt when
+            # nothing has changed and its payment page can still be paid: no second checkout is opened.
+            if same and earlier.status == S.CREATED and earlier.checkout_url and earlier.expires_at > timezone.now():
                 return JsonResponse({"success": True, "checkout_url": earlier.checkout_url, "token": earlier.token})
-            if same and earlier.status != PaymentAttempt.Status.CREATED:
-                return JsonResponse({"success": True, "checkout_url": reverse("gowns:payment_return", args=[earlier.token]), "token": earlier.token})
-            # A different choice (or a checkout that never opened): the old one gives up its id, is closed so it can no longer be paid, and a fresh
-            # one is made below. A payment that already went through is never thrown away: the customer is shown what happened to it.
+            # A different choice, a page that has run out, or a checkout that never opened: the old one gives up its id, is closed so it can no longer
+            # be paid, and a fresh one is made below. If it turns out it WAS paid, the customer is shown that instead.
             PaymentAttempt.objects.filter(pk=earlier.pk).update(request_id="")
-            if earlier.status == PaymentAttempt.Status.CREATED:
+            if earlier.status == S.CREATED:
                 closed = cancel_attempt(earlier.pk)
-                if closed is not None and closed.status != PaymentAttempt.Status.CANCELLED:
-                    return JsonResponse({"success": True, "checkout_url": reverse("gowns:payment_return", args=[earlier.token]), "token": earlier.token})
+                if closed is not None and closed.status != S.CANCELLED:
+                    return show_result(earlier)
+
+    # One open payment page per customer. Going Back from the payment page and pressing Pay on a freshly loaded checkout (or on a second tab) would
+    # otherwise leave the first page open and payable next to the new one. Every older open page is closed first; one that turns out to be paid
+    # (or whose payment is still being turned into a booking) is shown to the customer instead of starting another.
+    for other in PaymentAttempt.objects.filter(customer=user, status=S.CREATED).order_by("id"):
+        closed = cancel_attempt(other.pk)
+        if closed is not None and closed.status in (S.PAID, S.BOOKED, S.REFUNDED, S.FLAGGED, S.HANDLED):
+            return show_result(closed)
+    paying = PaymentAttempt.objects.filter(customer=user, status=S.PAID, paid_at__gte=timezone.now() - PAID_WAIT).order_by("-id").first()
+    if paying is not None:
+        return show_result(paying)
 
     profile, _ = UserProfile.objects.get_or_create(user=user)
     typed_name = f"{(request.POST.get('first_name') or '').strip()} {(request.POST.get('last_name') or '').strip()}".strip()

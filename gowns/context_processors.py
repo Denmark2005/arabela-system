@@ -444,6 +444,15 @@ def expire_reservation_hold_if_lapsed(request):
     record_abandoned_hold(request.user)
 
 
+def _paid_during_this_hold(request, deadline):
+    """True when this customer's money came in (booked, being booked, sent back, or with the shop to check) after the running hold began."""
+    from reservations.models import PaymentAttempt
+    began = deadline - timedelta(minutes=RESERVATION_HOLD_MINUTES)
+    S = PaymentAttempt.Status
+    return PaymentAttempt.objects.filter(
+        customer=request.user, status__in=(S.PAID, S.BOOKED, S.REFUNDED, S.FLAGGED, S.HANDLED), paid_at__gte=began).exists()
+
+
 def reservation_hold(request):
     """Feeds the site-wide countdown banner in base.html.
 
@@ -455,6 +464,11 @@ def reservation_hold(request):
     expire_reservation_hold_if_lapsed(request)
     deadline = get_reservation_hold_deadline(request)
     if not deadline:
+        return {"reservation_hold_until": "", "reservation_hold_seconds": 0}
+    if _paid_during_this_hold(request, deadline):
+        # The customer paid on the payment page during this hold (and may never have come back to the return page, for example after closing the tab):
+        # the checkout is over, so the "Your selection is held" bar must not keep offering to pay.
+        clear_reservation_hold(request)
         return {"reservation_hold_until": "", "reservation_hold_seconds": 0}
     # Seconds-remaining is what the countdown actually anchors to: a wrong clock
     # on the customer's device would otherwise show a bogus (or already-expired)
