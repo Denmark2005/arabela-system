@@ -17,7 +17,7 @@ from gowns.models import (
 )
 from gowns.covers import cover_for, owner_cover_urls
 from gowns.photos import GRID_WIDTH, sized
-from reservations import paymongo
+from reservations import gateway
 from reservations.models import Reservation, ReservationItem
 
 _PRICE_RE = re.compile(r"[^\d]")
@@ -362,7 +362,8 @@ def site_settings(request):
         "site_deposit_per_gown": deposit_per_gown,
         "site_late_fee_per_day": late_fee_per_day,
         # True while the checkout pays through PayMongo (a key is set): the pages that explain how to pay say so (How it works, FAQs, the product page).
-        "paymongo_enabled": paymongo.enabled(),
+        "paymongo_enabled": gateway.enabled(),
+        "payment_provider_label": gateway.label(),                 # "Xendit" or "PayMongo": the pages that explain how to pay name the service
         "site_deposit_php": deposit.php_text(deposit_per_gown),
         "site_deposit_php_short": deposit.php_short(deposit_per_gown),
     }

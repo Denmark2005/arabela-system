@@ -7,7 +7,7 @@ done on a clock; it is safe to run at any time, any number of times."""
 from django.core.management.base import BaseCommand
 
 from gowns import online_checkout
-from reservations import paymongo
+from reservations import gateway
 
 
 class Command(BaseCommand):
@@ -17,8 +17,8 @@ class Command(BaseCommand):
         parser.add_argument("--limit", type=int, default=50, help="How many old checkouts to look at (default 50).")
 
     def handle(self, *args, **options):
-        if not paymongo.enabled():
-            self.stdout.write("PayMongo is not set up (no key): nothing to do.")
+        if not gateway.enabled():
+            self.stdout.write("Online payment is not set up (no key): nothing to do.")
             return
         looked = online_checkout.expire_stale(limit=max(1, options["limit"]))
         self.stdout.write(self.style.SUCCESS(f"Looked at {looked} old checkout(s)."))

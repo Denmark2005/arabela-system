@@ -1253,7 +1253,7 @@
               {% if is_owner %}<a class="pm-tab{% if mode == 'receipts' %} is-on{% endif %}" href="{% url 'arabela_admin:payment_receipts' %}"{% if mode == 'receipts' %} aria-current="page"{% endif %}>All receipts</a>{% endif %}
               <a class="pm-tab{% if mode == 'online' %} is-on{% endif %}" href="{% url 'arabela_admin:payment_online' %}"{% if mode == 'online' %} aria-current="page"{% endif %}>Online payments{% if online_attention %}<span class="pm-badge" title="{{ online_attention }} need a look">{{ online_attention }}</span>{% endif %}</a>
             </div>
-            {% if paymongo_mode == "test" and mode != "online" %}<p class="pm-note">{% if paymongo_demo %}PRACTICE mode: online payments are made on a practice payment page on this computer (not PayMongo). No real money moves.{% else %}PayMongo is in TEST mode: online payments are simulated and no real money moves, but the bookings they make are real bookings.{% endif %}</p>{% endif %}
+            {% if paymongo_mode == "test" and mode != "online" %}<p class="pm-note">{% if paymongo_demo %}PRACTICE mode: online payments are made on a practice payment page on this computer (not {{ payment_provider }}). No real money moves.{% else %}{{ payment_provider }} is in TEST mode: online payments are simulated and no real money moves, but the bookings they make are real bookings.{% endif %}</p>{% endif %}
 
             {% if mode == "bookings" %}
             <!-- What every booking still owes, its late fee and the deposit it can give back: all worked out by the system (reservations/ledger.py). Click a booking to open its payments. -->
@@ -1306,13 +1306,13 @@
               </div>
             </div>
             {% elif mode == "online" %}
-            <!-- Payments customers made on PayMongo's page. The system makes the booking the moment PayMongo confirms the money, so what is listed
+            <!-- Payments customers made on {{ payment_provider }}'s page. The system makes the booking the moment {{ payment_provider }} confirms the money, so what is listed
                  here as "Needs a look" is money that arrived WITHOUT a booking behind it, or a refund that did not go through. -->
             <div class="pm-card">
-              {% if paymongo_mode == "test" %}<p class="pm-note">{% if paymongo_demo %}Practice mode: these payments were made on the practice payment page on this computer (not PayMongo). No real money moved.{% else %}Test mode: these payments were made on PayMongo's simulated page. No real money moved.{% endif %}</p>{% endif %}
+              {% if paymongo_mode == "test" %}<p class="pm-note">{% if paymongo_demo %}Practice mode: these payments were made on the practice payment page on this computer (not {{ payment_provider }}). No real money moved.{% else %}Test mode: these payments were made on {{ payment_provider }}'s simulated page. No real money moved.{% endif %}</p>{% endif %}
               <form method="get" class="pm-filters" role="search" aria-label="Find an online payment">
                 <div style="flex: 1 1 14rem; min-width: 12rem;">
-                  <label class="pm-hint" for="pm-q">Customer, booking or PayMongo payment number</label>
+                  <label class="pm-hint" for="pm-q">Customer, booking or {{ payment_provider }} payment number</label>
                   <input id="pm-q" type="text" name="q" value="{{ q }}" class="pm-in" style="width: 100%;" placeholder="Juan, RSV-2026-0112, pay_...">
                 </div>
                 <div><label class="pm-hint" for="pm-show">Show</label>
@@ -1370,7 +1370,7 @@
                   if (button.getAttribute('data-online-action') === 'refund') {
                     adminConfirm({
                       title: 'Send this payment back?',
-                      message: 'The whole payment goes back to the customer through PayMongo (to the GCash, Maya or bank account they paid with). This cannot be undone.',
+                      message: 'The whole payment goes back to the customer through {{ payment_provider }} (to the GCash, Maya or bank account they paid with). This cannot be undone.',
                       confirmText: 'Send it back', danger: true
                     }).then(function (ok) {
                       if (!ok) return;
@@ -1381,7 +1381,7 @@
                     });
                   } else {
                     adminPrompt({
-                      title: 'Mark as handled', message: 'What did you do? For example: refunded in PayMongo\u2019s dashboard, or booked the gown by hand.',
+                      title: 'Mark as handled', message: 'What did you do? For example: refunded in {{ payment_provider }}\u2019s dashboard, or booked the gown by hand.',
                       multiline: true, confirmText: 'Save'
                     }).then(function (text) {
                       if (text === null) return;
@@ -1568,7 +1568,7 @@
                         <div class="pm-radios" role="radiogroup" aria-label="How it was handed back">
                           <label :class="ret.method === 'Cash' ? 'is-on' : ''"><input type="radio" name="pm-ret-method" value="Cash" x-model="ret.method" style="accent-color: #465fff;"> Cash</label>
                           <label :class="ret.method === 'GCash' ? 'is-on' : ''"><input type="radio" name="pm-ret-method" value="GCash" x-model="ret.method" style="accent-color: #465fff;"> GCash (sent from the shop's GCash app)</label>
-                          <label x-show="d.onlineRefund && d.onlineRefund.offered && d.onlineRefund.available" :class="ret.method === 'PayMongo' ? 'is-on' : ''"><input type="radio" name="pm-ret-method" value="PayMongo" x-model="ret.method" style="accent-color: #465fff;"> <span x-text="'Automatically to the customer ' + (d.onlineRefund ? d.onlineRefund.label : '') + ' account (through PayMongo)'"></span></label>
+                          <label x-show="d.onlineRefund && d.onlineRefund.offered && d.onlineRefund.available" :class="ret.method === 'PayMongo' ? 'is-on' : ''"><input type="radio" name="pm-ret-method" value="PayMongo" x-model="ret.method" style="accent-color: #465fff;"> <span x-text="'Automatically to the customer ' + (d.onlineRefund ? d.onlineRefund.label : '') + ' account (through {{ payment_provider }})'"></span></label>
                         </div></div>
                       <p class="pm-hint" x-show="ret.method === 'PayMongo'">The money goes back to the account the customer paid with, usually within a day. It is sent as soon as you press the button and cannot be undone.</p>
                       <p class="pm-hint" x-show="d.onlineRefund && d.onlineRefund.offered && !d.onlineRefund.available" x-text="'It cannot be sent back automatically: ' + (d.onlineRefund ? d.onlineRefund.reason : '')"></p>
@@ -1711,7 +1711,7 @@
           // Money leaves at once and cannot be called back: ask first.
           adminConfirm({
             title: 'Send the deposit back now?',
-            message: '₱' + this.ret.amount + ' goes back to the ' + (this.d.onlineRefund ? this.d.onlineRefund.label : 'account') + ' the customer paid with, through PayMongo. This cannot be undone.',
+            message: '₱' + this.ret.amount + ' goes back to the ' + (this.d.onlineRefund ? this.d.onlineRefund.label : 'account') + ' the customer paid with, through {{ payment_provider }}. This cannot be undone.',
             confirmText: 'Send it back', danger: true
           }).then(function (ok) { if (ok) send(); });
         },

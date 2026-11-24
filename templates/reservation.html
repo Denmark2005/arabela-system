@@ -185,7 +185,7 @@
     </section>
 
     {% if paymongo_enabled %}
-    <!-- Payment: pay on PayMongo's own page (GCash, Maya or QR Ph). The two tiles are the same look as the older payment-method tile. -->
+    <!-- Payment: pay on {{ payment_provider_label }}'s own page (GCash, Maya or QR Ph). The two tiles are the same look as the older payment-method tile. -->
     <section id="pay-section" class="bg-white border border-black/10 rounded-[12px] editorial-shadow overflow-hidden res-reveal res-delay-200">
       <div class="flex items-center gap-3 px-6 sm:px-8 py-5 border-b border-black/5">
         <span class="font-headline text-sm font-semibold text-secondary">02</span>
@@ -224,10 +224,10 @@
 
         <div class="flex items-start gap-3 rounded-[8px] bg-gray-50 px-4 py-3">
           <span class="material-symbols-outlined shrink-0 text-secondary" style="font-size: 1.1rem;">lock</span>
-          <p class="text-[0.8rem] text-secondary leading-relaxed">You will choose <b class="font-medium text-on-surface">GCash, Maya or QR Ph</b> on PayMongo&rsquo;s secure payment page. Your booking is confirmed the moment the payment is received. The security deposit is fully refundable when you return the gown.</p>
+          <p class="text-[0.8rem] text-secondary leading-relaxed">You will choose <b class="font-medium text-on-surface">GCash, Maya or QR Ph</b> on {{ payment_provider_label }}&rsquo;s secure payment page. Your booking is confirmed the moment the payment is received. The security deposit is fully refundable when you return the gown.</p>
         </div>
         {% if paymongo_test %}
-        <p id="pay-test-note" class="text-[0.75rem] leading-relaxed text-secondary">{% if paymongo_demo %}Practice mode: the payment page is a practice page running on this computer, not PayMongo. No real money is charged.{% else %}Test mode: the payment page is a simulation. No real money is charged.{% endif %}</p>
+        <p id="pay-test-note" class="text-[0.75rem] leading-relaxed text-secondary">{% if paymongo_demo %}Practice mode: the payment page is a practice page running on this computer, not {{ payment_provider_label }}. No real money is charged.{% else %}Test mode: the payment page is a simulation. No real money is charged.{% endif %}</p>
         {% endif %}
       </div>
     </section>
@@ -503,7 +503,7 @@
         var PROFILE_DISPLAY_NAME = "{{ profile_display_name|default:''|escapejs }}";
         var SUBMIT_URL = "{% url 'gowns:reservation_submit' %}";
         var CONFIRMATION_URL = "{% url 'gowns:confirmation' %}";
-        // Paying through PayMongo (the server turns this on while a PayMongo key is set). The selection is NOT cleared when Pay is pressed: the
+        // Paying through {{ payment_provider_label }} (the server turns this on while a {{ payment_provider_label }} key is set). The selection is NOT cleared when Pay is pressed: the
         // customer may come back without paying, and only the confirmed payment turns it into a booking (templates/payment_return.html).
         var PAYMONGO = {{ paymongo_enabled|yesno:"true,false" }};
         var PAY_START_URL = "{% url 'gowns:pay_start' %}";
@@ -962,7 +962,7 @@
             arabelaAlert({ title: titles[described.kind] || (PAYMONGO ? 'Payment not started' : 'Reservation not submitted'), message: message, danger: true });
         }
 
-        // Pay: the server checks everything the older checkout checked, keeps the selection, and opens PayMongo's page; the browser goes there.
+        // Pay: the server checks everything the older checkout checked, keeps the selection, and opens {{ payment_provider_label }}'s page; the browser goes there.
         function startOnlinePayment(payload, submitItems, btn) {
             var overlay = document.getElementById('loading-overlay');
             if (overlay) overlay.classList.add('show');
@@ -998,7 +998,7 @@
                 });
         }
 
-        // Coming back with the browser's Back button from PayMongo's page restores this page as it was left: the overlay and the disabled button
+        // Coming back with the browser's Back button from {{ payment_provider_label }}'s page restores this page as it was left: the overlay and the disabled button
         // must not come back with it.
         window.addEventListener('pageshow', function (event) {
             if (!PAYMONGO || !event.persisted) return;

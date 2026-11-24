@@ -49,7 +49,7 @@ from gowns.models import (
 from gowns import availability, deposit, late_fee, proof_image, receipt_check, receipt_tries, reservation_limits, typed_payment
 from gowns.photos import GRID_WIDTH, PAGE_WIDTH, sized
 from gowns.size_guides import size_guide_for
-from reservations import ledger, paymongo, reminders, timeline
+from reservations import gateway, ledger, reminders, timeline
 from reservations.models import Payment, ProofRejection, Reservation, ReservationItem, ReservationStatusEvent
 
 
@@ -892,9 +892,10 @@ def reservation(request):
             "checkout_lockout_seconds": lockout_seconds,
             "checkout_lockout_message": lockout_message,
             # Pay through PayMongo while a key is set (gowns/online_checkout.py); with none the older GCash-screenshot section is shown.
-            "paymongo_enabled": paymongo.enabled(),
-            "paymongo_test": paymongo.is_test(),
-            "paymongo_demo": paymongo.is_demo(),
+            "paymongo_enabled": gateway.enabled(),
+            "paymongo_test": gateway.is_test(),
+            "paymongo_demo": gateway.is_demo(),
+            "payment_provider_label": gateway.label(),
             "payment_cancelled": request.GET.get("payment") == "cancelled",
         },
     )
@@ -1192,8 +1193,8 @@ def reservation_submit(request):
     """Persist a customer's reservation request (status=Pending) so it flows into
     the admin's Pending Approval + Payment Verification modules. Sent as multipart
     form data from reservation.html so the uploaded proof-of-payment rides along."""
-    if paymongo.enabled():
-        # Customers pay on PayMongo's page now (gowns/online_checkout.py). A checkout page that was opened before that was switched on still posts here:
+    if gateway.enabled():
+        # Customers pay on the online payment page now (gowns/online_checkout.py). A checkout page that was opened before that was switched on still posts here:
         # it books nothing, and tells the customer to reload so they pay the new way.
         return JsonResponse({
             "success": False, "reload_required": True,

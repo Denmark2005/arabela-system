@@ -311,7 +311,7 @@ class ConfirmTests(Base):
         self.assertRegex(payment.receipt_number, r"^PR-\d{4}-\d{6}$")
         self.assertEqual(payment.request_id, f"pm-{attempt.pk}")
         self.assertIn("TEST PAYMENT", payment.note)
-        self.assertEqual(payment.snapshot["method"], "Maya (PayMongo)")
+        self.assertEqual(payment.snapshot["method"], "Maya (online payment)")
         self.assertEqual(payment.snapshot["balance_after"], "3500.00")
         self.assertEqual(payment.snapshot["paid_before"], "0.00")
         self.assertEqual(Reservation.objects.get().payment_method, "Maya")

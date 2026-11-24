@@ -14,7 +14,7 @@ from django.views.decorators.http import require_POST
 from gowns import deposit
 from gowns.context_processors import _build_search_catalog, all_categories, category_url
 from gowns.models import SiteSettings
-from reservations import paymongo
+from reservations import gateway
 
 logger = logging.getLogger(__name__)
 
@@ -201,13 +201,14 @@ def _system_prompt(catalog: tuple[str, set[str]] | None = None) -> str:
     )
     catalog_lines, _allowed = catalog or _live_catalog()
     deposit_text = deposit.peso_sign(deposit.per_gown())    # the owner's setting, so the chat never quotes an old amount
-    if paymongo.enabled():
+    if gateway.enabled():
+        service = gateway.label()
         # Paying online through PayMongo (the checkout, reservations/paymongo.py): no receipt upload, and the booking is confirmed by the payment itself.
-        pay_step = (f"Pay online on PayMongo's secure payment page with GCash, Maya or QR Ph: either the {deposit_text} security deposit for each gown "
+        pay_step = (f"Pay online on {service}'s secure payment page with GCash, Maya or QR Ph: either the {deposit_text} security deposit for each gown "
                     "(the rental fee is then paid at the shop), or everything now (the rental fee and the deposit). There is nothing to upload and no reference "
                     "number to type -- the reservation is confirmed automatically the moment the payment is received.")
         pay_policy = (
-            "- Online payment: customers pay on PayMongo's secure payment page with GCash, Maya or QR Ph. Cards are not accepted. A payment made on the website "
+            f"- Online payment: customers pay on {service}'s secure payment page with GCash, Maya or QR Ph. Cards are not accepted. A payment made on the website "
             "confirms the reservation by itself; nobody has to approve it. If the customer paid only the deposit, the rental fee is paid at the shop on pick-up "
             "day (GCash or cash in person). If a customer says they paid but see no reservation, tell them NOT to pay again, to check Messages and My "
             "Reservations, and to contact the shop if it does not show up soon.\n"

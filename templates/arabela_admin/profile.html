@@ -1960,7 +1960,7 @@
                   };
                 };
               </script>
-              {# The shop's GCash accounts are for the screenshot payment. Once customers pay on PayMongo's page they have nothing to send to, so the card is left out. #}
+              {# The shop's GCash accounts are for the screenshot payment. Once customers pay on the payment service's page they have nothing to send to, so the card is left out. #}
               {% if not admin_hide_gcash_cards %}
               {{ gcash_holders|json_script:"gcash-holders-data" }}
               <div

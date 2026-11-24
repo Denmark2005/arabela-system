@@ -123,8 +123,8 @@ def admin_flow(request):
     user = getattr(request, "user", None)
     if not (user and user.is_authenticated and (user.is_staff or user.is_superuser)):
         return {}
-    from reservations import paymongo
-    if not paymongo.enabled():
+    from reservations import gateway
+    if not gateway.enabled():
         return {}
     from reservations.models import Reservation
     nothing_pending = not Reservation.objects.filter(status=Reservation.Status.PENDING).exists()

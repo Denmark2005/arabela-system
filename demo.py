@@ -32,6 +32,8 @@ def main():
         "ARABELA_DEMO": "1",                                           # settings.py: its own SQLite file, no emails, refuses Render
         "DEBUG": "True",
         "ALLOWED_HOSTS": "127.0.0.1,localhost",
+        "PAYMENT_PROVIDER": "paymongo",                                 # the practice gateway speaks PayMongo's language, whatever keys .env holds
+        "XENDIT_SECRET_KEY": "",
         "PAYMONGO_SECRET_KEY": GATEWAY_KEY,
         "PAYMONGO_WEBHOOK_SECRET": "whsk_demo",
         "PAYMONGO_API_BASE": f"http://127.0.0.1:{args.gateway_port}",

@@ -586,7 +586,8 @@ def _online_attempt_text(attempt_id):
 
 def online_refund(ctx):
     text, target = _online_attempt_text(ctx.kwargs.get("attempt_id"))
-    return {"summary": f"sent {text} back through PayMongo", "target": target, "sensitive": True, "details": _keep(ctx.body, "reason")}
+    from reservations import gateway
+    return {"summary": f"sent {text} back through {gateway.label()}", "target": target, "sensitive": True, "details": _keep(ctx.body, "reason")}
 
 
 def online_handled(ctx):

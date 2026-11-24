@@ -65,7 +65,7 @@ class AutomaticRefundTests(Base):
         statement = ledger.statement(helpers.Reservation.objects.get(pk=booking.pk))
         self.assertEqual((statement.refunded, statement.refund_available), (Decimal("2000.00"), Decimal("0.00")))
         message = CustomerMessage.objects.filter(recipient=self.ana, category="Payment").latest("id")
-        self.assertIn("returned (Maya (PayMongo))", message.body)
+        self.assertIn("returned (Maya online)", message.body)
         self.assertIn("up to a day", message.body)
         self.assertTrue(ReservationStatusEvent.objects.filter(reservation=booking, label="Security deposit returned").exists())
         self.assertEqual(payment.snapshot["return"]["returned_now"], "2000.00")
@@ -220,7 +220,7 @@ class RefundThroughThePaymentsPageTests(Base):
         response = self.client.post(reverse("arabela_admin:deposit_return", args=[booking.pk]), data=json.dumps(
             {"amount": "2000", "method": "PayMongo", "request_id": "ret-0009-zzzz"}), content_type="application/json")
         self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(response.json()["payment"]["method"], "GCash (PayMongo)")
+        self.assertEqual(response.json()["payment"]["method"], "GCash (online payment)")
         self.assertEqual(len(self.fake.refunds), 1)
         self.assertEqual(self.client.get(reverse("arabela_admin:payment_detail", args=[booking.pk])).json()["canReturn"], False)
 

@@ -281,7 +281,7 @@ class EveryExistingPageStillWorksTests(Base):
         self.assertTrue(online)
         self.assertRegex(online[0]["receiptNumber"], r"^PR-\d{4}-\d{6}$")
         receipts = self.client.get(reverse("arabela_admin:payment_receipts")).content.decode()
-        self.assertIn("GCash (PayMongo)", receipts)
+        self.assertIn("GCash (online payment)", receipts)
 
     def test_the_owner_check_and_the_approve_button_never_apply_to_an_online_paid_booking(self):
         booking = self.booked()

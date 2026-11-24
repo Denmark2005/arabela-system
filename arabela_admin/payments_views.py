@@ -35,7 +35,7 @@ from django.views.decorators.http import require_http_methods
 from accounts.audit import audited
 from gowns import late_fee, online_checkout, typed_payment
 from gowns.models import SiteSettings
-from reservations import ledger, payments, paymongo
+from reservations import gateway, ledger, payments
 from reservations.models import Deduction, Payment, PaymentAttempt, Reservation, ReservationItem
 
 from . import audit_describe
@@ -116,7 +116,7 @@ def payments_view(request):
         "page": "payments", "mode": "bookings", "rows": rows, "counts": counts, "balance_total": balance_total,
         "is_owner": _is_owner(request), "can_void": _can(request, "void_receipts"),
         "late_fee_per_day": late_fee.per_day(), "open_id": request.GET.get("open", ""), "online_attention": online_attention_count(),
-        "paymongo_mode": paymongo.mode(), "paymongo_demo": paymongo.is_demo(),
+        "payment_provider": gateway.label(), "paymongo_mode": gateway.mode(), "paymongo_demo": gateway.is_demo(),
     })
 
 
@@ -410,8 +410,8 @@ def payment_receipts_view(request):
         p.customer_name = p.reservation.display_customer_name
     return render(request, "arabela_admin/payments.html", {
         "page": "payments", "mode": "receipts", "receipts": page, "q": q, "kind": kind, "status": status, "from": start, "to": end,
-        "is_owner": True, "can_void": True, "online_attention": online_attention_count(), "paymongo_mode": paymongo.mode(),
-        "paymongo_demo": paymongo.is_demo(),
+        "is_owner": True, "can_void": True, "online_attention": online_attention_count(), "payment_provider": gateway.label(), "paymongo_mode": gateway.mode(),
+        "paymongo_demo": gateway.is_demo(),
     })
 
 
@@ -445,7 +445,7 @@ def _online_row(attempt, now):
         chip, words = "cancelled", "Not paid"
     attempt.chip, attempt.chip_words, attempt.attention = chip, words, attention
     attempt.kind_label = attempt.get_purpose_display()
-    attempt.channel_label = paymongo.CHANNEL_LABELS.get(attempt.channel, attempt.channel or "-")
+    attempt.channel_label = gateway.CHANNEL_LABELS.get(attempt.channel, attempt.channel or "-")
     attempt.who = attempt.customer_name or (attempt.customer.get_username() if attempt.customer_id else "-")
     attempt.booking_code = attempt.reservation.reference_code if attempt.reservation_id else ""
     attempt.can_refund = attempt.attention and attempt.refund_can_be_asked
@@ -469,7 +469,7 @@ def payment_online_view(request):
         _online_row(attempt, now)
     return render(request, "arabela_admin/payments.html", {
         "page": "payments", "mode": "online", "attempts": page, "q": q, "show": show, "online_attention": online_attention_count(),
-        "paymongo_mode": paymongo.mode(), "paymongo_demo": paymongo.is_demo(), "is_owner": _is_owner(request), "can_void": _can(request, "void_receipts"),
+        "payment_provider": gateway.label(), "paymongo_mode": gateway.mode(), "paymongo_demo": gateway.is_demo(), "is_owner": _is_owner(request), "can_void": _can(request, "void_receipts"),
     })
 
 
@@ -494,7 +494,7 @@ def payment_online_refund_view(request, attempt_id):
     result = online_checkout.refund_attempt(attempt.pk, f"The shop checked this payment: {reason}")
     if result.refund_id:
         return JsonResponse({"success": True, "message": "The money is on its way back to the customer."})
-    return JsonResponse({"error": "PayMongo would not send it back right now. Try again later, or refund it in PayMongo's dashboard and press Mark as handled."}, status=502)
+    return JsonResponse({"error": f"{gateway.label()} would not send it back right now. Try again later, or refund it in {gateway.label()}'s dashboard and press Mark as handled."}, status=502)
 
 
 @require_http_methods(["POST"])

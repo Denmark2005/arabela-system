@@ -36,7 +36,7 @@ from gowns import availability, deposit, late_fee, reservation_limits
 from gowns import views as checkout
 from gowns.context_processors import RESERVATION_HOLD_MINUTES
 from gowns.models import COOLDOWN_DAYS, Gown, GownUnavailability
-from reservations import payments, paymongo
+from reservations import gateway, payments
 from reservations.ledger import money, peso
 from reservations.models import Payment, PaymentAttempt, Reservation, ReservationItem, ReservationStatusEvent
 from reservations.staff_booking import APPROVED_LABEL
@@ -148,7 +148,7 @@ def _parse_items(raw_items):
 def start_payment(request):
     """POST from the checkout page: validates, keeps the selection in a PaymentAttempt and opens PayMongo's checkout. A JsonResponse with
     {"success": True, "checkout_url": ...} or the same kind of refusal the older checkout gives (the page already knows how to show each one)."""
-    if not paymongo.enabled():
+    if not gateway.enabled():
         return _fail("Online payment is not available right now. Please try again later.", 503)
     user = request.user
     refusal = checkout._terms_refusal(request)
@@ -239,7 +239,7 @@ def start_payment(request):
 
     rental_subtotal = sum((item["price"] for item in items), Decimal("0"))
     amount = current_deposit if purpose == PaymentAttempt.Purpose.DEPOSIT else rental_subtotal + current_deposit
-    if amount > MAX_ONLINE_AMOUNT:
+    if amount > min(MAX_ONLINE_AMOUNT, Decimal(gateway.max_amount())):
         return _fail("This booking is too large to pay online. Please pay at the shop, or choose the deposit only.", 400)
 
     now = timezone.now()
@@ -257,7 +257,7 @@ def start_payment(request):
         with transaction.atomic():
             attempt = PaymentAttempt.objects.create(
                 token=secrets.token_urlsafe(24), customer=user, customer_name=customer_name, purpose=purpose, amount=amount, payload=payload,
-                request_id=request_id, livemode=not paymongo.is_test(), expires_at=now + timedelta(minutes=RESERVATION_HOLD_MINUTES),
+                request_id=request_id, livemode=not gateway.is_test(), expires_at=now + timedelta(minutes=RESERVATION_HOLD_MINUTES),
             )
     except IntegrityError:
         # Two presses of Pay carrying the same request id arrived at the very same moment: the other one is opening the page.
@@ -267,15 +267,16 @@ def start_payment(request):
     what = "Security deposit" if purpose == PaymentAttempt.Purpose.DEPOSIT else "Gown rental and security deposit"
     gowns = ", ".join(i["gown_name"] for i in items)[:140]
     try:
-        session = paymongo.create_checkout_session(
+        session = gateway.create_checkout_session(
             amount=amount, name=what, description=f"Arabela Gown Rental: {gowns}", reference_number=attempt.token,
             success_url=absolute(request, return_path), cancel_url=absolute(request, cancel_path),
             metadata={"attempt": attempt.pk, "purpose": purpose, "customer": user.pk}, customer_name=customer_name, customer_email=user.email or "",
+            expires_minutes=RESERVATION_HOLD_MINUTES,                 # Xendit closes the page by itself when the customer's hold ends (PayMongo's never does)
         )
-    except paymongo.PaymongoError as exc:
-        logger.warning("PayMongo checkout could not be opened for attempt %s: %s", attempt.pk, exc)
+    except gateway.GatewayError as exc:
+        logger.warning("%s checkout could not be opened for attempt %s: %s", gateway.label(), attempt.pk, exc)
         PaymentAttempt.objects.filter(pk=attempt.pk, status=PaymentAttempt.Status.CREATED).update(
-            status=PaymentAttempt.Status.EXPIRED, note="PayMongo would not open a checkout.", finished_at=timezone.now())
+            status=PaymentAttempt.Status.EXPIRED, note=f"{gateway.label()} would not open a checkout.", finished_at=timezone.now())
         return _fail("We could not open the payment page just now. Nothing was charged. Please try again in a moment.", 502)
     PaymentAttempt.objects.filter(pk=attempt.pk).update(session_id=session.id, checkout_url=session.checkout_url)
     return JsonResponse({"success": True, "checkout_url": session.checkout_url, "token": attempt.token})
@@ -305,9 +306,9 @@ def confirm_attempt(attempt_id, *, source="poll"):
             return attempt
         PaymentAttempt.objects.filter(pk=attempt.pk).update(last_checked_at=timezone.now())
         try:
-            state = paymongo.retrieve_checkout_session(attempt.session_id)
-        except paymongo.PaymongoError as exc:
-            logger.warning("Could not read PayMongo session %s: %s", attempt.session_id, exc)
+            state = gateway.retrieve_checkout_session(attempt.session_id)
+        except gateway.GatewayError as exc:
+            logger.warning("Could not read %s session %s: %s", gateway.label(), attempt.session_id, exc)
             return attempt                                   # still waiting; the next look asks again
         if not state.paid:
             if state.status == "expired":
@@ -332,7 +333,7 @@ def _mark_paid(attempt_id, state):
         if state.id != attempt.session_id:
             problem = "The paid session is not the one this attempt opened."
         elif money(state.amount) != money(attempt.amount):
-            problem = f"PayMongo says {peso(state.amount)} was paid but {peso(attempt.amount)} was asked."
+            problem = f"{gateway.label()} says {peso(state.amount)} was paid but {peso(attempt.amount)} was asked."
         elif state.reference_number and state.reference_number != attempt.token:
             problem = "The paid session carries another reference number."
         if problem:
@@ -349,7 +350,7 @@ def _mark_paid(attempt_id, state):
             # The same PayMongo payment is already on another attempt: never booked twice.
             attempt.provider_payment_id = ""
             attempt.status = PaymentAttempt.Status.FLAGGED
-            attempt.note = "This PayMongo payment is already used by another attempt."
+            attempt.note = f"This {gateway.label()} payment is already used by another attempt."
             attempt.finished_at = timezone.now()
             attempt.save()
         return attempt
@@ -440,13 +441,13 @@ def _create_booking(attempt):
         reservation=reservation, purpose=purpose, amount=attempt.paid_amount, channel=attempt.channel, provider_ref=attempt.provider_payment_id,
         paid_at=attempt.paid_at, livemode=attempt.livemode, request_id=f"pm-{attempt.pk}",
     )
-    how = paymongo.CHANNEL_LABELS.get(attempt.channel, "PayMongo")
+    how = gateway.CHANNEL_LABELS.get(attempt.channel, gateway.label())
     ReservationStatusEvent.record(
         reservation, APPROVED_LABEL, detail="Your payment was received. Your booking is confirmed.", actor=ReservationStatusEvent.Actor.SYSTEM)
     ReservationStatusEvent.record(
         reservation, "Booked and paid online",
-        detail=(f"Paid {peso(attempt.paid_amount)} ({'deposit only' if purpose == Payment.Purpose.DEPOSIT else 'in full'}) with {how} on PayMongo; "
-                f"confirmed automatically. PayMongo payment {attempt.provider_payment_id}."
+        detail=(f"Paid {peso(attempt.paid_amount)} ({'deposit only' if purpose == Payment.Purpose.DEPOSIT else 'in full'}) with {how} on {gateway.label()}; "
+                f"confirmed automatically. {gateway.label()} payment {attempt.provider_payment_id}."
                 + ("" if attempt.livemode else " TEST PAYMENT: no real money moved.")),
         actor=ReservationStatusEvent.Actor.SYSTEM, staff_only=True)
     ReservationStatusEvent.record(
@@ -474,11 +475,11 @@ def refund_attempt(attempt_id, reason):
         attempt.refund_amount = attempt.paid_amount
         attempt.note = (reason or "")[:300]
         attempt.save(update_fields=["status", "refund_status", "refund_amount", "note"])
-    how = paymongo.CHANNEL_LABELS.get(attempt.channel, "account")
+    how = gateway.CHANNEL_LABELS.get(attempt.channel, "account")
     try:
-        refund = paymongo.create_refund(payment_id=attempt.provider_payment_id, amount=attempt.paid_amount,
-                                        note=f"Booking not possible: {reason}"[:255])
-    except paymongo.PaymongoError as exc:
+        refund = gateway.create_refund(payment_id=attempt.provider_payment_id, amount=attempt.paid_amount,
+                                       note=f"Booking not possible: {reason}"[:255])
+    except gateway.GatewayError as exc:
         logger.error("The refund for attempt %s was refused: %s", attempt.pk, exc)
         PaymentAttempt.objects.filter(pk=attempt.pk).update(
             status=PaymentAttempt.Status.FLAGGED, refund_status="failed", note=f"{(reason or '')[:150]} | Refund not sent: {str(exc)[:120]}", finished_at=timezone.now())
@@ -496,7 +497,7 @@ def refund_attempt(attempt_id, reason):
 
 def on_refund_updated(resource):
     """PayMongo says a refund changed (the webhook payment.refund.updated): keep our copy of its status. `resource` is the refund inside the event."""
-    refund = paymongo.parse_refund(resource if isinstance(resource, dict) else {})
+    refund = gateway.parse_refund(resource if isinstance(resource, dict) else {})
     if not refund.id or not refund.status:
         return
     PaymentAttempt.objects.filter(refund_id=refund.id).update(refund_status=refund.status[:12])
@@ -509,7 +510,7 @@ def cancel_attempt(attempt_id):
     attempt = PaymentAttempt.objects.filter(pk=attempt_id).first()
     if attempt is None or attempt.status != PaymentAttempt.Status.CREATED:
         return attempt
-    outcome = paymongo.expire_checkout_session(attempt.session_id) if attempt.session_id else "expired"
+    outcome = gateway.expire_checkout_session(attempt.session_id) if attempt.session_id else "expired"
     if outcome in ("expired", "already_expired"):
         PaymentAttempt.objects.filter(pk=attempt.pk, status=PaymentAttempt.Status.CREATED).update(
             status=PaymentAttempt.Status.CANCELLED, finished_at=timezone.now())
@@ -526,9 +527,9 @@ def expire_stale(limit=SWEEP_BATCH, now=None):
     for attempt in stale:
         if not attempt.session_id:
             PaymentAttempt.objects.filter(pk=attempt.pk, status=PaymentAttempt.Status.CREATED).update(
-                status=PaymentAttempt.Status.EXPIRED, finished_at=now, note="No PayMongo checkout was ever opened.")
+                status=PaymentAttempt.Status.EXPIRED, finished_at=now, note=f"No {gateway.label()} checkout was ever opened.")
             continue
-        outcome = paymongo.expire_checkout_session(attempt.session_id)
+        outcome = gateway.expire_checkout_session(attempt.session_id)
         if outcome in ("expired", "already_expired"):
             PaymentAttempt.objects.filter(pk=attempt.pk, status=PaymentAttempt.Status.CREATED).update(status=PaymentAttempt.Status.EXPIRED, finished_at=now)
         elif outcome == "has_payment":
@@ -543,7 +544,7 @@ def attempt_state(attempt, *, request=None):
     S = PaymentAttempt.Status
     if attempt.status == S.BOOKED and attempt.reservation_id:
         reservation = attempt.reservation
-        payment = reservation.payments.filter(provider="paymongo", direction=Payment.Direction.IN).order_by("id").first()
+        payment = reservation.payments.filter(provider__in=gateway.PROVIDERS, direction=Payment.Direction.IN).order_by("id").first()
         item = reservation.items.order_by("id").first()
         return {
             "state": "booked", "reference_code": reservation.reference_code, "amount": f"{money(attempt.paid_amount):,.2f}", "test": not attempt.livemode,

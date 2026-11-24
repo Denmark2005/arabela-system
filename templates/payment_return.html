@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% comment %}
-  Where PayMongo sends the customer after they pay (gowns/online_views.py payment_return). The page itself does nothing: its script asks the status
+  Where {{ payment_provider_label }} sends the customer after they pay (gowns/online_views.py payment_return). The page itself does nothing: its script asks the status
   address right away and every second or two, and shows what the server says (gowns/online_checkout.py attempt_state). The look is the older
   confirmation page's (templates/confirmation.html), so the two feel like one flow.
 {% endcomment %}
@@ -39,13 +39,13 @@
   <div id="pay-return" data-status-url="{{ status_url }}" data-checkout-url="{{ checkout_url }}" data-orders-url="{{ orders_url }}"
        class="max-w-3xl w-full bg-white border border-[#E5E2E1]/50 editorial-shadow p-10 md:p-24 text-center animate-fade-in-up opacity-0" aria-live="polite">
 
-    <!-- Waiting for PayMongo / making the booking -->
+    <!-- Waiting for {{ payment_provider_label }} / making the booking -->
     <div data-pay-state="confirming">
       <div class="inline-flex items-center justify-center w-20 h-20 mb-8"><div class="pay-spinner" role="status" aria-label="Confirming your payment"></div></div>
       <h1 class="font-headline text-3xl md:text-5xl font-light tracking-tight text-primary leading-[1.1] mb-4">Confirming your payment.</h1>
       <h2 class="font-headline text-[0.7rem] md:text-[0.8rem] tracking-[0.3em] uppercase text-secondary/60 font-medium">Please keep this page open</h2>
       <p class="font-body text-base leading-relaxed font-light mt-10 text-primary max-w-lg mx-auto">
-        This only takes a moment. Your booking is made as soon as PayMongo confirms the payment. You will not be charged twice.
+        This only takes a moment. Your booking is made as soon as {{ payment_provider_label }} confirms the payment. You will not be charged twice.
       </p>
     </div>
 
@@ -81,10 +81,10 @@
       <div class="inline-flex items-center justify-center w-20 h-20 rounded-full border mb-8 border-black/10">
         <span class="material-symbols-outlined text-4xl font-light text-secondary">hourglass_top</span>
       </div>
-      <h1 class="font-headline text-3xl md:text-5xl font-light tracking-tight text-primary leading-[1.1] mb-4">Still waiting for PayMongo.</h1>
+      <h1 class="font-headline text-3xl md:text-5xl font-light tracking-tight text-primary leading-[1.1] mb-4">Still waiting for {{ payment_provider_label }}.</h1>
       <h2 class="font-headline text-[0.7rem] md:text-[0.8rem] tracking-[0.3em] uppercase text-secondary/60 font-medium">Do not pay again</h2>
       <p class="font-body text-base leading-relaxed font-light mt-10 text-primary max-w-lg mx-auto">
-        If you already paid, your booking will be made on its own as soon as PayMongo confirms it, and we will message you. If you did not finish paying, you can go back and try again.
+        If you already paid, your booking will be made on its own as soon as {{ payment_provider_label }} confirms it, and we will message you. If you did not finish paying, you can go back and try again.
       </p>
       <div class="flex flex-col items-center gap-8 mt-12">
         <a href="{{ orders_url }}" class="w-full md:w-64 px-10 py-5 bg-primary text-white text-[0.65rem] uppercase tracking-[0.3em] font-medium hover:bg-secondary transition-all duration-500 rounded-[6px] flex items-center justify-center no-underline text-center">View My Orders</a>

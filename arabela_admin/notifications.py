@@ -30,6 +30,7 @@ from accounts.models import AuditLog, UserProfile
 from arabela_admin.views import _SCHEDULED_STATUSES, _staff_display_name
 from gowns.models import Gown
 from reservations import cancel_requests as reservation_cancel_requests
+from reservations import gateway
 from reservations import ledger as reservation_ledger
 from reservations import owner_check as reservation_owner_check
 from reservations.models import CancelRequest, Payment, PaymentAttempt, Reservation, ReservationItem
@@ -402,7 +403,7 @@ def build_items(user):
     # reservations/payments.py on_online_refund_updated cancels such a deposit return, so the deposit is again "still to hand back". It stays here
     # until staff hand it back another way (the booking's deposit shows nothing left to return) -- derived, like every entry on this bell.
     failed_returns = (
-        Payment.objects.filter(direction=Payment.Direction.OUT, provider="paymongo", status=Payment.Status.VOID, voided_by_name="PayMongo",
+        Payment.objects.filter(direction=Payment.Direction.OUT, provider__in=gateway.PROVIDERS, status=Payment.Status.VOID, voided_by_name__in=list(gateway.LABELS.values()),
                                voided_at__gte=timezone.now() - timedelta(days=30))
         .select_related("reservation__customer__profile").order_by("-voided_at")[:5]
     )
@@ -415,7 +416,7 @@ def build_items(user):
             kind="payment",
             level="warning",
             actor=reservation.display_customer_name,
-            text="has a deposit PayMongo could not send back automatically. Hand it back for",
+            text=f"has a deposit {gateway.label()} could not send back automatically. Hand it back for",
             subject=reservation.reference_code,
             module="Payments",
             url=reverse("arabela_admin:payments") + "?" + urlencode({"open": reservation.id}),

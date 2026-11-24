@@ -23,7 +23,7 @@ from django.views.decorators.http import require_http_methods
 from gowns import online_checkout
 from gowns.context_processors import clear_reservation_hold
 from gowns.views import _signed_in_or_json
-from reservations import payments, paymongo
+from reservations import gateway, payments
 from reservations.models import PaymentAttempt
 
 logger = logging.getLogger(__name__)
@@ -78,14 +78,15 @@ def payment_cancel(request, token):
 @csrf_exempt
 @require_http_methods(["POST"])
 def paymongo_webhook(request):
-    """PayMongo's message. Believed only when its signature matches; then used only as a prompt to read the real state back from PayMongo.
-    200 once handled (or when it is an event we do not use), 400 for a bad signature, 503 when we could not finish (PayMongo then tries again)."""
-    event = paymongo.verify_webhook(request.body, request.headers.get(paymongo.SIGNATURE_HEADER, ""), getattr(settings, "PAYMONGO_WEBHOOK_SECRET", ""))
+    """The payment service's message (PayMongo or Xendit, whichever the shop uses; both addresses reach this view). Believed only when it proves itself
+    (PayMongo: its signature; Xendit: the callback token); then used only as a prompt to read the real state back from the service.
+    200 once handled (or when it is an event we do not use), 400 for a bad signature or token, 503 when we could not finish (the service then tries again)."""
+    event = gateway.verify_webhook(request)
     if event is None:
-        logger.warning("A PayMongo webhook with a bad or missing signature was refused.")
+        logger.warning("A %s webhook with a bad or missing signature or token was refused.", gateway.label())
         return HttpResponse("bad signature", status=400, content_type="text/plain")
-    kind = paymongo.event_type(event)
-    resource = paymongo.event_resource(event)
+    kind = gateway.event_type(event)
+    resource = gateway.event_resource(event)
     try:
         if kind == "checkout_session.payment.paid":
             attempt = PaymentAttempt.objects.filter(session_id=str(resource.get("id") or "")).first()
@@ -96,11 +97,11 @@ def paymongo_webhook(request):
                     return HttpResponse("could not confirm yet", status=503, content_type="text/plain")
         elif kind == "payment.refund.updated":
             online_checkout.on_refund_updated(resource)                  # a refund of a payment that could not be booked
-            refund = paymongo.parse_refund(resource)
+            refund = gateway.parse_refund(resource)
             if refund.id and refund.status:
                 payments.on_online_refund_updated(refund.id, refund.status)       # a refund of a returned deposit
         online_checkout.expire_stale(limit=2)
     except Exception:                                   # noqa: BLE001
-        logger.exception("A PayMongo webhook (%s) could not be handled", kind)
+        logger.exception("A %s webhook (%s) could not be handled", gateway.label(), kind)
         return HttpResponse("error", status=503, content_type="text/plain")
     return HttpResponse("ok", content_type="text/plain")

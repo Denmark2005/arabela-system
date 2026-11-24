@@ -458,6 +458,20 @@ PAYMONGO_AUTO_REFUND = os.getenv('PAYMONGO_AUTO_REFUND', 'true').strip().lower()
 # Only for the browser checks that run a practice gateway against an isolated test database (see reservations/paymongo.py api_base_allowed).
 PAYMONGO_ALLOW_LOCAL_GATEWAY = os.getenv('PAYMONGO_ALLOW_LOCAL_GATEWAY', '').strip() == '1'
 
+# Online payments through Xendit (reservations/xendit.py), which replaced PayMongo when PayMongo's sign-ups were closed. The same rule: online payment is ON only
+# while a key is set; a TEST key (xnd_development_...) moves no real money (customers pay on Xendit's own page, whose test mode has a "Proceed to Pay" button);
+# a LIVE key (xnd_production_...) is refused on a laptop copy of the database. The test suite never reads these from .env (it sets what it needs itself).
+_UNDER_TEST = len(sys.argv) > 1 and sys.argv[1] == 'test'
+XENDIT_SECRET_KEY = '' if _UNDER_TEST else os.getenv('XENDIT_SECRET_KEY', '').strip()
+# The "webhook verification token" Xendit shows in Settings > Developers > Callbacks: a webhook is believed only when it carries this in x-callback-token.
+XENDIT_WEBHOOK_TOKEN = '' if _UNDER_TEST else os.getenv('XENDIT_WEBHOOK_TOKEN', '').strip()
+XENDIT_API_BASE = os.getenv('XENDIT_API_BASE', 'https://api.xendit.co').strip().rstrip('/')
+XENDIT_TIMEOUT = int(os.getenv('XENDIT_TIMEOUT', '15'))
+# The ways to pay Xendit's page offers, in Xendit's names. (Cards are left off on purpose.)
+XENDIT_CHANNELS = [m.strip().upper() for m in os.getenv('XENDIT_CHANNELS', 'GCASH,PAYMAYA,QRPH').split(',') if m.strip()]
+# Which service takes the online payments: "xendit", "paymongo", or empty = Xendit while its key is set, else PayMongo (reservations/gateway.py).
+PAYMENT_PROVIDER = '' if _UNDER_TEST else os.getenv('PAYMENT_PROVIDER', '').strip().lower()
+
 # The practice shop (`python demo.py`): a separate throwaway database file, a practice payment gateway on this computer and sign-in links for a demo
 # customer and a demo owner, so the online payments can be shown without a PayMongo account. It can NEVER run against the live shop: it always uses
 # its own SQLite file (never the Postgres settings above) and refuses to start on Render. See demo.py and arabela_system/demo.py.

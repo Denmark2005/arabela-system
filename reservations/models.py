@@ -358,9 +358,9 @@ class Reservation(models.Model):
         else:
             # Paid on PayMongo's checkout page: the recorded payments say what was paid (the deposit alone, or everything), not the old assumption that
             # an online customer only ever pays the deposit.
-            online = [p for p in self.payments.all() if p.provider == 'paymongo' and p.direction == Payment.Direction.IN and not p.is_void]
+            online = [p for p in self.payments.all() if p.provider in ('paymongo', 'xendit') and p.direction == Payment.Direction.IN and not p.is_void]
             if online:
-                how = (online[0].get_method_display() or '').replace(' (PayMongo)', '')
+                how = (online[0].get_method_display() or '').replace(' (online payment)', '')
                 core = (Payment.Purpose.DEPOSIT, Payment.Purpose.FULL, Payment.Purpose.BALANCE)
                 received = sum((p.amount for p in self.payments.all() if not p.is_void and p.direction == Payment.Direction.IN and p.purpose in core), 0)
                 if received >= total:
@@ -1087,10 +1087,12 @@ class Payment(models.Model):
         CASH = 'Cash', 'Cash'
         GCASH = 'GCash', 'GCash'
         ONLINE_GCASH = 'GCash online', 'GCash (online)'          # an online booking's deposit, from the old screenshot flow
-        PM_GCASH = 'PayMongo GCash', 'GCash (PayMongo)'          # paid on PayMongo's checkout page (reservations/online_payment.py)
-        PM_MAYA = 'PayMongo Maya', 'Maya (PayMongo)'
-        PM_QRPH = 'PayMongo QR Ph', 'QR Ph (PayMongo)'
-        PM_OTHER = 'PayMongo other', 'Online (PayMongo)'          # a way of paying the shop did not offer (never expected; recorded honestly)
+        # Paid on the online payment service's own page (PayMongo or Xendit, whichever the shop used: Payment.provider says which). The stored values keep
+        # the name PayMongo (they are in the database already); the words people read do not name a service.
+        PM_GCASH = 'PayMongo GCash', 'GCash (online payment)'
+        PM_MAYA = 'PayMongo Maya', 'Maya (online payment)'
+        PM_QRPH = 'PayMongo QR Ph', 'QR Ph (online payment)'
+        PM_OTHER = 'PayMongo other', 'Online payment'            # a way of paying the shop did not offer (never expected; recorded honestly)
         OLD = 'Before Payments', 'Recorded before the Payments page'
 
     class Status(models.TextChoices):

@@ -25,7 +25,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.roles import staff_display_name
-from reservations import ledger, paymongo
+from reservations import gateway, ledger
 from reservations.ledger import money, peso
 from reservations.models import Deduction, Payment, ReceiptSequence, Reservation, ReservationStatusEvent
 
@@ -276,12 +276,12 @@ def _notice_text(payment):
     """The one sentence the bell and the email say about a payment (also used when it is sent again)."""
     reservation = payment.reservation
     code = reservation.reference_code
-    how = payment.get_method_display() if payment.method != Payment.Method.OLD else "at the shop"
+    how = _way(payment) if payment.method != Payment.Method.OLD else "at the shop"
     if payment.is_void:
         return (f"Receipt {payment.receipt_number} ({peso(payment.amount)}) for {code} was voided: {payment.void_reason}. "
                 "Please contact the shop if you have a question.")
     if payment.direction == Payment.Direction.OUT:
-        later = " It can take up to a day to show in your account." if payment.provider == "paymongo" else ""
+        later = " It can take up to a day to show in your account." if payment.provider in gateway.PROVIDERS else ""
         return f"Your security deposit of {peso(payment.amount)} for {code} was returned ({how}). Receipt {payment.receipt_number}.{later}"
     snapshot = payment.snapshot or {}
     balance = snapshot.get("balance_after")
@@ -410,7 +410,7 @@ def record_payment(*, reservation_id, purpose, amount, method, reference="", not
         payment.snapshot = _snapshot(reservation, payment, before, after, served_by=served_by)
         payment.save(update_fields=["snapshot"])
 
-        _event(reservation, PAYMENT_EVENT, f"{peso(amount)} received ({payment.get_purpose_display()}, {payment.get_method_display()}). "
+        _event(reservation, PAYMENT_EVENT, f"{peso(amount)} received ({payment.get_purpose_display()}, {_way(payment)}). "
                                            f"Receipt {payment.receipt_number}.")
         _notify(reservation, payment, _notice_text(payment), subject=_subject(payment), heading=_heading(payment))
     return payment
@@ -455,10 +455,10 @@ def record_online_payment(*, reservation, purpose, amount, channel, provider_ref
                 return earlier
         method = online_method(channel)
         how = Payment.Method(method).label
-        note = f"Paid online on PayMongo's checkout ({how})." + ("" if livemode else " TEST PAYMENT: no real money moved.")
+        note = f"Paid online on {gateway.label()}'s checkout ({how})." + ("" if livemode else " TEST PAYMENT: no real money moved.")
         payment = Payment.objects.create(
             reservation=reservation, direction=Payment.Direction.IN, purpose=purpose, method=method, amount=amount, reference="", paid_at=paid_at or now,
-            recorded_by=None, recorded_by_name=ONLINE_SERVED_BY, note=note, request_id=request_id, provider="paymongo", provider_ref=(provider_ref or "")[:60],
+            recorded_by=None, recorded_by_name=ONLINE_SERVED_BY, note=note, request_id=request_id, provider=gateway.name(), provider_ref=(provider_ref or "")[:60],
             receipt_number=ReceiptSequence.next_number(timezone.localtime(now).year),
         )
         # The statement is read AFTER the row exists (so it is this booking's own row that is counted, never an old-booking guess); the figures
@@ -516,7 +516,7 @@ def return_deposit(*, reservation_id, amount, method, reference="", note="", use
         after = ledger.statement(_fresh(reservation.pk))
         payment.snapshot = _snapshot(reservation, payment, before, after, served_by=served_by)
         payment.save(update_fields=["snapshot"])
-        _event(reservation, RETURN_EVENT, f"{peso(amount)} of the security deposit was handed back ({payment.get_method_display()}). "
+        _event(reservation, RETURN_EVENT, f"{peso(amount)} of the security deposit was handed back ({_way(payment)}). "
                                           f"Receipt {payment.receipt_number}.")
         _notify(reservation, payment, _notice_text(payment), subject=_subject(payment), heading=_heading(payment))
     return payment
@@ -525,29 +525,35 @@ def return_deposit(*, reservation_id, amount, method, reference="", note="", use
 # ---------------------------------------------------------------- the deposit sent back through PayMongo
 # How long after the payment PayMongo can still send money back, per way of paying. PayMongo's own documented limits are 180 days (GCash), 12 months
 # (Maya) and 30 days (QR Ph); the shop stays a little inside them so a refund is never asked for on the last day.
-ONLINE_REFUND_DAYS = {Payment.Method.PM_GCASH: 170, Payment.Method.PM_MAYA: 350, Payment.Method.PM_QRPH: 28}
-REFUND_FAILED_REASON = "PayMongo could not send this refund, so it was cancelled here. Hand the deposit back another way."
+def _way(payment):
+    """How a payment was made, for a sentence: "Cash", "GCash", "Maya online" (the receipt itself reads "Maya (online payment)")."""
+    return payment.get_method_display().replace(" (online payment)", " online")
 
 
-def _paymongo_payments(reservation, direction):
-    return [p for p in reservation.payments.all() if p.provider == "paymongo" and p.direction == direction and not p.is_void]
+def _refund_failed_reason():
+    return f"{gateway.label()} could not send this refund, so it was cancelled here. Hand the deposit back another way."
+
+
+def _online_payments(reservation, direction):
+    """The payments a customer made through an online service (PayMongo or Xendit), in one direction."""
+    return [p for p in reservation.payments.all() if p.provider in gateway.PROVIDERS and p.direction == direction and not p.is_void]
 
 
 def _online_refund_source(reservation, amount, now):
     """The online payment a refund of `amount` would be made against -> (Payment, "") or (None, why not). PayMongo sends money back only for a
     payment made through it, inside the time limit of the way it was paid, never more than that payment came to, and (Maya) a PART of a payment
     only from the day after it was paid."""
-    sources = [p for p in _paymongo_payments(reservation, Payment.Direction.IN)
+    sources = [p for p in _online_payments(reservation, Payment.Direction.IN)
                if p.provider_ref and p.purpose in (Payment.Purpose.DEPOSIT, Payment.Purpose.FULL)]
     if not sources:
-        return None, "This booking was not paid on PayMongo, so the deposit is handed back at the shop."
+        return None, f"This booking was not paid on {gateway.label()}, so the deposit is handed back at the shop."
     source = sources[0]
-    days = ONLINE_REFUND_DAYS.get(source.method)
+    days = gateway.refund_days().get(source.method)
     if days is None:
-        return None, "PayMongo cannot send this kind of payment back automatically."
+        return None, f"{gateway.label()} cannot send this kind of payment back automatically."
     if now - source.paid_at > timedelta(days=days):
-        return None, f"It was paid more than {days} days ago, which is too long for PayMongo to send it back."
-    already = sum((money(p.amount) for p in _paymongo_payments(reservation, Payment.Direction.OUT)), Decimal("0"))
+        return None, f"It was paid more than {days} days ago, which is too long for {gateway.label()} to send it back."
+    already = sum((money(p.amount) for p in _online_payments(reservation, Payment.Direction.OUT)), Decimal("0"))
     if already + money(amount) > money(source.amount):
         return None, "That is more than the online payment came to."
     if source.method == Payment.Method.PM_MAYA and money(amount) != money(source.amount) and timezone.localdate(source.paid_at) == timezone.localdate(now):
@@ -558,15 +564,15 @@ def _online_refund_source(reservation, amount, now):
 def online_refund_choice(reservation, statement, now=None):
     """What the Return-the-deposit form should offer for this booking: {"offered": False} when it was not paid on PayMongo (or automatic refunds are
     off), else {"offered": True, "available": bool, "label": "GCash", "reason": why not}. The server checks it again when the form is sent."""
-    if not getattr(settings, "PAYMONGO_AUTO_REFUND", False) or not paymongo.enabled():
+    if not gateway.auto_refund() or not gateway.enabled():
         return {"offered": False}
-    online = _paymongo_payments(reservation, Payment.Direction.IN)
+    online = _online_payments(reservation, Payment.Direction.IN)
     if not online:
         return {"offered": False}
     now = now or timezone.now()
     amount = statement.refund_available if statement.refund_available > 0 else money(online[0].amount)
     source, reason = _online_refund_source(reservation, amount, now)
-    label = Payment.Method(online[0].method).label.replace(" (PayMongo)", "")
+    label = Payment.Method(online[0].method).label.replace(" (online payment)", "")
     return {"offered": True, "available": source is not None, "label": label, "reason": reason}
 
 
@@ -591,7 +597,7 @@ def return_deposit_online(*, reservation_id, amount, note="", user=None, request
     the staff member is told (nothing was sent). If PayMongo accepts, the customer is told and the receipt is theirs. A request that already
     has a row but no PayMongo refund (the server stopped halfway) is refused until a person checks PayMongo's dashboard -- PayMongo has no way to
     say "this request was already made", so asking twice could send the money twice."""
-    if not getattr(settings, "PAYMONGO_AUTO_REFUND", False) or not paymongo.enabled():
+    if not gateway.auto_refund() or not gateway.enabled():
         raise PaymentError("Automatic refunds are not switched on. Hand the deposit back in cash or from the shop's GCash.", status=409)
     now = now or timezone.now()
     request_id = (request_id or "")[:40] or None
@@ -606,8 +612,8 @@ def return_deposit_online(*, reservation_id, amount, note="", user=None, request
         if request_id:
             earlier = Payment.objects.filter(request_id=request_id).first()
             if earlier is not None:
-                if earlier.provider == "paymongo" and not earlier.provider_ref and not earlier.is_void:
-                    raise PaymentError("An earlier try to send this refund did not finish. Check PayMongo's dashboard to see whether it was sent, then void "
+                if earlier.provider in gateway.PROVIDERS and not earlier.provider_ref and not earlier.is_void:
+                    raise PaymentError(f"An earlier try to send this refund did not finish. Check {gateway.label()}'s dashboard to see whether it was sent, then void "
                                        "that receipt before trying again.", status=409)
                 return earlier
         if not ledger.counts_as_tracked(reservation) or reservation.status == Reservation.Status.CANCELLED:
@@ -626,7 +632,7 @@ def return_deposit_online(*, reservation_id, amount, note="", user=None, request
         payment = Payment.objects.create(
             reservation=reservation, direction=Payment.Direction.OUT, purpose=Payment.Purpose.DEPOSIT_RETURN, method=source.method, amount=amount, reference="",
             paid_at=now, recorded_by=user if getattr(user, "pk", None) else None, recorded_by_name=served_by, note=note, request_id=request_id,
-            provider="paymongo", provider_ref="", receipt_number=ReceiptSequence.next_number(timezone.localtime(now).year),
+            provider=gateway.name(), provider_ref="", receipt_number=ReceiptSequence.next_number(timezone.localtime(now).year),
         )
         after = ledger.statement(_fresh(reservation.pk))
         payment.snapshot = _snapshot(reservation, payment, before, after, served_by=served_by)
@@ -634,18 +640,18 @@ def return_deposit_online(*, reservation_id, amount, note="", user=None, request
         code, paid_ref = reservation.reference_code, source.provider_ref
 
     try:
-        refund = paymongo.create_refund(payment_id=paid_ref, amount=amount, note=f"Security deposit return for {code}")
-    except paymongo.PaymongoError as exc:
-        _void_quietly(payment.pk, f"PayMongo would not send the refund: {str(exc)[:120]}")
-        raise PaymentError(f"PayMongo would not send the refund just now ({str(exc)[:120]}). Nothing was sent or recorded. Try again, or hand the deposit back "
+        refund = gateway.create_refund(payment_id=paid_ref, amount=amount, note=f"Security deposit return for {code}")
+    except gateway.GatewayError as exc:
+        _void_quietly(payment.pk, f"{gateway.label()} would not send the refund: {str(exc)[:120]}")
+        raise PaymentError(f"{gateway.label()} would not send the refund just now ({str(exc)[:120]}). Nothing was sent or recorded. Try again, or hand the deposit back "
                            "in cash or from the shop's GCash.", status=502)
 
     with transaction.atomic():
         Payment.objects.filter(pk=payment.pk).update(provider_ref=refund.id[:60])
         payment = Payment.objects.select_related("reservation").get(pk=payment.pk)
         reservation = payment.reservation
-        _event(reservation, RETURN_EVENT, f"{peso(amount)} of the security deposit was sent back to the customer through PayMongo "
-                                          f"({payment.get_method_display()}). Receipt {payment.receipt_number}.")
+        _event(reservation, RETURN_EVENT, f"{peso(amount)} of the security deposit was sent back to the customer through {gateway.label()} "
+                                          f"({_way(payment)}). Receipt {payment.receipt_number}.")
         _notify(reservation, payment, _notice_text(payment), subject=_subject(payment), heading=_heading(payment))
     return payment
 
@@ -654,7 +660,7 @@ def on_online_refund_updated(refund_id, status):
     """PayMongo says a refund it was asked for changed (webhook payment.refund.updated). A refund that FAILED cancels the deposit-return row it
     belonged to (so the deposit shows as still to hand back), and the customer is told the shop will hand it back. Returns True when the refund was
     one of ours."""
-    payment = Payment.objects.select_related("reservation__customer").filter(provider="paymongo", provider_ref=refund_id, direction=Payment.Direction.OUT).first()
+    payment = Payment.objects.select_related("reservation__customer").filter(provider__in=gateway.PROVIDERS, provider_ref=refund_id, direction=Payment.Direction.OUT).first()
     if payment is None:
         return False
     if status != "failed" or payment.is_void:
@@ -664,13 +670,13 @@ def on_online_refund_updated(refund_id, status):
         if locked.is_void:
             return True
         locked.status = Payment.Status.VOID
-        locked.void_reason = REFUND_FAILED_REASON[:REASON_MAX]
-        locked.voided_by_name = "PayMongo"
+        locked.void_reason = _refund_failed_reason()[:REASON_MAX]
+        locked.voided_by_name = gateway.label()
         locked.voided_at = timezone.now()
         locked.save(update_fields=["status", "void_reason", "voided_by_name", "voided_at"])
         reservation = payment.reservation
         ReservationStatusEvent.record(reservation, "Automatic deposit refund failed",
-                                      detail=f"PayMongo could not send {peso(locked.amount)} back (receipt {locked.receipt_number}). Hand the deposit back another way.",
+                                      detail=f"{gateway.label()} could not send {peso(locked.amount)} back (receipt {locked.receipt_number}). Hand the deposit back another way.",
                                       actor=ReservationStatusEvent.Actor.SYSTEM, staff_only=True)
         if reservation.customer_id:
             notify_user(reservation.customer, f"We could not send your security deposit of {peso(locked.amount)} for {reservation.reference_code} back automatically. "
