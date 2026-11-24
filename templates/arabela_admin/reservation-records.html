@@ -557,6 +557,9 @@
           progressOptions: ['Pending approval', 'Awaiting pickup', 'With customer', 'Partly returned', 'Overdue', 'Completed', 'Rejected', 'Cancelled'],
 
           search: '',
+          // The "On this date" bar: one exact day and what it means (pick-up / return / event). Combines with every other filter.
+          dateFocus: '',
+          dateKind: 'pickup',
           dateFilter: 'all',
           customFrom: '',
           customTo: '',
@@ -623,6 +626,9 @@
             const params = new URLSearchParams(window.location.search);
             const presetSearch = params.get('search');
             if (presetSearch) { this.search = presetSearch; }
+            // ?date=YYYY-MM-DD&kind=pickup|return|event from the Gown Board and the dashboard; anything malformed is ignored.
+            const presetDate = arabelaDF.clean(params.get('date'));
+            if (presetDate) { this.dateFocus = presetDate; this.dateKind = arabelaDF.kind(params.get('kind')); }
             const presetCustomer = parseInt(params.get('customer'), 10);
             if (!isNaN(presetCustomer)) {
               const match = this.records.find(r => r.customerId === presetCustomer);
@@ -654,6 +660,8 @@
             this.$watch('pickupYear', () => this.syncUrl());
             this.$watch('pickupYear', value => { this.pickupYearInput = value; });
             this.$watch('pickupMonthNum', () => this.syncUrl());
+            this.$watch('dateFocus', () => this.syncUrl());
+            this.$watch('dateKind', () => this.syncUrl());
           },
 
           syncUrl() {
@@ -670,6 +678,7 @@
               params.delete('month');
               params.delete('year');
             }
+            if (this.dateFocus) { params.set('date', this.dateFocus); params.set('kind', this.dateKind); } else { params.delete('date'); params.delete('kind'); }
             const query = params.toString();
             history.replaceState(null, '', window.location.pathname + (query ? '?' + query : ''));
           },
@@ -773,6 +782,11 @@
             return !!r.paymentIncomplete;
           },
 
+          // The days of the kind the "On this date" bar is set to (pick-up, return or event) for one booking.
+          focusDays(r) {
+            return this.dateKind === 'return' ? r.datesReturn : (this.dateKind === 'event' ? r.datesEvent : r.datesPickup);
+          },
+
           inCustomerScope(r) {
             return this.customerFilter === null || r.customerId === this.customerFilter;
           },
@@ -784,6 +798,7 @@
             if (this.receiptFilter === 'needs' && !this.needsReceipt(r)) { return false; }
             if (this.channelFilter !== 'All' && r.channel !== this.channelFilter) { return false; }
             if (!this.inRange(r, this.dateRange(this.dateFilter))) { return false; }
+            if (this.dateFocus && !arabelaDF.hit(this.focusDays(r), this.dateFocus)) { return false; }
             if (this.pickupYear) {
               // r.pickupMonth is 'YYYY-MM' or '' (a booking with no gowns) -- slice
               // rather than build a key to compare, so a year-only pick still matches
@@ -906,6 +921,7 @@
           // A card is a quick view: it clears the other filters so the rows shown are
           // exactly the number on the card (the customer filter, if any, stays).
           applyCard(mode) {
+            this.dateFocus = '';
             this.search = '';
             this.channelFilter = 'All';
             this.statusFilter = 'All';
@@ -927,7 +943,7 @@
           },
 
           cardActive(mode) {
-            if (this.channelFilter !== 'All') { return false; }
+            if (this.channelFilter !== 'All' || this.dateFocus) { return false; }
             if (mode === 'cancelled') {
               return this.statusFilter === 'Cancelled' && !this.search && !this.pickupYear
                 && this.dateFilter === 'all' && this.receiptFilter === 'All';
@@ -951,6 +967,7 @@
           },
 
           resetFilters() {
+            this.dateFocus = '';
             this.search = '';
             this.channelFilter = 'All';
             this.dateFilter = 'all';
@@ -1355,7 +1372,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'gown-board' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -1538,6 +1555,15 @@
                 </li>
                 <li>
                   <a
+                    href="{% url 'arabela_admin:gown_board' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'gown-board' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Gown Board
+                  </a>
+                </li>
+                <li>
+                  <a
                     href="{% url 'arabela_admin:active_reservations' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'active' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
@@ -1554,6 +1580,7 @@
                     Rental History
                   </a>
                 </li>
+                {% if not admin_hide_pending_approval %}
                 <li>
                   <a
                     href="{% url 'arabela_admin:pending_approval' %}"
@@ -1563,6 +1590,7 @@
                     Pending Approval
                   </a>
                 </li>
+                {% endif %}
               </ul>
             </div>
             <!-- Dropdown Menu End -->
@@ -1874,6 +1902,7 @@
                     Payments
                   </a>
                 </li>
+                {% if not admin_hide_payment_verification %}
                 <li>
                   <a
                     href="{% url 'arabela_admin:payment_verification' %}"
@@ -1883,6 +1912,7 @@
                     Payment Verification
                   </a>
                 </li>
+                {% endif %}
                 <li>
                   <a
                     href="{% url 'arabela_admin:security_deposits' %}"
@@ -2476,6 +2506,8 @@
                 </div>
               </div>
 
+              {% include "arabela_admin/partials/date_focus.html" %}
+
               <div class="rr-toolbar2" x-show="customerFilter !== null" x-cloak>
                 <span class="rr-chip">
                   <span x-text="'Showing ' + customerFilterName + '\'s reservations'"></span>
@@ -2571,6 +2603,7 @@
                           </div>
                         </dl>
                         <div class="rr-iconbtns">
+                          <button type="button" class="ar-ib" x-show="r.hasReceipt" x-cloak @click.stop="arabelaReceipt.open(r.id)" title="Receipt" :aria-label="'Receipt of ' + r.customer + ', ' + r.reference"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg></button>
                           <button type="button" class="ar-ib" @click.stop="openRecord(r)" title="View details" :aria-label="'View the details of ' + r.customer + ', ' + r.reference">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                           </button>
@@ -2780,7 +2813,8 @@
                 <div class="rrd-rech">
                   <h3 class="rrd-h">Old receipt photos <small x-text="'(' + viewing.receipts.length + ')'"></small></h3>
                   <p class="rrd-recnone" x-show="viewing.receipts.length === 0">None. Payments are recorded in Payments, with a printed receipt.</p>
-                  <a :href="'{% url 'arabela_admin:payments' %}?open=' + viewing.id" class="rr-link" style="margin-left: auto; font-size: .8125rem; white-space: nowrap;">Open in Payments</a>
+                  <button type="button" class="rcm-open" x-show="viewing.hasReceipt" x-cloak style="margin-left: auto;" @click="arabelaReceipt.open(viewing.id)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg> Receipt</button>
+                  <a :href="'{% url 'arabela_admin:payments' %}?open=' + viewing.id" class="rr-link" :style="viewing.hasReceipt ? 'font-size: .8125rem; white-space: nowrap;' : 'margin-left: auto; font-size: .8125rem; white-space: nowrap;'">Open in Payments</a>
                 </div>
                 <div class="rrd-reclist" x-show="viewing.receipts.length">
                   <template x-for="receipt in viewing.receipts" :key="receipt.id">

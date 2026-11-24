@@ -1,0 +1,274 @@
+{% comment %}
+  The Receipt preview window: a "Receipt" button anywhere in the admin calls  arabelaReceipt.open(reservationId)  (or  arabelaReceipt.open(reservationId, {payment: id})
+  to land on one receipt). It shows the receipt exactly as it prints (the same paper as the Payments page: templates/partials/receipt_paper.html, loaded in a frame
+  from the print page with ?look=1&embed=1, which does NOT count as a print), a status pill, and Close / Print Receipt. Print Receipt opens the printable page in
+  the frame WITHOUT look=1, so it counts as the original or a reprint exactly like the Payments page's Print, then opens the browser's print window.
+  A Paper choice (80 mm roll, 58 mm roll, normal page) is remembered on this computer.
+
+  Included ONCE per admin page from partials/notifications.html. Self-contained: its own CSS (class prefix rcm-), light and dark. Everything that comes from the
+  server is put on the page as plain text (never as HTML).
+{% endcomment %}
+<style>
+  .rcm-win { position: fixed; inset: 0; z-index: 100001; display: flex; align-items: flex-start; justify-content: center; padding: 1.25rem; overflow-y: auto; background: rgba(16,24,40,.55); }
+  .rcm-win[hidden], .rcm-win [hidden] { display: none !important; }
+  .rcm-sheet { position: relative; width: 100%; max-width: 30rem; margin: auto; border-radius: 1.25rem; background: #fff; box-shadow: 0 24px 48px -12px rgba(16,24,40,.3); }
+  .dark .rcm-sheet { background: #101828; border: 1px solid #1d2939; }
+  .rcm-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1.1rem 1.25rem .6rem; }
+  .rcm-kicker { margin: 0; font-size: .72rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #667085; }
+  .dark .rcm-kicker { color: #98a2b3; }
+  .rcm-line { margin: .25rem 0 0; font-size: .8125rem; color: #475467; }
+  .dark .rcm-line { color: #98a2b3; }
+  .rcm-pill { display: inline-flex; align-items: center; margin-top: .45rem; padding: .15rem .65rem; border-radius: 999px; font-size: .75rem; font-weight: 600; background: #f2f4f7; color: #475467; }
+  .rcm-pill--paid { background: #d1fadf; color: #067647; }
+  .rcm-pill--partly { background: #fef0c7; color: #b54708; }
+  .rcm-pill--void { background: #fee4e2; color: #b42318; }
+  .rcm-pill--returned { background: #e0eaff; color: #3641f5; }
+  .dark .rcm-pill--paid { background: rgba(18,183,106,.16); color: #32d583; }
+  .dark .rcm-pill--partly { background: rgba(247,144,9,.18); color: #fdb022; }
+  .dark .rcm-pill--void { background: rgba(240,68,56,.18); color: #fda29b; }
+  .dark .rcm-pill--returned { background: rgba(70,95,255,.2); color: #9bb0ff; }
+  .rcm-b:focus-visible, .rcm-chip:focus-visible, .rcm-paper select:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+  .rcm-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem .75rem; padding: 0 1.25rem .6rem; }
+  .rcm-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .rcm-chip { padding: .3rem .7rem; border: 1px solid #d0d5dd; border-radius: 999px; background: transparent; color: #475467; font-size: .78rem; font-weight: 500; cursor: pointer; }
+  .rcm-chip:hover { background: rgba(152,162,179,.12); }
+  .rcm-chip.is-on { background: #465fff; border-color: #465fff; color: #fff; }
+  .dark .rcm-chip { border-color: #344054; color: #d0d5dd; }
+  .dark .rcm-chip.is-on { background: #465fff; border-color: #465fff; color: #fff; }
+  .rcm-paper { display: inline-flex; align-items: center; gap: .4rem; font-size: .78rem; color: #667085; }
+  .dark .rcm-paper { color: #98a2b3; }
+  .rcm-paper select { height: 2rem; padding: 0 .5rem; border: 1px solid #d0d5dd; border-radius: .5rem; background: #fff; color: #1d2939; font: inherit; font-size: .8125rem; }
+  .dark .rcm-paper select { background: #0c111d; border-color: #344054; color: #f2f4f7; }
+  .rcm-stage { margin: 0 1.25rem; padding: .75rem; border-radius: .9rem; background: #e4e7ec; }
+  .dark .rcm-stage { background: #1d2939; }
+  .rcm-frame { display: block; width: 100%; height: 22rem; border: 0; background: transparent; }
+  .rcm-msg { margin: 0; padding: 2rem 1rem; text-align: center; font-size: .875rem; color: #475467; }
+  .dark .rcm-msg { color: #98a2b3; }
+  .rcm-msg a { color: #465fff; font-weight: 600; }
+  .rcm-foot { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; padding: .9rem 1.25rem 1.1rem; }
+  .rcm-b { display: inline-flex; align-items: center; justify-content: center; min-height: 2.5rem; padding: 0 1.15rem; border: 1px solid #d0d5dd; border-radius: .6rem; background: #fff; color: #344054;
+    font: 600 .875rem system-ui, sans-serif; text-decoration: none; cursor: pointer; }
+  .rcm-b:hover:not(:disabled) { background: #f9fafb; }
+  .rcm-b:disabled { opacity: .6; cursor: not-allowed; }
+  .rcm-b--main { background: #465fff; border-color: #465fff; color: #fff; }
+  .rcm-b--main:hover:not(:disabled) { background: #3641f5; }
+  .dark .rcm-b { background: transparent; border-color: #344054; color: #d0d5dd; }
+  .dark .rcm-b:hover:not(:disabled) { background: rgba(255,255,255,.05); }
+  .dark .rcm-b--main { background: #465fff; border-color: #465fff; color: #fff; }
+  .rcm-open { display: inline-flex; align-items: center; gap: .35rem; padding: .2rem .75rem; border: 1px solid #d0d5dd; border-radius: 999px; background: transparent; color: #344054;
+    font: 600 .78rem system-ui, sans-serif; cursor: pointer; }
+  .rcm-open:hover { background: rgba(152,162,179,.14); }
+  .rcm-open:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+  .dark .rcm-open { border-color: #344054; color: #d0d5dd; }
+  .rcm-open svg { width: .95rem; height: .95rem; }
+  .rcm-spin { display: inline-block; width: 1.6rem; height: 1.6rem; border: 3px solid #d0d5dd; border-top-color: #465fff; border-radius: 999px; animation: rcm-turn .8s linear infinite; }
+  @keyframes rcm-turn { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .rcm-spin { animation-duration: 2.4s; } }
+  @media (max-width: 520px) { .rcm-win { padding: .5rem; } .rcm-head, .rcm-bar, .rcm-foot { padding-left: 1rem; padding-right: 1rem; } .rcm-stage { margin: 0 1rem; padding: .5rem; } }
+  @media print { .rcm-win { display: none !important; } }
+</style>
+<div id="rcm-root" class="rcm-win" hidden data-list-url="{% url 'arabela_admin:receipt_list' 999999 %}" data-payments-url="{% url 'arabela_admin:payments' %}">
+  <div class="rcm-sheet" role="dialog" aria-modal="true" aria-labelledby="rcm-title" tabindex="-1">
+    <div class="rcm-head">
+      <div style="min-width: 0;">
+        <p class="rcm-kicker" id="rcm-title">Receipt</p>
+        <span class="rcm-pill" id="rcm-pill" hidden></span>
+        <p class="rcm-line" id="rcm-booking"></p>
+        <p class="rcm-line" id="rcm-when"></p>
+      </div>
+    </div>
+    <div class="rcm-bar" id="rcm-bar" hidden>
+      <div class="rcm-chips" id="rcm-chips" role="group" aria-label="This booking's receipts"></div>
+      <label class="rcm-paper">Paper
+        <select id="rcm-paper" aria-label="Paper to print on">
+          <option value="80">80 mm roll</option>
+          <option value="58">58 mm roll</option>
+          <option value="normal">Normal page</option>
+        </select>
+      </label>
+    </div>
+    <div class="rcm-stage" id="rcm-stage">
+      <p class="rcm-msg" id="rcm-loading" role="status"><span class="rcm-spin" aria-hidden="true"></span><br>Loading the receipt...</p>
+      <p class="rcm-msg" id="rcm-empty" hidden></p>
+      <iframe class="rcm-frame" id="rcm-frame" title="The receipt as it prints" hidden></iframe>
+    </div>
+    <div class="rcm-foot">
+      <button type="button" class="rcm-b" id="rcm-close">Close</button>
+      <button type="button" class="rcm-b rcm-b--main" id="rcm-print" disabled>Print Receipt</button>
+    </div>
+  </div>
+</div>
+<script>
+  (function () {
+    var root = document.getElementById('rcm-root');
+    if (!root || window.arabelaReceipt) { return; }
+    // This partial is included inside the page header, whose buttons fold into a menu on a phone: a window left in there would never show. It lives at the end of
+    // the page instead, where every other window of the admin is.
+    if (root.parentElement !== document.body) { document.body.appendChild(root); }
+    var $ = function (id) { return document.getElementById(id); };
+    var els = { pill: $('rcm-pill'), booking: $('rcm-booking'), when: $('rcm-when'), bar: $('rcm-bar'), chips: $('rcm-chips'), paper: $('rcm-paper'), loading: $('rcm-loading'),
+                empty: $('rcm-empty'), frame: $('rcm-frame'), print: $('rcm-print'), close: $('rcm-close'), stage: $('rcm-stage') };
+    var KEY = 'arabela_receipt_paper';
+    var state = { list: [], at: 0, opener: null, seq: 0, printing: false, reservation: 0 };
+
+    function paper() {
+      var v = '80';
+      try { v = localStorage.getItem(KEY) || '80'; } catch (e) { v = '80'; }
+      return ['58', '80', 'normal'].indexOf(v) === -1 ? '80' : v;
+    }
+    function fit() {
+      try {
+        var d = els.frame.contentDocument;
+        if (d && d.documentElement) { els.frame.style.height = Math.max(d.documentElement.scrollHeight, d.body ? d.body.scrollHeight : 0) + 'px'; }
+      } catch (e) { /* the frame is not ready yet */ }
+    }
+    function applyPaper() {
+      var v = paper();
+      els.paper.value = v;
+      try {
+        var d = els.frame.contentDocument;
+        if (d && d.documentElement) { d.documentElement.setAttribute('data-paper', v); }
+      } catch (e) { /* not ready */ }
+      fit();
+    }
+    function say(el, text) { el.textContent = text; }
+    function show(which) {
+      els.loading.hidden = which !== 'loading';
+      els.empty.hidden = which !== 'empty';
+      els.frame.hidden = which !== 'frame';
+    }
+    function busy(on) {
+      els.print.disabled = on || !state.list.length;
+      els.print.textContent = on ? 'Opening...' : 'Print Receipt';
+    }
+
+    function select(i) {
+      state.at = i;
+      var r = state.list[i];
+      if (!r) { return; }
+      els.pill.hidden = false;
+      els.pill.className = 'rcm-pill rcm-pill--' + r.pill.kind;
+      say(els.pill, r.pill.text);
+      say(els.when, r.when + (r.by ? ' · Served by ' + r.by : '') + ' · ' + r.number);
+      Array.prototype.forEach.call(els.chips.children, function (chip, n) {
+        chip.classList.toggle('is-on', n === i);
+        chip.setAttribute('aria-pressed', n === i ? 'true' : 'false');
+      });
+      show('frame');
+      els.print.disabled = true;
+      els.frame.src = r.lookUrl;
+    }
+
+    els.frame.addEventListener('load', function () {
+      applyPaper();
+      els.print.disabled = !state.list.length;
+      if (state.printing) {
+        state.printing = false;
+        busy(false);
+        try { els.frame.contentWindow.focus(); els.frame.contentWindow.print(); } catch (e) { /* the browser refused: the receipt is still on screen */ }
+      }
+    });
+
+    function render(data) {
+      state.list = data.receipts || [];
+      say(els.booking, data.booking.code + ' · ' + data.booking.customer);
+      if (!state.list.length) {
+        els.pill.hidden = true;
+        say(els.when, '');
+        els.bar.hidden = true;
+        els.empty.textContent = '';
+        els.empty.appendChild(document.createTextNode('No receipt has been made for this booking yet. Payments are recorded on the '));
+        var link = document.createElement('a');
+        link.href = root.getAttribute('data-payments-url') + '?open=' + state.reservation;
+        link.textContent = 'Payments page';
+        els.empty.appendChild(link);
+        els.empty.appendChild(document.createTextNode('.'));
+        show('empty');
+        busy(false);
+        return;
+      }
+      els.bar.hidden = false;
+      els.chips.textContent = '';
+      els.chips.hidden = state.list.length < 2;
+      state.list.forEach(function (r, i) {
+        var chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'rcm-chip';
+        chip.textContent = r.label + ' ' + r.signed;
+        chip.title = r.number;
+        chip.addEventListener('click', function () { select(i); });
+        els.chips.appendChild(chip);
+      });
+      els.paper.value = paper();
+      select(data.at || 0);
+    }
+
+    function open(reservationId, opts) {
+      opts = opts || {};
+      var id = Number(reservationId);
+      if (!id) { return; }
+      state.opener = document.activeElement;
+      state.reservation = id;
+      state.list = [];
+      state.printing = false;
+      var seq = ++state.seq;
+      root.hidden = false;
+      document.body.style.overflow = 'hidden';
+      els.pill.hidden = true;
+      say(els.booking, '');
+      say(els.when, '');
+      els.bar.hidden = true;
+      els.frame.removeAttribute('src');
+      show('loading');
+      busy(true);
+      root.querySelector('.rcm-sheet').focus();
+      fetch(root.getAttribute('data-list-url').replace('999999', String(id)), { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+        .then(function (result) {
+          if (seq !== state.seq) { return; }
+          if (!result.ok || !result.data || !result.data.booking) { throw new Error((result.data && result.data.error) || 'failed'); }
+          var data = result.data;
+          var at = 0;
+          if (opts.payment) {
+            (data.receipts || []).forEach(function (r, i) { if (r.id === Number(opts.payment)) { at = i; } });
+          }
+          data.at = at;
+          render(data);
+        })
+        .catch(function (err) {
+          if (seq !== state.seq) { return; }
+          els.empty.textContent = (err && err.message && err.message !== 'failed') ? err.message : 'The receipt could not be loaded. Please close this window and try again.';
+          show('empty');
+          busy(false);
+          els.print.disabled = true;
+        });
+    }
+
+    function close() {
+      state.seq += 1;
+      state.printing = false;
+      root.hidden = true;
+      document.body.style.overflow = '';
+      els.frame.removeAttribute('src');
+      if (state.opener && typeof state.opener.focus === 'function') { try { state.opener.focus(); } catch (e) { /* the button is gone */ } }
+    }
+
+    els.close.addEventListener('click', close);
+    root.addEventListener('mousedown', function (event) { if (event.target === root) { close(); } });
+    document.addEventListener('keydown', function (event) { if (!root.hidden && event.key === 'Escape') { event.stopPropagation(); close(); } });
+    els.paper.addEventListener('change', function () {
+      try { localStorage.setItem(KEY, els.paper.value); } catch (e) { /* not remembered: it still applies now */ }
+      applyPaper();
+    });
+    els.print.addEventListener('click', function () {
+      var r = state.list[state.at];
+      if (!r || state.printing) { return; }
+      // The printable page WITHOUT look=1 counts as a print (the first is the original, later ones are reprints, with the REPRINT mark on the paper).
+      state.printing = true;
+      busy(true);
+      els.frame.src = r.printUrl;
+    });
+
+    window.arabelaReceipt = { open: open, close: close };
+  })();
+</script>

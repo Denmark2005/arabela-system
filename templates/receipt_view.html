@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
   <title>{{ r.title }} {{ r.number }} | Arabela</title>
+  <script>
+    // The paper this device prints on: a normal page unless the customer chose a receipt roll before.
+    (function () {
+      var v = 'normal';
+      try { v = localStorage.getItem('arabela_receipt_paper_customer') || 'normal'; } catch (e) { v = 'normal'; }
+      document.documentElement.setAttribute('data-paper', ['58', '80', 'normal'].indexOf(v) === -1 ? 'normal' : v);
+    })();
+  </script>
   <style>
     html, body { margin: 0; padding: 0; }
     body { min-height: 100vh; background: #efeeeb; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
@@ -14,6 +22,8 @@
     .rv-btn--main { background: #dc2626; color: #fff; }
     .rv-btn:focus-visible { outline: 3px solid #f2a1a1; outline-offset: 2px; }
     .rv-hint { color: #d6d3cd; font-size: .8rem; }
+    .rv-paper { display: inline-flex; align-items: center; gap: .4rem; color: #d6d3cd; font-size: .85rem; }
+    .rv-paper select { height: 2.75rem; padding: 0 .6rem; border: 0; border-radius: 6px; background: #fff; color: #1b1c1c; font: 600 .875rem system-ui, sans-serif; }
     .rv-wrap { padding: 1.25rem .75rem 2rem; }
     .rv-wrap .rc-paper { box-shadow: 0 2px 14px rgba(27, 28, 28, .2); }
     @page { margin: 4mm; }
@@ -29,10 +39,28 @@
   <div class="rv-bar">
     <button type="button" class="rv-btn rv-btn--main" onclick="window.print()">Print or save as PDF</button>
     <a class="rv-btn" href="{{ back_url }}">Back to my reservation</a>
+    <label class="rv-paper">Paper
+      <select id="rv-paper" aria-label="Paper to print on">
+        <option value="normal">Normal page</option>
+        <option value="80">80 mm roll</option>
+        <option value="58">58 mm roll</option>
+      </select>
+    </label>
     <span class="rv-hint">On a phone, choose "Save as PDF" in the print window to keep a copy.</span>
   </div>
   <div class="rv-wrap">
     {% include "partials/receipt_paper.html" %}
   </div>
+  <script>
+    (function () {
+      var select = document.getElementById('rv-paper');
+      if (!select) { return; }
+      select.value = document.documentElement.getAttribute('data-paper') || 'normal';
+      select.addEventListener('change', function () {
+        try { localStorage.setItem('arabela_receipt_paper_customer', select.value); } catch (e) { /* not remembered; it still applies now */ }
+        document.documentElement.setAttribute('data-paper', select.value);
+      });
+    })();
+  </script>
 </body>
 </html>

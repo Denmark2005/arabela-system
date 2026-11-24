@@ -137,6 +137,7 @@ TEMPLATES = [
                 'gowns.context_processors.reservation_hold',
                 'gowns.context_processors.site_settings',
                 'arabela_admin.context_processors.admin_user',
+                'arabela_admin.context_processors.admin_flow',
                 'arabela_admin.context_processors.admin_notifications',
                 'arabela_admin.context_processors.admin_asset_version',
                 'arabela_admin.context_processors.site_asset_version',

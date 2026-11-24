@@ -12,7 +12,7 @@
     <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
   <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet"></head>
   <body
-    x-data="{ page: 'active', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, openCustomerModal: false, viewingCustomer: {}, search: '', stateFilter: 'all', openTimeline: null, openBookings: [], autoOpen: [],
+    x-data="{ page: 'active', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, openCustomerModal: false, viewingCustomer: {}, search: '', stateFilter: 'all', dateFocus: '', dateKind: 'pickup', openTimeline: null, openBookings: [], autoOpen: [],
       isBookingOpen(id) { return this.openBookings.includes(id) || this.autoOpen.includes(id); },
       toggleBooking(id) {
         if (this.isBookingOpen(id)) { this.openBookings = this.openBookings.filter(x => x !== id); this.autoOpen = this.autoOpen.filter(x => x !== id); }
@@ -20,7 +20,7 @@
       },
       matchCount() {
         const q = String(this.search || '').toLowerCase(); const f = this.stateFilter;
-        return Array.from(document.querySelectorAll('.ar-booking[data-booking-id]')).filter(el => (f === 'all' || el.getAttribute('data-state') === f) && (q === '' || (el.getAttribute('data-search') || '').indexOf(q) !== -1)).length;
+        return Array.from(document.querySelectorAll('.ar-booking[data-booking-id]')).filter(el => (f === 'all' || el.getAttribute('data-state') === f) && (q === '' || (el.getAttribute('data-search') || '').indexOf(q) !== -1) && arabelaDF.has(el, this.dateFocus, this.dateKind)).length;
       } }"
     x-init="
          darkMode = JSON.parse(localStorage.getItem('darkMode'));
@@ -30,6 +30,8 @@
          if (presetSearch) { search = presetSearch; }
          const presetState = presetSearchParams.get('state');
          if (['confirmed', 'active', 'overdue'].includes(presetState)) { stateFilter = presetState; }
+         const presetDate = arabelaDF.clean(presetSearchParams.get('date'));
+         if (presetDate) { dateFocus = presetDate; dateKind = arabelaDF.kind(presetSearchParams.get('kind')); }
          $watch('search', value => {
            const params = new URLSearchParams(window.location.search);
            value ? params.set('search', value) : params.delete('search');
@@ -42,6 +44,14 @@
            const query = params.toString();
            history.replaceState(null, '', window.location.pathname + (query ? '?' + query : ''));
          });
+         const keepDateInAddress = () => {
+           const params = new URLSearchParams(window.location.search);
+           if (dateFocus) { params.set('date', dateFocus); params.set('kind', dateKind); } else { params.delete('date'); params.delete('kind'); }
+           const query = params.toString();
+           history.replaceState(null, '', window.location.pathname + (query ? '?' + query : ''));
+         };
+         $watch('dateFocus', keepDateInAddress);
+         $watch('dateKind', keepDateInAddress);
          arSetupBookings($data, $watch);"
     :class="{'dark bg-gray-900': darkMode === true}"
   >
@@ -109,7 +119,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'gown-board' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -292,6 +302,15 @@
                 </li>
                 <li>
                   <a
+                    href="{% url 'arabela_admin:gown_board' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'gown-board' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Gown Board
+                  </a>
+                </li>
+                <li>
+                  <a
                     href="{% url 'arabela_admin:active_reservations' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'active' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
@@ -308,6 +327,7 @@
                     Rental History
                   </a>
                 </li>
+                {% if not admin_hide_pending_approval %}
                 <li>
                   <a
                     href="{% url 'arabela_admin:pending_approval' %}"
@@ -317,6 +337,7 @@
                     Pending Approval
                   </a>
                 </li>
+                {% endif %}
               </ul>
             </div>
             <!-- Dropdown Menu End -->
@@ -628,6 +649,7 @@
                     Payments
                   </a>
                 </li>
+                {% if not admin_hide_payment_verification %}
                 <li>
                   <a
                     href="{% url 'arabela_admin:payment_verification' %}"
@@ -637,6 +659,7 @@
                     Payment Verification
                   </a>
                 </li>
+                {% endif %}
                 <li>
                   <a
                     href="{% url 'arabela_admin:security_deposits' %}"
@@ -1158,6 +1181,7 @@
                   </details>
                 </div>
               </div>
+              {% include "arabela_admin/partials/date_focus.html" %}
               <div class="ar-count" id="ar-count" aria-live="polite"></div>
 
               <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg=".ar-booking" data-arpg-noun="bookings" data-arpg-top="off" data-arpg-count="#ar-count" data-live-region="active-list" data-live-hold="#row-popover[style*='display: block'], .ar-more[aria-expanded='true'], details[open]">
@@ -1173,7 +1197,7 @@
                 {% with item_count=r.items.all|length %}
                 <!-- One booking: a closed line (status circle, name, booking number, cellphone, first pick-up, last return) and, hidden until it is
                      opened, that booking's icon buttons and one short line per gown. -->
-                  <div class="ar-booking{% if r.state == 'overdue' %} is-overdue{% endif %}" data-booking-id="{{ r.id }}" data-search="{{ r.display_customer_name|lower }} {{ r.reference_code|lower }}{% for gi in r.items.all %} {{ gi.gown_code|lower }}{% endfor %} {{ r.phone|cut:' ' }} {{ r.proof_search_text }}" x-show="(stateFilter === 'all' || stateFilter === '{{ r.state }}') && (search === '' || '{{ r.display_customer_name|lower|escapejs }} {{ r.reference_code|lower|escapejs }}{% for gi in r.items.all %} {{ gi.gown_code|lower|escapejs }}{% endfor %} {{ r.phone|cut:" "|escapejs }}'.includes(search.toLowerCase()))" data-state="{{ r.state }}">
+                  <div class="ar-booking{% if r.state == 'overdue' %} is-overdue{% endif %}" data-booking-id="{{ r.id }}" data-search="{{ r.display_customer_name|lower }} {{ r.reference_code|lower }}{% for gi in r.items.all %} {{ gi.gown_code|lower }}{% endfor %} {{ r.phone|cut:' ' }} {{ r.proof_search_text }}" x-show="(stateFilter === 'all' || stateFilter === '{{ r.state }}') && (search === '' || '{{ r.display_customer_name|lower|escapejs }} {{ r.reference_code|lower|escapejs }}{% for gi in r.items.all %} {{ gi.gown_code|lower|escapejs }}{% endfor %} {{ r.phone|cut:" "|escapejs }}'.includes(search.toLowerCase())) && arabelaDF.has($el, dateFocus, dateKind)" data-state="{{ r.state }}" data-d-pickup="{% for gi in r.items.all %}{% if gi.stage != 'Cancelled' %}{{ gi.rental_date|date:'Y-m-d' }} {{ gi.picked_up_on|date:'Y-m-d' }} {% endif %}{% endfor %}" data-d-return="{% for gi in r.items.all %}{% if gi.stage != 'Cancelled' %}{{ gi.return_date|date:'Y-m-d' }} {{ gi.returned_on|date:'Y-m-d' }} {% endif %}{% endfor %}" data-d-event="{% for gi in r.items.all %}{% if gi.stage != 'Cancelled' %}{{ gi.effective_event_date|date:'Y-m-d' }} {% endif %}{% endfor %}">
                     <div class="ar-line" :class="isBookingOpen({{ r.id }}) ? 'is-open' : ''" @click="toggleBooking({{ r.id }})">
                       <div class="ar-who">
                         <span class="ar-dot ar-dot--{{ r.state }}" role="img" aria-label="{{ r.state|title }}"
@@ -1223,7 +1247,8 @@
 
                       <!-- The booking's own actions: three icon buttons, then (managers and the owner only) the cancel buttons, still with their words. -->
                       <div class="ar-acts">
-                        <a href="{% url 'arabela_admin:payment_verification' %}?search={{ r.display_customer_name|urlencode }}" class="ar-ib"
+                        {% if r.has_receipt %}<button type="button" class="ar-ib" title="Receipt" aria-label="Receipt of {{ r.display_customer_name }}, {{ r.reference_code }}" @click="arabelaReceipt.open({{ r.id }})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg></button>{% endif %}
+                        <a href="{% if paymongo_enabled %}{% url 'arabela_admin:payments' %}?open={{ r.id }}{% else %}{% url 'arabela_admin:payment_verification' %}?search={{ r.display_customer_name|urlencode }}{% endif %}" class="ar-ib"
                           title="View payment" aria-label="View payment of {{ r.display_customer_name }}">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         </a>
@@ -1385,7 +1410,7 @@
                 {% endfor %}
                 {% if reservations %}
                 <div class="ar-empty" x-show="matchCount() === 0" x-cloak>
-                  <p class="text-gray-500 text-theme-sm dark:text-gray-400" x-text="search !== '' ? 'No running rentals match your search.' : (stateFilter === 'overdue' ? 'No overdue reservations right now.' : (stateFilter === 'active' ? 'No gown is out with a customer right now.' : 'No booking is waiting for its first pick-up.'))"></p>
+                  <p class="text-gray-500 text-theme-sm dark:text-gray-400" x-text="dateFocus !== '' ? 'No running rental has a gown on that date. Try another date, or press Any date.' : search !== '' ? 'No running rentals match your search.' : (stateFilter === 'overdue' ? 'No overdue reservations right now.' : (stateFilter === 'active' ? 'No gown is out with a customer right now.' : 'No booking is waiting for its first pick-up.'))"></p>
                   <p class="mt-1 text-gray-400 text-theme-xs dark:text-gray-500" x-show="search !== ''">Finished rentals are not listed here. Look for them in <a href="{% url 'arabela_admin:rental_history' %}" class="font-medium text-brand-500 hover:text-brand-600">Rental History</a>.</p>
                 </div>
                 {% endif %}
@@ -1489,12 +1514,15 @@
         var q = String(state.search || '').toLowerCase();
         if (q === '') { state.autoOpen = []; return; }
         var hits = Array.prototype.filter.call(document.querySelectorAll('.ar-booking[data-booking-id]'), function (el) {
-          return (state.stateFilter === 'all' || el.getAttribute('data-state') === state.stateFilter) && (el.getAttribute('data-search') || '').indexOf(q) !== -1;
+          return (state.stateFilter === 'all' || el.getAttribute('data-state') === state.stateFilter) && (el.getAttribute('data-search') || '').indexOf(q) !== -1
+            && arabelaDF.has(el, state.dateFocus, state.dateKind);
         });
         state.autoOpen = hits.length === 1 ? [Number(hits[0].getAttribute('data-booking-id'))] : [];
       }
       watch('search', openTheOnlyMatch);
       watch('stateFilter', openTheOnlyMatch);
+      watch('dateFocus', openTheOnlyMatch);
+      watch('dateKind', openTheOnlyMatch);
       openTheOnlyMatch();
     }
 

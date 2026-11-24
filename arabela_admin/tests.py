@@ -802,24 +802,26 @@ class SecurityDepositTests(TestCase):
             self.assertNotIn(gone, html)
         self.assertIn('aria-label="Show deposits by status"', html)                  # the Held / Returned counts are the filter buttons (the two number tiles are gone)
         self.assertIn("returned this month", html)
-        self.assertIn('title="View payment"', html)
+        self.assertIn('title="Open in Payments"', html)                              # the eye opens the booking in Payments (there is no proof window here any more)
 
-    def test_the_page_counts_held_and_returned_this_month(self):
+    def test_the_page_counts_held_due_and_returned_this_month(self):
         self._reservation("Returned", name="A")
         self._reservation("Returned", name="B")
         self._reservation("Reserved", name="C")
         response = self.client.get(reverse("arabela_admin:security_deposits"))
         self.assertEqual(response.context["held_count"], 1)
-        self.assertEqual(response.context["returned_this_month"], 2)
+        self.assertEqual(response.context["due_count"], 2)                               # every gown is back, so the deposit is due to be handed back (in Payments)
+        self.assertEqual(response.context["returned_count"], 0)
+        self.assertEqual(response.context["returned_this_month"], 0)
         self.assertNotIn("total_held_value", response.context)
-        self.assertEqual((response.context["all_count"], response.context["returned_count"]), (3, 2))
+        self.assertEqual(response.context["all_count"], 3)
         html = response.content.decode()
-        self.assertEqual(html.count('data-status="Returned"'), 2)
+        self.assertEqual(html.count('data-status="Return due"'), 2)
         self.assertEqual(html.count('data-status="Held"'), 1)
-        returned = html[html.index('data-status="Returned"'):]
-        returned = returned[:returned.index('class="ar-ib sd-eye"')]
-        self.assertIn("<span>Returned</span>", returned)                                # ONE status: Returned, with the day it came back under it
-        self.assertIn(f"{date.today():%b} {date.today().day}, {date.today().year}", returned)
+        due = html[html.index('data-status="Return due"'):]
+        due = due[:due.index('class="sd-acts"')]
+        self.assertIn("<span>Return due</span>", due)                                    # ONE status, with the day the last gown came back under the return date
+        self.assertIn(f"Back {date.today():%b} {date.today().day}", due)
         self.assertNotIn("Completed", html)                                              # the second "Completed / Active" status said the same thing twice
 
     def test_reservation_records_reports_the_automatic_status(self):
@@ -2524,11 +2526,11 @@ class ImageViewerFixTests(TestCase):
         self.assertIn(':href="viewingPayment.proofUrl"', html)
         self.assertIn('target="_blank"', html)
 
-    def test_security_deposits_has_a_view_full_image_link(self):
+    def test_security_deposits_has_no_proof_window_any_more(self):
         self._make_reservation_with_proof()
         html = self.client.get(reverse("arabela_admin:security_deposits")).content.decode()
-        self.assertIn(':href="viewingPayment.proofUrl"', html)
-        self.assertIn('target="_blank"', html)
+        self.assertNotIn(':href="viewingPayment.proofUrl"', html)                        # the picture lives on Payment Verification and Reservation Records
+        self.assertNotIn("viewingPayment", html)
 
     def test_no_unrendered_template_syntax_on_any_of_the_three_pages(self):
         _make_gown(photo_url="https://example.test/gowns/tall.jpg")
@@ -4360,7 +4362,7 @@ class GcashReferenceTests(TestCase):
         html = self.client.get(reverse("arabela_admin:payment_verification")).content.decode()
         self.assertNotIn("Same GCash ref as", html)
 
-    def test_security_deposits_shows_the_number_and_the_warning_too(self):
+    def test_security_deposits_no_longer_shows_the_number_or_the_warning(self):
         first = self._reservation("5555555555555", status=Reservation.Status.CONFIRMED)
         second = self._reservation("5555555555555", status=Reservation.Status.CONFIRMED)
         for reservation in (first, second):  # the page lists a booking once per gown on it
@@ -4369,8 +4371,9 @@ class GcashReferenceTests(TestCase):
                 rental_date=date.today(), return_date=date.today() + timedelta(days=3),
             )
         html = self.client.get(reverse("arabela_admin:security_deposits")).content.decode()
-        self.assertIn("gcashRef: '5555555555555'", html)
-        self.assertIn(f"Same GCash ref as {first.reference_code}", html)
+        self.assertNotIn("gcashRef", html)
+        self.assertNotIn("Same GCash ref as", html)                                      # Payment Verification and Reservation Records still warn about a repeated number
+        self.assertIn(first.reference_code, html)                                        # the booking itself is still listed
 
 
 class CustomCategoryTests(TestCase):

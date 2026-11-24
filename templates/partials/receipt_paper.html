@@ -5,28 +5,33 @@
   Self-contained: its own CSS (class prefix rc-), a narrow 80 mm paper that also prints on any ordinary printer or saves as a PDF.
 {% endcomment %}
 <style>
-  .rc-paper { position: relative; box-sizing: border-box; width: 80mm; max-width: 100%; margin: 0 auto; padding: 14px 12px 18px; background: #fff; color: #111;
-    font-family: "Courier New", Courier, ui-monospace, Menlo, monospace; font-size: 12.5px; line-height: 1.38; overflow: hidden; }
+  /* The paper's width (--rc-w) and text scale (--rc-s) come from the Paper choice: html[data-paper] = 80 (default), 58 or normal (set by the print page, the
+     Receipt preview window and the customer's receipt page). Nothing else about the paper changes. */
+  .rc-paper { --rc-w: 80mm; --rc-s: 1; position: relative; box-sizing: border-box; width: var(--rc-w); max-width: 100%; margin: 0 auto;
+    padding: calc(14px * var(--rc-s)) calc(12px * var(--rc-s)) calc(18px * var(--rc-s)); background: #fff; color: #111;
+    font-family: "Courier New", Courier, ui-monospace, Menlo, monospace; font-size: calc(12.5px * var(--rc-s)); line-height: 1.38; overflow: hidden; }
+  html[data-paper="58"] .rc-paper { --rc-w: 58mm; --rc-s: .86; }
+  html[data-paper="normal"] .rc-paper { --rc-w: 132mm; --rc-s: 1.35; }
   .rc-paper * { box-sizing: border-box; }
   .rc-c { text-align: center; }
-  .rc-shop { font-size: 15px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-  .rc-small { font-size: 11.5px; }
+  .rc-shop { font-size: calc(15px * var(--rc-s)); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+  .rc-small { font-size: calc(11.5px * var(--rc-s)); }
   .rc-rule { margin: 8px 0; border: 0; border-top: 1px dashed #111; }
-  .rc-title { margin: 4px 0; text-align: center; font-size: 14px; font-weight: 700; letter-spacing: .12em; }
+  .rc-title { margin: 4px 0; text-align: center; font-size: calc(14px * var(--rc-s)); font-weight: 700; letter-spacing: .12em; }
   .rc-row { display: flex; justify-content: space-between; gap: 8px; }
   .rc-row > span:first-child { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
   .rc-row > span:last-child { flex: none; text-align: right; white-space: nowrap; }
   .rc-kv { display: flex; gap: 6px; }
-  .rc-kv > span:first-child { flex: 0 0 84px; }
+  .rc-kv > span:first-child { flex: 0 0 calc(84px * var(--rc-s)); }
   .rc-kv > span:last-child { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
   .rc-bold { font-weight: 700; }
-  .rc-big { font-size: 13.5px; }
-  .rc-sub { padding-left: 10px; font-size: 11.5px; }
-  .rc-note { margin: 8px 0 0; font-size: 11px; line-height: 1.3; text-align: center; }
+  .rc-big { font-size: calc(13.5px * var(--rc-s)); }
+  .rc-sub { padding-left: 10px; font-size: calc(11.5px * var(--rc-s)); }
+  .rc-note { margin: 8px 0 0; font-size: calc(11px * var(--rc-s)); line-height: 1.3; text-align: center; }
   .rc-tag { margin: 4px 0; text-align: center; font-weight: 700; letter-spacing: .08em; }
   .rc-void { position: absolute; left: 50%; top: 40%; z-index: 2; transform: translate(-50%, -50%) rotate(-18deg); padding: 0 14px; border: 3px double #b42318;
-    color: #b42318; font-size: 34px; font-weight: 700; letter-spacing: .1em; opacity: .55; pointer-events: none; }
-  .rc-voidinfo { margin-top: 6px; padding: 4px 6px; border: 1px solid #b42318; color: #b42318; font-size: 11px; }
+    color: #b42318; font-size: calc(34px * var(--rc-s)); font-weight: 700; letter-spacing: .1em; opacity: .55; pointer-events: none; }
+  .rc-voidinfo { margin-top: 6px; padding: 4px 6px; border: 1px solid #b42318; color: #b42318; font-size: calc(11px * var(--rc-s)); }
 </style>
 <div class="rc-paper" id="rc-paper" role="document" aria-label="{{ r.title|default:'Payment Receipt' }} {{ r.number }}">
   {% if payment.is_void %}<div class="rc-void" aria-hidden="true">VOID</div>{% endif %}

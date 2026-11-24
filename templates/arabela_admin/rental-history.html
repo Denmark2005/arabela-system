@@ -68,12 +68,13 @@
   </style>
 </head>
   <body
-    x-data="{ page: 'rental-history', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', statusFilter: 'All', monthFilter: 'All', yearFilter: '', openProofModal: false, viewingRental: {}, openRows: [],
+    x-data="{ page: 'rental-history', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', statusFilter: 'All', dateFocus: '', dateKind: 'pickup', monthFilter: 'All', yearFilter: '', openProofModal: false, viewingRental: {}, openRows: [],
       rentalRecords: [],
       matches(el) {
         return (this.statusFilter === 'All' || el.getAttribute('data-status') === this.statusFilter)
           && (this.monthFilter === 'All' || el.getAttribute('data-month') === this.monthFilter)
           && (this.yearFilter === '' || el.getAttribute('data-year') === this.yearFilter)
+          && arabelaDF.has(el, this.dateFocus, this.dateKind)
           && (this.search === '' || (el.getAttribute('data-search') || '').indexOf(String(this.search).toLowerCase()) !== -1);
       },
       matchCount() { return Array.from(document.querySelectorAll('.ar-booking[data-row-id]')).filter(el => this.matches(el)).length; },
@@ -84,9 +85,12 @@
           (status === 'All' || r.status === status)
           && (this.monthFilter === 'All' || r.month === this.monthFilter)
           && (this.yearFilter === '' || r.year === this.yearFilter)
+          && arabelaDF.hit(this.focusDays(r), this.dateFocus)
           && (q === '' || r.q.includes(q))
         ).length;
       },
+      // The days of the kind the date bar is set to (pick-up, return or event), for one gown.
+      focusDays(r) { return this.dateKind === 'return' ? r.dReturn : (this.dateKind === 'event' ? r.dEvent : r.dPickup); },
       isRowOpen(id) { return this.openRows.includes(id); },
       toggleRow(id) { this.openRows = this.isRowOpen(id) ? this.openRows.filter(x => x !== id) : this.openRows.concat([id]); }
     }"
@@ -99,7 +103,9 @@
          const presetMonth = params.get('month');
          if (presetMonth) { monthFilter = presetMonth; }
          const presetYear = params.get('year');
-         if (presetYear) { yearFilter = presetYear; }"
+         if (presetYear) { yearFilter = presetYear; }
+         const presetDate = arabelaDF.clean(params.get('date'));
+         if (presetDate) { dateFocus = presetDate; dateKind = arabelaDF.kind(params.get('kind')); }"
     :class="{'dark bg-gray-900': darkMode === true}"
   >
     {% include "arabela_admin/partials/timeline_styles.html" %}
@@ -147,7 +153,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'gown-board' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -330,6 +336,15 @@
                 </li>
                 <li>
                   <a
+                    href="{% url 'arabela_admin:gown_board' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'gown-board' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Gown Board
+                  </a>
+                </li>
+                <li>
+                  <a
                     href="{% url 'arabela_admin:active_reservations' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'active' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
@@ -346,6 +361,7 @@
                     Rental History
                   </a>
                 </li>
+                {% if not admin_hide_pending_approval %}
                 <li>
                   <a
                     href="{% url 'arabela_admin:pending_approval' %}"
@@ -355,6 +371,7 @@
                     Pending Approval
                   </a>
                 </li>
+                {% endif %}
               </ul>
             </div>
             <!-- Dropdown Menu End -->
@@ -666,6 +683,7 @@
                     Payments
                   </a>
                 </li>
+                {% if not admin_hide_payment_verification %}
                 <li>
                   <a
                     href="{% url 'arabela_admin:payment_verification' %}"
@@ -675,6 +693,7 @@
                     Payment Verification
                   </a>
                 </li>
+                {% endif %}
                 <li>
                   <a
                     href="{% url 'arabela_admin:security_deposits' %}"
@@ -1200,6 +1219,8 @@
                 <div class="ar-count"><span id="ar-count" aria-live="polite"></span></div>
               </div>
 
+              {% include "arabela_admin/partials/date_focus.html" %}
+
               <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg=".ar-booking" data-arpg-noun="rentals" data-arpg-top="off" data-arpg-count="#ar-count">
                 <div class="ar-head rh-grid">
                   <span>Customer</span>
@@ -1214,7 +1235,7 @@
                 {% with r=item.reservation %}
                 <!-- One gown that went out: a closed line (status circle and name, the gown, the dates, how late, the amount, the proof icon) and, hidden until it is
                      opened, the facts in words and the timeline. -->
-                <div class="ar-booking" data-row-id="{{ item.id }}" data-status="{{ item.history_status }}" data-month="{{ item.rental_date|date:'M' }}" data-year="{{ item.rental_date|date:'Y' }}" data-search="{{ r.display_customer_name|lower }} {{ item.gown_name|lower }}" x-show="matches($el)">
+                <div class="ar-booking" data-row-id="{{ item.id }}" data-status="{{ item.history_status }}" data-month="{{ item.rental_date|date:'M' }}" data-year="{{ item.rental_date|date:'Y' }}" data-d-pickup="{{ item.rental_date|date:'Y-m-d' }} {{ item.picked_up_on|date:'Y-m-d' }}" data-d-return="{{ item.return_date|date:'Y-m-d' }} {{ item.returned_on|date:'Y-m-d' }}" data-d-event="{{ item.effective_event_date|date:'Y-m-d' }}" data-search="{{ r.display_customer_name|lower }} {{ item.gown_name|lower }}" x-show="matches($el)">
                   <!-- A click on the line opens it, except a click on the proof icon (it does not stop the click: other scripts on the page may listen for it). -->
                   <div class="ar-line rh-grid" :class="isRowOpen({{ item.id }}) ? 'is-open' : ''" @click="if (!$event.target.closest('.rh-eye')) { toggleRow({{ item.id }}) }">
                     <div class="rh-cust">
@@ -1249,6 +1270,7 @@
                       <span class="rh-fact"><span class="rh-k">Status</span><span class="rh-v"><span class="ar-dot {% if item.history_kind == 'missed' %}rh-dot--missed{% else %}ar-dot--{{ item.history_kind }}{% endif %}"></span>{{ item.history_status }}<span class="rh-why">&middot; {{ item.history_tip }}</span></span></span>
                       {% if item.returned_on %}<span class="rh-fact"><span class="rh-k">Returned</span><span class="rh-v">{{ item.returned_on|date:"M j, Y" }}</span></span>{% endif %}
                       <span class="rh-fact"><span class="rh-k">Booking</span><span class="rh-v ar-ref"><b>{{ r.reference_code }}</b></span></span>
+                      {% if item.has_receipt %}<span class="rh-fact"><span class="rh-k">Receipt</span><span class="rh-v"><button type="button" class="rcm-open" @click="arabelaReceipt.open({{ r.id }})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg> View &amp; print</button></span></span>{% endif %}
                       {% if r.booked_as_name %}<span class="rh-fact"><span class="rh-k">Booked as</span><span class="rh-v">{{ r.booked_as_name }}</span></span>{% endif %}
                     </div>
                     <div class="ar-tl">
@@ -1265,7 +1287,7 @@
                 <!-- Shown when rows exist but the current search, status, month or year hides them all. -->
                 {% if rental_items %}
                 <div class="ar-empty" x-show="matchCount() === 0" x-cloak>
-                  <p class="text-gray-500 text-theme-sm dark:text-gray-400">No rental records found for this period.</p>
+                  <p class="text-gray-500 text-theme-sm dark:text-gray-400" x-text="dateFocus ? 'No gown has that date. Try another date, or press Any date.' : 'No rental records found for this period.'">No rental records found for this period.</p>
                 </div>
                 {% endif %}
               </div>

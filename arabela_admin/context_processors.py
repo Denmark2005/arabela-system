@@ -110,6 +110,32 @@ def admin_user(request):
     }
 
 
+def admin_flow(request):
+    """Which screenshot-era parts of the admin to HIDE once customers pay on PayMongo's page (a booking then arrives confirmed and paid, so there is
+    nothing to approve or verify). Empty, so nothing is hidden, while no PayMongo key is set: the live shop keeps every page it has today.
+
+      admin_hide_payment_verification, admin_hide_gcash_cards    hidden while PayMongo is on
+      admin_hide_pending_approval, admin_hide_quick_verify        hidden while PayMongo is on AND no booking is still pending
+                                                                  (an old booking from before the switch can still need an answer)
+
+    The pages stay reachable by their address (an old bookmark still works); only the menu links and the cards are left out. Each name starts with
+    "hide" so a template that does not receive them shows everything."""
+    user = getattr(request, "user", None)
+    if not (user and user.is_authenticated and (user.is_staff or user.is_superuser)):
+        return {}
+    from reservations import paymongo
+    if not paymongo.enabled():
+        return {}
+    from reservations.models import Reservation
+    nothing_pending = not Reservation.objects.filter(status=Reservation.Status.PENDING).exists()
+    return {
+        "admin_hide_payment_verification": True,
+        "admin_hide_quick_verify": nothing_pending,
+        "admin_hide_gcash_cards": True,
+        "admin_hide_pending_approval": nothing_pending,
+    }
+
+
 def admin_notifications(request):
     """The header bell's data -- see arabela_admin.notifications, which also serves the live feed
     that keeps the bell current without a refresh. Blank for anonymous or customer sessions."""

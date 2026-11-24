@@ -62,7 +62,7 @@ class OverviewStripTests(DashboardBase):
     def test_the_three_figures_are_one_slim_strip_and_each_still_opens_its_own_page(self):
         _make_gown(1)
         response, html = self.page()
-        strip = html[html.index('class="ov-strip ov-strip--top"'):html.index('class="ov-strip ov-strip--gowns"')]
+        strip = html[html.index('class="ov-strip ov-strip--top"'):html.index('data-live-region="overview-money"')]     # the first strip only (Today at the shop is the next one)
         for label, url, number in (
             ("Registered Customers", reverse("arabela_admin:clients"), response.context["registered_customers"]),
             ("Active Rentals", reverse("arabela_admin:active_reservations"), response.context["active_rentals"]),

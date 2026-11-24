@@ -221,7 +221,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'gown-board' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -404,6 +404,15 @@
                 </li>
                 <li>
                   <a
+                    href="{% url 'arabela_admin:gown_board' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'gown-board' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Gown Board
+                  </a>
+                </li>
+                <li>
+                  <a
                     href="{% url 'arabela_admin:active_reservations' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'active' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
@@ -420,6 +429,7 @@
                     Rental History
                   </a>
                 </li>
+                {% if not admin_hide_pending_approval %}
                 <li>
                   <a
                     href="{% url 'arabela_admin:pending_approval' %}"
@@ -429,6 +439,7 @@
                     Pending Approval
                   </a>
                 </li>
+                {% endif %}
               </ul>
             </div>
             <!-- Dropdown Menu End -->
@@ -740,6 +751,7 @@
                     Payments
                   </a>
                 </li>
+                {% if not admin_hide_payment_verification %}
                 <li>
                   <a
                     href="{% url 'arabela_admin:payment_verification' %}"
@@ -749,6 +761,7 @@
                     Payment Verification
                   </a>
                 </li>
+                {% endif %}
                 <li>
                   <a
                     href="{% url 'arabela_admin:security_deposits' %}"
@@ -1453,7 +1466,7 @@
                   <div style="display: grid; gap: 1.1rem;">
                     <div class="pm-ok" x-show="last" x-cloak>
                       <span x-text="last ? last.message : ''"></span>
-                      <div class="pm-btns"><a class="pm-b pm-b--main" :href="last ? last.printUrl : '#'" target="_blank" rel="noopener" x-show="last && last.printUrl">Print receipt</a></div>
+                      <div class="pm-btns"><button type="button" class="pm-b pm-b--main" x-show="last && last.printUrl" @click="arabelaReceipt.open(d.id, {payment: last.paymentId})">Receipt</button></div>
                     </div>
 
                     <div class="pm-sum">
@@ -1502,7 +1515,7 @@
                               <small><span x-text="p.receiptNumber || 'before the Payments page'"></span><span x-show="p.when"> - <span x-text="p.when"></span></span><span x-show="p.by"> - <span x-text="p.by"></span></span><span x-show="p.reference"> - ref <span x-text="p.reference"></span></span><span x-show="p.void"> - VOIDED: <span x-text="p.voidReason"></span></span></small></span>
                             <span style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .45rem;">
                               <b x-text="(p.direction === 'Out' ? '-' : '') + peso(p.amount)"></b>
-                              <a class="pm-b pm-b--small" :href="p.printUrl" target="_blank" rel="noopener" x-show="p.printUrl">Print</a>
+                              <button type="button" class="pm-b pm-b--small" x-show="p.printUrl" @click="arabelaReceipt.open(d.id, {payment: p.id})" title="See the receipt and print it">Receipt</button>
                               <button type="button" class="pm-b pm-b--small" x-show="p.printUrl && d.hasAccount && !p.void" @click="send(p)" :disabled="busy" title="Send the receipt to the customer's account and email again">Send</button>
                               <button type="button" class="pm-b pm-b--small pm-b--danger" x-show="d.canVoid && !p.legacy && !p.void && p.printUrl" @click="startVoid('payment', p.id, 'receipt ' + p.receiptNumber)">Void</button>
                             </span>
@@ -1679,7 +1692,7 @@
             var printUrl = data.payment && data.payment.printUrl ? data.payment.printUrl : '';
             var shown = typeof message === 'function' ? message(data) : message;
             self.show(data.detail);
-            self.last = { message: shown, printUrl: printUrl };
+            self.last = { message: shown, printUrl: printUrl, paymentId: data.payment && data.payment.id ? data.payment.id : 0 };
           }).catch(function (e) { self.busy = false; self.formError = e.message; });
         },
         record: function () {

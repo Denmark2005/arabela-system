@@ -1,0 +1,58 @@
+{% comment %}
+  The small helper behind the "On this date" bar (partials/date_focus.html): one exact date, and what it means (pick-up, return or event).
+  Included ONCE per admin page from partials/notifications.html, as a plain inline script so it exists before any page script asks for it.
+
+  Every page that filters by date marks its rows with three attributes, each holding the dates (YYYY-MM-DD, space separated) of that row's gowns:
+      data-d-pickup="2026-11-23 2026-11-24"   data-d-return="2026-11-27"   data-d-event="2026-11-25"
+  and calls arabelaDF.has(row, date, kind). A page that keeps its rows as data (Reservation Records) calls arabelaDF.hit(list, date) instead.
+  An empty or malformed date means "any date" (everything shows), so a half-typed date can never hide the whole list.
+{% endcomment %}
+<script>
+  (function () {
+    if (window.arabelaDF) { return; }
+    var DAY = /^\d{4}-\d{2}-\d{2}$/;
+    var KINDS = { pickup: 'pickup', 'return': 'return', event: 'event' };
+    function pad(n) { return (n < 10 ? '0' : '') + n; }
+    function iso(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+    function parse(value) {
+      if (!DAY.test(String(value || ''))) { return null; }
+      var p = String(value).split('-');
+      var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+      return (isNaN(d.getTime()) || iso(d) !== value) ? null : d;
+    }
+    window.arabelaDF = {
+      clean: function (value) { return parse(value) ? String(value) : ''; },
+      kind: function (value) { return KINDS[value] || 'pickup'; },
+      today: function () { return iso(new Date()); },
+      tomorrow: function () { var d = new Date(); d.setDate(d.getDate() + 1); return iso(d); },
+      // One day before / after the date (or before / after today when none is chosen yet).
+      shift: function (value, days) {
+        var d = parse(value) || new Date();
+        d.setDate(d.getDate() + Number(days || 0));
+        return iso(d);
+      },
+      label: function (value) {
+        var d = parse(value);
+        return d ? d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : '';
+      },
+      sentence: function (kind, value) {
+        var when = this.label(value);
+        if (!when) { return ''; }
+        if (kind === 'return') { return 'Showing gowns that come back on ' + when; }
+        if (kind === 'event') { return 'Showing gowns for events on ' + when; }
+        return 'Showing gowns picked up on ' + when;
+      },
+      // Does this row (an element with data-d-* attributes) have the date, of that kind?
+      has: function (el, value, kind) {
+        if (!parse(value)) { return true; }
+        var held = (el && el.getAttribute('data-d-' + this.kind(kind))) || '';
+        return (' ' + held + ' ').indexOf(' ' + value + ' ') !== -1;
+      },
+      // The same test for a row kept as data: a list of YYYY-MM-DD strings.
+      hit: function (list, value) {
+        if (!parse(value)) { return true; }
+        return Array.isArray(list) && list.indexOf(value) !== -1;
+      }
+    };
+  })();
+</script>

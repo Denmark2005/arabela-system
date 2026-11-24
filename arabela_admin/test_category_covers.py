@@ -205,7 +205,7 @@ class CategoriesPageTests(OwnerCase):
         for part in ("View Full Image", "data-view-kind", "data-view-size", "cvr-view-x", 'aria-label="Close"'):
             with self.subTest(part=part):
                 self.assertIn(part, html)
-        self.assertNotIn(">Close</button>", html)                                   # the X (and the backdrop) close it: no second, wording button
+        self.assertNotIn(">Close</button>", html.replace('<button type="button" class="rcm-b" id="rcm-close">Close</button>', ""))     # the X (and the backdrop) close it: no second, wording button (the Receipt window on every page has its own)
         main = html.split("<main>")[1].split("</main>")[0]
         for word in ('id="cvr-view"', "View Full Image", "could not be loaded", "data-view-close"):
             with self.subTest(word=word):

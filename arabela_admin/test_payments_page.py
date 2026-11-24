@@ -450,9 +450,10 @@ class SidebarTests(TestCase):
                 continue
             found += 1
             with self.subTest(page=path.name):
-                # The Payments page links to itself (its own tabs); Active Reservations and Reservation Records also link to it from the Balance chips.
-                if path.name not in ("payments.html", "active-reservations.html", "reservation-records.html"):
+                # The Payments page links to itself (its own tabs); Active Reservations and Reservation Records also link to it from the Balance chips; the Dashboard
+                # (Pick-ups with a balance) and Security Deposits (Open in Payments) send people into it too.
+                if path.name not in ("payments.html", "active-reservations.html", "reservation-records.html", "dashboard.html", "security-deposits.html"):
                     self.assertEqual(text.count("{% url 'arabela_admin:payments' %}"), 1)
                 self.assertLess(text.index("{% url 'arabela_admin:payments' %}"), text.index("{% url 'arabela_admin:payment_verification' %}"))
                 self.assertIn("page === 'payments' || page === 'payment-verification' || page === 'security-deposits'", text)
-        self.assertEqual(found, 16)
+        self.assertEqual(found, 17)                                       # the Gown Board page has the sidebar too

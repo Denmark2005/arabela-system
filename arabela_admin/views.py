@@ -39,7 +39,7 @@ from accounts.roles import (
     parse_permissions, permission_message, staff_display_name,
 )
 from accounts.services import CANCELLATION_FLAG_THRESHOLD, clear_proof_block, record_rejected_proof
-from arabela_admin import audit_describe, gown_inventory, gown_photo
+from arabela_admin import audit_describe, dashboard_money, gown_inventory, gown_photo
 from gowns import availability, deposit, gcash_numbers
 from gowns.models import (
     COOLDOWN_DAYS,
@@ -68,7 +68,7 @@ from reservations import payments as reservation_payments
 from reservations import owner_check as reservation_owner_check
 from reservations import reminders as reservation_reminders
 from reservations import timeline as reservation_timeline
-from reservations.models import ProofRejection, Reservation, ReceiptRecord, ReservationItem, ReservationStatusEvent
+from reservations.models import Payment, ProofRejection, Reservation, ReceiptRecord, ReservationItem, ReservationStatusEvent
 
 User = get_user_model()
 
@@ -240,11 +240,23 @@ def dashboard_view(request):
         audit.maybe_purge()
         staff_today = today_strip()
 
+    # The money on the Dashboard (the latest payments and today's few counts). It is only an overview, so a failure here must never cost staff their dashboard.
+    try:
+        latest_transactions = dashboard_money.latest_transactions()
+        shop_today = dashboard_money.shop_today(today)
+    except Exception:
+        logging.getLogger(__name__).exception("Dashboard: the money overview could not be built")
+        latest_transactions, shop_today = [], None
+
     return render(
         request,
         "arabela_admin/dashboard.html",
         {
             "staff_today": staff_today,
+            "latest_transactions": latest_transactions,
+            "shop_today": shop_today,
+            # "View all": the owner has the list of every receipt; staff open the Payments page.
+            "latest_all_url": reverse("arabela_admin:payment_receipts" if _is_owner(request) else "arabela_admin:payments"),
             "quick_verify_reservations": quick_verify_reservations,
             "quick_verify_count": len(quick_verify_reservations),
             # The owner's own Approve is never held back (it counts as her confirming the payment); everyone else waits for her Received.
@@ -867,6 +879,7 @@ def rental_history_view(request):
             item.history_status = "Ongoing"
         item.history_kind, item.history_tip = _HISTORY_LOOK[item.history_status]
         item.late_days = _days_late(item, today)       # None = nothing to say, 0 = on time, N = N days late (so far, if it is still out)
+        item.has_receipt = reservation_payments.has_receipt(item.reservation)
 
     reservation_timeline.attach_to_items(items)
 
@@ -879,6 +892,10 @@ def rental_history_view(request):
             "year": item.rental_date.strftime("%Y"),
             "status": item.history_status,
             "q": f"{item.reservation.display_customer_name} {item.gown_name}".lower(),
+            # The days of this gown for the "On this date" bar, so the status numbers follow the date too.
+            "dPickup": sorted({d.isoformat() for d in (item.rental_date, item.picked_up_on) if d}),
+            "dReturn": sorted({d.isoformat() for d in (item.return_date, item.returned_on) if d}),
+            "dEvent": [item.effective_event_date.isoformat()] if item.effective_event_date else [],
         }
         for item in items
     ]
@@ -910,38 +927,97 @@ def _deposit_gown_state(item):
     return "out", "Out with the customer"
 
 
+# Security Deposits: where each booking's deposit stands, read from the same payments ledger the Payments page uses (reservations/ledger.py).
+#   Held         some gown is not back yet: the deposit is the shop's protection until then
+#   Return due   every gown is back and there is deposit left to hand back (it is handed back in Payments, which prints the receipt)
+#   Returned     every gown is back and nothing is left to hand back: it was handed back, or the late fee and deductions used all of it
+# A deposit marked returned by hand before the Payments page existed (deposit_returned_at) counts as Returned with its own date.
+_DEPOSIT_KINDS = {"Held": "held", "Return due": "due", "Returned": "returned"}
+
+
+def _deposit_state(reservation, live_items, today):
+    """The deposit of one booking for the Security Deposits list: {state, kind, notes, when, how, amounts...}. Display only: nothing is saved."""
+    ledger = reservation_ledger
+    statement = ledger.statement(reservation, today)
+    handed_back = [
+        p for p in reservation.payments.all()
+        if p.direction == Payment.Direction.OUT and p.purpose == Payment.Purpose.DEPOSIT_RETURN and not p.is_void
+    ]
+    methods = []
+    for p in handed_back:
+        label = p.get_method_display()
+        if label not in methods:
+            methods.append(label)
+    back = sum(1 for i in live_items if i.stage == ReservationItem.Stage.RETURNED)
+    notes, when, how = [], None, ""
+    if reservation.deposit_returned_at:
+        state = "Returned"
+        when = timezone.localtime(reservation.deposit_returned_at).date()
+        notes.append("Marked as returned before the Payments page")
+    elif not statement.all_returned:
+        state = "Held"
+        if len(live_items) > 1:
+            notes.append(f"{back} of {len(live_items)} gowns back")
+        else:
+            notes.append("Gown not back yet")
+        if statement.deposit_unpaid > 0:
+            notes.append(f"{ledger.peso(statement.deposit_unpaid)} of the deposit is not paid yet")
+    elif statement.refund_available > 0:
+        state = "Return due"
+        notes.append(f"{ledger.peso(statement.refund_available)} to hand back")
+        if statement.deposit_used > 0:
+            notes.append(f"{ledger.peso(statement.deposit_used)} kept for late fee or deductions")
+    else:
+        state = "Returned"
+        when = reservation.deposit_returned_on
+        if handed_back:
+            when = timezone.localtime(max(p.paid_at for p in handed_back)).date()
+            how = " and ".join(methods)
+            notes.append(f"{ledger.peso(statement.refunded)} handed back" + (f" ({how})" if how else ""))
+        elif statement.deposit_paid <= 0:
+            notes.append("No deposit was paid")
+        else:
+            notes.append("Nothing to hand back: the late fee and deductions used the deposit")
+    return {
+        "state": state, "kind": _DEPOSIT_KINDS[state], "notes": notes, "when": when, "how": how,
+        "paid": statement.deposit_paid, "late_fee": statement.late_fee, "deductions": statement.deductions_total,
+        "handed_back": statement.refunded, "to_hand_back": statement.refund_available,
+    }
+
+
 @_require_admin_staff
 def security_deposits_view(request):
+    today = timezone.localdate()
     reservations = list(
         Reservation.objects.filter(status__in=_SCHEDULED_STATUSES)
         .select_related("customer__profile")
-        .prefetch_related("items", _receipts_prefetch(), "payments")
+        .prefetch_related("items", _receipts_prefetch(), "payments", "deductions")
     )
-    duplicates = _same_gcash_number_elsewhere(reservations)
-
-    # The deposit follows the gowns (see Reservation.deposit_returned_on): Returned the
-    # moment every gown is back, with nothing for staff to press. Counts only -- no peso
-    # total is shown anywhere on this page.
-    today = timezone.localdate()
+    counts = {"Held": 0, "Return due": 0, "Returned": 0}
+    returned_this_month = 0
     for r in reservations:
-        r.returned_on = r.deposit_returned_on
-        r.gcash_dups = duplicates.get(r.id, "")
-        # What the closed line says about the gowns (a gown the shop cancelled never went out, so it is not counted) and, while the
-        # deposit is still held, how many are back -- the answer to "why is it still held?". The opened booking lists every gown.
+        # What the closed line says about the gowns (a gown the shop cancelled never went out, so it is not counted). The opened booking lists every gown.
         items = list(r.items.all())
         live = [i for i in items if i.stage != ReservationItem.Stage.CANCELLED]
         r.live_items = live
         r.gown_count = len(live)
         r.cancelled_count = len(items) - len(live)
-        r.returned_gowns = sum(1 for i in live if i.stage == ReservationItem.Stage.RETURNED)
         r.item_total = len(items)
         for item in items:
             item.state_kind, item.state_text = _deposit_gown_state(item)
-    held_count = sum(1 for r in reservations if r.returned_on is None)
-    returned_this_month = sum(
-        1 for r in reservations
-        if r.returned_on and (r.returned_on.year, r.returned_on.month) == (today.year, today.month)
-    )
+        deposit_state = _deposit_state(r, live, today)
+        r.dep = deposit_state
+        counts[deposit_state["state"]] += 1
+        if deposit_state["state"] == "Returned" and deposit_state["when"] and (deposit_state["when"].year, deposit_state["when"].month) == (today.year, today.month):
+            returned_this_month += 1
+        # The day the last gown is due back (or came back), and the days of the "On this date" bar.
+        _first, last_return = _reservation_window(items)
+        r.last_return = last_return
+        r.last_return_late = bool(last_return and last_return < today and deposit_state["state"] == "Held")
+        r.back_on = None if deposit_state["state"] == "Held" else r.deposit_returned_on     # the day the last gown came back
+        dates = _focus_dates(r, items)
+        r.d_pickup, r.d_return, r.d_event = " ".join(dates["datesPickup"]), " ".join(dates["datesReturn"]), " ".join(dates["datesEvent"])
+        r.has_receipt = reservation_payments.has_receipt(r)
 
     return render(
         request,
@@ -950,8 +1026,9 @@ def security_deposits_view(request):
             "page": "security-deposits",
             "reservations": reservations,
             "all_count": len(reservations),
-            "held_count": held_count,
-            "returned_count": len(reservations) - held_count,
+            "held_count": counts["Held"],
+            "due_count": counts["Return due"],
+            "returned_count": counts["Returned"],
             "returned_this_month": returned_this_month,
         },
     )
@@ -1145,6 +1222,22 @@ def _reservation_progress(reservation, items, today):
     return "Awaiting pickup"
 
 
+def _focus_dates(reservation, items):
+    """{"datesPickup", "datesReturn", "datesEvent"}: the sorted ISO days a booking's live gowns are picked up (planned and actual), come back (due and actual)
+    and are worn. The "On this date" bar on Reservation Records filters with these; empty for a booking that never became a rental."""
+    out = {"datesPickup": set(), "datesReturn": set(), "datesEvent": set()}
+    if reservation.status not in _NON_RENTAL_STATUSES:
+        for i in items:
+            if i.stage == ReservationItem.Stage.CANCELLED:
+                continue
+            out["datesPickup"].update(d.isoformat() for d in (i.rental_date, i.picked_up_on) if d)
+            out["datesReturn"].update(d.isoformat() for d in (i.return_date, i.returned_on) if d)
+            event = i.effective_event_date
+            if event:
+                out["datesEvent"].add(event.isoformat())
+    return {key: sorted(days) for key, days in out.items()}
+
+
 def _deposit_status(reservation):
     """Where the P2,000 deposit stands. Only Confirmed-and-later bookings actually hold
     one (the same set Security Deposits lists); Pending ones haven't been verified yet."""
@@ -1222,6 +1315,9 @@ def reservation_records_view(request):
             # every other booking, but left out of those monthly counts.
             "countsAsRental": r.status not in _NON_RENTAL_STATUSES,
             "gownSummary": _gown_summary(items),
+            # The days this booking's gowns are picked up / come back / are worn, for the "On this date" bar (YYYY-MM-DD). A rejected or cancelled
+            # booking, and a gown the shop cancelled, never happen on those days, so they carry none.
+            **_focus_dates(r, items),
             "items": [
                 {
                     "gown": i.gown_name,
@@ -1294,6 +1390,7 @@ def reservation_records_view(request):
             "notebookNumber": r.notebook_number,
             "awaitingPayment": r.is_staff_recorded and r.status == Reservation.Status.PENDING,
             # Something is still to pay (any running booking, online or walk-in): the balance chip. The amount is what the Payments page shows.
+            "hasReceipt": reservation_payments.has_receipt(r),
             "paymentIncomplete": money.tracked and not money.cancelled and money.balance_due > 0,
             "balanceDue": f"{money.balance_due:,.2f}",
             # Everything the search box should match, lower-cased once here.
@@ -1476,6 +1573,7 @@ def active_reservations_view(request):
         money = reservation_ledger.statement(reservation, today)
         reservation.balance_due = money.balance_due
         reservation.balance_text = f"{money.balance_due:,.2f}"
+        reservation.has_receipt = reservation_payments.has_receipt(reservation)       # the Receipt button is shown only when there is a receipt to show
         if reservation.has_overdue_item:
             reservation.state = "overdue"
         elif any(i.stage != ReservationItem.Stage.PICKUP for i in live_items):

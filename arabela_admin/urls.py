@@ -16,6 +16,7 @@ from .new_booking import (
     booking_gown_search_view,
     new_booking_view,
 )
+from .gown_board import gown_board_view
 from .payments_views import (
     deduction_add_view,
     deduction_void_view,
@@ -27,6 +28,7 @@ from .payments_views import (
     payment_online_refund_view,
     payment_online_view,
     payment_receipts_view,
+    receipt_list_view,
     payment_record_view,
     payment_void_view,
     payments_view,
@@ -113,6 +115,7 @@ urlpatterns = [
     path("logout/", admin_logout_view, name="admin_logout"),
     path("", dashboard_view, name="dashboard"),
     path("rental-schedule/", rental_schedule_view, name="rental_schedule"),
+    path("gown-board/", gown_board_view, name="gown_board"),
     # New Booking: walk-in / Facebook / phone bookings recorded by staff, and the "Check availability" answers it shares
     # with Gown Catalog (arabela_admin/new_booking.py).
     path("new-booking/", new_booking_view, name="new_booking"),
@@ -193,6 +196,7 @@ urlpatterns = [
     path("api/search/", admin_search_view, name="admin_search"),
     path("payments/", payments_view, name="payments"),
     path("payments/receipts/", payment_receipts_view, name="payment_receipts"),
+    path("api/receipts/booking/<int:pk>/", receipt_list_view, name="receipt_list"),
     path("payments/online/", payment_online_view, name="payment_online"),
     path("api/payments/online/<int:attempt_id>/refund/", payment_online_refund_view, name="payment_online_refund"),
     path("api/payments/online/<int:attempt_id>/handled/", payment_online_handled_view, name="payment_online_handled"),

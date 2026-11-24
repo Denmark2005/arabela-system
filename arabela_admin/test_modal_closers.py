@@ -22,13 +22,13 @@ ONLY_CLOSE = {
     "gown-catalog.html": 4,                  # the Blocked Gowns / Tag Colors / Removal Log / Add Category panels (a header link, not a window)
     "partials/availability_check.html": 1,   # "Check a date" window
     "partials/attach_receipt.html": 1,       # "Attach the shop's receipt" window (its other button is Attach receipt)
+    "partials/receipt_preview.html": 1,      # the Receipt window: Close and Print Receipt side by side, no corner X
 }
 # How the allowed ones look in the served page: the two own-window partials by id, the panel / QR links by their small grey style.
-ALLOWED_MARKS = ('id="ca-close"', 'id="ar-close"', 'class="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"')
+ALLOWED_MARKS = ('id="ca-close"', 'id="ar-close"', 'id="rcm-close"', 'class="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"')
 # Windows that lost their Close button: file -> the flags their X is wired to.
 LOST_CLOSE = {
     "dashboard.html": ["openReceiptModal"],
-    "security-deposits.html": ["openReceiptModal"],
     "payment-verification.html": ["openReceiptModal"],
     "pending-approval.html": ["openCustomerModal"],
     "active-reservations.html": ["openCustomerModal"],
@@ -110,18 +110,20 @@ class RenderedPagesTests(TestCase):
     """The same promises on the pages as they are really served."""
 
     PAGES = {
-        "dashboard": (reverse("arabela_admin:dashboard"), 0),
-        "pending_approval": (reverse("arabela_admin:pending_approval"), 1),
-        "active_reservations": (reverse("arabela_admin:active_reservations"), 0),
-        "rental_history": (reverse("arabela_admin:rental_history"), 0),
-        "payment_verification": (reverse("arabela_admin:payment_verification"), 0),
-        "security_deposits": (reverse("arabela_admin:security_deposits"), 0),
-        "clients": (reverse("arabela_admin:clients"), 0),
-        "staff_management": (reverse("arabela_admin:staff_management"), 0),
-        "profile": (reverse("arabela_admin:page", kwargs={"page": "profile"}), 1),
-        "gown_catalog": (reverse("arabela_admin:gown_catalog"), 4),
-        "categories": (reverse("arabela_admin:categories"), 0),
-        "calendar": (reverse("arabela_admin:calendar"), 0),
+        # (every page carries the Receipt window, which has one wording Close of its own: +1 on each)
+        "dashboard": (reverse("arabela_admin:dashboard"), 1),
+        "pending_approval": (reverse("arabela_admin:pending_approval"), 2),
+        "active_reservations": (reverse("arabela_admin:active_reservations"), 1),
+        "rental_history": (reverse("arabela_admin:rental_history"), 1),
+        "payment_verification": (reverse("arabela_admin:payment_verification"), 1),
+        "security_deposits": (reverse("arabela_admin:security_deposits"), 1),
+        "gown_board": (reverse("arabela_admin:gown_board"), 1),
+        "clients": (reverse("arabela_admin:clients"), 1),
+        "staff_management": (reverse("arabela_admin:staff_management"), 1),
+        "profile": (reverse("arabela_admin:page", kwargs={"page": "profile"}), 2),
+        "gown_catalog": (reverse("arabela_admin:gown_catalog"), 5),
+        "categories": (reverse("arabela_admin:categories"), 1),
+        "calendar": (reverse("arabela_admin:calendar"), 1),
     }
 
     @classmethod

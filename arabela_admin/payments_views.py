@@ -29,6 +29,7 @@ from django.http import Http404, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_http_methods
 
 from accounts.audit import audited
@@ -317,6 +318,8 @@ def receipt_send_view(request, payment_id):
 
 
 # ---------------------------------------------------------------- the printed receipt
+# Shown inside the Receipt window (an iframe on the SAME site), so it may be framed by this site and nobody else; the rest of the shop stays unframeable.
+@xframe_options_sameorigin
 @_require_admin_staff
 def payment_receipt_print_view(request, payment_id):
     payment = Payment.objects.select_related("reservation__customer__profile").filter(pk=payment_id).first()
@@ -326,9 +329,53 @@ def payment_receipt_print_view(request, payment_id):
     reprint = 0 if request.GET.get("look") else payments.mark_printed(payment.pk)
     payment.refresh_from_db()
     return render(request, "arabela_admin/receipt_print.html", {
-        "payment": payment, "r": payment.snapshot, "reprint": reprint, "copy_label": "",
+        # `embed` = inside the Receipt preview window: just the paper, no toolbar.
+        "payment": payment, "r": payment.snapshot, "reprint": reprint, "copy_label": "", "embed": bool(request.GET.get("embed")),
         "back_url": reverse("arabela_admin:payments") + "?open=" + str(payment.reservation_id),
     })
+
+
+# ---------------------------------------------------------------- one booking's receipts (the Receipt preview window)
+def _receipt_pill(payment):
+    """The status pill of one receipt: Void, Deposit returned, Paid, or Partly paid (with what is still to pay at that moment)."""
+    if payment.is_void:
+        return {"kind": "void", "text": "Void"}
+    if payment.direction == Payment.Direction.OUT:
+        return {"kind": "returned", "text": "Deposit returned"}
+    try:
+        balance = ledger.money((payment.snapshot or {}).get("balance_after") or "0")
+    except Exception:       # noqa: BLE001 -- an odd snapshot must not break the window
+        balance = ledger.ZERO
+    if balance > 0:
+        return {"kind": "partly", "text": f"Partly paid \u00b7 {ledger.peso(balance)} to pay"}
+    return {"kind": "paid", "text": "Paid"}
+
+
+def _receipt_item(payment):
+    out = payment.direction == Payment.Direction.OUT
+    label = "Deposit return" if out else payment.get_purpose_display()
+    amount = ledger.money(payment.amount)
+    base = reverse("arabela_admin:payment_receipt_print", args=[payment.pk])
+    return {
+        "id": payment.pk, "number": payment.receipt_number, "label": label, "direction": payment.direction,
+        "signed": ("-" if out else "+") + ledger.peso(amount), "amount": f"{amount:.2f}", "method": payment.get_method_display(),
+        "when": timezone.localtime(payment.paid_at).strftime("%b %d, %Y %I:%M %p").replace(" 0", " "), "by": payment.recorded_by_name or "",
+        "void": payment.is_void, "pill": _receipt_pill(payment),
+        # The preview shows the paper without counting a print; pressing Print Receipt opens the other address, which counts like the Payments page's Print.
+        "lookUrl": base + "?look=1&embed=1", "printUrl": base + "?embed=1",
+    }
+
+
+@require_http_methods(["GET"])
+def receipt_list_view(request, pk):
+    """The receipts of one booking, newest first, for the Receipt preview window (any admin account that can open the page it is pressed on)."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    reservation = Reservation.objects.select_related("customer__profile").prefetch_related("payments").filter(pk=pk).first()
+    if reservation is None:
+        return JsonResponse({"error": "That booking was not found."}, status=404)
+    receipts = [_receipt_item(p) for p in reversed(payments.printable_receipts(reservation))]
+    return JsonResponse({"booking": {"id": reservation.pk, "code": reservation.reference_code, "customer": reservation.display_customer_name}, "receipts": receipts})
 
 
 # ---------------------------------------------------------------- every receipt (owner)

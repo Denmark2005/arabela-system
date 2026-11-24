@@ -1,0 +1,60 @@
+{% comment %}
+  The "On this date" bar: pick ONE exact date (or step a day back / forward) and say what it means -- the day gowns are picked up, the day they come
+  back, or the event day. The page then shows only the gowns on that date. Used by Active Reservations, Reservation Records, Rental History, the Gown Board
+  and Security Deposits.
+
+  It needs the page's Alpine scope to have two values: dateFocus ('' or 'YYYY-MM-DD') and dateKind ('pickup' | 'return' | 'event'). The filtering itself
+  is the page's own (see partials/date_focus_lib.html for the shared helper). Self-contained: its own CSS (class prefix df-), light and dark.
+{% endcomment %}
+<style>
+  .df-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem .9rem; padding: 0 1.25rem .85rem; }
+  .df-lbl { font-size: .8125rem; color: #667085; }
+  .dark .df-lbl { color: #98a2b3; }
+  .df-step { display: inline-flex; align-items: center; gap: .3rem; }
+  .df-arrow { display: inline-flex; align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; border: 1px solid #d0d5dd; border-radius: .6rem; background: transparent;
+    color: #475467; font-size: 1.25rem; line-height: 1; cursor: pointer; }
+  .df-arrow:hover { background: rgba(152,162,179,.12); }
+  .df-arrow:focus-visible, .df-chip:focus-visible, .df-seg button:focus-visible, .df-date:focus { outline: 2px solid #465fff; outline-offset: 1px; }
+  .dark .df-arrow { border-color: #344054; color: #d0d5dd; }
+  .df-date { box-sizing: border-box; width: 10.5rem; height: 2.5rem; padding: .4rem .7rem; border: 1px solid #d0d5dd; border-radius: .6rem; background-color: transparent; color: #1d2939;
+    font: inherit; font-size: .875rem; }
+  .dark .df-date { background-color: #0c111d; border-color: #344054; color: #f2f4f7; }
+  .df-seg { display: inline-flex; flex-wrap: wrap; gap: .25rem; padding: .25rem; border-radius: .75rem; background: #f2f4f7; }
+  .dark .df-seg { background: rgba(255,255,255,.05); }
+  .df-seg button { padding: .45rem .8rem; border-radius: .55rem; border: 0; background: transparent; font-size: .8125rem; font-weight: 500; color: #667085; white-space: nowrap; cursor: pointer; }
+  .df-seg button.is-on { background: #fff; color: #1d2939; box-shadow: 0 1px 2px rgba(16,24,40,.08); }
+  .dark .df-seg button { color: #98a2b3; }
+  .dark .df-seg button.is-on { background: #1d2939; color: #f2f4f7; box-shadow: none; }
+  .df-quick { display: inline-flex; flex-wrap: wrap; gap: .4rem; }
+  .df-chip { display: inline-flex; align-items: center; padding: .3rem .75rem; border: 1px solid #d0d5dd; border-radius: 999px; background: transparent; color: #475467;
+    font-size: .8125rem; font-weight: 500; cursor: pointer; }
+  .df-chip:hover { background: rgba(152,162,179,.12); }
+  .df-chip.is-on { background: #465fff; border-color: #465fff; color: #fff; }
+  .dark .df-chip { border-color: #344054; color: #d0d5dd; }
+  .dark .df-chip.is-on { background: #465fff; border-color: #465fff; color: #fff; }
+  .df-note { font-size: .8125rem; font-weight: 500; color: #465fff; }
+  .dark .df-note { color: #9bb0ff; }
+  @media (max-width: 620px) {
+    .df-bar { padding: 0 1rem .75rem; }
+    .df-date { flex: 1 1 8rem; width: auto; min-width: 8rem; }
+  }
+</style>
+<div class="df-bar" role="group" aria-label="Show one exact date">
+  <span class="df-lbl">On this date:</span>
+  <div class="df-step">
+    <button type="button" class="df-arrow" @click="dateFocus = arabelaDF.shift(dateFocus, -1)" aria-label="The day before" title="The day before">&lsaquo;</button>
+    <input type="date" class="df-date" x-model="dateFocus" @change="dateFocus = arabelaDF.clean(dateFocus)" aria-label="Pick one exact date" title="Pick one exact date">
+    <button type="button" class="df-arrow" @click="dateFocus = arabelaDF.shift(dateFocus, 1)" aria-label="The day after" title="The day after">&rsaquo;</button>
+  </div>
+  <div class="df-seg" role="group" aria-label="What the date means">
+    <button type="button" :class="dateKind === 'pickup' && 'is-on'" :aria-pressed="dateKind === 'pickup' ? 'true' : 'false'" @click="dateKind = 'pickup'" title="The day the gown is picked up">Pick-up</button>
+    <button type="button" :class="dateKind === 'return' && 'is-on'" :aria-pressed="dateKind === 'return' ? 'true' : 'false'" @click="dateKind = 'return'" title="The day the gown is due back">Return</button>
+    <button type="button" :class="dateKind === 'event' && 'is-on'" :aria-pressed="dateKind === 'event' ? 'true' : 'false'" @click="dateKind = 'event'" title="The day of the customer's event">Event</button>
+  </div>
+  <div class="df-quick">
+    <button type="button" class="df-chip" :class="dateFocus === arabelaDF.today() && 'is-on'" @click="dateFocus = arabelaDF.today()">Today</button>
+    <button type="button" class="df-chip" :class="dateFocus === arabelaDF.tomorrow() && 'is-on'" @click="dateFocus = arabelaDF.tomorrow()">Tomorrow</button>
+    <button type="button" class="df-chip" x-show="dateFocus" x-cloak @click="dateFocus = ''">Any date</button>
+  </div>
+  <span class="df-note" x-show="dateFocus" x-cloak x-text="arabelaDF.sentence(dateKind, dateFocus)"></span>
+</div>

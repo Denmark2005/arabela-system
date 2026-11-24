@@ -721,21 +721,21 @@ class ReceiptPhotosInProofPopupsTests(Base):
         self.assertEqual(reservation.receipts_json, "[]")
         self.assertEqual(reservation.deposit_receipts_json, "[]")
 
-    def test_security_deposits_shows_only_the_deposit_receipts(self):
+    def test_security_deposits_offers_no_receipt_photo_at_all(self):
         self.deposit_then_rental(133, b"p4")
         html = self.client.get(reverse("arabela_admin:security_deposits")).content.decode()
-        self.assertIn("receipt1.jpg", html)                       # the Deposit one
-        self.assertNotIn("receipt2.jpg", html)                    # the Rental one is not about the deposit
-        self.assertIn("!viewingPayment.proofUrl && !(viewingPayment.receipts || []).length", html)
+        self.assertNotIn("receipt1.jpg", html)                    # the Deposit photo is on Payment Verification / Reservation Records, not here
+        self.assertNotIn("receipt2.jpg", html)
+        self.assertNotIn("viewingPayment", html)
 
-    def test_security_deposits_shows_nothing_for_a_rental_only_receipt(self):
+    def test_security_deposits_lists_a_booking_with_only_a_rental_receipt_without_its_photo(self):
         reservation = Reservation.objects.create(customer=None, customer_name="Walk In", phone="09171234567",
                                                  channel=Reservation.Channel.WALK_IN, status=Reservation.Status.CONFIRMED)
         ReservationItem.objects.create(reservation=reservation, gown=make_gown(134), gown_name="Walkin Gown", size="Medium",
                                        rental_date=self.event, return_date=self.event + timedelta(days=4))
         ReceiptRecord.objects.create(reservation=reservation, photo_url="https://example.test/r/rentalonly.jpg", covers="Rental")
         html = self.client.get(reverse("arabela_admin:security_deposits")).content.decode()
-        self.assertIn(reservation.reference_code.replace("-", "\\u002D"), html)    # the booking is on the page (escapejs writes "-" as -) ...
+        self.assertIn(f"<b>{reservation.reference_code}</b>", html)                 # the booking is on the page ...
         self.assertNotIn("rentalonly.jpg", html)                  # ... but its Rental receipt is not offered as deposit proof
 
     def test_the_other_pages_show_every_receipt(self):
@@ -767,7 +767,6 @@ class ReceiptPhotosInProofPopupsTests(Base):
         scrolled to. The limit is inside the :style string (Alpine replaces the whole style attribute with it), for both widths."""
         self.deposit_then_rental(180, b"w1")
         for name, flag, var in (("payment_verification", "openReceiptModal", "viewingPayment"),
-                                ("security_deposits", "openReceiptModal", "viewingPayment"),
                                 ("rental_history", "openProofModal", "viewingRental"),
                                 ("dashboard", "openReceiptModal", "receiptPreview")):
             with self.subTest(page=name):
@@ -1102,7 +1101,7 @@ class PaymentBreakdownTests(Base):
         self.assertIn("&#8369;9,000", html)
         self.assertNotIn("Gown ₱", html)
 
-    def test_the_dashboard_card_and_window_and_security_deposits_window_show_it_too(self):
+    def test_the_dashboard_card_and_window_show_it_too(self):
         self.online(512)
         dashboard = self.client.get(reverse("arabela_admin:dashboard")).content.decode()
         card = dashboard[dashboard.index('class="qv-card"'):dashboard.index("Quick Verify End")]
@@ -1113,9 +1112,7 @@ class PaymentBreakdownTests(Base):
         self.assertIn("receiptPreview.breakdown ? receiptPreview.breakdown.headline : receiptPreview.amount", dashboard)
         self.online(513, status=Reservation.Status.CONFIRMED)
         deposits = self.client.get(reverse("arabela_admin:security_deposits")).content.decode()
-        self.assertIn("breakdown: JSON.parse(", deposits)
-        self.assertIn('class="pbd" x-show="viewingPayment.breakdown"', deposits)
-        self.assertIn("viewingPayment.breakdown ? viewingPayment.breakdown.headline : viewingPayment.amount", deposits)
+        self.assertNotIn("breakdown: JSON.parse(", deposits)                             # the slim Security Deposits page has no payment window
 
     def test_the_pages_do_not_ask_the_database_once_per_booking_with_the_breakdown(self):
         def queries(name):

@@ -23,11 +23,18 @@
     .sd-month { color: #98a2b3; }
     /* customer | gown | deposit | date held | status | payment | arrow. Every column is fixed or has a minimum, never "auto" (an auto column is sized per row and
        the column titles would stop lining up). */
-    .ar-head.sd-grid, .ar-line.sd-grid { grid-template-columns: minmax(9rem, 1.5fr) minmax(9rem, 1.5fr) 6.5rem 7.5rem 10rem 2.75rem 2.25rem; }
+    .ar-head.sd-grid, .ar-line.sd-grid { grid-template-columns: minmax(9rem, 1.5fr) minmax(9rem, 1.5fr) 6.5rem 7.5rem minmax(10rem, 1.2fr) 5.5rem 2.25rem; }
+    .sd-acts { display: flex; align-items: center; justify-content: flex-end; gap: .35rem; }
+    .sd-handback { display: inline-block; margin: .3rem 0 0 1.25rem; font-size: .75rem; font-weight: 600; color: #465fff; text-decoration: none; }
+    .sd-handback:hover { text-decoration: underline; }
+    .dark .sd-handback { color: #9bb0ff; }
+    .sd-money span { padding: .1rem .55rem; border-radius: 999px; background: #f2f4f7; color: #475467; }
+    .dark .sd-money span { background: rgba(255,255,255,.07); color: #d0d5dd; }
     .sd-cust, .sd-gowns, .sd-dep, .sd-date, .sd-status { min-width: 0; }
     .sd-sub { margin-top: .3rem; }
     .sd-sub b { white-space: nowrap; }
     .sd-dot--held { background: #f79009; }
+    .sd-dot--due { background: #1570ef; }
     .sd-dot--returned { background: #039855; }
     .sd-g1 { font-size: .875rem; font-weight: 500; color: #1d2939; overflow-wrap: anywhere; }
     .dark .sd-g1 { color: rgba(255,255,255,.9); }
@@ -56,27 +63,28 @@
     /* A small laptop: the deposit and the date drop to a second line under the booking (the column titles go: they no longer line up). */
     @media (max-width: 1180px) {
       .ar-head.sd-grid { display: none; }
-      .ar-line.sd-grid { grid-template-columns: minmax(9rem, 1.4fr) minmax(8rem, 1.2fr) 10rem 2.75rem 2.25rem; grid-template-areas: "cust gowns status eye chev" "dep date date date date"; row-gap: .5rem; }
+      .ar-line.sd-grid { grid-template-columns: minmax(9rem, 1.4fr) minmax(8rem, 1.2fr) 10rem 5.5rem 2.25rem; grid-template-areas: "cust gowns status acts chev" "dep date date date date"; row-gap: .5rem; }
       .ar-line.sd-grid > .sd-cust { grid-area: cust; }
       .ar-line.sd-grid > .sd-gowns { grid-area: gowns; }
       .ar-line.sd-grid > .sd-status { grid-area: status; }
       .ar-line.sd-grid > .sd-dep { grid-area: dep; }
       .ar-line.sd-grid > .sd-date { grid-area: date; }
-      .ar-line.sd-grid > .sd-eye { grid-area: eye; }
+      .ar-line.sd-grid > .sd-acts { grid-area: acts; }
       .ar-line.sd-grid > .ar-chev { grid-area: chev; }
     }
     /* A phone: one column, in the order staff read it. */
     @media (max-width: 760px) {
-      .ar-line.sd-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.75rem 2.25rem; grid-template-areas: "cust cust eye chev" "gowns gowns gowns gowns" "status status dep dep" "date date date date"; }
+      .ar-line.sd-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 5.5rem 2.25rem; grid-template-areas: "cust cust acts chev" "gowns gowns gowns gowns" "status status dep dep" "date date date date"; }
       .ar-gl.sd-gl { grid-template-columns: minmax(0, 1fr); row-gap: .2rem; }
     }
   </style>
 </head>
   <body
-    x-data="{ page: 'security-deposits', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', statusFilter: 'All', yearFilter: '', showYearToast: false, yearToastTimeout: null, openReceiptModal: false, viewingPayment: {}, openBookings: [], autoOpen: [],
+    x-data="{ page: 'security-deposits', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', statusFilter: 'All', yearFilter: '', dateFocus: '', dateKind: 'return', showYearToast: false, yearToastTimeout: null, openBookings: [], autoOpen: [],
       matches(el) {
         return (this.statusFilter === 'All' || el.getAttribute('data-status') === this.statusFilter)
           && (this.yearFilter === '' || el.getAttribute('data-year') === this.yearFilter)
+          && arabelaDF.has(el, this.dateFocus, this.dateKind)
           && (this.search === '' || (el.getAttribute('data-search') || '').indexOf(String(this.search).toLowerCase()) !== -1);
       },
       isBookingOpen(id) { return this.openBookings.includes(id) || this.autoOpen.includes(id); },
@@ -99,24 +107,24 @@
          const presetSearch = presetSearchParams.get('search');
          if (presetSearch) { search = presetSearch; }
          const presetStatus = presetSearchParams.get('status');
-         if (presetStatus) { statusFilter = presetStatus; }
-         // Keeps the address bar in sync with whatever is actually on screen, so a
-         // reload (this page's own post-action refresh, or the browser's) lands back
-         // on what the admin was just looking at instead of snapping back to the URL
-         // that was true only when the page first opened -- e.g. arriving here from a
-         // notification with ?search=..., then clearing the search and picking a
-         // different status, then confirming an action: without this, that reload
-         // re-read the stale ?search= and undid both changes at once.
+         if (['Held', 'Return due', 'Returned'].includes(presetStatus)) { statusFilter = presetStatus; }
+         const presetDate = arabelaDF.clean(presetSearchParams.get('date'));
+         if (presetDate) { dateFocus = presetDate; dateKind = presetSearchParams.get('kind') ? arabelaDF.kind(presetSearchParams.get('kind')) : 'return'; }
+         // Keeps the address bar in sync with whatever is actually on screen, so a reload (this page's own refresh, or the browser's) lands back on what the
+         // admin was just looking at instead of snapping back to the URL that was true only when the page first opened.
          function syncFilterParamsToUrl() {
            const params = new URLSearchParams(window.location.search);
            search ? params.set('search', search) : params.delete('search');
            (statusFilter && statusFilter !== 'All') ? params.set('status', statusFilter) : params.delete('status');
+           if (dateFocus) { params.set('date', dateFocus); params.set('kind', dateKind); } else { params.delete('date'); params.delete('kind'); }
            const query = params.toString();
            const next = window.location.pathname + (query ? '?' + query : '');
            history.replaceState(null, '', next);
          }
          $watch('search', syncFilterParamsToUrl);
          $watch('statusFilter', syncFilterParamsToUrl);
+         $watch('dateFocus', syncFilterParamsToUrl);
+         $watch('dateKind', syncFilterParamsToUrl);
          sdSetupBookings($data, $watch);"
     :class="{'dark bg-gray-900': darkMode === true}"
   >
@@ -164,7 +172,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'gown-board' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -347,6 +355,15 @@
                 </li>
                 <li>
                   <a
+                    href="{% url 'arabela_admin:gown_board' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'gown-board' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Gown Board
+                  </a>
+                </li>
+                <li>
+                  <a
                     href="{% url 'arabela_admin:active_reservations' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'active' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
@@ -363,6 +380,7 @@
                     Rental History
                   </a>
                 </li>
+                {% if not admin_hide_pending_approval %}
                 <li>
                   <a
                     href="{% url 'arabela_admin:pending_approval' %}"
@@ -372,6 +390,7 @@
                     Pending Approval
                   </a>
                 </li>
+                {% endif %}
               </ul>
             </div>
             <!-- Dropdown Menu End -->
@@ -683,6 +702,7 @@
                     Payments
                   </a>
                 </li>
+                {% if not admin_hide_payment_verification %}
                 <li>
                   <a
                     href="{% url 'arabela_admin:payment_verification' %}"
@@ -692,6 +712,7 @@
                     Payment Verification
                   </a>
                 </li>
+                {% endif %}
                 <li>
                   <a
                     href="{% url 'arabela_admin:security_deposits' %}"
@@ -1178,9 +1199,9 @@
 </div>
 </div>
             <!-- Breadcrumb End -->
-            <!-- ONE box, the same look as Active Reservations and Pending Approval: the search, the three filter buttons (they carry the counts the two big
-                 number tiles used to show) and the year, then one short line per booking. A booking with several gowns shows "10 gowns" and opens to one
-                 short line per gown. The page's own name is not repeated here: the sidebar already shows where you are. -->
+            <!-- ONE box, the same look as Active Reservations: the search, the status buttons (they carry the counts) and the year, the "On this date" bar (here it
+                 opens on the RETURN date: who gives a gown back on that day), then one short line per booking. The deposit is Held until every gown is back, Return due
+                 once it is (hand it back in Payments, which prints the receipt) and Returned after. Everything is read from the payments ledger: nothing is typed here. -->
             <div class="sd-card">
               <div class="ar-toolbar">
                 <div class="ar-search">
@@ -1190,12 +1211,14 @@
                 <div class="ar-filters" role="group" aria-label="Show deposits by status" data-live-region="sd-filters" data-live-hold="details[open]">
                   <button type="button" class="ar-filter" :class="statusFilter === 'All' ? 'is-on' : ''" :aria-pressed="statusFilter === 'All' ? 'true' : 'false'" @click="statusFilter = 'All'">All <span class="ar-n">{{ all_count }}</span></button>
                   <button type="button" class="ar-filter" :class="statusFilter === 'Held' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Held' ? 'true' : 'false'" @click="statusFilter = 'Held'" title="The deposit is still held: not every gown is back"><span class="ar-dot sd-dot--held"></span>Held <span class="ar-n">{{ held_count }}</span></button>
-                  <button type="button" class="ar-filter" :class="statusFilter === 'Returned' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Returned' ? 'true' : 'false'" @click="statusFilter = 'Returned'" title="Every gown is back, so the deposit is returned"><span class="ar-dot sd-dot--returned"></span>Returned <span class="ar-n">{{ returned_count }}</span></button>
+                  <button type="button" class="ar-filter" :class="statusFilter === 'Return due' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Return due' ? 'true' : 'false'" @click="statusFilter = 'Return due'" title="Every gown is back and the deposit is waiting to be handed back"><span class="ar-dot sd-dot--due"></span>Return due <span class="ar-n">{{ due_count }}</span></button>
+                  <button type="button" class="ar-filter" :class="statusFilter === 'Returned' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Returned' ? 'true' : 'false'" @click="statusFilter = 'Returned'" title="The deposit was handed back, or used up by the late fee and deductions"><span class="ar-dot sd-dot--returned"></span>Returned <span class="ar-n">{{ returned_count }}</span></button>
                 </div>
                 <div class="sd-year-wrap">
                   <input type="text" inputmode="numeric" class="ar-search-input sd-year-input" x-model="yearFilter" @input="yearFilter = yearFilter.replace(/[^0-9]/g, '').slice(0, 4)" maxlength="4" placeholder="Year" aria-label="Show one year only, for example 2026" title="Show one year only, for example 2026">
                 </div>
               </div>
+              {% include "arabela_admin/partials/date_focus.html" %}
               <div class="ar-count sd-countrow"><span id="ar-count" aria-live="polite"></span><span class="sd-month" data-live-region="sd-month">{{ returned_this_month }} returned this month</span></div>
 
               <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg=".ar-booking" data-arpg-noun="bookings" data-arpg-top="off" data-arpg-count="#ar-count" data-live-region="sd-list" data-live-hold="details[open]">
@@ -1203,17 +1226,17 @@
                   <span>Customer</span>
                   <span>Gown</span>
                   <span>Deposit</span>
-                  <span>Date held</span>
+                  <span>Return date</span>
                   <span>Status</span>
                   <span></span>
                   <span></span>
                 </div>
                 {% for r in reservations %}
-                <!-- One booking: a closed line (name and booking number, the gown(s), the deposit, the date it was held, ONE status, the payment button) and, hidden
-                     until it is opened, who it was booked as and where each gown is. -->
-                <div class="ar-booking" data-booking-id="{{ r.id }}" data-status="{% if r.returned_on %}Returned{% else %}Held{% endif %}" data-year="{{ r.created_at|date:'Y' }}" data-search="{{ r.display_customer_name|lower }} {{ r.reference_code|lower }}{% for gi in r.items.all %} {{ gi.gown_name|lower }}{% endfor %} {{ r.phone|cut:' ' }} {{ r.proof_search_text }}" x-show="matches($el)">
-                  <!-- A click on the line opens the booking, except a click on the payment button (it does not stop the click: other scripts on the page may listen for it). -->
-                  <div class="ar-line sd-grid" :class="isBookingOpen({{ r.id }}) ? 'is-open' : ''" @click="if (!$event.target.closest('.sd-eye')) { toggleBooking({{ r.id }}) }">
+                <!-- One booking: a closed line (name and booking number, the gown(s), the deposit, the day the last gown comes back, ONE status, the Receipt and Payments buttons) and,
+                     hidden until it is opened, who it was booked as, the money of the deposit and where each gown is. -->
+                <div class="ar-booking" data-booking-id="{{ r.id }}" data-status="{{ r.dep.state }}" data-year="{{ r.created_at|date:'Y' }}" data-d-pickup="{{ r.d_pickup }}" data-d-return="{{ r.d_return }}" data-d-event="{{ r.d_event }}" data-search="{{ r.display_customer_name|lower }} {{ r.reference_code|lower }}{% for gi in r.items.all %} {{ gi.gown_name|lower }}{% endfor %} {{ r.phone|cut:' ' }} {{ r.proof_search_text }}" x-show="matches($el)">
+                  <!-- A click on the line opens the booking, except a click on the buttons (it does not stop the click: other scripts on the page may listen for it). -->
+                  <div class="ar-line sd-grid" :class="isBookingOpen({{ r.id }}) ? 'is-open' : ''" @click="if (!$event.target.closest('.sd-acts')) { toggleBooking({{ r.id }}) }">
                     <div class="sd-cust">
                       <div class="ar-who"><span class="ar-name">{{ r.display_customer_name }}</span></div>
                       <div class="ar-ref sd-sub"><b>{{ r.reference_code }}</b></div>
@@ -1231,26 +1254,25 @@
                     </div>
                     <div class="sd-dep">
                       <div class="sd-amt">&#8369;{{ r.security_deposit|floatformat:'-2g' }}</div>
-                      {% if r.gcash_dups %}<div class="sd-note sd-note--bad" title="The same GCash reference number is also on {{ r.gcash_dups }}">Same GCash ref as {{ r.gcash_dups }}</div>{% endif %}
                     </div>
                     <div class="sd-date">
-                      <div class="sd-day">{{ r.created_at|date:"M j, Y" }}</div>
-                      <div class="sd-note">{{ r.created_at|date:"g:i A" }}</div>
-                    </div>
-                    <div class="sd-status">
-                      {% if r.returned_on %}
-                      <div class="sd-st"><span class="ar-dot sd-dot--returned" role="img" aria-label="Deposit returned" title="Every gown is back, so the deposit is returned"></span><span>Returned</span></div>
-                      <div class="sd-note">{{ r.returned_on|date:"M j, Y" }}</div>
+                      {% if r.last_return %}
+                      <div class="sd-day">{{ r.last_return|date:"M j, Y" }}</div>
+                      <div class="sd-note{% if r.last_return_late %} sd-note--bad{% endif %}">{% if r.back_on %}Back {{ r.back_on|date:"M j" }}{% elif r.last_return_late %}Past due{% else %}Due back{% endif %}</div>
                       {% else %}
-                      <div class="sd-st"><span class="ar-dot sd-dot--held" role="img" aria-label="Deposit held" title="The deposit is held until every gown is back"></span><span>Held</span></div>
-                      <div class="sd-note">{% if r.gown_count > 1 %}{{ r.returned_gowns }} of {{ r.gown_count }} gowns back{% else %}Gown not back yet{% endif %}</div>
+                      <div class="sd-day">&mdash;</div>
                       {% endif %}
                     </div>
-                    <button type="button"
-                      @click="viewingPayment = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"—"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:'-2g' }}', date: '{{ r.created_at|date:"M j, Y"|escapejs }}', status: '{{ r.status|escapejs }}', proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.deposit_receipts_json|escapejs }}'), breakdown: JSON.parse('{{ r.payment_breakdown_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', refInfo: JSON.parse('{{ r.reference_info_json|escapejs }}'), gcashDup: '{{ r.gcash_dups|escapejs }}' }; openReceiptModal = true"
-                      class="ar-ib sd-eye" title="View payment" aria-label="View payment of {{ r.display_customer_name }}">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                    </button>
+                    <div class="sd-status">
+                      <div class="sd-st"><span class="ar-dot sd-dot--{{ r.dep.kind }}" role="img" aria-label="Deposit {{ r.dep.state|lower }}" title="{% if r.dep.state == 'Held' %}The deposit is held until every gown is back{% elif r.dep.state == 'Return due' %}Every gown is back: hand the deposit back in Payments{% else %}The deposit was handed back, or used up{% endif %}"></span><span>{{ r.dep.state }}</span></div>
+                      {% for note in r.dep.notes %}<div class="sd-note">{{ note }}</div>{% endfor %}
+                      {% if r.dep.state == 'Returned' and r.dep.when %}<div class="sd-note">{{ r.dep.when|date:"M j, Y" }}</div>{% endif %}
+                      {% if r.dep.state == 'Return due' %}<a class="sd-handback" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" @click.stop>Hand back in Payments</a>{% endif %}
+                    </div>
+                    <div class="sd-acts">
+                      {% if r.has_receipt %}<button type="button" class="ar-ib" title="Receipt" aria-label="Receipt of {{ r.display_customer_name }}, {{ r.reference_code }}" @click.stop="arabelaReceipt.open({{ r.id }})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg></button>{% endif %}
+                      <a href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" class="ar-ib" title="Open in Payments" aria-label="Open the payments of {{ r.display_customer_name }}, {{ r.reference_code }}" @click.stop><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></a>
+                    </div>
                     <button type="button" class="ar-chev" @click.stop="toggleBooking({{ r.id }})" aria-expanded="false"
                       :aria-expanded="isBookingOpen({{ r.id }}) ? 'true' : 'false'" aria-controls="ar-panel-{{ r.id }}"
                       aria-label="Show or hide the gowns of {{ r.display_customer_name }}, {{ r.reference_code }}">
@@ -1261,7 +1283,14 @@
                     {% if r.booked_as_name %}
                     <div class="ar-strip"><span>Booked as: {{ r.booked_as_name }}</span></div>
                     {% endif %}
-                    <!-- One short line per gown, where it is now. The deposit is returned when every gown that went out is back (a cancelled one never went out). -->
+                    <div class="ar-strip sd-money">
+                      <span>Deposit paid &#8369;{{ r.dep.paid|floatformat:'-2g' }}</span>
+                      {% if r.dep.late_fee %}<span>Late fee &#8369;{{ r.dep.late_fee|floatformat:'-2g' }}</span>{% endif %}
+                      {% if r.dep.deductions %}<span>Deductions &#8369;{{ r.dep.deductions|floatformat:'-2g' }}</span>{% endif %}
+                      {% if r.dep.handed_back %}<span>Handed back &#8369;{{ r.dep.handed_back|floatformat:'-2g' }}</span>{% endif %}
+                      {% if r.dep.to_hand_back %}<span>To hand back &#8369;{{ r.dep.to_hand_back|floatformat:'-2g' }}</span>{% endif %}
+                    </div>
+                    <!-- One short line per gown, where it is now. The deposit is handed back when every gown that went out is back (a cancelled one never went out). -->
                     <div class="ar-gowns">
                       {% for item in r.items.all %}
                       <div class="ar-gown">
@@ -1285,101 +1314,12 @@
                 {% endfor %}
                 {% if reservations %}
                 <div class="ar-empty" x-show="matchCount() === 0" x-cloak>
-                  <p class="text-gray-500 text-theme-sm dark:text-gray-400">No security deposit matches your search.</p>
+                  <p class="text-gray-500 text-theme-sm dark:text-gray-400" x-text="dateFocus !== '' ? 'No deposit has a gown on that date. Try another date, or press Any date.' : 'No security deposit matches your search.'"></p>
                 </div>
                 {% endif %}
               </div>
             </div>
-
-            <div x-show="openReceiptModal" x-cloak class="fixed inset-0 flex items-center justify-center p-5 overflow-y-auto z-99999">
-              <div class="modal-close-btn admin-backdrop fixed inset-0 h-full w-full"></div>
-              <div @click.outside="openReceiptModal = false" x-effect="if (openReceiptModal) { $nextTick(function () { $el.scrollTop = 0; }); }" class="no-scrollbar relative w-full overflow-y-auto rounded-3xl bg-white p-4 dark:bg-gray-900 lg:p-8" :style="(viewingPayment.proofUrl || (viewingPayment.receipts || []).length) ? 'max-width: min(1100px, 92vw); max-height: calc(100vh - 2.5rem); max-height: calc(100dvh - 2.5rem);' : 'max-width: 700px; max-height: calc(100vh - 2.5rem); max-height: calc(100dvh - 2.5rem);'">
-                <button
-                  type="button"
-                  @click="openReceiptModal = false"
-                  class="transition-color absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300"
-                >
-                  <svg class="fill-current" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path fill-rule="evenodd" clip-rule="evenodd" d="M6.04289 16.5418C5.65237 16.9323 5.65237 17.5655 6.04289 17.956C6.43342 18.3465 7.06658 18.3465 7.45711 17.956L11.9987 13.4144L16.5408 17.9565C16.9313 18.347 17.5645 18.347 17.955 17.9565C18.3455 17.566 18.3455 16.9328 17.955 16.5423L13.4129 12.0002L17.955 7.45808C18.3455 7.06756 18.3455 6.43439 17.955 6.04387C17.5645 5.65335 16.9313 5.65335 16.5408 6.04387L11.9987 10.586L7.45711 6.04439C7.06658 5.65386 6.43342 5.65386 6.04289 6.04439C5.65237 6.43491 5.65237 7.06808 6.04289 7.4586L10.5845 12.0002L6.04289 16.5418Z" fill=""/>
-                  </svg>
-                </button>
-                <div class="px-2 pr-14">
-                  <h4 class="mb-2 text-2xl font-semibold text-gray-800 dark:text-white/90">GCash Payment Proof</h4>
-                  <p class="mb-6 text-sm text-gray-500 dark:text-gray-400" x-text="viewingPayment.name ? `${viewingPayment.name} &middot; ${viewingPayment.reservation}` : ''"></p>
-                  <p x-show="viewingPayment.bookedAs" class="-mt-4 mb-6 text-xs text-gray-400 dark:text-gray-500">Booked as: <span x-text="viewingPayment.bookedAs"></span></p>
-                </div>
-                <div class="px-2">
-                  {% include "arabela_admin/partials/gcash_reference_block.html" with var="viewingPayment" %}
-                  <!-- Natural size, never cropped, capped at 75% of the viewport height
-                       so it never needs to spill past the modal -- but a genuinely small or
-                       low-resolution upload (a downscaled screenshot, a distant phone photo)
-                       still just renders small at that size; CSS can't invent detail that
-                       was never in the file. "View Full Image" opens the actual upload
-                       directly in a new tab, at its real resolution, where the browser's own
-                       zoom/pinch handles anything this modal can't. -->
-                  <template x-if="viewingPayment.proofUrl">
-                    <div>
-                      <div class="mb-3 flex w-full justify-center">
-                        <div class="admin-photo-frame overflow-hidden rounded-2xl bg-gray-100 dark:bg-gray-800">
-                          <img :src="viewingPayment.proofUrl" alt="Payment proof" style="display: block; max-height: 75vh; max-width: 100%; width: auto; height: auto;" />
-                        </div>
-                      </div>
-                      <a
-                        :href="viewingPayment.proofUrl"
-                        target="_blank"
-                        rel="noopener"
-                        class="mb-6 inline-flex items-center gap-1.5 text-theme-xs font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400"
-                      >
-                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
-                        View Full Image
-                      </a>
-                    </div>
-                  </template>
-                  <!-- The shop's own receipt photos (a booking recorded at the counter has no customer GCash screenshot). -->
-                  <template x-for="(rc, rcIndex) in (viewingPayment.receipts || [])" :key="rcIndex">
-                    <div>
-                      <p class="mb-3 text-sm font-medium text-gray-800 dark:text-white/90"><span x-text="rc.label"></span> <span class="text-xs font-normal text-gray-500 dark:text-gray-400" x-text="'· attached ' + rc.when + (rc.by ? ' · by ' + rc.by : '')"></span></p>
-                      <div class="mb-3 flex w-full justify-center">
-                        <div class="admin-photo-frame overflow-hidden rounded-2xl bg-gray-100 dark:bg-gray-800">
-                          <img :src="rc.url" :alt="rc.label" style="display: block; max-height: 75vh; max-width: 100%; width: auto; height: auto;" />
-                        </div>
-                      </div>
-                      <a :href="rc.url" target="_blank" rel="noopener" class="mb-6 inline-flex items-center gap-1.5 text-theme-xs font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400">
-                        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
-                        View Full Image
-                      </a>
-                    </div>
-                  </template>
-                  <template x-if="!viewingPayment.proofUrl && !(viewingPayment.receipts || []).length">
-                    <div class="mb-6 flex h-[212px] items-center justify-center overflow-hidden rounded-2xl bg-gray-100 text-sm text-gray-400 dark:bg-gray-800">
-                      No proof of payment uploaded
-                    </div>
-                  </template>
-                  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div>
-                      <p class="text-xs text-gray-500 dark:text-gray-400">Reference</p>
-                      <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewingPayment.reference"></p>
-                    </div>
-                    <div>
-                      <p class="text-xs text-gray-500 dark:text-gray-400" x-text="viewingPayment.breakdown ? viewingPayment.breakdown.paidLabel : 'Amount'"></p>
-                      <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewingPayment.breakdown ? viewingPayment.breakdown.headline : viewingPayment.amount"></p>
-                    </div>
-                    <div>
-                      <p class="text-xs text-gray-500 dark:text-gray-400">Date Submitted</p>
-                      <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewingPayment.date"></p>
-                    </div>
-                    <div>
-                      <p class="text-xs text-gray-500 dark:text-gray-400">Status</p>
-                      <p class="mt-1 text-sm font-medium text-gray-800 dark:text-white/90" x-text="viewingPayment.status"></p>
-                    </div>
-                  </div>
-                  {% include "arabela_admin/partials/payment_breakdown.html" with var="viewingPayment" %}
-                  <p x-show="viewingPayment.gcashDup" x-cloak style="margin-top: 1rem;" class="rounded-lg bg-error-50 px-4 py-3 text-xs font-medium text-error-700 dark:bg-error-500/15 dark:text-error-500"
-                     x-text="'This GCash reference number is also on ' + viewingPayment.gcashDup + '. Check the receipt before approving.'"></p>
-                </div>
-              </div>
-            </div>
-            </div>
+          </div>
         </main>
         <!-- ===== Main Content End ===== -->
       </div>
@@ -1417,6 +1357,8 @@
       watch('search', openTheOnlyMatch);
       watch('statusFilter', openTheOnlyMatch);
       watch('yearFilter', openTheOnlyMatch);
+      watch('dateFocus', openTheOnlyMatch);
+      watch('dateKind', openTheOnlyMatch);
       openTheOnlyMatch();
     }
 

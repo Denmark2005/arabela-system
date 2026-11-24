@@ -1,0 +1,27 @@
+{% comment %}
+  One gown on the Gown Board (arabela_admin/gown_board.py builds `row`). Everything is plain text from the server (the template escapes it); the gown's tag colour is
+  one of the shop's own fixed colours. "Open booking" goes to Active Reservations (or Reservation Records for a finished booking), searched for this booking.
+{% endcomment %}
+<div class="gb-line gb-line--{{ row.state }}">
+  <div class="gb-gown">
+    <span class="gb-dot"{% if row.tag_hex %} style="background: {{ row.tag_hex }};"{% endif %} title="{% if row.tag_color %}{{ row.tag_color }} tag{% else %}No tag colour{% endif %}"></span>
+    <div class="gb-gown-t">
+      <b>{{ row.gown }}</b>
+      <span class="gb-sub">{% if row.tag_color %}{{ row.tag_color }} tag{% endif %}{% if row.code %}{% if row.tag_color %} &middot; {% endif %}{{ row.code }}{% endif %}{% if row.size %}{% if row.tag_color or row.code %} &middot; {% endif %}Size {{ row.size }}{% endif %}</span>
+    </div>
+  </div>
+  <div class="gb-cust">
+    <b>{{ row.customer }}</b>
+    {% if row.phone %}<a href="tel:{{ row.phone }}" class="gb-tel" title="Call the customer">{{ row.phone }}</a>{% endif %}
+  </div>
+  <div class="gb-dates" aria-label="Pick-up and return dates">
+    <span><i>Pick-up</i> {{ row.pickup|date:"M j" }}</span>
+    <span><i>Return</i> {{ row.ret|date:"M j" }}</span>
+  </div>
+  <div class="gb-meta">
+    <span class="gb-chip gb-chip--{{ row.state }}">{{ row.state_text }}</span>
+    {% if row.balance %}<span class="gb-chip gb-chip--balance" title="Still to pay at the shop. Collect it at the counter and record it in Payments.">Balance &#8369;{{ row.balance }}</span>{% endif %}
+    {% if row.reason %}<span class="gb-chip gb-chip--rush" title="This gown is needed soon but is not ready.">Rush &middot; {{ row.reason }}</span>{% endif %}
+    <a class="gb-open" href="{{ row.open_url }}">Open booking</a>
+  </div>
+</div>

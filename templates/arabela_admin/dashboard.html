@@ -142,6 +142,67 @@
       .qv-line > .qv-ret { grid-area: ret; }
       .qv-line > .qv-date { grid-area: date; text-align: right; }
     }
+    /* Latest transactions (lt-): the last payments, one line each. The title row is shown on a wide screen only; below it every value carries its own
+       small label. The method is a name in the colour people know it by (no logos). Light and dark. */
+    .lt-card { overflow: hidden; margin-bottom: 1.5rem; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; }
+    .dark .lt-card { background: rgba(255,255,255,.03); border-color: #1d2939; }
+    .lt-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; padding: .85rem 1.25rem; }
+    .lt-title { margin: 0; font-size: 1.0625rem; font-weight: 600; color: #1d2939; }
+    .dark .lt-title { color: rgba(255,255,255,.9); }
+    .lt-cols, .lt-line { display: grid; grid-template-columns: 8.5rem 9rem minmax(11rem, 1.8fr) minmax(10rem, 1.4fr) 7.5rem 5.5rem; align-items: center; column-gap: 1rem; padding: .7rem 1.25rem; border-top: 1px solid #f2f4f7; }
+    .dark .lt-cols, .dark .lt-line { border-color: #1d2939; }
+    .lt-cols { background: #f9fafb; font-size: .75rem; font-weight: 500; color: #667085; padding-top: .6rem; padding-bottom: .6rem; }
+    .dark .lt-cols { background: rgba(255,255,255,.025); color: #98a2b3; }
+    .lt-cols > span:nth-child(5) { text-align: right; }
+    .lt-line { cursor: pointer; transition: background-color .15s; }
+    .lt-line:hover { background: rgba(152,162,179,.08); }
+    .lt-line:focus-visible { outline: 2px solid #465fff; outline-offset: -2px; }
+    .lt-when, .lt-what, .lt-who, .lt-rent { display: flex; flex-direction: column; min-width: 0; font-size: .8125rem; color: #475467; }
+    .dark .lt-when, .dark .lt-what, .dark .lt-who, .dark .lt-rent { color: #d0d5dd; }
+    .lt-when b, .lt-what b, .lt-rent b, .lt-name { font-size: .875rem; font-weight: 600; color: #1d2939; overflow-wrap: anywhere; }
+    .dark .lt-when b, .dark .lt-what b, .dark .lt-rent b, .dark .lt-name { color: rgba(255,255,255,.9); }
+    .lt-when span, .lt-what span, .lt-rent span, .lt-sub { margin-top: .1rem; font-size: .75rem; color: #98a2b3; overflow-wrap: anywhere; }
+    .lt-who { gap: .15rem; }
+    .lt-tags { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; margin-bottom: .1rem; }
+    .lt-pill { display: inline-flex; align-items: center; padding: .1rem .6rem; border-radius: 999px; background: #f2f4f7; color: #475467; font-size: .72rem; font-weight: 600; white-space: nowrap; }
+    .lt-pill--gcash { background: #e5f0ff; color: #0b5cd0; }
+    .lt-pill--maya { background: #e1f7ea; color: #0a7a3d; }
+    .lt-pill--qrph { background: #fde8ea; color: #b4232c; }
+    .lt-pill--cash { background: #f2f4f7; color: #475467; }
+    .dark .lt-pill { background: rgba(255,255,255,.07); color: #d0d5dd; }
+    .dark .lt-pill--gcash { background: rgba(21,112,239,.2); color: #84caff; }
+    .dark .lt-pill--maya { background: rgba(18,183,106,.16); color: #32d583; }
+    .dark .lt-pill--qrph { background: rgba(240,68,56,.18); color: #fda29b; }
+    .lt-test { padding: .05rem .5rem; border: 1px dashed #98a2b3; border-radius: 999px; color: #667085; font-size: .68rem; font-weight: 600; text-transform: lowercase; }
+    .dark .lt-test { border-color: #667085; color: #98a2b3; }
+    .lt-amt { text-align: right; font-size: .875rem; font-weight: 600; font-variant-numeric: tabular-nums; color: #101828; white-space: nowrap; }
+    .dark .lt-amt { color: rgba(255,255,255,.9); }
+    .lt-amt.is-out { color: #b42318; }
+    .dark .lt-amt.is-out { color: #fda29b; }
+    .lt-line.is-void .lt-amt { text-decoration: line-through; opacity: .6; }
+    .lt-st { display: inline-flex; align-items: center; padding: .1rem .6rem; border-radius: 999px; font-size: .72rem; font-weight: 600; white-space: nowrap; }
+    .lt-st--ok { background: #d1fadf; color: #067647; }
+    .lt-st--void { background: #f2f4f7; color: #667085; }
+    .dark .lt-st--ok { background: rgba(18,183,106,.16); color: #32d583; }
+    .dark .lt-st--void { background: rgba(255,255,255,.07); color: #98a2b3; }
+    .lt-empty { padding: 1.5rem 1.25rem; border-top: 1px solid #f2f4f7; text-align: center; font-size: .875rem; color: #667085; }
+    .dark .lt-empty { border-color: #1d2939; color: #98a2b3; }
+    @media (max-width: 1279px) {
+      .lt-cols { display: none; }
+      .lt-line { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr) 7rem; grid-template-areas: "who who who stat" "when what rent amt"; row-gap: .6rem; column-gap: .75rem; }
+      .lt-line > .lt-who { grid-area: who; }
+      .lt-line > .lt-stat { grid-area: stat; justify-self: end; }
+      .lt-line > .lt-when { grid-area: when; align-self: start; }
+      .lt-line > .lt-what { grid-area: what; align-self: start; }
+      .lt-line > .lt-rent { grid-area: rent; align-self: start; }
+      .lt-line > .lt-amt { grid-area: amt; align-self: start; }
+      .lt-line > [data-label]::before { content: attr(data-label); display: block; margin-bottom: .15rem; font-size: .6875rem; font-weight: 500; line-height: 1.2; color: #98a2b3; white-space: nowrap; }
+    }
+    @media (max-width: 760px) {
+      .lt-head, .lt-empty { padding-left: 1rem; padding-right: 1rem; }
+      .lt-line { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "who amt" "rent stat" "when what"; padding: .7rem 1rem; }
+      .lt-line > .lt-amt { align-self: start; }
+    }
   </style>
   </head>
   <body
@@ -196,7 +257,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'gown-board' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -379,6 +440,15 @@
                 </li>
                 <li>
                   <a
+                    href="{% url 'arabela_admin:gown_board' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'gown-board' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Gown Board
+                  </a>
+                </li>
+                <li>
+                  <a
                     href="{% url 'arabela_admin:active_reservations' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'active' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
@@ -395,6 +465,7 @@
                     Rental History
                   </a>
                 </li>
+                {% if not admin_hide_pending_approval %}
                 <li>
                   <a
                     href="{% url 'arabela_admin:pending_approval' %}"
@@ -404,6 +475,7 @@
                     Pending Approval
                   </a>
                 </li>
+                {% endif %}
               </ul>
             </div>
             <!-- Dropdown Menu End -->
@@ -715,6 +787,7 @@
                     Payments
                   </a>
                 </li>
+                {% if not admin_hide_payment_verification %}
                 <li>
                   <a
                     href="{% url 'arabela_admin:payment_verification' %}"
@@ -724,6 +797,7 @@
                     Payment Verification
                   </a>
                 </li>
+                {% endif %}
                 <li>
                   <a
                     href="{% url 'arabela_admin:security_deposits' %}"
@@ -1212,6 +1286,24 @@
                   </a>
                 </div>
 
+                {# Today at the shop: three counts, each opens the page that has the details (counted from the same data, so a click never lands on a different number). #}
+                {% if shop_today %}
+                <div class="ov-strip ov-strip--top" data-live-region="overview-money">
+                  <a href="{% url 'arabela_admin:reservation_records' %}" title="Bookings made today - opens Reservation Records" class="ov-cell">
+                    <span class="ov-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 00-2 2v13a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2zm0 15H5V9h14v10zm-8-8h2v2h2v2h-2v2h-2v-2H9v-2h2v-2z"/></svg></span>
+                    <span class="ov-txt"><span class="ov-lbl">New bookings today</span><span class="ov-num{% if not shop_today.new_bookings %} ov-num--zero{% endif %}">{{ shop_today.new_bookings }}</span></span>
+                  </a>
+                  <a href="{% url 'arabela_admin:payments' %}" title="Gowns picked up in the next 2 days whose booking still has a balance - opens Payments" class="ov-cell">
+                    <span class="ov-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 15.5V19h-2v-1.5c-1.6-.3-2.7-1.3-2.8-2.9h2c.1.7.7 1.2 1.8 1.2 1 0 1.7-.5 1.7-1.2 0-.8-.6-1.1-2-1.5-1.8-.5-3.2-1.2-3.2-3 0-1.4 1-2.4 2.5-2.7V6h2v1.4c1.4.3 2.4 1.2 2.5 2.7h-2c-.1-.6-.6-1.1-1.5-1.1-.9 0-1.5.4-1.5 1.1 0 .6.5.9 1.9 1.3 1.9.5 3.3 1.1 3.3 3 0 1.5-1.1 2.5-2.7 2.8z"/></svg></span>
+                    <span class="ov-txt"><span class="ov-lbl">Pick-ups with a balance <span class="ov-tag">next 2 days</span></span><span class="ov-num{% if not shop_today.pickups_owing %} ov-num--zero{% endif %}">{{ shop_today.pickups_owing }}</span></span>
+                  </a>
+                  <a href="{% if shop_today.late_gowns or not shop_today.online_attention %}{% url 'arabela_admin:gown_board' %}{% if shop_today.late_gowns %}#gb-overdue{% endif %}{% else %}{% url 'arabela_admin:payment_online' %}{% endif %}" title="Gowns late in coming back, and online payments that need a person" class="ov-cell">
+                    <span class="ov-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg></span>
+                    <span class="ov-txt"><span class="ov-lbl">Needs a look{% if shop_today.late_gowns %} <span class="ov-tag">{{ shop_today.late_gowns }} late</span>{% endif %}{% if shop_today.online_attention %} <span class="ov-tag">{{ shop_today.online_attention }} online</span>{% endif %}</span><span class="ov-num{% if not shop_today.needs_look %} ov-num--zero{% endif %}">{{ shop_today.needs_look }}</span></span>
+                  </a>
+                </div>
+                {% endif %}
+
                 {# With an empty catalog nothing else on this page matters (no real booking can complete without real inventory), so that case is an alert, not a quiet strip. #}
 {% if catalog_is_empty %}
 <a
@@ -1256,6 +1348,36 @@
               </div>
 
               <div class="col-span-12">
+                {# ====== Latest transactions: the last payments the shop recorded (money received, a late fee, a deposit handed back). A click on a line opens its receipt, ready to print. #}
+                <div class="lt-card" data-live-region="latest-transactions">
+                  <div class="lt-head">
+                    <h3 class="lt-title">Latest transactions</h3>
+                    <a href="{{ latest_all_url }}" class="qv-all" title="See every payment">View all <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+                  </div>
+                  {% if latest_transactions %}
+                  <div class="lt-cols" aria-hidden="true"><span>Date</span><span>Type</span><span>Details</span><span>Rental</span><span>Amount</span><span>Status</span></div>
+                  {% for t in latest_transactions %}
+                  <div class="lt-line{% if t.void %} is-void{% endif %}" role="button" tabindex="0" title="Open the receipt" aria-label="Open the receipt {{ t.receipt }} of {{ t.customer }}, {{ t.what }}"
+                    @click="arabelaReceipt.open({{ t.booking_id }}, { payment: {{ t.id }} })" @keydown.enter="arabelaReceipt.open({{ t.booking_id }}, { payment: {{ t.id }} })" @keydown.space.prevent="arabelaReceipt.open({{ t.booking_id }}, { payment: {{ t.id }} })">
+                    <div class="lt-when" data-label="Date"><b>{{ t.day }}</b><span>{{ t.time }}</span></div>
+                    <div class="lt-what" data-label="Type"><b>{{ t.what }}</b>{% if t.purpose %}<span>{{ t.purpose }}</span>{% endif %}</div>
+                    <div class="lt-who" data-label="Details">
+                      <span class="lt-tags"><span class="lt-pill lt-pill--{{ t.method_kind }}">{{ t.method }}</span>{% if t.test %}<span class="lt-test" title="A practice or test payment: no real money moved">test</span>{% endif %}</span>
+                      <span class="lt-name">{{ t.customer }}</span>
+                      <span class="lt-sub">{{ t.code }}</span>
+                    </div>
+                    <div class="lt-rent" data-label="Rental"><b>{{ t.gown|default:"-" }}</b>{% if t.dates %}<span>{{ t.dates }}</span>{% endif %}</div>
+                    <div class="lt-amt{% if t.is_out %} is-out{% endif %}" data-label="Amount">{% if t.is_out %}&minus;{% else %}+{% endif %}&#8369;{{ t.amount }}</div>
+                    <div class="lt-stat" data-label="Status"><span class="lt-st {% if t.void %}lt-st--void{% else %}lt-st--ok{% endif %}">{{ t.status }}</span></div>
+                  </div>
+                  {% endfor %}
+                  {% else %}
+                  <p class="lt-empty">No payment has been recorded yet.</p>
+                  {% endif %}
+                </div>
+                <!-- ====== Latest transactions End -->
+
+                {% if not admin_hide_quick_verify %}
                 {# ====== Quick Verify: the Pending Approval look. Only the latest few are listed (a short fixed list, however many are waiting); "N waiting" is the real size. The buttons are icons: view proof, approve, reject (same confirm, same server calls). #}
                 <div class="qv-card" data-live-region="quick-verify">
                   <div class="qv-head">
@@ -1405,6 +1527,7 @@
     </div>
   </div>
 </div>
+{% endif %}
 
               </div>
             </div>

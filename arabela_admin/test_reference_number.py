@@ -16,7 +16,8 @@ REF = "5046933479702"
 GROUPED = "5046 933 479702"
 OTHER = "5046933479720"
 
-PAGES = ("arabela_admin:pending_approval", "arabela_admin:payment_verification", "arabela_admin:security_deposits", "arabela_admin:dashboard")
+# The pages with a payment proof window (Security Deposits had one too until it became the slim page: it has no proof window now).
+PAGES = ("arabela_admin:pending_approval", "arabela_admin:payment_verification", "arabela_admin:dashboard")
 
 
 class TheProofWindowsShowTheNumberTests(OwnerCheckBase):
@@ -38,7 +39,7 @@ class TheProofWindowsShowTheNumberTests(OwnerCheckBase):
 
     def test_the_booking_hands_its_reference_to_the_window(self):
         self.booking(0, gcash_reference=REF, proof_typed_reference=REF, proof_typed_amount=Decimal("2000"), proof_match="match", status=Reservation.Status.PENDING)
-        # Security Deposits lists the bookings whose deposit is held (approved ones)
+        # an approved booking, which Security Deposits lists (it shows no proof window, so it does not need the reference)
         self.booking(1, gcash_reference=REF, proof_typed_reference=REF, proof_typed_amount=Decimal("2000"), proof_match="match",
                      status=Reservation.Status.CONFIRMED, owner=Reservation.OwnerCheck.RECEIVED)
         for name in PAGES:
@@ -210,7 +211,7 @@ class TheOwnersCardShowsTheDateAndTheReasonTests(OwnerCheckBase):
 
     def test_every_window_carries_the_date_the_old_flag_and_the_reason(self):
         self.old_booking()
-        self.old_booking(status=Reservation.Status.CONFIRMED, owner=Reservation.OwnerCheck.RECEIVED)           # for Security Deposits
+        self.old_booking(status=Reservation.Status.CONFIRMED, owner=Reservation.OwnerCheck.RECEIVED)           # an approved one too
         for name in PAGES:
             with self.subTest(page=name):
                 html = self.page(name)

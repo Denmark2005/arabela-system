@@ -80,7 +80,7 @@ class StatusTests(HistoryBase):
         self.assertEqual([r["status"] for r in records], [i.history_status for i in response.context["rental_items"]])
         self.assertEqual(sorted(r["status"] for r in records), ["Completed", "Ongoing", "Overdue"])
         for record in records:
-            self.assertEqual(set(record), {"month", "year", "status", "q"})
+            self.assertEqual(set(record), {"month", "year", "status", "q", "dPickup", "dReturn", "dEvent"})        # (the three lists of days are for the "On this date" bar)
 
 
 class OneCardTests(HistoryBase):

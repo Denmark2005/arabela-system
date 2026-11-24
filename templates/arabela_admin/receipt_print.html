@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
   <title>{{ r.title }} {{ r.number }}</title>
+  <script>
+    // The paper this computer prints on (80 mm roll, 58 mm roll or normal page), remembered by the Receipt preview and by this page's Paper choice.
+    (function () {
+      var v = '80';
+      try { v = localStorage.getItem('arabela_receipt_paper') || '80'; } catch (e) { v = '80'; }
+      document.documentElement.setAttribute('data-paper', ['58', '80', 'normal'].indexOf(v) === -1 ? '80' : v);
+    })();
+  </script>
   <style>
     html, body { margin: 0; padding: 0; }
     body { min-height: 100vh; background: #e4e7ec; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
@@ -13,9 +21,16 @@
       color: #101828; font: 600 .9rem system-ui, sans-serif; text-decoration: none; cursor: pointer; }
     .rp-btn--main { background: #465fff; color: #fff; }
     .rp-btn:focus-visible { outline: 3px solid #9bb0ff; outline-offset: 2px; }
+    .rp-paper { display: inline-flex; align-items: center; gap: .4rem; color: #d0d5dd; font-size: .85rem; }
+    .rp-paper select { height: 2.5rem; padding: 0 .6rem; border: 0; border-radius: .55rem; background: #fff; color: #101828; font: 600 .875rem system-ui, sans-serif; }
     .rp-hint { color: #d0d5dd; font-size: .8rem; }
     .rp-wrap { padding: 1.25rem .75rem 2rem; }
     .rp-wrap .rc-paper { box-shadow: 0 2px 14px rgba(16, 24, 40, .18); }
+    {% if embed %}
+    /* Inside the Receipt preview window: just the paper, on the window's own grey. */
+    body { min-height: 0; }
+    .rp-wrap { padding: 0; }
+    {% endif %}
     @page { margin: 4mm; }
     @media print {
       body { background: #fff; min-height: 0; }
@@ -26,13 +41,35 @@
   </style>
 </head>
 <body>
+  {% if not embed %}
   <div class="rp-bar">
     <button type="button" class="rp-btn rp-btn--main" onclick="window.print()">Print receipt</button>
     <a class="rp-btn" href="{{ back_url }}">Back to Payments</a>
-    <span class="rp-hint">{% if reprint %}This is reprint {{ reprint }}. {% endif %}Narrow 80 mm paper; it also prints on any ordinary printer or saves as a PDF.</span>
+    <label class="rp-paper">Paper
+      <select id="rp-paper" aria-label="Paper to print on">
+        <option value="80">80 mm roll</option>
+        <option value="58">58 mm roll</option>
+        <option value="normal">Normal page</option>
+      </select>
+    </label>
+    <span class="rp-hint">{% if reprint %}This is reprint {{ reprint }}. {% endif %}Choose the paper you print on. The print window decides the final paper size; it also saves as a PDF.</span>
   </div>
+  {% endif %}
   <div class="rp-wrap">
     {% include "partials/receipt_paper.html" %}
   </div>
+  {% if not embed %}
+  <script>
+    (function () {
+      var select = document.getElementById('rp-paper');
+      if (!select) { return; }
+      select.value = document.documentElement.getAttribute('data-paper') || '80';
+      select.addEventListener('change', function () {
+        try { localStorage.setItem('arabela_receipt_paper', select.value); } catch (e) { /* not remembered; it still applies now */ }
+        document.documentElement.setAttribute('data-paper', select.value);
+      });
+    })();
+  </script>
+  {% endif %}
 </body>
 </html>

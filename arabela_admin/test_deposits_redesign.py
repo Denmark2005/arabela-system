@@ -1,13 +1,17 @@
-"""Security Deposits, redesigned: ONE card (the Active Reservations look) with the search, the Held / Returned counts as filter buttons and the year,
-then one short line per booking; a booking with many gowns shows "10 gowns" and opens to one short line per gown; ONE status per booking (the
-"Completed / Active" column said the same thing as "Returned / Held"); no page title row, no two number tiles, no fake half-second spinner.
+"""Security Deposits, the slim page: ONE card (the Active Reservations look) with the search, the All / Held / Return due / Returned counts as filter buttons,
+the year and the shared "On this date" bar (it opens on the RETURN date), then one short line per booking; a booking with many gowns shows "10 gowns" and
+opens to one short line per gown; ONE status per booking, read from the payments ledger (the same one the Payments page uses):
+  Held         some gown is not back yet
+  Return due   every gown is back and there is deposit left to hand back (it is handed back in Payments)
+  Returned     handed back, or used up by the late fee and deductions
+There is no proof-of-payment window and no duplicate-GCash note on this page any more (Payment Verification and Reservation Records keep those).
 
-When a deposit counts as returned (Reservation.deposit_returned_on), the receipts window and the counts keep their own tests (tests.py,
-test_new_booking, test_cancel_gowns). What is checked here: the numbers each line shows, where each gown is, that every hook the page's scripts
-need is still there, that the page asks the database the same number of questions however long the list is, and that the page is still closed
-to anyone who is not staff."""
+What is checked here: the numbers each line shows, where each gown is, the three states and how they are worked out, the two buttons (Receipt, Open in Payments),
+that every hook the page's scripts need is still there, that the page asks the database the same number of questions however long the list is, and that
+the page is still closed to anyone who is not staff."""
 import re
 from datetime import timedelta
+from decimal import Decimal
 from pathlib import Path
 
 from django.conf import settings
@@ -19,8 +23,10 @@ from django.urls import reverse
 from django.utils import timezone
 
 from arabela_admin.test_active_dropdown import ActiveDropdownBase, CAN, P, R, RET
-from arabela_admin.views import _deposit_gown_state
-from reservations.models import ReservationItem, Reservation
+from arabela_admin.views import _deposit_gown_state, _deposit_state
+from reservations import payments as reservation_payments
+from reservations.models import Payment, ReservationItem, Reservation
+from reservations.test_ledger import make_booking, pay
 
 User = get_user_model()
 URL = reverse("arabela_admin:security_deposits")
@@ -67,7 +73,7 @@ class ClosedLineTests(DepositsBase):
         reservation, items = self.book("Many Gowns", "0917 000 0002", [self.returned_item(), self.returned_item(), (-3, 2, R, {"picked_up_on": self.today - timedelta(days=3)}), (3, 6, P, {})])
         response, html = self.page()
         shown = next(r for r in response.context["reservations"] if r.id == reservation.id)
-        self.assertEqual((shown.gown_count, shown.cancelled_count, shown.returned_gowns, shown.item_total), (4, 0, 2, 4))
+        self.assertEqual((shown.gown_count, shown.cancelled_count, shown.item_total), (4, 0, 4))
         block = self.booking_html(html, reservation)
         closed = block[:block.index('<div class="ar-panel"')]
         self.assertIn("4 gowns", closed)
@@ -90,7 +96,7 @@ class ClosedLineTests(DepositsBase):
         self.assertEqual(panel.count('class="ar-gl sd-gl"'), 3)                     # all three are listed
         self.assertEqual(panel.count(">Cancelled</span>"), 2)
         self.assertEqual(panel.count("text-decoration: line-through"), 2)
-        self.assertIn('data-status="Returned"', block)                              # the cancelled ones never held it up
+        self.assertIn('data-status="Return due"', block)                            # the cancelled ones never held it up: the one gown is back, the deposit is due
 
     def test_a_one_gown_booking_names_its_gown_and_says_the_gown_is_not_back(self):
         reservation, [item] = self.book("One Gown", "09170000004", [(2, 5, R, {"picked_up_on": self.today})])
@@ -114,24 +120,52 @@ class ClosedLineTests(DepositsBase):
         shown = self.booking_html(html, every)
         self.assertIn("Every gown was cancelled", shown[:shown.index('<div class="ar-panel"')])
 
-    def test_a_returned_deposit_says_returned_and_the_day(self):
+    def test_every_gown_back_means_the_deposit_is_due_to_be_handed_back(self):
         back = self.today - timedelta(days=2)
         reservation, _ = self.book("Back Home", "09170000005", [self.returned_item(back_days_ago=2)])
         _, html = self.page()
         closed = self.booking_html(html, reservation)
         closed = closed[:closed.index('<div class="ar-panel"')]
-        self.assertIn("<span>Returned</span>", closed)
-        self.assertIn(f"{back:%b} {back.day}, {back.year}", closed)
+        self.assertIn('data-status="Return due"', self.booking_html(html, reservation))
+        self.assertIn("<span>Return due</span>", closed)
+        self.assertIn("to hand back", closed)
+        self.assertIn(f'href="{reverse("arabela_admin:payments")}?open={reservation.id}"', closed)     # "Hand back in Payments" and the eye both open the Payments window
+        self.assertIn("Hand back in Payments", closed)
+        self.assertIn(f"Back {back:%b} {back.day}", closed)                                          # the day the last gown came back
         self.assertNotIn("<span>Held</span>", closed)
+        self.assertNotIn("<span>Returned</span>", closed)
 
-    def test_the_line_shows_the_deposit_the_date_held_and_the_booking_number(self):
+    def test_a_handed_back_deposit_says_returned_the_day_and_how(self):
+        reservation, _ = self.book("Paid Back", "09170000009", [self.returned_item(back_days_ago=2)])
+        reservation_payments.return_deposit(reservation_id=reservation.pk, amount=Decimal("2000"), method=Payment.Method.CASH, user=self.staff)
+        _, html = self.page()
+        closed = self.booking_html(html, reservation)
+        closed = closed[:closed.index('<div class="ar-panel"')]
+        self.assertIn('data-status="Returned"', self.booking_html(html, reservation))
+        self.assertIn("<span>Returned</span>", closed)
+        self.assertIn("handed back (Cash)", closed)
+        self.assertIn(f"{self.today:%b} {self.today.day}, {self.today.year}", closed)
+        self.assertNotIn("Hand back in Payments", closed)
+        self.assertNotIn("<span>Return due</span>", closed)
+
+    def test_the_line_shows_the_deposit_the_return_date_and_the_booking_number(self):
         reservation, _ = self.book("Numbers", "09170000006", [(3, 6, P, {})])
         _, html = self.page()
         closed = self.booking_html(html, reservation)
         closed = closed[:closed.index('<div class="ar-panel"')]
+        due = self.today + timedelta(days=6)
         self.assertIn(f"&#8369;{reservation.security_deposit:,.0f}", closed)
-        self.assertIn(f"{reservation.created_at:%b} {reservation.created_at.day}, {reservation.created_at.year}", closed)
+        self.assertIn(f"{due:%b} {due.day}, {due.year}", closed)
+        self.assertIn("Due back", closed)
         self.assertIn(f"<b>{reservation.reference_code}</b>", closed)
+
+    def test_a_gown_past_its_return_date_and_still_out_says_past_due(self):
+        reservation, _ = self.book("Late", "09170000010", [(-9, -2, R, {"picked_up_on": self.today - timedelta(days=9)})])
+        _, html = self.page()
+        closed = self.booking_html(html, reservation)
+        closed = closed[:closed.index('<div class="ar-panel"')]
+        self.assertIn("Past due", closed)
+        self.assertIn("<span>Held</span>", closed)
 
     def test_the_panel_says_where_each_gown_is(self):
         reservation, items = self.book("Where", "09170000007", [self.returned_item(), (-2, 3, R, {"picked_up_on": self.today - timedelta(days=2)}), (3, 6, P, {})])
@@ -151,21 +185,27 @@ class ClosedLineTests(DepositsBase):
         for gone in ("Reservation Status", "Deposit Status", ">Completed<", ">Active<", "Returned on "):
             self.assertNotIn(gone, html)
         headers = re.findall(r"<span>([^<]*)</span>", html[html.index('class="ar-head sd-grid"'):html.index('class="ar-head sd-grid"') + 400])
-        self.assertEqual([h for h in headers if h], ["Customer", "Gown", "Deposit", "Date held", "Status"])
+        self.assertEqual([h for h in headers if h], ["Customer", "Gown", "Deposit", "Return date", "Status"])
 
 
 class FiltersAndSearchTests(DepositsBase):
-    def test_the_pills_carry_the_counts_and_the_note_says_how_many_came_back_this_month(self):
-        self.book("A", "09170000011", [self.returned_item()])
+    def test_the_pills_carry_the_counts_and_the_note_says_how_many_were_handed_back_this_month(self):
+        a, _ = self.book("A", "09170000011", [self.returned_item(back_days_ago=2)])                 # back on its return day: no late fee, the whole 2,000 is handed back
         self.book("B", "09170000012", [self.returned_item()])
         self.book("C", "09170000013", [(3, 6, P, {})])
         response, html = self.page()
-        self.assertEqual((response.context["all_count"], response.context["held_count"], response.context["returned_count"]), (3, 1, 2))
+        context = response.context
+        self.assertEqual((context["all_count"], context["held_count"], context["due_count"], context["returned_count"], context["returned_this_month"]), (3, 1, 2, 0, 0))
         bar = html[html.index('aria-label="Show deposits by status"'):html.index('class="sd-year-wrap"')]
         self.assertRegex(bar, r">All <span class=\"ar-n\">3</span>")
         self.assertRegex(bar, r"Held <span class=\"ar-n\">1</span>")
-        self.assertRegex(bar, r"Returned <span class=\"ar-n\">2</span>")
-        self.assertIn(f'{response.context["returned_this_month"]} returned this month</span>', html)
+        self.assertRegex(bar, r"Return due <span class=\"ar-n\">2</span>")
+        self.assertRegex(bar, r"Returned <span class=\"ar-n\">0</span>")
+        reservation_payments.return_deposit(reservation_id=a.pk, amount=Decimal("2000"), method=Payment.Method.CASH, user=self.staff)
+        response, html = self.page()
+        context = response.context
+        self.assertEqual((context["held_count"], context["due_count"], context["returned_count"], context["returned_this_month"]), (1, 1, 1, 1))
+        self.assertIn("1 returned this month</span>", html)
 
     def test_each_booking_carries_what_the_filters_read(self):
         reservation, [item] = self.book("Search Me", "0917 555 1234", [(3, 6, P, {})])
@@ -183,6 +223,7 @@ class FiltersAndSearchTests(DepositsBase):
         _, html = self.page()
         self.assertIn("presetSearchParams.get('search')", html)
         self.assertIn("presetSearchParams.get('status')", html)
+        self.assertIn("['Held', 'Return due', 'Returned'].includes(presetStatus)", html)
         self.assertIn("$watch('search', syncFilterParamsToUrl);", html)
         self.assertIn("$watch('statusFilter', syncFilterParamsToUrl);", html)
         self.assertIn("sdSetupBookings($data, $watch);", html)
@@ -213,7 +254,7 @@ class PageChromeTests(DepositsBase):
         self.assertIn("pageName: `Security Deposits`", html)                         # ... but the "Home > Security Deposits" breadcrumb is there
         self.assertIn("mb-4 flex flex-wrap items-center justify-end gap-3", html)
         self.assertEqual(html.count('class="sd-card"'), 1)
-        self.assertNotIn('<table', html[html.index('class="sd-card"'):html.index('x-show="openReceiptModal"')])
+        self.assertNotIn('<table', html[html.index('class="sd-card"'):html.index("</main>")])
 
     def test_the_card_is_the_active_reservations_look_with_the_pagers_hooks(self):
         self.book("Look", "09170000022", [(3, 6, P, {})])
@@ -223,35 +264,136 @@ class PageChromeTests(DepositsBase):
         self.assertIn('placeholder="Search by customer, booking number or gown..."', html)
         self.assertNotIn(".ar-card { margin-bottom", html)                           # this page draws its own box (.sd-card)
 
-    def test_the_payment_window_and_its_numbers_are_untouched(self):
+    def test_the_proof_window_is_gone_and_the_buttons_open_payments_and_the_receipt(self):
         reservation, _ = self.book("Window", "09170000023", [(3, 6, P, {})])
         Reservation.objects.filter(pk=reservation.pk).update(gcash_reference="GC-D1", payment_proof_url="https://files.example/d.jpg")
         _, html = self.page()
-        button = re.search(r'<button[^>]*title="View payment"[^>]*>', self.booking_html(html, reservation), re.S).group(0)
-        for needle in ("openReceiptModal = true", "proofUrl: 'https://files.example/d.jpg'", "receipts: JSON.parse(", "breakdown: JSON.parse(", "gcashRef: 'GC\\u002DD1'"):
-            self.assertIn(needle, button)
-        self.assertIn('<div @click.outside="openReceiptModal = false" x-effect="if (openReceiptModal)', html)
-        self.assertIn("viewingPayment.breakdown ? viewingPayment.breakdown.headline : viewingPayment.amount", html)
-        self.assertNotRegex(html[html.index("GCash Payment Proof"):], r">\s*Close\s*</button>")
+        for gone in ("viewingPayment", "openReceiptModal", "GCash Payment Proof", "gcash_reference_block", "https://files.example/d.jpg", "gcashDup"):
+            self.assertNotIn(gone, html)
+        block = self.booking_html(html, reservation)
+        link = re.search(r'<a href="[^"]*"[^>]*title="Open in Payments"[^>]*>', block, re.S).group(0)
+        self.assertIn(f"{reverse('arabela_admin:payments')}?open={reservation.id}", link)
+        self.assertNotIn("arabelaReceipt.open", block)                                  # nothing was paid through the Payments page yet: no receipt to print
+        pay(Reservation.objects.get(pk=reservation.pk), Payment.Purpose.DEPOSIT, "2000")
+        _, html = self.page()
+        self.assertIn(f"arabelaReceipt.open({reservation.id})", self.booking_html(html, reservation))
 
-    def test_the_payment_button_does_not_stop_the_click(self):
+    def test_the_buttons_do_not_open_or_close_the_booking(self):
         reservation, _ = self.book("Click", "09170000024", [(3, 6, P, {})])
         _, html = self.page()
         block = self.booking_html(html, reservation)
-        expected = "@click=\"if (!$event.target.closest('.sd-eye')) { toggleBooking(%d) }\"" % reservation.id
+        expected = "@click=\"if (!$event.target.closest('.sd-acts')) { toggleBooking(%d) }\"" % reservation.id
         self.assertIn(expected, block)
-        self.assertNotIn("@click.stop", block[:block.index('class="ar-chev"')])
+        self.assertIn('class="sd-acts"', block)
+        acts = block[block.index('class="sd-acts"'):block.index('class="ar-chev"')]
+        self.assertIn('@click.stop', acts)                                              # a click on a button is the button's, not the line's
 
 
 class SameGcashNumberTests(DepositsBase):
-    def test_the_deposit_cell_and_the_window_warn_about_a_number_on_another_booking(self):
+    def test_the_duplicate_gcash_note_is_gone_from_this_page(self):
         a, _ = self.book("Twin A", "09170000031", [(3, 6, P, {})])
         b, _ = self.book("Twin B", "09170000032", [(3, 6, P, {})])
         Reservation.objects.filter(pk__in=[a.pk, b.pk]).update(gcash_reference="GC-5005", payment_proof_url="https://files.example/t.jpg")
         _, html = self.page()
-        block = self.booking_html(html, a)
-        self.assertIn(f"Same GCash ref as {b.reference_code}", block)
-        self.assertIn("gcashDup: '%s'" % b.reference_code.replace("-", "\\u002D"), block)
+        self.assertNotIn("Same GCash ref", html)                                       # Payment Verification and Reservation Records still warn about it
+        self.assertNotIn("gcashDup", html)
+
+
+class DateBarTests(DepositsBase):
+    def test_the_bar_is_on_the_page_and_opens_on_the_return_date(self):
+        reservation, _ = self.book("Dates", "09170000041", [(3, 6, P, {})])
+        _, html = self.page()
+        self.assertIn('class="df-bar"', html)
+        self.assertIn("dateFocus: '', dateKind: 'return'", html)
+        self.assertIn("arabelaDF.has(el, this.dateFocus, this.dateKind)", html)
+        self.assertIn("presetSearchParams.get('kind') ? arabelaDF.kind(presetSearchParams.get('kind')) : 'return'", html)
+        self.assertIn("$watch('dateFocus', syncFilterParamsToUrl);", html)
+        tag = re.search(r'<div class="ar-booking" data-booking-id="%d"[^>]*>' % reservation.id, html).group(0)
+        due, pick = self.today + timedelta(days=6), self.today + timedelta(days=3)
+        self.assertIn(f'data-d-return="{due:%Y-%m-%d}"', tag)
+        self.assertIn(f'data-d-pickup="{pick:%Y-%m-%d}"', tag)
+        self.assertIn("data-d-event=", tag)
+
+    def test_a_gown_the_shop_cancelled_has_no_date_on_the_bar(self):
+        reservation, _ = self.book("Cancelled Dates", "09170000042", [(3, 6, P, {}), (20, 25, CAN, {})])
+        _, html = self.page()
+        tag = re.search(r'<div class="ar-booking" data-booking-id="%d"[^>]*>' % reservation.id, html).group(0)
+        far = self.today + timedelta(days=25)
+        self.assertNotIn(f"{far:%Y-%m-%d}", tag)
+
+
+class DepositStateTests(TestCase):
+    """_deposit_state: the three states and the words under them, worked out from the ledger."""
+
+    def state(self, reservation):
+        reservation = Reservation.objects.get(pk=reservation.pk)
+        live = [i for i in reservation.items.all() if i.stage != ReservationItem.Stage.CANCELLED]
+        return _deposit_state(reservation, live, timezone.localdate())
+
+    def test_a_gown_still_out_holds_the_deposit(self):
+        booking = make_booking(stage=R, pickup=-3, ret=2)
+        pay(booking, Payment.Purpose.FULL, "5500")
+        held = self.state(booking)
+        self.assertEqual((held["state"], held["kind"]), ("Held", "held"))
+        self.assertEqual(held["notes"], ["Gown not back yet"])
+
+    def test_how_many_gowns_are_back_is_said_for_a_booking_with_several(self):
+        booking = make_booking(gowns=3, stage=R, pickup=-3, ret=2)
+        first = ReservationItem.objects.filter(reservation=booking).order_by("id").first()
+        ReservationItem.objects.filter(pk=first.pk).update(stage=RET, returned_on=timezone.localdate())
+        pay(booking, Payment.Purpose.FULL, "5500")
+        self.assertEqual(self.state(booking)["notes"], ["1 of 3 gowns back"])
+
+    def test_a_deposit_not_paid_yet_says_so(self):
+        booking = make_booking(stage=R, pickup=-3, ret=2)
+        pay(booking, Payment.Purpose.DEPOSIT, "500")
+        self.assertIn("of the deposit is not paid yet", " ".join(self.state(booking)["notes"]))
+
+    def test_every_gown_back_and_nothing_handed_back_yet_is_return_due(self):
+        booking = make_booking(stage=RET, pickup=-6, ret=-2, returned_on=-2)
+        pay(booking, Payment.Purpose.FULL, "5500")
+        due = self.state(booking)
+        self.assertEqual((due["state"], due["kind"]), ("Return due", "due"))
+        self.assertEqual(due["notes"], ["₱2,000.00 to hand back"])
+        self.assertEqual(due["to_hand_back"], Decimal("2000.00"))
+
+    def test_a_late_fee_comes_off_what_is_to_hand_back_and_the_line_says_so(self):
+        booking = make_booking(stage=RET, pickup=-9, ret=-5, returned_on=-2, original_return=-5)       # 3 days late at 200 a day
+        pay(booking, Payment.Purpose.FULL, "5500")
+        due = self.state(booking)
+        self.assertEqual(due["state"], "Return due")
+        self.assertEqual(due["notes"], ["₱1,400.00 to hand back", "₱600.00 kept for late fee or deductions"])
+        self.assertEqual(due["late_fee"], Decimal("600.00"))
+
+    def test_a_handed_back_deposit_is_returned_with_its_day_and_how(self):
+        booking = make_booking(stage=RET, pickup=-6, ret=-2, returned_on=-2)
+        pay(booking, Payment.Purpose.FULL, "5500")
+        reservation_payments.return_deposit(reservation_id=booking.pk, amount=Decimal("2000"), method=Payment.Method.CASH)
+        done = self.state(booking)
+        self.assertEqual((done["state"], done["kind"], done["how"], done["when"]), ("Returned", "returned", "Cash", timezone.localdate()))
+        self.assertEqual(done["notes"], ["₱2,000.00 handed back (Cash)"])
+
+    def test_a_deposit_used_up_by_the_late_fee_is_returned_with_nothing_to_hand_back(self):
+        booking = make_booking(stage=RET, pickup=-20, ret=-18, returned_on=-4, original_return=-18, deposit="2000")   # 14 days late at 200 a day = 2,800 > 2,000
+        pay(booking, Payment.Purpose.FULL, "5500")
+        used = self.state(booking)
+        self.assertEqual(used["state"], "Returned")
+        self.assertEqual(used["notes"], ["Nothing to hand back: the late fee and deductions used the deposit"])
+
+    def test_a_deposit_marked_returned_by_hand_before_the_payments_page_keeps_its_date(self):
+        booking = make_booking(stage=RET, pickup=-6, ret=-2, returned_on=-2)
+        when = timezone.now() - timedelta(days=30)
+        Reservation.objects.filter(pk=booking.pk).update(deposit_returned_at=when)
+        old = self.state(booking)
+        self.assertEqual((old["state"], old["when"]), ("Returned", timezone.localtime(when).date()))
+        self.assertEqual(old["notes"], ["Marked as returned before the Payments page"])
+
+    def test_a_cancelled_gown_does_not_hold_the_deposit_up(self):
+        booking = make_booking(gowns=2, stage=RET, pickup=-6, ret=-2, returned_on=-2)
+        last = ReservationItem.objects.filter(reservation=booking).order_by("-id").first()
+        ReservationItem.objects.filter(pk=last.pk).update(stage=CAN, returned_on=None)
+        pay(booking, Payment.Purpose.FULL, "5500")
+        self.assertEqual(self.state(booking)["state"], "Return due")
 
 
 class FewQuestionsTests(DepositsBase):

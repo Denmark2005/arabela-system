@@ -269,7 +269,9 @@ class CoverageTests(TestCase):
         "category_cover_preview",
         # Payments: the page, the receipts list, the printable receipt (a print only stamps the receipt's own counter) and one booking's figures are all reads.
         # Every payments change (record, deposit return, deduction, void, resend, late-fee setting) is @audited.
-        "payments", "payment_receipts", "payment_receipt_print", "payment_detail", "payment_online",
+        "payments", "payment_receipts", "payment_receipt_print", "payment_detail", "payment_online", "receipt_list",
+        # The Gown Board only shows what is to be got ready and what comes back; marking a pick-up or a return is Active Reservations' (audited) job.
+        "gown_board",
     }
 
     def admin_patterns(self):

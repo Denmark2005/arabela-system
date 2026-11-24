@@ -538,7 +538,7 @@ class ReceiptUploaderInProofWindowsTests(Base):
         self.booking_with_receipts(status=Reservation.Status.PENDING, number_from=1)          # Dashboard Quick Verify lists Pending ones
         self.booking_with_receipts(number_from=11)                                            # the others list confirmed ones
         self.client.force_login(self.owner)
-        for name in ("payment_verification", "security_deposits", "rental_history", "dashboard"):
+        for name in ("payment_verification", "rental_history", "dashboard"):                 # (Security Deposits has no receipt window any more)
             with self.subTest(page=name):
                 html = self.client.get(reverse(f"arabela_admin:{name}")).content.decode()
                 self.assertIn("Rita Uploader", html)                                           # the name is in the data the window reads ...

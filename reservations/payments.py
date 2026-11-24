@@ -202,6 +202,16 @@ def _send_email(reservation_id, payment_id, text, subject, heading):
     customer_emails._deliver(reservation.customer, customer_emails.PAYMENT_NOTICE, data)
 
 
+def printable_receipts(reservation):
+    """This booking's receipts a person can print: recorded payments and deposit returns that have a receipt number (a payment from before the Payments
+    page has none). Reads reservation.payments, so prefetch it for a list. In the order they were made."""
+    return [p for p in reservation.payments.all() if p.receipt_number and not p.is_legacy]
+
+
+def has_receipt(reservation):
+    return any(p.receipt_number and not p.is_legacy for p in reservation.payments.all())
+
+
 def notify_user(user, text, *, subject, heading):
     """A payment notice for a customer with NO booking to hang it on (an online payment that could not be turned into a booking): the bell message
     always, and the email when customer emails are on and the database commits. Returns False when there is no account to tell."""
