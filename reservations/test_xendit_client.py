@@ -254,6 +254,14 @@ class WebhookTests(SimpleTestCase):
         self.assertEqual(xendit.event_type({"event": "payment_session.expired"}), "payment_session.expired")
         self.assertEqual((xendit.event_type({}), xendit.event_resource({})), ("", {}))
 
+    def test_the_session_and_the_refund_are_found_under_either_name_xendit_uses(self):
+        # The sample Xendit's dashboard sends ("Test and save") names the session "id"; its documentation names it "payment_session_id".
+        sample = {"event": "payment_session.completed", "business_id": "b", "data": {"id": "ps-579c8d61f23fa4ca35e52da4", "amount": 100000}}
+        self.assertEqual(xendit.event_resource(sample)["id"], "ps-579c8d61f23fa4ca35e52da4")
+        refund = {"event": "refund.succeeded", "data": {"id": "rfd-7", "payment_id": "py-1", "amount": 5}}
+        resource = xendit.event_resource(refund)
+        self.assertEqual((resource["id"], resource["refund_id"], xendit.parse_refund(resource).id), ("rfd-7", "rfd-7", "rfd-7"))
+
 
 class HttpCallTests(SimpleTestCase):
     def response(self, status=200, body=None, content=True):

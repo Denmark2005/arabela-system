@@ -420,6 +420,13 @@ class WebhookTests(Base):
         self.assertEqual(attempt.status, PaymentAttempt.Status.BOOKED)
         self.assertIsNotNone(attempt.webhook_at)
 
+    def test_the_session_named_id_as_in_xendits_own_sample_books_the_attempt_too(self):
+        attempt, _ = self.started()
+        self.fake.paid(attempt.session_id)
+        self.assertEqual(self.post("payment_session.completed", {"id": attempt.session_id, "status": "COMPLETED"}).status_code, 200)
+        attempt.refresh_from_db()
+        self.assertEqual(attempt.status, PaymentAttempt.Status.BOOKED)
+
     def test_both_addresses_reach_the_same_view(self):
         attempt, _ = self.started()
         self.fake.paid(attempt.session_id)

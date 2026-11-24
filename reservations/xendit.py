@@ -363,11 +363,14 @@ def event_type(event):
 def event_resource(event):
     """The resource inside an event, as {"id": ..., ...}: the session for a completed session, the refund (with its refund_id and status) for a refund."""
     data = dict(_event_data(event))
-    if isinstance(event, dict) and str(event.get("event") or "") == "payment_session.completed":
-        data["id"] = str(data.get("payment_session_id") or "")
-    elif isinstance(event, dict) and str(event.get("event") or "").startswith("refund."):
-        data["id"] = str(data.get("refund_id") or "")
-        data.setdefault("status", "succeeded" if str(event.get("event")).endswith("succeeded") else "failed")
+    name = str(event.get("event") or "") if isinstance(event, dict) else ""
+    # Xendit's own documentation names the session "payment_session_id", but the sample its dashboard sends (Test and save) names it "id": both are read.
+    if name == "payment_session.completed":
+        data["id"] = str(data.get("payment_session_id") or data.get("id") or "")
+    elif name.startswith("refund."):
+        data["id"] = str(data.get("refund_id") or data.get("id") or "")
+        data["refund_id"] = data["id"]
+        data.setdefault("status", "succeeded" if name.endswith("succeeded") else "failed")
     return data
 
 
