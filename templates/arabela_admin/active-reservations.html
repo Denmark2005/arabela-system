@@ -65,6 +65,81 @@
       .dark .ar-card { background: rgba(255,255,255,.03); border-color: #1d2939; }
     </style>
     {% include "arabela_admin/partials/ar_list_styles.html" %}
+    <style>
+      /* Active Reservations only (the list look is shared with other pages: nothing is changed there). The page uses the whole width next to the menu, up to about 2000px. */
+      .ar-wide { max-width: 2000px; }
+      .ar-cq { container-type: inline-size; container-name: arlist; }
+
+      /* The table: eight columns. Pick-up, Event, Return and Rental price sit in .ar-dts, which takes no box of its own on a wide list. */
+      .ar-head.ar-act, .ar-line.ar-act { grid-template-columns: minmax(8rem, 2fr) minmax(8.25rem, 1.4fr) minmax(6.75rem, 1.1fr) repeat(3, minmax(6rem, 1fr)) minmax(5rem, .8fr) 2.25rem; column-gap: .75rem; }
+      .ar-line.ar-act { padding-block: 1.05rem; }
+      .ar-dts { display: contents; }
+      .ar-pr { text-align: right; }
+      .ar-dts > .ar-pr { font-weight: 600; color: #1d2939; font-variant-numeric: tabular-nums; }
+      .dark .ar-dts > .ar-pr { color: rgba(255,255,255,.9); }
+      .ar-dt { font-size: .875rem; color: #667085; font-variant-numeric: tabular-nums; }
+      .dark .ar-dt { color: #98a2b3; }
+      .ar-dt small { display: block; margin-top: .15rem; font-size: .8125rem; line-height: 1.3; }
+      .ar-to { color: #667085; font-weight: 400; } .dark .ar-to { color: #98a2b3; }
+      .ar-was { color: #b54708; font-weight: 500; } .dark .ar-was { color: #fdb022; }
+      @container arlist (min-width: 72rem) { .ar-head.ar-act, .ar-line.ar-act { column-gap: 1.5rem; } }
+      /* Too narrow for eight columns: the four facts sit in one even row under the name, each with its label. */
+      @container arlist (max-width: 55.99rem) {
+        .ar-head.ar-act { display: none; }
+        .ar-line.ar-act { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.2fr) minmax(0, 1fr) 2.25rem; grid-template-areas: "who ref ph chev" "dts dts dts dts"; row-gap: .85rem; }
+        .ar-line.ar-act > .ar-who { grid-area: who; } .ar-line.ar-act > .ar-ref { grid-area: ref; } .ar-line.ar-act > .ar-phone-cell { grid-area: ph; } .ar-line.ar-act > .ar-chev { grid-area: chev; }
+        .ar-line.ar-act > .ar-dts { grid-area: dts; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 1rem; }
+        .ar-dts > .ar-dt::before { content: attr(data-label); display: block; margin-bottom: .15rem; font-size: .8125rem; font-weight: 500; color: #667085; }
+        .dark .ar-dts > .ar-dt::before { color: #98a2b3; }
+        .ar-dts > .ar-pr { text-align: left; }
+      }
+      /* A phone: the four facts in a box of two by two, and every button the full width. */
+      @container arlist (max-width: 35rem) {
+        .ar-line.ar-act { grid-template-columns: minmax(0, 1fr) 2.25rem; grid-template-areas: "who chev" "ref ref" "ph ph" "dts dts"; row-gap: .7rem; padding-inline: 1rem; }
+        .ar-line.ar-act > .ar-dts { grid-template-columns: 1fr 1fr; row-gap: .9rem; padding: .85rem 1rem; border: 1px solid #e4e7ec; border-radius: .75rem; background: rgba(152,162,179,.06); }
+        .dark .ar-line.ar-act > .ar-dts { border-color: #1d2939; }
+        .ar-acts { flex-direction: column; align-items: stretch; }
+        .ar-bgroup { display: grid; grid-template-columns: 1fr 1fr; }
+        .ar-bcancel { margin-left: 0; }
+        .ar-bcancel > .cb-open-btn { flex: 1 1 100%; }
+        .ar-gbtns { flex-direction: column; align-items: stretch; }
+        .ar-gbtns .ar-lb, .ar-gbtns .cb-open-btn { width: 100%; min-height: 2.75rem; }
+        .ar-sp { display: none; }
+        .ar-gfacts { grid-template-columns: 1fr 1fr; }
+      }
+
+      /* The opened booking: its buttons (with words), then one calm line per gown. */
+      .ar-acts { justify-content: space-between; gap: .75rem 1.5rem; padding: .85rem 1.25rem 1.15rem; }
+      .ar-bgroup, .ar-bcancel { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+      .ar-bcancel { margin-left: auto; }
+      .ar-ib.ar-lb { width: auto; height: auto; min-height: 2.5rem; padding: 0 1rem; gap: .5rem; border-radius: .65rem; font-size: .875rem; font-weight: 600; line-height: 1.2; white-space: nowrap; }
+      .ar-ib.ar-lb svg { width: 1.1rem; height: 1.1rem; }
+      .ar-ib.ar-go { background: #ecfdf3; border-color: #abefc6; color: #027a48; }
+      .ar-ib.ar-go:hover:not(:disabled) { background: #d1fadf; color: #05603a; }
+      .dark .ar-ib.ar-go { background: rgba(18,183,106,.14); border-color: rgba(18,183,106,.5); color: #75e0a7; }
+      .dark .ar-ib.ar-go:hover:not(:disabled) { background: rgba(18,183,106,.22); color: #a6f4c5; }
+      .ar-acts .cb-open-btn, .ar-gbtns .cb-open-btn { min-height: 2.5rem; padding: 0 1rem; border-radius: .65rem; font-size: .875rem; font-weight: 600; justify-content: center; }
+      .ar-gl.ar-gl2 { grid-template-columns: auto minmax(0, 1fr) auto 2.5rem; column-gap: 1.1rem; padding: 1rem 1.25rem; align-items: center; }
+      .ar-gl2 .ar-more { width: 2.5rem; height: 2.5rem; border-radius: .65rem; }
+      .ar-gl2 .ar-more svg { width: 1.2rem; height: 1.2rem; }
+      .ar-gstat { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .4rem; }
+      .ar-gmore { padding: 0 1.25rem 1.3rem 3.85rem; }
+      .ar-gmore .ar-facts { gap: .5rem; margin-bottom: .9rem; }
+      .ar-gbtns { gap: .75rem; padding-top: .95rem; border-top: 1px dashed #d0d5dd; }
+      .dark .ar-gbtns { border-color: #344054; }
+      .ar-sp { flex: 1 1 1rem; }
+      .ar-gfacts { display: grid; grid-template-columns: repeat(4, minmax(0, 9.5rem)); gap: 1rem 1.75rem; margin-bottom: 1rem; }
+      .ar-fc { display: grid; gap: .2rem; align-content: start; min-width: 0; }
+      .ar-fk { font-size: .8125rem; font-weight: 500; color: #667085; } .dark .ar-fk { color: #98a2b3; }
+      .ar-fv { font-size: .9375rem; font-weight: 600; color: #1d2939; font-variant-numeric: tabular-nums; } .dark .ar-fv { color: rgba(255,255,255,.9); }
+      .ar-fc .ar-was { font-size: .8125rem; }
+      @media (max-width: 760px) {
+        .ar-gl.ar-gl2 { grid-template-columns: auto minmax(0, 1fr) 2.5rem; grid-template-areas: "num name more" ". stat stat"; row-gap: .6rem; padding: .9rem 1rem; }
+        .ar-gl.ar-gl2 > .ar-num { grid-area: num; } .ar-gl.ar-gl2 > .ar-gname { grid-area: name; } .ar-gl.ar-gl2 > .ar-more { grid-area: more; } .ar-gl.ar-gl2 > .ar-gstat { grid-area: stat; justify-content: flex-start; }
+        .ar-gmore { padding: 0 1rem 1.2rem 1rem; }
+        .ar-acts { padding: .8rem 1rem 1.05rem; }
+      }
+    </style>
     <!-- One shared floating popover, reused for both the pickup/return date "Edit"
          form and the "Mark Returned" condition choice -- position: fixed so it
          overlays the table instead of growing a row's height (which used to push
@@ -1119,7 +1194,7 @@
 
         <!-- ===== Main Content Start ===== -->
         <main>
-          <div class="mx-auto max-w-(--breakpoint-2xl) p-4 md:p-6">
+          <div class="mx-auto ar-wide p-4 md:p-6">
             <!-- Breadcrumb Start -->
             <div x-data="{ pageName: `Active Reservations`}">
               <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -1196,13 +1271,15 @@
               {% include "arabela_admin/partials/date_focus.html" %}
               <div class="ar-count" id="ar-count" aria-live="polite"></div>
 
-              <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg=".ar-booking" data-arpg-noun="bookings" data-arpg-top="off" data-arpg-count="#ar-count" data-live-region="active-list" data-live-hold="#row-popover[style*='display: block'], .ar-more[aria-expanded='true'], details[open]">
-                <div class="ar-head">
+              <div class="custom-scrollbar overflow-y-auto ar-cq" style="max-height: 760px;" data-arpg=".ar-booking" data-arpg-noun="bookings" data-arpg-top="off" data-arpg-count="#ar-count" data-live-region="active-list" data-live-hold="#row-popover[style*='display: block'], .ar-more[aria-expanded='true'], details[open]">
+                <div class="ar-head ar-act">
                   <span>Customer</span>
                   <span>Booking no.</span>
                   <span>Cellphone</span>
-                  <span>Rental Date</span>
-                  <span>Return Date</span>
+                  <span>Pick-up</span>
+                  <span>Event</span>
+                  <span>Return</span>
+                  <span class="ar-pr">Rental price</span>
                   <span></span>
                 </div>
                 {% for r in reservations %}
@@ -1210,7 +1287,7 @@
                 <!-- One booking: a closed line (status circle, name, booking number, cellphone, first pick-up, last return) and, hidden until it is
                      opened, that booking's icon buttons and one short line per gown. -->
                   <div class="ar-booking{% if r.state == 'overdue' %} is-overdue{% endif %}" data-booking-id="{{ r.id }}" data-search="{{ r.display_customer_name|lower }} {{ r.reference_code|lower }}{% for gi in r.items.all %} {{ gi.gown_code|lower }}{% endfor %} {{ r.phone|cut:' ' }} {{ r.proof_search_text }}" x-show="(stateFilter === 'all' || stateFilter === '{{ r.state }}') && (search === '' || '{{ r.display_customer_name|lower|escapejs }} {{ r.reference_code|lower|escapejs }}{% for gi in r.items.all %} {{ gi.gown_code|lower|escapejs }}{% endfor %} {{ r.phone|cut:" "|escapejs }}'.includes(search.toLowerCase())) && arabelaDF.has($el, dateFocus, dateKind)" data-state="{{ r.state }}" data-d-pickup="{% for gi in r.items.all %}{% if gi.stage != 'Cancelled' %}{{ gi.rental_date|date:'Y-m-d' }} {{ gi.picked_up_on|date:'Y-m-d' }} {% endif %}{% endfor %}" data-d-return="{% for gi in r.items.all %}{% if gi.stage != 'Cancelled' %}{{ gi.return_date|date:'Y-m-d' }} {{ gi.returned_on|date:'Y-m-d' }} {% endif %}{% endfor %}" data-d-event="{% for gi in r.items.all %}{% if gi.stage != 'Cancelled' %}{{ gi.effective_event_date|date:'Y-m-d' }} {% endif %}{% endfor %}">
-                    <div class="ar-line" :class="isBookingOpen({{ r.id }}) ? 'is-open' : ''" @click="toggleBooking({{ r.id }})">
+                    <div class="ar-line ar-act" :class="isBookingOpen({{ r.id }}) ? 'is-open' : ''" @click="toggleBooking({{ r.id }})">
                       <div class="ar-who">
                         <span class="ar-dot ar-dot--{{ r.state }}" role="img" aria-label="{{ r.state|title }}"
                           title="{% if r.state == 'overdue' %}Overdue: at least one gown in this booking is past its return date{% elif r.state == 'active' %}Active: a gown from this booking is out with the customer{% else %}Confirmed: waiting for the first pick-up{% endif %}"></span>
@@ -1226,8 +1303,14 @@
                       <div class="ar-phone-cell">
                         {% if r.phone %}<a href="tel:{{ r.phone }}" class="ar-phone" title="Call the customer" @click.stop>{{ r.phone }}</a>{% else %}<span class="ar-none">&mdash;</span>{% endif %}
                       </div>
-                      <div class="ar-date" data-label="Rental">{{ r.span_start|date:"M j, Y" }}</div>
-                      <div class="ar-date" data-label="Return">{{ r.span_end|date:"M j, Y" }}</div>
+                      <!-- What the booking as a whole shows: the first pick-up, the first event day (to the last one when the gowns are for different days), the last return
+                           and the total rental price. A date a staff member moved shows the day it was booked for under it. -->
+                      <div class="ar-dts">
+                        <div class="ar-dt" data-label="Pick-up">{{ r.span_start|date:"M j, Y" }}{% if r.pickup_was %}<small class="ar-was">was {{ r.pickup_was|date:"M j" }}</small>{% endif %}</div>
+                        <div class="ar-dt" data-label="Event">{{ r.span_event_start|date:"M j, Y" }}{% if r.span_event_end != r.span_event_start %}<small class="ar-to">to {{ r.span_event_end|date:"M j, Y" }}</small>{% endif %}</div>
+                        <div class="ar-dt" data-label="Return">{{ r.span_end|date:"M j, Y" }}{% if r.return_was %}<small class="ar-was">was {{ r.return_was|date:"M j" }}</small>{% endif %}</div>
+                        <div class="ar-dt ar-pr" data-label="Rental price" title="The rental price of the gowns, without the security deposit">&#8369;{{ r.total_rental|floatformat:'-2g' }}</div>
+                      </div>
                       <button type="button" class="ar-chev" @click.stop="toggleBooking({{ r.id }})" aria-expanded="false"
                         :aria-expanded="isBookingOpen({{ r.id }}) ? 'true' : 'false'" aria-controls="ar-panel-{{ r.id }}"
                         aria-label="Show or hide the details of {{ r.display_customer_name }}, {{ r.reference_code }}">
@@ -1256,23 +1339,26 @@
                       </div>
                       {% endif %}
 
-                      <!-- The booking's own actions: three icon buttons, then (managers and the owner only) the cancel buttons, still with their words. -->
+                      <!-- The booking's own actions, each with its words: Receipt, Payment, Customer, Timeline; then (managers and the owner only) the cancel buttons, apart on the right. -->
                       <div class="ar-acts">
-                        {% if r.has_receipt %}<button type="button" class="ar-ib" title="Receipt" aria-label="Receipt of {{ r.display_customer_name }}, {{ r.reference_code }}" @click="arabelaReceipt.open({{ r.id }})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg></button>{% endif %}
-                        <a href="{% if paymongo_enabled %}{% url 'arabela_admin:payments' %}?open={{ r.id }}{% else %}{% url 'arabela_admin:payment_verification' %}?search={{ r.display_customer_name|urlencode }}{% endif %}" class="ar-ib"
+                        <div class="ar-bgroup">
+                        {% if r.has_receipt %}<button type="button" class="ar-ib ar-lb" title="Receipt" aria-label="Receipt of {{ r.display_customer_name }}, {{ r.reference_code }}" @click="arabelaReceipt.open({{ r.id }})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>Receipt</button>{% endif %}
+                        <a href="{% if paymongo_enabled %}{% url 'arabela_admin:payments' %}?open={{ r.id }}{% else %}{% url 'arabela_admin:payment_verification' %}?search={{ r.display_customer_name|urlencode }}{% endif %}" class="ar-ib ar-lb"
                           title="View payment" aria-label="View payment of {{ r.display_customer_name }}">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>Payment
                         </a>
                         <button type="button"
                               @click="viewingCustomer = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reference: '{{ r.reference_code|escapejs }}', email: '{{ r.customer.email|default:"—"|escapejs }}', phone: '{{ r.phone|default:"—"|escapejs }}', address: '{{ r.address|escapejs }}', city: '{{ r.city|escapejs }}', postal: '{{ r.postal_code|escapejs }}', submitted: '{{ r.created_at|date:"M j, Y"|escapejs }} at {{ r.created_at|date:"g:i A"|escapejs }}' }; openCustomerModal = true"
-                          class="ar-ib" title="View customer" aria-label="View customer {{ r.display_customer_name }}">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                          class="ar-ib ar-lb" title="View customer" aria-label="View customer {{ r.display_customer_name }}">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Customer
                         </button>
-                        <button type="button" class="ar-ib" :class="openTimeline === {{ r.id }} ? 'is-on' : ''" :aria-pressed="openTimeline === {{ r.id }} ? 'true' : 'false'"
+                        <button type="button" class="ar-ib ar-lb" :class="openTimeline === {{ r.id }} ? 'is-on' : ''" :aria-pressed="openTimeline === {{ r.id }} ? 'true' : 'false'"
                           @click="openTimeline = (openTimeline === {{ r.id }} ? null : {{ r.id }})"
                           :title="openTimeline === {{ r.id }} ? 'Hide timeline' : 'Show timeline'" title="Show timeline" aria-label="Timeline">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Timeline
                         </button>
+                        </div>
+                        <div class="ar-bcancel">
                             {% if r.can_cancel and not r.cancel_request or r.can_cancel and admin_perms.cancel_bookings %}
                             <!-- Only while nothing in the booking has been picked up. Opens the confirm window
                                  (partials/cancel_booking.html); nothing happens until the booking code is typed. -->
@@ -1300,13 +1386,15 @@
                               data-event="{{ r.unpicked_event_text }}"
                               data-reason="{{ r.unpicked_default_reason }}">{% if admin_perms.cancel_bookings %}Cancel all not picked up ({{ r.unpicked_count }}){% else %}Request cancellation ({{ r.unpicked_count }}){% endif %}</button>
                             {% endif %}
+                        </div>
                       </div>
 
-                      <!-- One short line per gown: its circle, name, tag, dates and price. Everything you can DO to a gown is behind its dots. -->
+                      <!-- One calm line per gown: its circle, name, tag and status words. The dates and the price are in the table above; everything you can DO to a gown is behind its dots
+                           (and, when the booking has more than one gown, that gown's own dates and price). -->
                       <div class="ar-gowns">
                         {% for item in r.items.all %}
                         <div class="ar-gown" x-data="{ more: false }">
-                          <div class="ar-gl">
+                          <div class="ar-gl ar-gl2">
                             <span class="ar-num ar-num--{{ item.circle.kind }}" role="img" title="{{ item.circle.title }}" aria-label="{{ item.circle.title }}">{% if item.circle.kind == 'returned' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>{% elif item.circle.kind == 'cancelled' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>{% else %}{{ item.circle.number }}{% endif %}</span>
                             <div class="ar-gname">
                               <span class="ar-gtitle" role="button" tabindex="0" data-gpw-name="{{ item.gown_name }}" data-gpw-sub="{{ item.window_sub }}" data-gpw-photo="{{ item.window_photo }}" title="Click to see the photo"{% if item.stage == "Cancelled" %} style="text-decoration: line-through; opacity: .65;"{% endif %}>{{ item.gown_name }}</span>
@@ -1318,17 +1406,8 @@
                               </span>
                               {% endif %}
                             </div>
-                            <div class="ar-gdates">
-                              <span>{{ item.rental_date|date:"M j" }}{% if item.rental_date.year != item.return_date.year %}, {{ item.rental_date.year }}{% endif %} &rarr; {{ item.return_date|date:"M j, Y" }}</span>
-                              {% if item.rental_date != item.scheduled_pickup or item.return_date != item.scheduled_return %}
-                              <span class="ar-chg" role="img"
-                                title="Dates changed{% if item.rental_date != item.scheduled_pickup %} &middot; pick-up was {{ item.scheduled_pickup|date:'M j' }}{% endif %}{% if item.return_date != item.scheduled_return %} &middot; return was {{ item.scheduled_return|date:'M j' }}{% endif %}"
-                                aria-label="Dates changed{% if item.rental_date != item.scheduled_pickup %}, pick-up was {{ item.scheduled_pickup|date:'M j' }}{% endif %}{% if item.return_date != item.scheduled_return %}, return was {{ item.scheduled_return|date:'M j' }}{% endif %}">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
-                              </span>
-                              {% endif %}
-                            </div>
-                            <div class="ar-gprice">&#8369;{{ item.rental_price|floatformat:'-2g' }}</div>
+                            <!-- Where the gown stands, in words (a phone has no hover, and the circle's colour alone is easy to misread). -->
+                            <div class="ar-gstat" data-item-status="{{ item.id }}">{% for remark in item.line_remarks %}<span class="inline-flex items-center rounded-full px-2 py-0.5 text-theme-xs font-medium {% if remark.tone == 'warning' %}bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400{% elif remark.tone == 'success' %}bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500{% elif remark.tone == 'primary' %}bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400{% elif remark.tone == 'danger' %}bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500{% else %}bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400{% endif %}">{{ remark.text }}</span>{% endfor %}</div>
                             <button type="button" class="ar-ib ar-more" :class="more ? 'is-on' : ''" @click="more = !more" :aria-expanded="more ? 'true' : 'false'" aria-controls="ar-more-{{ item.id }}"
                               title="Show or hide what you can do with this gown" aria-label="Actions for {{ item.gown_name }}">
                               <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
@@ -1336,59 +1415,66 @@
                           </div>
 
                           <div class="ar-gmore" id="ar-more-{{ item.id }}" x-show="more" x-cloak>
-                            <!-- What staff used to read as chips and columns, written out (a phone has no hover): the status remarks, the real dates. -->
-                            <div class="ar-facts" data-item-remarks="{{ item.id }}">
-                              {% for remark in item.remarks %}
-                            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-theme-xs font-medium {% if remark.tone == 'warning' %}bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400{% elif remark.tone == 'success' %}bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500{% elif remark.tone == 'primary' %}bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400{% elif remark.tone == 'danger' %}bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500{% else %}bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400{% endif %}">{{ remark.text }}</span>
-                              {% endfor %}
-                              {% if item.picked_up_on %}<span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">Picked up {{ item.picked_up_on|date:"M j" }}</span>{% endif %}
-                              {% if item.returned_on %}<span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">Returned {{ item.returned_on|date:"M j" }}</span>{% endif %}
-                              {% if item.rental_date != item.scheduled_pickup %}<span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">Pick-up originally {{ item.scheduled_pickup|date:"M j" }}</span>{% endif %}
-                              {% if item.return_date != item.scheduled_return %}<span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">Return originally {{ item.scheduled_return|date:"M j" }}</span>{% endif %}
+                            {% if r.multi_gown %}
+                            <!-- Several gowns: the table row can only show the booking as a whole, so each gown says its own days and price here. A date that was moved shows the day it was booked for. -->
+                            <div class="ar-gfacts">
+                              <div class="ar-fc"><span class="ar-fk">{% if item.picked_up_on %}Picked up{% else %}Pick-up{% endif %}</span><span class="ar-fv">{{ item.picked_up_on|default:item.rental_date|date:"M j, Y" }}</span>{% if item.rental_date != item.scheduled_pickup %}<span class="ar-was">was {{ item.scheduled_pickup|date:"M j" }}</span>{% endif %}</div>
+                              <div class="ar-fc"><span class="ar-fk">Event</span><span class="ar-fv">{{ item.effective_event_date|date:"M j, Y" }}</span></div>
+                              <div class="ar-fc"><span class="ar-fk">{% if item.returned_on %}Returned{% elif item.picked_up_on %}Return due{% else %}Return{% endif %}</span><span class="ar-fv">{{ item.returned_on|default:item.return_date|date:"M j, Y" }}</span>{% if item.return_date != item.scheduled_return %}<span class="ar-was">was {{ item.scheduled_return|date:"M j" }}</span>{% endif %}</div>
+                              <div class="ar-fc"><span class="ar-fk">Rental price</span><span class="ar-fv">&#8369;{{ item.rental_price|floatformat:'-2g' }}</span></div>
                             </div>
+                            {% endif %}
+                            {% if item.note_remarks or item.picked_up_on %}
+                            <div class="ar-facts" data-item-remarks="{{ item.id }}">
+                              {% for remark in item.note_remarks %}<span class="inline-flex items-center rounded-full px-2 py-0.5 text-theme-xs font-medium {% if remark.tone == 'warning' %}bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400{% elif remark.tone == 'success' %}bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500{% elif remark.tone == 'primary' %}bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400{% elif remark.tone == 'danger' %}bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500{% else %}bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400{% endif %}">{{ remark.text }}</span>{% endfor %}
+                              {% if item.picked_up_on %}<span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">Picked up {{ item.picked_up_on|date:"M j" }}</span>{% endif %}
+                            </div>
+                            {% endif %}
                             {% if item.stage != "Returned" and item.stage != "Cancelled" %}
                             <div class="ar-gbtns" data-item-actions="{{ item.id }}">
-                              {% if r.has_account %}
-                              <button type="button" class="resv-remind-btn ar-ib"
-                                data-url="{% url 'arabela_admin:reservation_item_send_reminder' item.id %}"
-                                data-gown="{{ item.gown_name }}"
-                                data-customer="{{ r.display_customer_name }}"
-                                data-suggested="{{ item.suggested_reminder }}"
-                                title="Remind the customer" aria-label="Remind the customer about {{ item.gown_name }}"
-                                onclick="sendReminder(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/></svg></button>
-                              {% endif %}
-                              <!-- No website account (a walk-in): no Remind button, a message can't reach them. Staff call the number on the booking's line. -->
                               {% if item.stage == "Pick-up" %}
                               <!-- One click records today as the pick-up. The server only allows it on or after the booking's CURRENT pick-up date (the customer's
                                    changed one if they moved it) and says so if it's too early. -->
-                              <button type="button" class="resv-mark-pickedup-btn ar-ib" title="Mark picked up" aria-label="Mark {{ item.gown_name }} picked up"
-                                data-item-id="{{ item.id }}"{% if r.balance_due > 0 %} data-balance="{{ r.balance_text }}" data-pay-url="{% url 'arabela_admin:payments' %}?open={{ r.id }}"{% endif %}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+                              <button type="button" class="resv-mark-pickedup-btn ar-ib ar-lb ar-go" title="Mark as picked up" aria-label="Mark {{ item.gown_name }} as picked up"
+                                data-item-id="{{ item.id }}"{% if r.balance_due > 0 %} data-balance="{{ r.balance_text }}" data-pay-url="{% url 'arabela_admin:payments' %}?open={{ r.id }}"{% endif %}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>Mark as picked up</button>
                               {% elif item.stage == "Reserved" or item.stage == "Return" or item.stage == "Overdue" %}
                               <!-- The condition choices open in a floating popover (#row-popover near the end of <body>), not inline: revealing them in the row
                                    would grow it and push every row below it down the page on every click. -->
-                              <button type="button" class="resv-mark-returned-btn ar-ib" title="Mark returned" aria-label="Mark {{ item.gown_name }} returned"
-                                data-item-id="{{ item.id }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></button>
+                              <button type="button" class="resv-mark-returned-btn ar-ib ar-lb ar-go" title="Mark as returned" aria-label="Mark {{ item.gown_name }} as returned"
+                                data-item-id="{{ item.id }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>Mark as returned</button>
                               {% endif %}
-                              {% if item.picked_up_on %}
-                              <button type="button" class="resv-undo-pickup-btn ar-ib" title="Undo the pick-up" aria-label="Undo the pick-up of {{ item.gown_name }}"
-                                data-item-id="{{ item.id }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 103-7.7L3 8"/></svg></button>
-                              {% elif item.stage == "Pick-up" %}
-                              <button type="button" class="resv-change-date-btn ar-ib" title="Change pick-up date" aria-label="Change the pick-up date of {{ item.gown_name }}"
+                              {% if not item.picked_up_on and item.stage == "Pick-up" %}
+                              <button type="button" class="resv-change-date-btn ar-ib ar-lb" title="Change pick-up date" aria-label="Change the pick-up date of {{ item.gown_name }}"
                                 data-kind="pickup" data-item-id="{{ item.id }}"
                                 data-current="{{ item.rental_date|date:'Y-m-d' }}"
                                 data-original="{{ item.scheduled_pickup|date:'Y-m-d' }}"
                                 data-rental="{{ item.rental_date|date:'Y-m-d' }}"
-                                data-return="{{ item.return_date|date:'Y-m-d' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M13.5 14l-2.5 2 2.5 2"/></svg></button>
+                                data-return="{{ item.return_date|date:'Y-m-d' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M13.5 14l-2.5 2 2.5 2"/></svg>Change pick-up date</button>
                               {% endif %}
                               {% if not item.returned_on %}
-                              <button type="button" class="resv-change-date-btn ar-ib" title="Change return date" aria-label="Change the return date of {{ item.gown_name }}"
+                              <button type="button" class="resv-change-date-btn ar-ib ar-lb" title="Change return date" aria-label="Change the return date of {{ item.gown_name }}"
                                 data-kind="return" data-item-id="{{ item.id }}"
                                 data-current="{{ item.return_date|date:'Y-m-d' }}"
                                 data-original="{{ item.scheduled_return|date:'Y-m-d' }}"
                                 data-rental="{{ item.rental_date|date:'Y-m-d' }}"
-                                data-return="{{ item.return_date|date:'Y-m-d' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M10.5 14l2.5 2-2.5 2"/></svg></button>
+                                data-return="{{ item.return_date|date:'Y-m-d' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M10.5 14l2.5 2-2.5 2"/></svg>Change return date</button>
+                              {% endif %}
+                              {% if r.has_account %}
+                              <button type="button" class="resv-remind-btn ar-ib ar-lb"
+                                data-url="{% url 'arabela_admin:reservation_item_send_reminder' item.id %}"
+                                data-gown="{{ item.gown_name }}"
+                                data-customer="{{ r.display_customer_name }}"
+                                data-suggested="{{ item.suggested_reminder }}"
+                                title="Send reminder" aria-label="Send a reminder to the customer about {{ item.gown_name }}"
+                                onclick="sendReminder(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/></svg>Send reminder</button>
+                              {% endif %}
+                              <!-- No website account (a walk-in): no Send reminder button, a message can't reach them. Staff call the number on the booking's line. -->
+                              {% if item.picked_up_on %}
+                              <button type="button" class="resv-undo-pickup-btn ar-ib ar-lb" title="Undo pick-up" aria-label="Undo the pick-up of {{ item.gown_name }}"
+                                data-item-id="{{ item.id }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 103-7.7L3 8"/></svg>Undo pick-up</button>
                               {% endif %}
                             {% if item.can_cancel_gown and not r.cancel_request or item.can_cancel_gown and admin_perms.cancel_bookings %}
+                            <span class="ar-sp"></span>
                             <!-- Cancels just this gown (nobody picked it up); the rest of the booking carries on.
                                  Opens the small confirm window in partials/cancel_booking.html. -->
                             <button type="button" class="cb-open-btn cb-open-btn--small{% if item.cancel_urgent %} cb-open-btn--urgent{% endif %}"
@@ -1555,9 +1641,9 @@
           return;
         }
 
-        var original = btn.innerHTML, originalTitle = btn.title;      // the button is an icon: swap the icon, not text
+        var original = btn.innerHTML, originalTitle = btn.title;      // the button is an icon and its words: swap them as markup, back again after
         btn.disabled = true;
-        btn.innerHTML = '<span class="ar-spin" aria-hidden="true"></span>';
+        btn.innerHTML = '<span class="ar-spin" aria-hidden="true"></span>Sending\u2026';
         btn.title = 'Sending...';
 
         fetch(url, {
@@ -1573,7 +1659,7 @@
               throw new Error(result.data.error || 'Could not send this reminder.');
             }
             btn.disabled = false;
-            btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>';
+            btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>Sent';
             btn.title = 'Sent';
             // Back to normal shortly: the button stays usable because staff legitimately
             // send more than one reminder to the same customer over a rental.

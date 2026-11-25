@@ -113,31 +113,39 @@ class RedesignedPageTests(ActiveDropdownBase):
         expect = {self.m_items[0].id: ("confirmed", "6"), self.m_items[1].id: ("active", "3"), self.m_items[2].id: ("overdue", "5")}
         for item_id, (kind, number) in expect.items():
             more = self.card.index(f'id="ar-more-{item_id}"')
-            line = self.card[self.card.rindex('<div class="ar-gl">', 0, more):more]
+            line = self.card[self.card.rindex('<div class="ar-gl ar-gl2">', 0, more):more]
             with self.subTest(kind=kind):
                 self.assertRegex(line, r'class="ar-num ar-num--%s" role="img" title="[^"]+" aria-label="[^"]+">%s</span>' % (kind, number))
         back = self.card.index(f'id="ar-more-{self.m_items[3].id}"')
-        self.assertIn('ar-num ar-num--returned', self.card[self.card.rindex('<div class="ar-gl">', 0, back):back])
+        self.assertIn('ar-num ar-num--returned', self.card[self.card.rindex('<div class="ar-gl ar-gl2">', 0, back):back])
 
     # ---- the opened booking: icons, then one short line per gown
-    def test_the_booking_actions_are_three_icon_buttons_with_labels_and_no_words(self):
+    def test_the_booking_actions_are_icon_buttons_with_their_words_a_tooltip_and_a_label(self):
         acts = self.card[self.card.index('class="ar-acts"'):self.card.index('class="ar-gowns"')]
         tags = re.findall(r'<(?:a|button)\b[^>]*class="ar-ib[^"]*"[^>]*>.*?</(?:a|button)>', acts, flags=re.S)
         self.assertEqual(len(tags), 3)
+        words = []
         for tag in tags:
             with self.subTest(tag=tag[:90]):
                 self.assertRegex(tag, r"title=")
                 self.assertRegex(tag, r"aria-label=")
-                self.assertEqual(re.sub(r"<svg.*?</svg>", "", re.sub(r"<[^>]+>", "", tag, count=0), flags=re.S).strip(), "")     # nothing but the drawing inside
+                self.assertIn("<svg", tag)
+                words.append(re.sub(r"\s+", " ", re.sub(r"<svg.*?</svg>", "", re.sub(r"<[^>]+>", "", tag, count=0), flags=re.S)).strip())
+        self.assertEqual(words, ["Payment", "Customer", "Timeline"])             # (the Receipt button only shows when the booking has a receipt)
 
-    def test_every_small_gown_action_is_an_icon_with_a_tooltip_and_a_label(self):
+    def test_every_gown_action_is_an_icon_with_its_words_a_tooltip_and_a_label(self):
         icons = re.findall(r'<button\b[^>]*class="(?:resv-[a-z-]+-btn )?ar-ib[^"]*"[^>]*>.*?</button>', self.card, flags=re.S)
         self.assertGreaterEqual(len(icons), 10)
+        allowed = {"Mark as picked up", "Mark as returned", "Change pick-up date", "Change return date", "Send reminder", "Undo pick-up", "Customer", "Timeline", "Receipt"}
         for tag in icons:
             with self.subTest(tag=tag[:90]):
                 self.assertRegex(tag, r"title=")
                 self.assertRegex(tag, r"aria-label=")
-                self.assertEqual(re.sub(r"<[^>]+>", "", tag).strip(), "")
+                words = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", tag)).strip()
+                if "ar-more" in tag:
+                    self.assertEqual(words, "")                                  # the dots stay a plain icon
+                else:
+                    self.assertIn(words, allowed)                                 # every other button says what it does
 
     def test_the_cancel_buttons_keep_their_words(self):
         self.assertIn(">Cancel booking</button>", self.card)                                       # the walk-in nobody picked up
@@ -150,7 +158,7 @@ class RedesignedPageTests(ActiveDropdownBase):
     def test_a_gown_line_has_no_buttons_but_its_dots_and_the_actions_are_inside_them(self):
         for item in self.m_items:
             more = self.card.index(f'id="ar-more-{item.id}"')
-            line = self.card[self.card.rindex('<div class="ar-gl">', 0, more):more]
+            line = self.card[self.card.rindex('<div class="ar-gl ar-gl2">', 0, more):more]
             self.assertEqual(line.count("<button"), 1)
             self.assertIn('class="ar-ib ar-more"', line)
             self.assertIn(f'aria-controls="ar-more-{item.id}"', line)
@@ -161,18 +169,21 @@ class RedesignedPageTests(ActiveDropdownBase):
         back = self.card[self.card.index(f'id="ar-more-{self.m_items[3].id}"'):]
         self.assertNotIn(f'data-item-actions="{self.m_items[3].id}"', back[:3000])               # a returned gown has nothing to press
 
-    def test_the_status_words_the_old_chips_said_are_written_out_when_a_gown_is_opened(self):
-        more = self.card[self.card.index(f'id="ar-more-{self.m_items[2].id}"'):][:2500]
-        self.assertIn("Out with customer", more)
-        self.assertIn("Overdue · 5 days late", more)
+    def test_the_status_words_are_written_out_on_the_gown_line_itself(self):
+        more = self.card.index(f'id="ar-more-{self.m_items[2].id}"')
+        line = self.card[self.card.rindex('<div class="ar-gl ar-gl2">', 0, more):more]
+        self.assertIn("Out with customer", line)
+        self.assertIn("Overdue · 5 days late", line)
 
-    def test_the_changed_dates_show_as_a_small_icon_with_the_old_date_as_its_hover(self):
+    def test_a_moved_date_shows_the_day_it_was_booked_for_as_text_in_the_table_and_the_note_in_the_dots(self):
         self.client.logout()
         self.client.force_login(self.staff)
         _, [moved] = self.book("Moved Redesign", "09170006666", [(4, 8, P, {"original_rental_date": self.today + timedelta(days=6), "original_return_date": self.today + timedelta(days=8)})])
         _, html = self.page()
-        self.assertIn('title="Dates changed &middot; pick-up was ', html)
-        self.assertIn("Pick-up originally ", html)
+        booked = self.today + timedelta(days=6)
+        self.assertIn(f'<small class="ar-was">was {booked:%b} {booked.day}</small>', html)               # under the Pick-up column of the table
+        self.assertIn("Changed pick-up date by customer", html)                                          # the early-by-N-days note stays inside the gown's dots
+        self.assertNotIn('title="Dates changed', html)                                                    # no hover-only icon any more
 
     def test_the_timeline_is_a_toggle_icon_over_one_block_per_booking(self):
         self.assertEqual(self.card.count('aria-label="Timeline"'), 2)

@@ -489,6 +489,11 @@ def _item_remarks(item, today=None):
     return remarks
 
 
+def _is_change_note(remark):
+    """A remark about a date that was moved (not about where the gown stands): Active Reservations keeps these inside a gown's dots and puts the others on its line."""
+    return remark["text"].startswith(("Changed ", "Pick-up moved", "Return moved"))
+
+
 _OUT_STAGES = (ReservationItem.Stage.RESERVED, ReservationItem.Stage.RETURN, ReservationItem.Stage.OVERDUE)
 
 
@@ -1551,6 +1556,8 @@ def active_reservations_view(request):
             item.scheduled_return = item.original_return_date or item.return_date
             item.effective_stage = _effective_stage(item, today)
             item.remarks = _item_remarks(item, today)
+            item.line_remarks = [r for r in item.remarks if not _is_change_note(r)]       # the status words shown on the gown's line
+            item.note_remarks = [r for r in item.remarks if _is_change_note(r)]           # the notes about moved dates, inside its dots
             item.circle = _gown_circle(item, today)
             # Everything else holding this same physical gown, so the Change pick-up /
             # return calendars can grey out the days that are taken and say why. The
@@ -1581,6 +1588,16 @@ def active_reservations_view(request):
         reservation.span_start = min((i.rental_date for i in dated), default=None)
         reservation.span_end = max((i.return_date for i in dated), default=None)
         reservation.gown_count = len(live_items)
+        # The table's own columns (display only): the first event day (and the last, when the gowns are for different days), the total rental price, and -- when the
+        # gown that gives the first pick-up / last return was moved -- the day it was booked for, shown as "was ...".
+        reservation.multi_gown = len(live_items) > 1
+        reservation.span_event_start = min((i.effective_event_date for i in dated), default=None)
+        reservation.span_event_end = max((i.effective_event_date for i in dated), default=None)
+        reservation.total_rental = sum((i.rental_price or Decimal("0") for i in dated), Decimal("0"))
+        first_out = min(dated, key=lambda i: i.rental_date, default=None)
+        last_back = max(dated, key=lambda i: i.return_date, default=None)
+        reservation.pickup_was = first_out.scheduled_pickup if first_out is not None and first_out.scheduled_pickup != first_out.rental_date else None
+        reservation.return_was = last_back.scheduled_return if last_back is not None and last_back.scheduled_return != last_back.return_date else None
         # Every gown still part of the booking is back: shown as Completed (a booking's own status stays "Confirmed"),
         # and not counted in the dashboard's Active Rentals tile.
         reservation.is_completed = bool(live_items) and all(i.stage == ReservationItem.Stage.RETURNED for i in live_items)

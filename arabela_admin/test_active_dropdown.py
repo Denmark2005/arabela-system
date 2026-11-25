@@ -112,8 +112,8 @@ class ClosedLineTests(ActiveDropdownBase):
     def test_the_closed_list_has_its_own_header_and_the_search_says_cellphone(self):
         self.book("Header Check", "09170000000", [(3, 7, P, {})])
         _, html = self.page()
-        header = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", re.search(r'<div class="ar-head">.*?</div>', html, re.S).group(0))).strip()
-        self.assertEqual(header, "Customer Booking no. Cellphone Rental Date Return Date")
+        header = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", re.search(r'<div class="ar-head ar-act">.*?</div>', html, re.S).group(0))).strip()
+        self.assertEqual(header, "Customer Booking no. Cellphone Pick-up Event Return Rental price")
         self.assertIn("Search by customer, reference, cellphone or gown ID...", html)
 
     def test_the_empty_state_is_still_shown(self):
@@ -144,8 +144,8 @@ class DropdownContentTests(ActiveDropdownBase):
         self.assertNotIn(f'data-kind="pickup" data-item-id="{o2.id}"', html)             # already out
         for kind in ("mark-pickedup", "mark-returned", "undo-pickup"):
             self.assertIsNone(button(kind, o3))                                          # already back
-        self.assertIn('title="Mark picked up"', html)                                    # the words are the tooltip (and the screen-reader label)
-        self.assertIn('title="Mark returned"', html)
+        self.assertIn('title="Mark as picked up"', html)                                 # the words are on the button, and in the tooltip and the screen-reader label
+        self.assertIn('title="Mark as returned"', html)
         self.assertEqual(html.count('class="resv-remind-btn'), 2)                        # the account holder's two gowns still to come back
         self.assertEqual(html.count('onclick="sendReminder(this)"'), 2)
         self.assertNotIn(">Call</a>", html)                                              # no Call button anywhere: the walk-in has no Remind either, staff dial the number on the line
@@ -158,16 +158,22 @@ class DropdownContentTests(ActiveDropdownBase):
         self.assertIn(reverse("arabela_admin:reservation_cancel_gowns", args=[walkin.id]), html)
         self.assertEqual(html.count("payment-verification/?search="), 2)                  # View
 
-    def test_a_gown_line_shows_the_circle_the_name_the_dates_and_the_price(self):
+    def test_the_table_shows_the_dates_and_the_price_and_the_gown_line_only_its_name_and_status_words(self):
         reservation, [item] = self.book("Columns Check", "09170000001", [(3, 7, P, {})])
         _, html = self.page()
+        closed = html[html.index('data-booking-id="%d"' % reservation.id):html.index('id="ar-panel-%d"' % reservation.id)]
+        pickup, event, back = self.today + timedelta(days=3), self.today + timedelta(days=5), self.today + timedelta(days=7)
+        self.assertIn("&#8369;3,000", closed)                                        # every admin price carries its thousands comma; it is a column of the table
+        for day in (pickup, event, back):
+            self.assertIn(f"{day:%b} {day.day}, {day.year}", closed)
+        for label in ("Pick-up", "Event", "Return", "Rental price"):
+            self.assertIn(f'data-label="{label}"', closed)
         panel = html[html.index('id="ar-panel-%d"' % reservation.id):]
-        line = panel[panel.index('<div class="ar-gl">'):panel.index('id="ar-more-%d"' % item.id)]
-        pickup, back = self.today + timedelta(days=3), self.today + timedelta(days=7)
+        line = panel[panel.index('<div class="ar-gl ar-gl2">'):panel.index('id="ar-more-%d"' % item.id)]
         self.assertIn(item.gown_name, line)
-        self.assertIn("&#8369;3,000", line)                                          # every admin price carries its thousands comma
-        self.assertIn(f"{pickup:%b} {pickup.day}", line)
-        self.assertIn(f"{back:%b} {back.day}, {back.year}", line)
+        self.assertIn("Pick-up in 3 days", line)                                     # the status words are on the line itself
+        self.assertNotIn("&#8369;", line)                                            # the price and the dates are not repeated there
+        self.assertNotIn("ar-gdates", line)
         self.assertRegex(line, r'class="ar-num ar-num--confirmed" role="img" title="Pick-up in 3 days"[^>]*>3</span>')     # green, 3 days to pick-up
         self.assertEqual(line.count("<button"), 1)                                   # the line itself has no buttons but the dots
         card = html[html.index('class="ar-card"'):html.index('x-show="openCustomerModal"')]
