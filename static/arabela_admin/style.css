@@ -5055,12 +5055,6 @@ span.flatpickr-weekday,
   flex: none;
 }
 
-/* ===== One page width for the whole admin =====
-   Every admin page's box (the area next to the menu, class adm-page) takes the whole width it is given, up to 2560px: a laptop and an ordinary monitor are
-   filled edge to edge, and only a very large screen (4K, ultra-wide) stops there, so a table row never gets too long to read across. Change it here and every
-   page follows. (Before: the theme's 1536px on most pages, 2000px on Active Reservations.) Pop-up windows and the printed receipt keep their own sizes. */
-.adm-page { max-width: 2560px; }
-
 /* ===== Readable admin text =====
    Added so readers over 45 can read the admin panel. ONE dial for the whole panel: the page's base size, set by <html data-text-size="normal | large | xl">.
    Everything written in rem (the utilities above AND each page's own styles) grows with it, spacing included, so layouts keep their proportions.

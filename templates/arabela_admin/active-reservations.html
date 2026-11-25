@@ -66,7 +66,8 @@
     </style>
     {% include "arabela_admin/partials/ar_list_styles.html" %}
     <style>
-      /* Active Reservations only (the list look is shared with other pages: nothing is changed there). The page's width is the admin-wide one: .adm-page in static/arabela_admin/style.css. */
+      /* Active Reservations only (the list look is shared with other pages: nothing is changed there). The page uses the whole width next to the menu, up to about 2000px. */
+      .ar-wide { max-width: 2000px; }
       .ar-cq { container-type: inline-size; container-name: arlist; }
 
       /* The table: eight columns. Pick-up, Event, Return and Rental price sit in .ar-dts, which takes no box of its own on a wide list. */
@@ -1202,7 +1203,7 @@
 
         <!-- ===== Main Content Start ===== -->
         <main>
-          <div class="mx-auto adm-page p-4 md:p-6">
+          <div class="mx-auto ar-wide p-4 md:p-6">
             <!-- Breadcrumb Start -->
             <div x-data="{ pageName: `Active Reservations`}">
               <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
