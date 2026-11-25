@@ -51,31 +51,54 @@
   <div class="rc-kv"><span>Customer</span><span>{{ r.customer }}</span></div>
   {% if r.served_by %}<div class="rc-kv"><span>Served by</span><span>{{ r.served_by }}</span></div>{% endif %}
   <hr class="rc-rule">
+  {% if not r.return.gowns %}
   {% for g in r.gowns %}
     <div>{{ g.name }}{% if g.size %} ({{ g.size }}){% endif %}</div>
     <div class="rc-sub">Pick-up {{ g.pickup }} &nbsp; Return {{ g.return }}</div>
   {% endfor %}
   <hr class="rc-rule">
+  {% endif %}
 
   {% if r.return %}
+    {% if r.return.gowns %}
+      <div class="rc-bold">GOWN RETURNED</div>
+      {% for g in r.return.gowns %}
+        <div>{{ g.name }}{% if g.size %} ({{ g.size }}){% endif %}</div>
+        <div class="rc-sub">Due back {{ g.due }}</div>
+        {% if g.back %}<div class="rc-sub">Returned {{ g.back }}</div>{% endif %}
+        <div class="rc-sub">{% if g.late_days %}{{ g.late_days }} day{{ g.late_days|pluralize }} late{% else %}On time{% endif %}</div>
+      {% endfor %}
+      <hr class="rc-rule">
+      <div class="rc-bold">SECURITY DEPOSIT</div>
+    {% endif %}
     <div class="rc-row"><span>Security deposit paid</span><span>&#8369;{{ r.return.deposit_paid|floatformat:"2g" }}</span></div>
-    <div class="rc-row"><span>Late fee</span><span>-&#8369;{{ r.return.late_fee|floatformat:"2g" }}</span></div>
+    <div class="rc-row"><span>Late fee</span><span>{% if r.return.late_fee != "0.00" or not r.return.why %}-{% endif %}&#8369;{{ r.return.late_fee|floatformat:"2g" }}</span></div>
     {% for l in r.return.late_lines %}
-      <div class="rc-sub">{{ l.gown }}: {{ l.days }} day{{ l.days|pluralize }} x &#8369;{{ l.rate }}</div>
+      {% if l.due %}
+        <div class="rc-sub">{{ l.gown }}</div>
+        <div class="rc-sub">{{ l.days }} day{{ l.days|pluralize }} x &#8369;{{ l.rate }} = &#8369;{{ l.amount|floatformat:"2g" }}</div>
+      {% else %}
+        <div class="rc-sub">{{ l.gown }}: {{ l.days }} day{{ l.days|pluralize }} x &#8369;{{ l.rate }}</div>
+      {% endif %}
     {% endfor %}
-    <div class="rc-row"><span>Deductions</span><span>-&#8369;{{ r.return.deductions_total|floatformat:"2g" }}</span></div>
+    <div class="rc-row"><span>Deductions</span><span>{% if r.return.deductions_total != "0.00" or not r.return.why %}-{% endif %}&#8369;{{ r.return.deductions_total|floatformat:"2g" }}</span></div>
     {% for d in r.return.deductions %}
       <div class="rc-sub">{{ d.reason }}: -&#8369;{{ d.amount|floatformat:"2g" }}</div>
     {% endfor %}
     <hr class="rc-rule">
     <div class="rc-row rc-bold rc-big"><span>DEPOSIT RETURNED</span><span>&#8369;{{ r.return.returned_now|floatformat:"2g" }}</span></div>
     <div class="rc-kv"><span>Returned by</span><span>{{ r.method }}</span></div>
+    {% if payment.provider and r.return.why and not payment.is_void %}<div class="rc-sub">Sent back to the account the customer paid with. It can take up to a day to show.</div>{% endif %}
     {% if r.reference %}<div class="rc-kv"><span>GCash ref no.</span><span>{{ r.reference }}</span></div>{% endif %}
     {% if r.return.returned_before and r.return.returned_before != "0.00" %}
       <div class="rc-row"><span>Handed back before</span><span>&#8369;{{ r.return.returned_before|floatformat:"2g" }}</span></div>
     {% endif %}
     {% if r.return.still_to_return and r.return.still_to_return != "0.00" %}
       <div class="rc-row"><span>Still to hand back</span><span>&#8369;{{ r.return.still_to_return|floatformat:"2g" }}</span></div>
+    {% endif %}
+    {% if r.return.why %}
+      <hr class="rc-rule">
+      <p class="rc-note rc-bold">{{ r.return.why }}</p>
     {% endif %}
     <hr class="rc-rule">
     <p class="rc-note">Thank you for renting with us.</p>
@@ -84,6 +107,23 @@
     <div class="rc-row"><span>Security deposit</span><span>&#8369;{{ r.charges.deposit|floatformat:"2g" }}</span></div>
     <div class="rc-row rc-bold"><span>TOTAL</span><span>&#8369;{{ r.charges.total|floatformat:"2g" }}</span></div>
     <hr class="rc-rule">
+    {% if r.extra %}
+      <div class="rc-bold">WHY THIS IS OWED</div>
+      {% if r.extra.late_fee != "0.00" %}<div class="rc-row"><span>Late fee</span><span>&#8369;{{ r.extra.late_fee|floatformat:"2g" }}</span></div>{% endif %}
+      {% for l in r.extra.late_lines %}
+        <div class="rc-sub">{{ l.gown }}</div>
+        <div class="rc-sub">{{ l.days }} day{{ l.days|pluralize }} x &#8369;{{ l.rate }} = &#8369;{{ l.amount|floatformat:"2g" }}</div>
+        <div class="rc-sub">Due back {{ l.due }}</div>
+        <div class="rc-sub">{% if l.back %}Returned {{ l.returned }}{% else %}Not back yet{% endif %}</div>
+      {% endfor %}
+      {% if r.extra.deductions_total != "0.00" %}<div class="rc-row"><span>Deductions</span><span>&#8369;{{ r.extra.deductions_total|floatformat:"2g" }}</span></div>{% endif %}
+      {% for d in r.extra.deductions %}
+        <div class="rc-sub">{{ d.reason }}: &#8369;{{ d.amount|floatformat:"2g" }}</div>
+      {% endfor %}
+      <div class="rc-row"><span>Taken from the deposit</span><span>-&#8369;{{ r.extra.deposit_used|floatformat:"2g" }}</span></div>
+      <div class="rc-row rc-bold"><span>Over the deposit</span><span>&#8369;{{ r.extra.over|floatformat:"2g" }}</span></div>
+      <hr class="rc-rule">
+    {% endif %}
     <div class="rc-bold">PAID NOW: {{ r.purpose_label }}</div>
     <div class="rc-kv"><span>Method</span><span>{{ r.method }}</span></div>
     {% if r.reference %}<div class="rc-kv"><span>GCash ref no.</span><span>{{ r.reference }}</span></div>{% endif %}
@@ -99,7 +139,11 @@
       <div class="rc-row rc-bold rc-big"><span>BALANCE TO PAY AT SHOP</span><span>&#8369;{{ r.balance_after|floatformat:"2g" }}</span></div>
     {% endif %}
     <hr class="rc-rule">
+    {% if r.extra %}
+    <p class="rc-note">The late fee and deductions were more than the security deposit. This receipt is for the part the deposit did not cover.</p>
+    {% else %}
     <p class="rc-note">The deposit is returned when the gown is back on time and in good condition.{% if r.late_rate and r.late_rate != "0" %} Late return: &#8369;{{ r.late_rate }} a day for each gown, taken from the deposit.{% endif %}</p>
+    {% endif %}
     <p class="rc-note rc-bold">Thank you!</p>
   {% endif %}
   {% if payment.is_void %}

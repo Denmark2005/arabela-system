@@ -148,6 +148,21 @@ def item_change_pickup(ctx):
             "details": {"pick-up date": [old, new], "return date": [ctx.before.get("return", ""), _date_text(item.return_date) if item else ""]}}
 
 
+def item_change_dates(ctx):
+    item = _item(ctx.kwargs.get("item_id"))
+    before = ctx.before or {}
+    new_pickup, new_return = (_date_text(item.rental_date), _date_text(item.return_date)) if item else ("", "")
+    parts, details = [], {}
+    if before.get("pickup", "") != new_pickup:
+        parts.append(f"pick-up from {before.get('pickup', '')} to {new_pickup}")
+        details["pick-up date"] = [before.get("pickup", ""), new_pickup]
+    if before.get("return", "") != new_return:
+        parts.append(f"return from {before.get('return', '')} to {new_return}")
+        details["return date"] = [before.get("return", ""), new_return]
+    return {"summary": f"changed the dates of {_item_text(item)}: " + (" and ".join(parts) or "no change"),
+            "target": _booking_target(item.reservation if item else None), "details": details}
+
+
 def item_change_return(ctx):
     item = _item(ctx.kwargs.get("item_id"))
     old = ctx.before.get("return", "")

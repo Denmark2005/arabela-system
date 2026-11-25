@@ -3769,8 +3769,8 @@ class MoveGownsBetweenCategoriesWorkflowTests(TestCase):
 
 class ScheduleActionsTests(TestCase):
     """The scheduling actions now live ONLY in Active Reservations -- Mark Picked Up (on or
-    after the current pick-up date), Change pick-up date (earlier, or back up to the day
-    originally booked) and Change return date (later only) -- and the Rental Schedule is view-only. Everything the calendar and
+    after the current pick-up date), Change pick-up date (earlier or later, from today up to 60 days ahead)
+    and Change return date (later only) -- and the Rental Schedule is view-only. Everything the calendar and
     the early / late remarks read is the booking's own pick-up / return date, so a change
     shows in the Rental Schedule colours by itself."""
 
@@ -3892,12 +3892,16 @@ class ScheduleActionsTests(TestCase):
         item.refresh_from_db()
         self.assertEqual(item.effective_event_date, event_before)
 
-    def test_pickup_cannot_move_later_than_booked_or_stay_the_same(self):
-        """Never moved yet: the day booked IS the current day, so there is nowhere later to go."""
+    def test_pickup_cannot_stay_the_same_but_can_move_later_than_booked(self):
+        """The customer cannot come on the booked day: the pick-up can move later (and the late fee does not change, see test_date_changes)."""
         item = self._item(6, 10)
-        for days in (6, 8):
-            with self.subTest(days=days):
-                self.assertEqual(self._post("reservation_item_change_pickup", item, self.today + timedelta(days=days)).status_code, 400)
+        self.assertEqual(self._post("reservation_item_change_pickup", item, self.today + timedelta(days=6)).status_code, 400)       # the day it is on
+        response = self._post("reservation_item_change_pickup", item, self.today + timedelta(days=8))
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["days_early"], -2)
+        item.refresh_from_db()
+        self.assertEqual((item.rental_date, item.original_rental_date), (self.today + timedelta(days=8), self.today + timedelta(days=6)))
+        self.assertIn("Pick-up moved 2 days later", self._remarks(item))
 
     # ---- moving the pick-up back after it went earlier --------------------------------------------
     def test_pickup_can_go_back_to_the_original_day_after_moving_earlier(self):
@@ -3928,16 +3932,20 @@ class ScheduleActionsTests(TestCase):
         self.assertEqual(item.original_rental_date, self.today + timedelta(days=10))
         self.assertIn("Changed pick-up date by customer · 3 days early", self._remarks(item))
 
-    def test_pickup_can_never_go_past_the_day_originally_booked_even_after_an_earlier_change(self):
+    def test_pickup_can_go_past_the_day_originally_booked_and_the_booking_remembers_what_was_booked(self):
         item = self._item(10, 14)
         self._post("reservation_item_change_pickup", item, self.today + timedelta(days=2))
         for days in (11, 12, 14):
             with self.subTest(days=days):
                 response = self._post("reservation_item_change_pickup", item, self.today + timedelta(days=days))
-                self.assertEqual(response.status_code, 400)
-                self.assertIn("originally booked", response.json()["error"])
+                self.assertEqual(response.status_code, 200, response.content)
         item.refresh_from_db()
-        self.assertEqual(item.rental_date, self.today + timedelta(days=2))
+        self.assertEqual((item.rental_date, item.original_rental_date), (self.today + timedelta(days=14), self.today + timedelta(days=10)))
+        self.assertIn("Pick-up moved 4 days later", self._remarks(item))
+        # a pick-up after the return date needs the return moved too (see test_date_changes for the combined change)
+        response = self._post("reservation_item_change_pickup", item, self.today + timedelta(days=15))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Choose the new return date too", response.json()["error"])
 
     def test_pickup_cannot_be_set_to_the_day_it_is_already_on(self):
         item = self._item(10, 14)
@@ -4005,11 +4013,12 @@ class ScheduleActionsTests(TestCase):
         self.assertIn("moved back from", details[1])
         self.assertIn("the day it was originally booked", details[1])
 
-    def test_a_customer_who_missed_the_early_day_can_be_moved_back_toward_the_booked_day(self):
-        """Moved to day -1 (already passed, never collected) but originally booked for day 6: today (day 0) .. day 6 are all fine."""
+    def test_a_customer_who_missed_the_early_day_can_be_moved_to_a_later_day(self):
+        """Moved to day -1 (already passed, never collected) but originally booked for day 6: today (day 0) up to the return date (day 9) are all fine."""
         item = self._item(-1, 9, original_rental_date=self.today + timedelta(days=6))
         self.assertEqual(self._post("reservation_item_change_pickup", item, self.today - timedelta(days=1)).status_code, 400)  # same day
-        self.assertEqual(self._post("reservation_item_change_pickup", item, self.today + timedelta(days=7)).status_code, 400)  # past booked day
+        self.assertEqual(self._post("reservation_item_change_pickup", item, self.today + timedelta(days=10)).status_code, 400)  # past the return date
+        self.assertEqual(self._post("reservation_item_change_pickup", item, self.today + timedelta(days=7)).status_code, 200)   # later than booked is fine now
         self.assertEqual(self._post("reservation_item_change_pickup", item, self.today + timedelta(days=3)).status_code, 200)
 
     def test_pickup_cannot_move_into_the_past(self):

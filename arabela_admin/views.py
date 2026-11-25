@@ -357,19 +357,26 @@ def _original_event_date(item):
     return _event_date(item)
 
 
+def _span_event(item):
+    """The event day as the calendar markers use it: kept inside the booking's own days (pick-up .. return). The event stays the customer's own day on every
+    page, but once staff move the pick-up later than that day the markers must not be painted on days before the gown was even collected."""
+    event = _event_date(item)
+    return min(max(event, item.rental_date), item.return_date) if item.return_date else max(event, item.rental_date)
+
+
 def _pickup_span(item):
-    rental, event = item.rental_date, _event_date(item)
+    rental, event = item.rental_date, _span_event(item)
     end_incl = max(rental, event - timedelta(days=1))
     return rental, end_incl
 
 
 def _reserved_span(item):
-    event = _event_date(item)
+    event = _span_event(item)
     return event, event
 
 
 def _return_span(item):
-    event, ret = _event_date(item), item.return_date
+    event, ret = _span_event(item), item.return_date
     start = min(ret, event + timedelta(days=1))
     end_incl = ret
     if end_incl < start:
@@ -555,19 +562,33 @@ def _holding_items(gown_ids):
     )
 
 
-def _schedule_conflict(item, rental_date, return_date):
+def _schedule_conflict(item, rental_date, return_date, rest_days=0):
     """What (if anything) already holds THIS physical gown on any day of
     rental_date..return_date, besides the booking being moved -- as a message naming
     it, or None. Inclusive on both ends, like checkout: a booking ending on the 12th
-    collides with one starting on the 12th."""
+    collides with one starting on the 12th.
+
+    rest_days: the days the gown must rest after it comes back (the booking's own cooldown block). When given, a LATER booking may not start inside
+    those days either -- the same rule the website applies when a customer books (gowns/availability.plan_unit: the rental fits, but its rest days
+    would run into a later booking). Another booking's rest block, or a staff block, inside the rest days is not a clash (as on the website), but
+    any block inside the rental days still is."""
     clash = (
         _holding_items([item.gown_id])
-        .filter(rental_date__lte=return_date, return_date__gte=rental_date)
+        .filter(rental_date__lte=return_date + timedelta(days=rest_days), return_date__gte=rental_date)
         .exclude(id=item.id)
         .select_related("reservation__customer__profile")
         .order_by("rental_date")
         .first()
     )
+    if clash and clash.rental_date > return_date:
+        # It starts after the return, inside the rest days: the dates fit, but the gown would not get its rest.
+        latest = clash.rental_date - timedelta(days=rest_days + 1)
+        advice = (f" The latest return date is {latest:%b %d, %Y}." if latest > item.return_date else
+                  " The return date can't be moved later without running into it.")
+        return (
+            f"{item.gown_name} needs {rest_days} rest days after it comes back, and {clash.reservation.display_customer_name} "
+            f"({clash.reservation.reference_code}) has it from {clash.rental_date:%b %d, %Y}.{advice}"
+        )
     if clash:
         return (
             f"{item.gown_name} is already booked {clash.rental_date:%b %d} – "
@@ -625,7 +646,7 @@ def _other_holds_by_gown(gown_ids):
             label += " · awaiting payment approval"
         holds[it.gown_id].append({
             "itemId": it.id, "start": it.rental_date.isoformat(),
-            "end": it.return_date.isoformat(), "label": label,
+            "end": it.return_date.isoformat(), "label": label, "kind": "booking",
         })
     for block in GownUnavailability.objects.filter(gown_id__in=gown_ids, end_date__gte=today):
         holds[block.gown_id].append({
@@ -633,7 +654,7 @@ def _other_holds_by_gown(gown_ids):
             # calendar recognize "this is the very item I'm viewing's own cooldown",
             # instead of always reading as an unrelated hold.
             "itemId": block.auto_for_item_id, "start": block.start_date.isoformat(),
-            "end": block.end_date.isoformat(), "label": f"Blocked · {block.get_reason_display()}",
+            "end": block.end_date.isoformat(), "label": f"Blocked · {block.get_reason_display()}", "kind": "block",
         })
     for gown_holds in holds.values():
         gown_holds.sort(key=lambda h: h["start"])
@@ -1540,6 +1561,10 @@ def active_reservations_view(request):
         {i.gown_id for r in reservations for i in r.items.all() if i.gown_id}
     )
     item_holds = {}
+    # Which gowns still HAVE their rest block (the cooldown after the return): the calendars only guard the rest days of those (staff may have released one on purpose).
+    rest_item_ids = set(
+        GownUnavailability.objects.filter(auto_for_item_id__in=[i.id for r in reservations for i in r.items.all()]).values_list("auto_for_item_id", flat=True)
+    )
     for reservation in reservations:
         for item in reservation.items.all():
             # The exact gown this line is matched to + its tag color, shown under the
@@ -1559,6 +1584,18 @@ def active_reservations_view(request):
             item.line_remarks = [r for r in item.remarks if not _is_change_note(r)]       # the status words shown on the gown's line
             item.note_remarks = [r for r in item.remarks if _is_change_note(r)]           # the notes about moved dates, inside its dots
             item.circle = _gown_circle(item, today)
+            item.has_rest = item.id in rest_item_ids
+            # The late fee for the dates as they stand (reservations/ledger.py): counted from the ORIGINAL return date, ₱ per day per gown, up to the planned return
+            # (or up to today when the gown is out and already past it). Display only; the Payments page keeps working out the real, so-far figure.
+            rate = int(reservation.late_fee_per_day or 0)
+            item.late_days_planned = reservation_ledger.planned_late_days(item, today)
+            item.late_fee_planned = Decimal(item.late_days_planned * rate)
+            if item.stage == ReservationItem.Stage.RETURNED:
+                item.late_fee_kind = "back"
+            elif item.stage in reservation_ledger.OUT_STAGES and item.return_date and today > item.return_date:
+                item.late_fee_kind = "sofar"
+            else:
+                item.late_fee_kind = "planned"
             # Everything else holding this same physical gown, so the Change pick-up /
             # return calendars can grey out the days that are taken and say why. The
             # server still decides (_schedule_conflict); this is only the early guide.
@@ -1610,6 +1647,16 @@ def active_reservations_view(request):
         money = reservation_ledger.statement(reservation, today)
         reservation.balance_due = money.balance_due
         reservation.balance_text = f"{money.balance_due:,.2f}"
+        # The booking's late fee (all its gowns) and how it sits against the security deposit: it comes out of the deposit; what does not fit is still to pay.
+        reservation.late_fee_planned = sum((i.late_fee_planned for i in booking_items), Decimal("0"))
+        reservation.late_days_planned = sum(i.late_days_planned for i in booking_items)
+        # Measured against the deposit paid -- or, when nothing is paid yet (a walk-in that pays at pick-up), the deposit the booking was made with:
+        # the fee comes out of it once it is paid, so an unpaid deposit never makes every fee look "over the deposit".
+        reservation.fee_deposit_paid = money.deposit_paid
+        reservation.fee_deposit_basis = money.deposit_paid if money.deposit_paid > 0 else money.deposit
+        reservation.fee_over_deposit = max(reservation.late_fee_planned + money.deductions_total - reservation.fee_deposit_basis, Decimal("0"))
+        for gown_item in booking_items:
+            gown_item.fee_others = reservation.late_fee_planned - gown_item.late_fee_planned + money.deductions_total   # what the rest of the booking already takes from the deposit
         reservation.has_receipt = reservation_payments.has_receipt(reservation)       # the Receipt button is shown only when there is a receipt to show
         reservation.id_chip = _id_badge(reservation, owner)                            # the "Valid ID" chip in the opened booking
         if reservation.has_overdue_item:
@@ -1681,6 +1728,8 @@ def active_reservations_view(request):
             "today_iso": today.isoformat(),
             # Only the owner answers a cancellation request (the server makes the same test).
             "can_answer_cancel_requests": _is_owner(request),
+            # The limits the date-change calendar greys out by (the server enforces the same ones).
+            "cooldown_days": COOLDOWN_DAYS, "pickup_max_days": PICKUP_MAX_DAYS_AHEAD, "return_max_days": RETURN_MAX_DAYS_AHEAD,
         },
     )
 
@@ -3546,130 +3595,182 @@ def reservation_item_mark_picked_up_view(request, item_id):
     return JsonResponse({"success": True, "stage": item.stage, "picked_up_on": today.isoformat()})
 
 
+PICKUP_MAX_DAYS_AHEAD = 60        # how far from today a pick-up can be moved
+RETURN_MAX_DAYS_AHEAD = 365       # a sanity limit for the return date (nobody keeps a gown longer than that)
+
+
+def _date_choices(request, pickup_key, return_key):
+    """({"pickup": date or None, "return": date or None}, None) from the JSON body of a date change, or (None, JsonResponse) when the body or a date is not valid.
+    A key that is missing or empty means "not changing that one"."""
+    try:
+        data = json.loads(request.body or "{}")
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None, JsonResponse({"error": "Invalid JSON"}, status=400)
+    if not isinstance(data, dict):
+        return None, JsonResponse({"error": "Invalid JSON"}, status=400)
+    chosen = {"pickup": None, "return": None}
+    for name, key in (("pickup", pickup_key), ("return", return_key)):
+        raw = data.get(key) if key else None
+        if raw in (None, ""):
+            continue
+        parsed = _parse_iso_date(raw) if isinstance(raw, str) else None
+        if parsed is None:
+            return None, JsonResponse({"error": "Invalid date"}, status=400)
+        chosen[name] = parsed
+    return chosen, None
+
+
+def _change_item_dates(request, item_id, want_pickup, want_return):
+    """The ONE place a gown's pick-up and/or return date is changed (the three views below call it). Everything is checked before anything is saved, and both dates
+    are saved together or not at all (the views run in one transaction, and the gown's row is locked first, so two staff members can never double-book it).
+
+    Pick-up (want_pickup): the gown must still be waiting for pick-up; any day from today up to PICKUP_MAX_DAYS_AHEAD days ahead, earlier OR later than before.
+    A pick-up that ends up after the current return date needs a new return date in the same request.
+    Return (want_return): later only (there is no early return), never a day that has passed.
+    Never: a day another booking or a block holds this gown. When the RETURN moves, the gown's rest days after it must also stay clear of a later booking, and the
+    gown's rest block (its cooldown) moves to sit right after the new return -- unless staff already released it, which is respected and never undone.
+    The late fee does not change: it is always counted from the ORIGINAL return date (reservations/ledger.py). The customer's event date is frozen, never moved."""
+    item, error = _load_open_item(request, item_id)
+    if error:
+        return error
+    if item.gown_id:
+        list(Gown.objects.select_for_update().filter(id=item.gown_id))          # one change at a time per gown
+    item.refresh_from_db(fields=["stage", "rental_date", "return_date", "original_rental_date", "original_return_date", "event_date", "overdue_date", "picked_up_on", "returned_on"])
+    if item.stage in (ReservationItem.Stage.RETURNED, ReservationItem.Stage.CANCELLED):
+        return JsonResponse({"error": "This gown just changed (it may have been returned or cancelled). Please refresh the page."}, status=409)
+    if want_pickup is None and want_return is None:
+        return JsonResponse({"error": "Choose a new pick-up date or a new return date."}, status=400)
+
+    today = timezone.localdate()
+    old_pickup, old_return = item.rental_date, item.return_date
+    if want_pickup is not None:
+        if item.stage != ReservationItem.Stage.PICKUP:
+            return JsonResponse({"error": "The gown has already been picked up, so its pick-up date can't change."}, status=400)
+        if want_pickup == old_pickup:
+            return JsonResponse({"error": f"The pick-up is already on {want_pickup:%b %d, %Y}. Choose a different day."}, status=400)
+        if want_pickup < today:
+            return JsonResponse({"error": "The new pick-up date can't be a day that has already passed."}, status=400)
+        last_pickup = today + timedelta(days=PICKUP_MAX_DAYS_AHEAD)
+        if want_pickup > last_pickup:
+            return JsonResponse({"error": f"The pick-up can be moved up to {PICKUP_MAX_DAYS_AHEAD} days from today (until {last_pickup:%b %d, %Y})."}, status=400)
+    if want_return is not None:
+        if want_return <= old_return:
+            return JsonResponse({
+                "error": f"The new return date must be later than the current one ({old_return:%b %d, %Y}). There is no early return.",
+            }, status=400)
+        if want_return < today:
+            return JsonResponse({"error": "The new return date can't be a day that has already passed."}, status=400)
+        if want_return > today + timedelta(days=RETURN_MAX_DAYS_AHEAD):
+            return JsonResponse({"error": "That return date is too far away. Please choose a nearer day."}, status=400)
+
+    final_pickup = want_pickup if want_pickup is not None else old_pickup
+    final_return = want_return if want_return is not None else old_return
+    if final_pickup > final_return:
+        if want_return is None:
+            return JsonResponse({
+                "error": f"The new pick-up ({final_pickup:%b %d, %Y}) is after the return date ({old_return:%b %d, %Y}). Choose the new return date too.",
+            }, status=400)
+        return JsonResponse({"error": "The return date can't be before the pick-up date."}, status=400)
+
+    if item.gown_id:
+        # Rest days only matter when the return moves, and only while the gown still HAS its rest block (staff may have released it on purpose).
+        rest_days = COOLDOWN_DAYS if (want_return is not None and getattr(item, "auto_cooldown_block", None) is not None) else 0
+        conflict = _schedule_conflict(item, final_pickup, final_return, rest_days=rest_days)
+        if conflict:
+            return JsonResponse({"error": conflict}, status=409)
+
+    fields = ["updated_at", "event_date"]
+    # The event day is the customer's own and doesn't move with the dates -- but until it is saved it is *computed* from them, so freeze it first.
+    if item.event_date is None:
+        item.event_date = item.effective_event_date
+    if want_pickup is not None:
+        if item.original_rental_date is None:
+            item.original_rental_date = old_pickup
+        item.rental_date = want_pickup
+        fields += ["rental_date", "original_rental_date"]
+    if want_return is not None:
+        if item.original_return_date is None:
+            item.original_return_date = old_return
+        item.return_date = want_return
+        item.overdue_date = want_return
+        fields += ["return_date", "overdue_date", "original_return_date"]
+    item.save(update_fields=fields)
+    if want_return is not None and item.gown_id:
+        _resync_cooldown_block(item, want_return)                 # the rest days move with the return
+
+    days_early = ((item.original_rental_date or old_pickup) - final_pickup).days
+    days_late = (final_return - (item.original_return_date or old_return)).days
+    if want_pickup is not None:
+        if days_early > 0:
+            how = f"{_plural_days(days_early)} earlier than originally booked"
+        elif days_early == 0:
+            how = "the day it was originally booked"
+        else:
+            how = f"{_plural_days(-days_early)} later than originally booked"
+        ReservationStatusEvent.record(
+            item.reservation, f"{item.gown_name} pick-up date changed", item=item,
+            detail=f"Pick-up moved {'back ' if want_pickup > old_pickup else ''}from {old_pickup:%b %d} to {want_pickup:%b %d, %Y} at the customer's request ({how}).",
+            actor=ReservationStatusEvent.Actor.STAFF,
+        )
+    if want_return is not None:
+        ReservationStatusEvent.record(
+            item.reservation, f"{item.gown_name} return date changed", item=item,
+            detail=(
+                f"Return moved from {old_return:%b %d} to {want_return:%b %d, %Y} at the customer's request "
+                f"({_plural_days(max(days_late, 0))} later than originally booked)."
+            ),
+            actor=ReservationStatusEvent.Actor.STAFF,
+        )
+    return JsonResponse({
+        "success": True, "rental_date": final_pickup.isoformat(), "return_date": final_return.isoformat(), "days_early": days_early, "days_late": days_late,
+    })
+
+
 @require_http_methods(["POST"])
 @audited('item.change_pickup', 'Bookings', audit_describe.item_change_pickup, before=audit_describe.before_item)
 @transaction.atomic
 def reservation_item_change_pickup_view(request, item_id):
-    """The customer wants a different pick-up day. It may go EARLIER, and -- after it was moved earlier -- BACK up to the day the customer
-    originally booked (original_rental_date), but never past that day (a customer who comes later than they booked is just marked late),
-    never before today, never after the return date, and never onto days another booking, a block, or another booking's cooldown holds
-    the same physical gown.
-
-    Why moving back can never double-book the gown: a pick-up moved later only SHRINKS the days this booking holds (they were all its own),
-    so it can't touch anyone else's; the days it gives up become free for other customers at once. A move earlier takes new days, so the
-    same overlap check as ever has to pass. The booking's own pick-up moves, so everything that reads it -- the Rental Schedule (painted in
-    the Pick-up colour), availability, the early count against original_rental_date -- follows by itself."""
-    item, error = _load_open_item(request, item_id)
+    """The customer wants a different pick-up day: earlier, or later (a customer who cannot come on the booked day). See _change_item_dates for every rule. A pick-up
+    later than the current return date needs the new return date too: send both to change-dates."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    chosen, error = _date_choices(request, "date", None)
     if error:
         return error
-    if item.stage != ReservationItem.Stage.PICKUP:
-        return JsonResponse({"error": "The gown has already been picked up, so its pick-up date can't change."}, status=400)
-    try:
-        data = json.loads(request.body or "{}")
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
-    new_date = _parse_iso_date(data.get("date"))
-    if not new_date:
+    if chosen["pickup"] is None:
         return JsonResponse({"error": "Invalid date"}, status=400)
-
-    today = timezone.localdate()
-    booked_day = item.original_rental_date or item.rental_date            # the day the customer originally booked
-    if new_date == item.rental_date:
-        return JsonResponse({"error": f"The pick-up is already on {new_date:%b %d, %Y}. Choose a different day."}, status=400)
-    if new_date > booked_day:
-        return JsonResponse({
-            "error": (
-                f"The pick-up can't be later than the day the customer originally booked ({booked_day:%b %d, %Y}). "
-                f"A customer who comes later is just marked late."
-            ),
-        }, status=400)
-    if new_date < today:
-        return JsonResponse({"error": "The new pick-up date can't be a day that has already passed."}, status=400)
-    if new_date > item.return_date:
-        return JsonResponse({"error": "The pick-up can't be after the return date."}, status=400)
-
-    if item.gown_id:
-        list(Gown.objects.select_for_update().filter(id=item.gown_id))
-        conflict = _schedule_conflict(item, new_date, item.return_date)
-        if conflict:
-            return JsonResponse({"error": conflict}, status=409)
-
-    old_date = item.rental_date
-    if item.original_rental_date is None:
-        item.original_rental_date = old_date
-    item.rental_date = new_date
-    item.save(update_fields=["rental_date", "original_rental_date", "updated_at"])
-    days_early = ((item.original_rental_date or old_date) - new_date).days
-    how = "the day it was originally booked" if days_early == 0 else f"{_plural_days(days_early)} earlier than originally booked"
-    ReservationStatusEvent.record(
-        item.reservation, f"{item.gown_name} pick-up date changed", item=item,
-        detail=(
-            f"Pick-up moved {'back ' if new_date > old_date else ''}from {old_date:%b %d} to {new_date:%b %d, %Y} at the customer's "
-            f"request ({how})."
-        ),
-        actor=ReservationStatusEvent.Actor.STAFF,
-    )
-    return JsonResponse({"success": True, "rental_date": new_date.isoformat(), "days_early": days_early})
+    return _change_item_dates(request, item_id, chosen["pickup"], None)
 
 
 @require_http_methods(["POST"])
 @audited('item.change_return', 'Bookings', audit_describe.item_change_return, before=audit_describe.before_item)
 @transaction.atomic
 def reservation_item_change_return_view(request, item_id):
-    """The customer needs the gown LONGER: move the return date later. Only later (there
-    is no early return -- bringing it back sooner changes nothing), never to a day that has
-    passed, and never into days another booking or block holds the gown. The gown's own
-    cooldown moves along with it. Counted as late days against the ORIGINAL return date."""
-    item, error = _load_open_item(request, item_id)
+    """The customer needs the gown LONGER: move the return date later. Only later (there is no early return -- bringing it back sooner changes nothing), never to a
+    day that has passed, never into days another booking or block holds the gown, and the gown's rest days after the new return must stay free too. The gown's own
+    rest block moves along with it. Counted as late days against the ORIGINAL return date."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    chosen, error = _date_choices(request, None, "date")
     if error:
         return error
-    try:
-        data = json.loads(request.body or "{}")
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
-    new_date = _parse_iso_date(data.get("date"))
-    if not new_date:
+    if chosen["return"] is None:
         return JsonResponse({"error": "Invalid date"}, status=400)
+    return _change_item_dates(request, item_id, None, chosen["return"])
 
-    today = timezone.localdate()
-    if new_date <= item.return_date:
-        return JsonResponse({
-            "error": (
-                f"The new return date must be later than the current one "
-                f"({item.return_date:%b %d, %Y}). There is no early return."
-            ),
-        }, status=400)
-    if new_date < today:
-        return JsonResponse({"error": "The new return date can't be a day that has already passed."}, status=400)
 
-    if item.gown_id:
-        list(Gown.objects.select_for_update().filter(id=item.gown_id))
-        conflict = _schedule_conflict(item, item.rental_date, new_date)
-        if conflict:
-            return JsonResponse({"error": conflict}, status=409)
-
-    old_date = item.return_date
-    if item.original_return_date is None:
-        item.original_return_date = old_date
-    # The event day is the customer's own and doesn't move with the return -- but until it
-    # is saved it is *computed* as return - 2, so freeze it before the return changes.
-    if item.event_date is None:
-        item.event_date = item.effective_event_date
-    item.return_date = new_date
-    item.overdue_date = new_date
-    item.save(update_fields=["return_date", "overdue_date", "original_return_date", "event_date", "updated_at"])
-    if item.gown_id:
-        _resync_cooldown_block(item, new_date)
-    days_late = (new_date - (item.original_return_date or old_date)).days
-    ReservationStatusEvent.record(
-        item.reservation, f"{item.gown_name} return date changed", item=item,
-        detail=(
-            f"Return moved from {old_date:%b %d} to {new_date:%b %d, %Y} at the customer's request "
-            f"({_plural_days(days_late)} later than originally booked)."
-        ),
-        actor=ReservationStatusEvent.Actor.STAFF,
-    )
-    return JsonResponse({"success": True, "return_date": new_date.isoformat(), "days_late": days_late})
+@require_http_methods(["POST"])
+@audited('item.change_dates', 'Bookings', audit_describe.item_change_dates, before=audit_describe.before_item)
+@transaction.atomic
+def reservation_item_change_dates_view(request, item_id):
+    """Change the pick-up and/or the return date in ONE step -- {"pickup": "YYYY-MM-DD", "return": "YYYY-MM-DD"}, either one optional. What the Active Reservations
+    calendar sends: a pick-up moved past the current return date must come with its new return date, and both are saved together or not at all."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    chosen, error = _date_choices(request, "pickup", "return")
+    if error:
+        return error
+    return _change_item_dates(request, item_id, chosen["pickup"], chosen["return"])
 
 
 @require_http_methods(["POST"])

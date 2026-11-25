@@ -1572,7 +1572,20 @@
 
                     <div class="pm-form" x-show="d.canReturn">
                       <p class="pm-sec" style="margin: 0;">Hand the security deposit back</p>
-                      <p class="pm-hint">Up to <b x-text="peso(d.peso.refund_available)"></b>: the deposit less the late fee and any deductions. Every gown is back.</p>
+                      <!-- The working, so staff (and the customer standing there) can see why it is this amount: the deposit, what comes off it, and what goes back. -->
+                      <div class="pm-lines" aria-label="How the amount to hand back is worked out">
+                        <div class="pm-l"><span>Security deposit paid</span><b x-text="peso(d.peso.deposit_paid)"></b></div>
+                        <template x-for="(l, li) in d.lateLines" :key="'rlate' + li">
+                          <div class="pm-l pm-minus"><span>Late fee: <span x-text="l.gown"></span><small x-text="l.days + ' day' + (l.days === 1 ? '' : 's') + ' x ' + peso(l.rate) + (l.due ? ' (it was due back ' + l.due + ')' : '')"></small></span><b x-text="'-' + peso(l.amount)"></b></div>
+                        </template>
+                        <template x-for="x in d.deductions.filter(function (z) { return !z.void; })" :key="'rded' + x.id">
+                          <div class="pm-l pm-minus"><span>Deduction: <span x-text="x.reason"></span></span><b x-text="'-' + peso(x.amount)"></b></div>
+                        </template>
+                        <div class="pm-l" x-show="d.s.refunded !== '0.00'"><span>Already handed back</span><b x-text="'-' + peso(d.peso.refunded)"></b></div>
+                        <div class="pm-l is-total"><span>To hand back now</span><b x-text="peso(d.peso.refund_available)"></b></div>
+                      </div>
+                      <p class="pm-hint" x-show="d.s.late_fee === '0.00' && d.s.deductions_total === '0.00'">No late fee and no deductions: the whole deposit goes back.</p>
+                      <p class="pm-hint">Every gown is back. No more than the amount above can be handed back.</p>
                       <div><label for="pm-ret-amount">Amount handed back (pesos)</label><input id="pm-ret-amount" type="text" inputmode="decimal" class="pm-in" x-model="ret.amount" autocomplete="off"></div>
                       <div><label>Handed back by</label>
                         <div class="pm-radios" role="radiogroup" aria-label="How it was handed back">
@@ -1585,7 +1598,7 @@
                       <div x-show="ret.method === 'GCash'"><label for="pm-ret-ref">GCash reference number of the transfer you sent (13 digits)</label><input id="pm-ret-ref" type="text" inputmode="numeric" class="pm-in" x-model="ret.reference" maxlength="24" autocomplete="off"></div>
                       <div><label for="pm-ret-note">Note (optional)</label><input id="pm-ret-note" type="text" class="pm-in" x-model="ret.note" maxlength="200"></div>
                       <p class="pm-err" x-show="formError && formWhere === 'ret'" x-text="formError"></p>
-                      <div class="pm-btns"><button type="button" class="pm-b pm-b--main" @click="giveBack()" :disabled="busy" x-text="busy && formWhere === 'ret' ? 'Saving...' : (ret.method === 'PayMongo' ? 'Send deposit back' : 'Record deposit return')"></button></div>
+                      <div class="pm-btns"><button type="button" class="pm-b pm-b--main" @click="giveBack()" :disabled="busy" x-text="busy && formWhere === 'ret' ? 'Saving...' : (ret.method === 'PayMongo' ? (retNumber() > 0 ? 'Send ' + retShown() + ' back' : 'Send deposit back') : 'Record deposit return')"></button></div>
                     </div>
 
                     <details class="pm-form" x-show="d.canVoid && d.canDeduct">
@@ -1721,9 +1734,22 @@
           // Money leaves at once and cannot be called back: ask first.
           adminConfirm({
             title: 'Send the deposit back now?',
-            message: '₱' + this.ret.amount + ' goes back to the ' + (this.d.onlineRefund ? this.d.onlineRefund.label : 'account') + ' the customer paid with, through {{ payment_provider }}. This cannot be undone.',
+            message: this.retShown() + ' goes back to the ' + (this.d.onlineRefund ? this.d.onlineRefund.label : 'account') + ' the customer paid with, through {{ payment_provider }}.' + this.workingText() + ' This cannot be undone.',
             confirmText: 'Send it back', danger: true
           }).then(function (ok) { if (ok) send(); });
+        },
+        // The amount typed in the Return form, as a number (0 when it is not one) and as it is shown (1,400.00 with the peso sign, or what was typed when it is not a number).
+        retNumber: function () { var n = Number(String(this.ret.amount).replace(/,/g, '')); return n > 0 ? n : 0; },
+        retShown: function () { var n = this.retNumber(); return n ? this.peso(this.fmt(n)) : this.peso(this.ret.amount); },
+        // The sentence under the confirmation: why this amount and not the whole deposit (said only when the whole amount still to hand back is being sent).
+        workingText: function () {
+          var d = this.d, s = d.s, parts = [];
+          var whole = this.retNumber() === Number(String(d.peso.refund_available).replace(/,/g, ''));
+          if (!whole || s.refunded !== '0.00') { return ''; }
+          if (s.late_fee === '0.00' && s.deductions_total === '0.00') { return ' That is the whole deposit: no late fee and no deductions.'; }
+          if (s.late_fee !== '0.00') { parts.push(this.peso(d.peso.late_fee) + ' late fee'); }
+          if (s.deductions_total !== '0.00') { parts.push(this.peso(d.peso.deductions_total) + ' of deductions'); }
+          return ' That is the ' + this.peso(d.peso.deposit_paid) + ' deposit less the ' + parts.join(' and ') + '.';
         },
         deduct: function () {
           this.run('ded', this.url(DEDUCT, this.d.id), { amount: this.ded.amount, reason: this.ded.reason, request_id: this.ded.rid }, 'Deduction added. The customer has been told.');

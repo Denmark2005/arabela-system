@@ -128,6 +128,40 @@ def _gown_lines(reservation):
     return [{"name": i.gown_name, "size": i.size, "pickup": _day(i.rental_date), "return": _day(i.return_date)} for i in kept]
 
 
+def _return_gowns(reservation):
+    """The gowns of a deposit return receipt: the day each was due back (the ORIGINAL return date, which the late fee counts from), the day it came back, and how
+    many days late that is."""
+    out = []
+    for i in reservation.items.all():
+        if i.stage == i.Stage.CANCELLED:
+            continue
+        out.append({"name": i.gown_name, "size": i.size, "due": ledger.long_day(i.original_return_date or i.return_date), "back": ledger.long_day(i.returned_on),
+                    "late_days": ledger.late_days(i)})
+    return out
+
+
+def _return_reason(before, after):
+    """The plain sentence under a deposit return receipt: why the customer gets this amount and not the whole deposit."""
+    late, taken = after.late_fee, after.deductions_total
+    if late <= 0 and taken <= 0:
+        if before.refunded <= 0 and after.refund_available <= 0:
+            return "No late fee and no deductions: the security deposit is returned in full."
+        return f"No late fee and no deductions: the whole {peso(after.deposit_paid)} security deposit goes back to the customer."
+    parts = ([f"the {peso(late)} late fee"] if late > 0 else []) + ([f"{peso(taken)} of deductions"] if taken > 0 else [])
+    return f"The {peso(after.deposit_paid)} security deposit less {' and '.join(parts)} leaves {peso(after.refundable_total)} to give back."
+
+
+def _working(reservation, after):
+    """The late fee and the deductions, line by line: what a receipt shows so the customer can see where an amount comes from."""
+    return {
+        "late_lines": [{"gown": l["gown"], "days": l["days"], "rate": f"{l['rate']:.0f}", "amount": f"{l['amount']:.2f}", "due": l.get("due", ""),
+                        "returned": l.get("returned", ""), "back": l["back"]} for l in after.late_lines],
+        "late_fee": f"{after.late_fee:.2f}",
+        "deductions": [{"reason": d.reason, "amount": f"{money(d.amount):.2f}"} for d in reservation.deductions.all() if not d.is_void],
+        "deductions_total": f"{after.deductions_total:.2f}",
+    }
+
+
 def _snapshot(reservation, payment, before, after, *, served_by):
     """What the receipt says, frozen: a reprint years later is the same paper."""
     from gowns import typed_payment
@@ -157,14 +191,16 @@ def _snapshot(reservation, payment, before, after, *, served_by):
     if payment.purpose == Payment.Purpose.DEPOSIT_RETURN:
         snap["return"] = {
             "deposit_paid": f"{after.deposit_paid:.2f}",
-            "late_lines": [{"gown": l["gown"], "days": l["days"], "rate": f"{l['rate']:.0f}", "amount": f"{l['amount']:.2f}"} for l in after.late_lines],
-            "late_fee": f"{after.late_fee:.2f}",
-            "deductions": [{"reason": d.reason, "amount": f"{money(d.amount):.2f}"} for d in reservation.deductions.all() if not d.is_void],
-            "deductions_total": f"{after.deductions_total:.2f}",
+            **_working(reservation, after),
             "returned_before": f"{before.refunded:.2f}",
             "returned_now": f"{money(payment.amount):.2f}",
             "still_to_return": f"{after.refund_available:.2f}",
+            "gowns": _return_gowns(reservation),
+            "why": _return_reason(before, after),
         }
+    elif payment.purpose == Payment.Purpose.EXTRA:
+        # the late fee and deductions were more than the deposit, so nothing goes back: this receipt is where the customer sees why they pay more
+        snap["extra"] = {**_working(reservation, after), "deposit_used": f"{after.deposit_used:.2f}", "over": f"{after.overflow:.2f}"}
     return snap
 
 
@@ -282,7 +318,15 @@ def _notice_text(payment):
                 "Please contact the shop if you have a question.")
     if payment.direction == Payment.Direction.OUT:
         later = " It can take up to a day to show in your account." if payment.provider in gateway.PROVIDERS else ""
-        return f"Your security deposit of {peso(payment.amount)} for {code} was returned ({how}). Receipt {payment.receipt_number}.{later}"
+        working = ""
+        gone = (payment.snapshot or {}).get("return") or {}
+        late, taken = money(gone.get("late_fee") or 0), money(gone.get("deductions_total") or 0)
+        if late > 0 or taken > 0:          # the customer is told why it is not the whole deposit (true for a deposit handed back in parts too)
+            paid = money(gone.get("deposit_paid") or 0)
+            parts = ([f"the {peso(late)} late fee"] if late > 0 else []) + ([f"{peso(taken)} of deductions"] if taken > 0 else [])
+            working = (f" Your {peso(paid)} deposit less {' and '.join(parts)} comes to {peso(max(paid - late - taken, money(0)))}."
+                       " The receipt shows the details.")
+        return f"Your security deposit of {peso(payment.amount)} for {code} was returned ({how}). Receipt {payment.receipt_number}.{working}{later}"
     snapshot = payment.snapshot or {}
     balance = snapshot.get("balance_after")
     tail = f" Balance still to pay at the shop: {peso(balance)}." if balance and money(balance) > 0 else " Nothing is left to pay."

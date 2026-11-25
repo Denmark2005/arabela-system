@@ -47,6 +47,11 @@ STATE_LABELS = {
 }
 
 
+def long_day(value):
+    """'Nov 29, 2026': a day the way a receipt writes it, or '' when there is none."""
+    return f"{value:%b} {value.day}, {value.year}" if value else ""
+
+
 def money(value):
     """A Decimal with exactly two places."""
     return Decimal(value or 0).quantize(CENT, rounding=ROUND_HALF_UP)
@@ -90,6 +95,27 @@ def late_days(item, today=None):
     if item.stage in OUT_STAGES:
         return max(0, (today - scheduled).days)
     return 0
+
+
+def planned_late_days(item, today=None):
+    """The late days of this gown for the dates as they stand NOW: what late_days() will say once the gown is back on its planned return date.
+
+    A gown that is back counts exactly like late_days (up to the day it came back). One that has not come back yet counts up to its current return date --
+    or up to today, when it is out and already past that date. So a return moved later shows the fee it will cost before the days have gone by, and
+    the number never drops below what late_days() says today. Always counted from the return date the customer ORIGINALLY booked (the pick-up date and the
+    event date never change it). A cancelled gown, or one with no return date, has none."""
+    today = today or timezone.localdate()
+    scheduled = item.original_return_date or item.return_date
+    if scheduled is None or item.return_date is None:
+        return 0
+    if item.stage == ReservationItem.Stage.CANCELLED:
+        return 0
+    if item.stage == ReservationItem.Stage.RETURNED:
+        return max(0, (item.returned_on - scheduled).days) if item.returned_on else 0
+    end = item.return_date
+    if item.stage in OUT_STAGES and today > end:
+        end = today
+    return max(0, (end - scheduled).days)
 
 
 # ---------------------------------------------------------------- old bookings
@@ -184,6 +210,8 @@ def statement(reservation, today=None):
             late_lines.append({
                 "item_id": item.id, "gown": item.gown_name, "days": days, "rate": Decimal(rate), "amount": money(days * rate),
                 "back": item.stage == ReservationItem.Stage.RETURNED,
+                # the return date the fee is counted from (the ORIGINAL one) and the day it really came back: what a receipt says to explain the days
+                "due": long_day(item.original_return_date or item.return_date), "returned": long_day(item.returned_on),
             })
     late_fee = sum((line["amount"] for line in late_lines), ZERO)
 
