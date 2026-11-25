@@ -184,6 +184,15 @@ class PageMarkupPromisesTests(Base):
         start = self.html.index('<form x-show="!saved"')
         self.form = self.html[start:self.html.index("</form>", start)]
 
+    def test_the_saved_screen_does_not_ask_staff_to_tell_the_customer_the_booking_number(self):
+        # The printed receipt carries the booking number by itself, so the screen only says what was received and that nothing is left to pay.
+        start = self.html.index('<template x-if="saved">')
+        saved = self.html[start:self.html.index("</template>", start)]
+        self.assertNotIn("Tell the customer", self.html)
+        self.assertIn("'Nothing is left to pay.'", saved)
+        self.assertIn(">Print receipt</a>", saved)                                  # every saved booking has its receipt to print
+        self.assertIn('x-text="saved.reference_code"', saved)                       # the booking number is still shown for the staff
+
     def test_the_notebook_number_is_gone_from_the_page_and_the_page_never_sends_it(self):
         self.assertNotIn("nb-notebook", self.html)
         self.assertNotIn("Notebook", self.html)

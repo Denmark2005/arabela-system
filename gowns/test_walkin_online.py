@@ -223,6 +223,7 @@ class BookingMadeTests(Base):
         page = self.client.get(state["receiptUrl"])
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, payment.receipt_number)
+        self.assertContains(page, f"Booking</span><span>{payment.reservation.reference_code}</span>")       # the booking number is printed on the receipt by itself
         self.assertContains(page, "Lorna Reyes")
         self.assertContains(page, "Maria Cruz")
         owner = Client()

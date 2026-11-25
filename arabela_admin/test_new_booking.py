@@ -271,6 +271,9 @@ class RecordBookingTests(Base):
         self.assertRegex(payment.receipt_number, r"^PR-\d{4}-\d{6}$")
         self.assertEqual((data["receiptNumber"], data["balance"]), (payment.receipt_number, "0.00"))
         self.assertTrue(data["receiptUrl"].endswith(f"/payments/receipt/{payment.pk}/"))
+        paper = self.client.get(data["receiptUrl"]).content.decode()
+        self.assertIn(f"Booking</span><span>{reservation.reference_code}</span>", paper)       # the printed receipt carries the booking number BY ITSELF,
+        self.assertIn(payment.receipt_number, paper)                                            # so staff never have to read it out to the customer
         self.assertFalse(reservation.receipt_records.exists())               # no receipt photos any more: the system prints the receipt
         self.assertEqual(ledger.statement(reservation).state, ledger.PAID)
         gown.refresh_from_db()

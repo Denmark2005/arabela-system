@@ -1364,7 +1364,7 @@
                   <p style="margin: 0; font-weight: 600;">Booking saved</p>
                   <p class="nb-saved-ref" x-text="saved.reference_code"></p>
                   <p style="margin: 0 0 .5rem;" x-text="'Confirmed and on the calendar. Payment received' + (saved.paidWith ? ' online with ' + saved.paidWith : '') + ', receipt ' + saved.receiptNumber + '.'"></p>
-                  <p style="margin: 0 0 .9rem;" x-text="saved.depositOnly ? ('Only the deposit was paid. Balance still to pay at the shop: ' + peso(Number(String(saved.balance).replace(/,/g, ''))) + '. Record it in Payments when the customer pays it.') : 'Nothing is left to pay. Tell the customer the booking number.'"></p>
+                  <p style="margin: 0 0 .9rem;" x-text="saved.depositOnly ? ('Only the deposit was paid. Balance still to pay at the shop: ' + peso(Number(String(saved.balance).replace(/,/g, ''))) + '. Record it in Payments when the customer pays it.') : 'Nothing is left to pay.'"></p>
                   <div class="nb-actions" style="justify-content: flex-start;">
                     <a class="nb-btn nb-btn--primary" :href="saved.receiptUrl" target="_blank" rel="noopener">Print receipt</a>
                     <a class="nb-btn nb-btn--ghost" :href="saved.url" x-text="'Open in ' + saved.where"></a>
