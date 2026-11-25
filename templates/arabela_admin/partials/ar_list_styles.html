@@ -65,6 +65,18 @@
       .ar-bal-chip { display: inline-flex; align-items: center; padding: .1rem .55rem; border-radius: 999px; background: #fee4e2; color: #b42318; font-size: .72rem; font-weight: 600; text-decoration: none; white-space: nowrap; }
       .ar-bal-chip:hover { background: #fecdca; }
       .dark .ar-bal-chip { background: rgba(240,68,56,.18); color: #fda29b; }
+      /* The booking's valid-ID chip (reservations/identity.py): green = verified, amber = needs a look, red = declined, blue = being checked, grey = none on file. */
+      .ar-idchip { display: inline-flex; align-items: center; padding: .1rem .55rem; border-radius: 999px; background: #f2f4f7; color: #475467; font-size: .72rem; font-weight: 600; text-decoration: none; white-space: nowrap; }
+      .ar-idchip--ok { background: #ecfdf3; color: #027a48; }
+      .ar-idchip--warn { background: #fffaeb; color: #b54708; }
+      .ar-idchip--bad { background: #fee4e2; color: #b42318; }
+      .ar-idchip--wait { background: #eff8ff; color: #175cd3; }
+      a.ar-idchip:hover { text-decoration: underline; }
+      .dark .ar-idchip { background: rgba(255,255,255,.08); color: #d0d5dd; }
+      .dark .ar-idchip--ok { background: rgba(18,183,106,.16); color: #75e0a7; }
+      .dark .ar-idchip--warn { background: rgba(247,144,9,.16); color: #fdb022; }
+      .dark .ar-idchip--bad { background: rgba(240,68,56,.18); color: #fda29b; }
+      .dark .ar-idchip--wait { background: rgba(21,112,239,.18); color: #84caff; }
       .ar-count-pill { display: inline-flex; align-items: center; gap: .25rem; padding: .1rem .5rem; border-radius: 999px; background: #f2f4f7; color: #475467; font-size: .72rem; font-weight: 600; }
       .ar-count-pill svg { width: .75rem; height: .75rem; }
       .dark .ar-count-pill { background: #1d2939; color: #98a2b3; }

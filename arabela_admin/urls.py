@@ -20,6 +20,19 @@ from .new_booking import (
     new_booking_view,
 )
 from .gown_board import gown_board_view
+from .identity_views import (
+    booking_id_cancel_view,
+    booking_id_counter_view,
+    booking_id_start_view,
+    booking_id_status_view,
+    id_check_decide_view,
+    id_check_delete_photos_view,
+    id_check_open_view,
+    id_check_retry_photos_view,
+    id_checks_view,
+    id_photo_view,
+    id_setting_update_view,
+)
 from .payments_views import (
     deduction_add_view,
     deduction_void_view,
@@ -128,6 +141,18 @@ urlpatterns = [
     path("api/bookings/customer-hint/", booking_customer_hint_view, name="booking_customer_hint"),
     path("api/bookings/accounts/", booking_account_search_view, name="booking_account_search"),
     path("api/bookings/create/", booking_create_view, name="booking_create"),
+    # The customer's valid ID (arabela_admin/identity_views.py, reservations/identity.py): the walk-in ID row, and the owner's ID Checks page and pictures
+    path("api/bookings/id/start/", booking_id_start_view, name="booking_id_start"),
+    path("api/bookings/id/counter/", booking_id_counter_view, name="booking_id_counter"),
+    path("api/bookings/id/<str:token>/status/", booking_id_status_view, name="booking_id_status"),
+    path("api/bookings/id/<str:token>/cancel/", booking_id_cancel_view, name="booking_id_cancel"),
+    path("id-checks/", id_checks_view, name="id_checks"),
+    path("api/id-checks/photo/<str:token>/", id_photo_view, name="id_photo"),
+    path("api/id-checks/<int:pk>/open/", id_check_open_view, name="id_check_open"),
+    path("api/id-checks/<int:pk>/decide/", id_check_decide_view, name="id_check_decide"),
+    path("api/id-checks/<int:pk>/delete-photos/", id_check_delete_photos_view, name="id_check_delete_photos"),
+    path("api/id-checks/<int:pk>/retry-photos/", id_check_retry_photos_view, name="id_check_retry_photos"),
+    path("api/id-setting/", id_setting_update_view, name="id_setting_update"),
     path("api/bookings/pay/start/", booking_pay_start_view, name="booking_pay_start"),
     path("api/bookings/pay/<str:token>/status/", booking_pay_status_view, name="booking_pay_status"),
     path("api/bookings/pay/<str:token>/cancel/", booking_pay_cancel_view, name="booking_pay_cancel"),

@@ -24,7 +24,7 @@ from django.utils import timezone
 from gowns import availability, deposit, late_fee
 from gowns.models import COOLDOWN_DAYS, Gown, GownUnavailability
 from reservations import payments
-from reservations.models import Payment, Reservation, ReservationItem, ReservationStatusEvent
+from reservations.models import IdentityCheck, Payment, Reservation, ReservationItem, ReservationStatusEvent
 
 DEPOSIT_PER_GOWN = Decimal("2000")          # only the starting default: the amount really used is the owner's setting (gowns/deposit.py)
 MAX_GOWNS = 10
@@ -250,14 +250,17 @@ def _online_method(attempt):
 
 
 def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, account, address, notebook_number,
-                   lines, payment, method, reference, amount, note, request_id="", now=None, city="", postal_code="", online_attempt=None):
+                   lines, payment, method, reference, amount, note, request_id="", now=None, city="", postal_code="", online_attempt=None, identity_check=None):
     """Save the booking AND the payment taken for it. Everything is checked again inside one transaction with the gowns locked, so neither
     another staff member nor an online customer can take the same gown in between: either the whole booking (with its receipt) is saved,
     or nothing. `method` is Cash or GCash (with its 13-digit `reference`), `amount` is what the staff member confirmed was received (it must
     be exactly what the choice asks for). Returns the new Reservation, with the Payment on `reservation.first_payment`.
 
     `online_attempt`: the customer paid on their phone from the shop's QR code (gowns/walkin_payment.py). The booking is made exactly the same
-    way, but the payment recorded with it is that online payment (method, amount and reference come from the PaymentAttempt, not from staff typing)."""
+    way, but the payment recorded with it is that online payment (method, amount and reference come from the PaymentAttempt, not from staff typing).
+
+    `identity_check`: the customer's valid-ID check this booking rests on (reservations/identity.py), kept with the booking. A check made for ONE walk-in (a QR scan or a check at
+    the counter) can back only one booking."""
     now = now or availability.now_local()
     if channel not in STAFF_CHANNELS:
         raise BookingError("Only walk-in bookings can be recorded here. Bookings from the website come in by themselves.")
@@ -274,6 +277,12 @@ def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, a
             # Lock the chosen gowns one by one in the same order checkout locks gowns (by name), so this can never deadlock
             # with an online checkout for the same gowns; whoever is second waits, then sees the first one's booking.
             lock_and_check(lines, now=now, is_owner=is_owner)
+            if identity_check is not None and identity_check.source in (IdentityCheck.Source.WALKIN, IdentityCheck.Source.COUNTER):
+                # Two staff using the same check at the same moment: the row is locked, so the second finds the first's booking and stops.
+                if IdentityCheck.objects.select_for_update().get(pk=identity_check.pk).reservations.exists():
+                    if online_attempt is None:
+                        raise BookingError("That ID check was already used for another booking. Check the customer's ID again.", status=409)
+                    identity_check = None            # the customer has already paid: the booking is still made, just without that link
 
             rental_subtotal = sum((line["gown"].rental_price for line in lines), Decimal("0"))
             security_deposit = deposit.for_gowns(len(lines))
@@ -285,6 +294,7 @@ def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, a
                 city=(city or "")[:100],
                 postal_code=(postal_code or "")[:10],
                 payment_method=_online_method(online_attempt),
+                identity_check=identity_check,
                 status=Reservation.Status.CONFIRMED,        # something was paid at the shop, so it is confirmed at once
                 rental_subtotal=rental_subtotal,
                 security_deposit=security_deposit,

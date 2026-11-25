@@ -49,7 +49,7 @@ from gowns.models import (
 from gowns import availability, deposit, late_fee, proof_image, receipt_check, receipt_tries, reservation_limits, typed_payment
 from gowns.photos import GRID_WIDTH, PAGE_WIDTH, sized
 from gowns.size_guides import size_guide_for
-from reservations import gateway, ledger, reminders, timeline
+from reservations import gateway, identity, ledger, reminders, timeline
 from reservations.models import Payment, ProofRejection, Reservation, ReservationItem, ReservationStatusEvent
 
 
@@ -897,6 +897,8 @@ def reservation(request):
             "paymongo_demo": gateway.is_demo(),
             "payment_provider_label": gateway.label(),
             "payment_cancelled": request.GET.get("payment") == "cancelled",
+            # The "Valid ID" box (templates/partials/identity_box.html): shown while the owner requires it and Didit is set up.
+            "identity": identity.customer_state(request.user) if request.user.is_authenticated else None,
         },
     )
 
@@ -1203,6 +1205,9 @@ def reservation_submit(request):
     refusal = _terms_refusal(request)
     if refusal:
         return refusal
+    id_refusal = identity.online_gate(request.user)
+    if id_refusal is not None:
+        return JsonResponse({"success": False, "error": id_refusal.message, **id_refusal.extra}, status=id_refusal.status)
     try:
         raw_items = json.loads(request.POST.get("items") or "[]")
     except json.JSONDecodeError:
@@ -1515,6 +1520,7 @@ def reservation_submit(request):
             security_deposit=security_deposit,
             late_fee_per_day=late_fee.per_day(),            # the booking keeps the late fee it was made with, like the deposit
             total_amount=total_amount,
+            identity_check=identity.current_check_for(request.user),
             **{**_verdict_fields(verdict), "gcash_reference": (verdict.reference or typed_reference)[:20], **typed_columns},
         )
         for item in parsed_items:
@@ -2031,6 +2037,7 @@ def profile(request):
             "profile_first_name": first_name,
             "profile_last_name": last_name,
             "saved_addresses": _saved_addresses_for(request.user),
+            "identity": identity.customer_state(request.user),
         },
     )
 

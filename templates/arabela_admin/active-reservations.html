@@ -119,7 +119,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'gown-board' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'gown-board' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients' || page === 'id-checks') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -495,6 +495,17 @@
                     Client List
                   </a>
                 </li>
+                {% if admin_is_owner %}
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:id_checks' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'id-checks' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    ID Checks
+                  </a>
+                </li>
+                {% endif %}
               </ul>
             </div>
             <!-- Dropdown Menu End -->
@@ -1223,12 +1234,11 @@
                       </button>
                     </div>
                     <div class="ar-panel" id="ar-panel-{{ r.id }}" x-show="isBookingOpen({{ r.id }})" x-cloak>
-                      {% if r.booked_as_name or r.is_staff_recorded %}
                       <div class="ar-strip">
                         {% if r.booked_as_name %}<span>Booked as: {{ r.booked_as_name }}</span>{% endif %}
                         {% if r.is_staff_recorded %}<span class="inline-flex w-fit items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-theme-xs font-medium text-brand-500 dark:bg-brand-500/15 dark:text-brand-400" title="Recorded by staff in New Booking">{{ r.get_channel_display }}</span>{% endif %}
+                        {% if r.id_chip.link %}<a class="ar-idchip ar-idchip--{{ r.id_chip.kind }}" href="{{ r.id_chip.link }}" title="Open this ID check in ID Checks">Valid ID: {{ r.id_chip.words }}</a>{% else %}<span class="ar-idchip ar-idchip--{{ r.id_chip.kind }}" title="The customer's valid ID. The owner opens it in ID Checks.">Valid ID: {{ r.id_chip.words }}</span>{% endif %}
                       </div>
-                      {% endif %}
 
                       {% if r.cancel_request %}
                       <!-- A staff member who may not cancel asked the owner to. The booking stays as it is until she answers (reservations/cancel_requests.py). -->

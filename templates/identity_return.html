@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% comment %}
+  Where Didit sends the customer after they scan their ID and take the selfie (gowns/identity_views.py identity_return). The page itself decides nothing: its script asks the
+  status address right away and every couple of seconds, and shows what the server says (reservations/identity.py page_state). The look is the payment page's
+  (templates/payment_return.html), so the two feel like one flow.
+{% endcomment %}
+
+{% block title %}ARABELA | Your ID{% endblock %}
+
+{% block body_class %}min-h-screen flex flex-col{% endblock %}
+
+{% block extra_head %}
+  <style>
+    .editorial-shadow { box-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.05); }
+    @keyframes success-pop { 0% { transform: scale(0.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+    @keyframes fade-in-up { 0% { transform: translateY(20px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+    @keyframes idr-spin { to { transform: rotate(360deg); } }
+    .animate-success-pop { animation: success-pop 1s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+    .animate-fade-in-up { animation: fade-in-up 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards 0.3s; }
+    .idr-spinner { width: 2.25rem; height: 2.25rem; border-radius: 9999px; border: 2px solid rgba(0, 0, 0, 0.12); border-top-color: #0b0c0c; animation: idr-spin 0.9s linear infinite; }
+    [data-idr-state][hidden] { display: none; }
+    .idr-btn { display: flex; align-items: center; justify-content: center; width: 100%; padding: 1.15rem 2.5rem; border: 1px solid #0b0c0c; border-radius: 6px; background: #0b0c0c; color: #ffffff;
+               font-size: 0.65rem; font-weight: 500; letter-spacing: 0.3em; text-transform: uppercase; text-decoration: none; text-align: center; transition: all 0.4s; }
+    .idr-btn:hover { background: #615E57; border-color: #615E57; }
+    @media (min-width: 768px) { .idr-btn { width: 16rem; } }
+    .idr-link { font-size: 0.6rem; letter-spacing: 0.3em; text-transform: uppercase; color: #615E57; text-decoration: none; border-bottom: 1px solid transparent; padding-bottom: 0.25rem; transition: color 0.2s; }
+    .idr-link:hover { color: #0b0c0c; border-color: rgba(11, 12, 12, 0.2); }
+    @media (prefers-reduced-motion: reduce) { .animate-success-pop, .animate-fade-in-up { animation: none; opacity: 1; transform: none; } .idr-spinner { animation-duration: 2.4s; } }
+  </style>
+{% endblock %}
+
+{% block main_class %}flex-grow flex items-center justify-center pt-32 pb-24 px-6{% endblock %}
+
+{% block content %}
+  <div id="idr" data-status-url="{{ status_url }}"
+       class="max-w-3xl w-full bg-white border border-[#E5E2E1]/50 editorial-shadow p-10 md:p-24 text-center animate-fade-in-up opacity-0" aria-live="polite">
+
+    <div data-idr-state="checking">
+      <div class="inline-flex items-center justify-center w-20 h-20 mb-8"><div class="idr-spinner" role="status" aria-label="Checking your ID"></div></div>
+      <h1 class="font-headline text-3xl md:text-5xl font-light tracking-tight text-primary leading-[1.1] mb-4">Checking your ID.</h1>
+      <h2 class="font-headline text-[0.7rem] md:text-[0.8rem] tracking-[0.3em] uppercase text-secondary/60 font-medium">Please keep this page open</h2>
+      <p class="font-body text-base leading-relaxed font-light mt-10 text-primary max-w-lg mx-auto">This only takes a moment. We are waiting for the verification service to tell us the result.</p>
+    </div>
+
+    <div data-idr-state="approved" hidden>
+      <div class="inline-flex items-center justify-center w-20 h-20 rounded-full mb-8 animate-success-pop opacity-0" style="background-color: #22c55e;">
+        <span class="material-symbols-outlined text-4xl" style="color: #ffffff; font-weight: 500;">check</span>
+      </div>
+      <h1 class="font-headline text-3xl md:text-5xl font-light tracking-tight text-primary leading-[1.1] mb-4">Your ID is verified.</h1>
+      <h2 class="font-headline text-[0.7rem] md:text-[0.8rem] tracking-[0.3em] uppercase text-secondary/60 font-medium">Thank you</h2>
+      <p class="font-body text-base leading-relaxed font-light mt-10 text-primary max-w-lg mx-auto">You can go ahead and pay for your booking. We will not ask again for 12 months<span data-idr-field="until"></span>.</p>
+      <div class="flex flex-col items-center gap-8 mt-12">
+        <a class="idr-btn" href="{{ checkout_url }}">Continue to checkout</a>
+        <a class="idr-link" href="{{ home_url }}">Back to home</a>
+      </div>
+    </div>
+
+    <div data-idr-state="review" hidden>
+      <div class="inline-flex items-center justify-center w-20 h-20 rounded-full border mb-8 border-black/10"><span class="material-symbols-outlined text-4xl font-light text-secondary">hourglass_top</span></div>
+      <h1 class="font-headline text-3xl md:text-5xl font-light tracking-tight text-primary leading-[1.1] mb-4">The shop will take a look.</h1>
+      <h2 class="font-headline text-[0.7rem] md:text-[0.8rem] tracking-[0.3em] uppercase text-secondary/60 font-medium">Your ID is being reviewed</h2>
+      <p class="font-body text-base leading-relaxed font-light mt-10 text-primary max-w-lg mx-auto">The verification service could not decide by itself, so the shop owner will check it. You will get a message as soon as it is done, and then you can pay for your booking.</p>
+      <div class="flex flex-col items-center gap-8 mt-12">
+        <a class="idr-btn" href="{{ checkout_url }}">Back to checkout</a>
+        <a class="idr-link" href="{{ profile_url }}">Go to my profile</a>
+      </div>
+    </div>
+
+    <div data-idr-state="declined" hidden>
+      <div class="inline-flex items-center justify-center w-20 h-20 rounded-full border mb-8 border-black/10"><span class="material-symbols-outlined text-4xl font-light text-secondary">badge</span></div>
+      <h1 class="font-headline text-3xl md:text-5xl font-light tracking-tight text-primary leading-[1.1] mb-4">We could not verify your ID.</h1>
+      <h2 class="font-headline text-[0.7rem] md:text-[0.8rem] tracking-[0.3em] uppercase text-secondary/60 font-medium">Nothing was charged</h2>
+      <ul data-idr-field="reasons" class="font-body text-[0.9rem] leading-relaxed text-secondary mt-8 max-w-md mx-auto text-left list-disc pl-6" hidden></ul>
+      <p class="font-body text-base leading-relaxed font-light mt-8 text-primary max-w-lg mx-auto">Please try again with a clear, valid ID (the original, not a copy), good light and your face fully in view.</p>
+      <div class="flex flex-col items-center gap-8 mt-12">
+        <a class="idr-btn" href="{{ checkout_url }}">Try again</a>
+        <a class="idr-link" href="{{ home_url }}">Back to home</a>
+      </div>
+    </div>
+
+    <div data-idr-state="ended" hidden>
+      <div class="inline-flex items-center justify-center w-20 h-20 rounded-full border mb-8 border-black/10"><span class="material-symbols-outlined text-4xl font-light text-secondary">badge</span></div>
+      <h1 class="font-headline text-3xl md:text-5xl font-light tracking-tight text-primary leading-[1.1] mb-4">The ID check was not finished.</h1>
+      <h2 class="font-headline text-[0.7rem] md:text-[0.8rem] tracking-[0.3em] uppercase text-secondary/60 font-medium">Nothing was charged</h2>
+      <p class="font-body text-base leading-relaxed font-light mt-10 text-primary max-w-lg mx-auto">You can start it again whenever you are ready. Your selection is still saved.</p>
+      <div class="flex flex-col items-center gap-8 mt-12">
+        <a class="idr-btn" href="{{ checkout_url }}">Back to checkout</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  (function () {
+    var root = document.getElementById('idr');
+    if (!root) return;
+    var statusUrl = root.getAttribute('data-status-url');
+    var panels = {};
+    Array.prototype.forEach.call(root.querySelectorAll('[data-idr-state]'), function (el) { panels[el.getAttribute('data-idr-state')] = el; });
+    var started = Date.now();
+    var timer = null;
+    var shown = '';
+    function show(name) {
+      if (shown === name) return;
+      shown = name;
+      Object.keys(panels).forEach(function (key) { panels[key].hidden = key !== name; });
+    }
+    function field(name) { return root.querySelector('[data-idr-field="' + name + '"]'); }
+    function apply(data) {
+      if (data.state === 'approved') {
+        var until = field('until');
+        if (until) until.textContent = data.until ? ' (valid until ' + data.until + ')' : '';
+        show('approved');
+        return true;
+      }
+      if (data.state === 'declined') {
+        var list = field('reasons');
+        if (list) {
+          list.textContent = '';
+          (data.reasons || []).forEach(function (r) { var li = document.createElement('li'); li.textContent = r; list.appendChild(li); });
+          list.hidden = !list.children.length;
+        }
+        show('declined');
+        return true;
+      }
+      if (data.state === 'review') { show('review'); return true; }
+      if (data.state === 'ended') { show('ended'); return true; }
+      return false;
+    }
+    function ask() {
+      window.clearTimeout(timer);
+      fetch(statusUrl, { credentials: 'same-origin', headers: { 'Accept': 'application/json' }, cache: 'no-store' })
+        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+        .then(function (result) {
+          if (result.ok && result.data && apply(result.data)) return;
+          show('checking');
+          timer = window.setTimeout(ask, Date.now() - started > 60000 ? 6000 : 2000);
+        })
+        .catch(function () { timer = window.setTimeout(ask, 4000); });         // a dropped connection is not a failed check: keep asking
+    }
+    ask();
+  })();
+</script>
+{% endblock %}

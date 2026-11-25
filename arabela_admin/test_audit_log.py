@@ -270,6 +270,8 @@ class CoverageTests(TestCase):
         # A walk-in customer paying on their phone: this only READS the payment's state (the booking is made, and audited, by the payment's confirmation).
         # Opening and closing the payment page are @audited.
         "booking_pay_status",
+        # ID verification: the ID Checks page, one picture (opening a check, which hands out the picture links, IS audited) and a walk-in's QR-code status only read.
+        "id_checks", "id_photo", "booking_id_status",
         # Payments: the page, the receipts list, the printable receipt (a print only stamps the receipt's own counter) and one booking's figures are all reads.
         # Every payments change (record, deposit return, deduction, void, resend, late-fee setting) is @audited.
         "payments", "payment_receipts", "payment_receipt_print", "payment_detail", "payment_online", "receipt_list",

@@ -97,6 +97,9 @@ class Reservation(models.Model):
     # The shop's own number for this booking on paper (its notebook or receipt book), when it has one. Optional; never the
     # same on two bookings (see Meta.constraints), so one paper record can't be reused for a second booking.
     notebook_number = models.CharField(max_length=30, blank=True, default='', db_default='')
+    # The ID check that stood behind this booking (reservations/identity.py): the customer's verified ID (online), or the check made for this walk-in.
+    # SET_NULL: deleting an ID check (the wipe script, an account being deleted) must never take a booking with it.
+    identity_check = models.ForeignKey('IdentityCheck', on_delete=models.SET_NULL, null=True, blank=True, related_name='reservations')
 
     # ---- What the receipt check found (gowns/receipt_check.py) and the owner's own look at her GCash ----------------------------
     # Every one of these has a database default, so an older deployment that doesn't know the columns yet can still create bookings
@@ -1279,3 +1282,161 @@ class PaymentAttempt(models.Model):
 
     def __str__(self):
         return f'{self.token[:8]} {self.get_status_display()} {self.amount}'
+
+
+class IdentityCheck(models.Model):
+    """One check of a customer's valid government ID (reservations/identity.py).
+
+    There are three ways a check comes about:
+      * ONLINE: a customer verifies on their account. Didit (the verification service) hosts the page where they scan the ID and take a selfie; its verdict is
+        read back by the server (never taken from the browser or from a webhook's body alone).
+      * WALKIN: staff, in New Booking, show a QR code; the customer verifies on their own phone the same way.
+      * COUNTER: staff looked at the original ID at the counter and say so (their name and the time are kept; there is no photo).
+    What is kept: the result, the ID type, when it was verified and when it runs out (12 months), a few plain reasons if it failed, and -- for the owner only --
+    the FRONT and BACK photos of the ID (IdentityPhoto), deleted 30 days after the customer's last return. NEVER kept: the selfie, the ID number as text."""
+
+    class Source(models.TextChoices):
+        ONLINE = 'online', 'Online customer'
+        WALKIN = 'walkin', 'Walk-in (QR code)'
+        COUNTER = 'counter', 'Checked at the counter'
+
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'Checking'                  # the customer has not finished on the verification page
+        APPROVED = 'approved', 'Verified'
+        REVIEW = 'review', 'Needs the owner\'s review'    # the service could not decide by itself
+        DECLINED = 'declined', 'Declined'
+        EXPIRED = 'expired', 'Not finished'              # the customer never finished (the page closed after 7 days)
+        CANCELLED = 'cancelled', 'Cancelled'             # staff closed a walk-in QR code
+
+    class IdType(models.TextChoices):
+        PHILID = 'philid', 'PhilID (National ID)'
+        DRIVERS = 'drivers_license', "Driver's license"
+        PASSPORT = 'passport', 'Passport'
+        UMID = 'umid', 'UMID'
+        SSS = 'sss', 'SSS ID'
+        PRC = 'prc', 'PRC ID'
+        VOTERS = 'voters_id', "Voter's ID"
+        POSTAL = 'postal', 'Postal ID'
+        OTHER = 'other', 'Other valid government ID'
+
+    class DecisionSource(models.TextChoices):
+        DIDIT = 'didit', 'The verification service'
+        OWNER = 'owner', 'The owner'
+        COUNTER = 'counter', 'Staff at the counter'
+
+    class Photos(models.TextChoices):
+        NONE = '', 'None'
+        PENDING = 'pending', 'To be copied'
+        COPYING = 'copying', 'Being copied'
+        STORED = 'stored', 'Kept'
+        FAILED = 'failed', 'Could not be copied'
+        DELETED = 'deleted', 'Deleted'
+
+    token = models.CharField(max_length=43, unique=True)            # the secret the customer's return address carries
+    source = models.CharField(max_length=8, choices=Source.choices, default=Source.ONLINE)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING, db_index=True)
+    # The website account that was verified (online). CASCADE: deleting an account deletes its ID checks, and with them the photos (IdentityPhoto's
+    # post_delete removes the files). A walk-in's check has no account.
+    customer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True, related_name='identity_checks')
+    staff = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')       # who started / confirmed it at the shop
+    subject_name = models.CharField(max_length=120, blank=True, default='')
+    subject_phone = models.CharField(max_length=20, blank=True, default='')    # digits only: a walk-in's check is only good for a booking with this phone
+    id_type = models.CharField(max_length=16, choices=IdType.choices, default=IdType.OTHER)
+    note = models.CharField(max_length=200, blank=True, default='')            # the staff member's note at the counter / the owner's note on a decision
+    consent_at = models.DateTimeField(null=True, blank=True)                   # when the customer agreed to the ID being checked and kept
+    session_id = models.CharField(max_length=60, blank=True, default='')       # the verification service's session
+    session_url = models.URLField(max_length=500, blank=True, default='')      # the page the customer opens (kept secret: whoever has it can finish the session)
+    session_expires_at = models.DateTimeField(null=True, blank=True)
+    provider_status = models.CharField(max_length=30, blank=True, default='')  # what the service said last ("Approved", "In Review", ...)
+    decision_source = models.CharField(max_length=8, choices=DecisionSource.choices, blank=True, default='')
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    decided_at = models.DateTimeField(null=True, blank=True)
+    reasons = models.JSONField(default=list, blank=True)                       # short plain reasons it was not approved (never ID data)
+    name_check = models.CharField(max_length=8, blank=True, default='')        # '' | match | differs: the name on the ID against the name given
+    type_check = models.CharField(max_length=8, blank=True, default='')        # '' | match | differs: the ID type chosen against the one scanned
+    verified_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)                   # when a verified check stops counting (12 months after it)
+    photos_state = models.CharField(max_length=8, choices=Photos.choices, blank=True, default='')
+    photos_tries = models.PositiveSmallIntegerField(default=0)
+    last_checked_at = models.DateTimeField(null=True, blank=True)              # the last time the service was asked (so polling cannot hammer it)
+    webhook_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+        constraints = [
+            # One unfinished online check per account: pressing "Verify my ID" twice (or from two tabs) is the same check, never a second one.
+            models.UniqueConstraint(fields=['customer'], condition=Q(status='pending', source='online'), name='identitycheck_one_pending_per_customer'),
+            models.UniqueConstraint(fields=['session_id'], condition=~Q(session_id=''), name='identitycheck_session_unique'),
+        ]
+
+    def __str__(self):
+        return f'{self.token[:8]} {self.get_status_display()} ({self.get_source_display()})'
+
+    @property
+    def is_valid(self):
+        """True while this check counts: approved and not yet past its 12 months."""
+        return self.status == self.Status.APPROVED and bool(self.expires_at) and self.expires_at > timezone.now()
+
+    @property
+    def is_open(self):
+        """Still waiting for the customer or for a decision."""
+        return self.status in (self.Status.PENDING, self.Status.REVIEW)
+
+    @property
+    def badge(self):
+        """(kind, words) for the small ID chip staff see: kind is ok | warn | bad | wait."""
+        if self.status == self.Status.APPROVED:
+            if not self.is_valid:
+                return 'warn', 'ID expired'
+            if self.decision_source == self.DecisionSource.COUNTER:
+                return 'ok', 'ID checked at the counter'
+            return 'ok', 'ID verified'
+        if self.status == self.Status.REVIEW:
+            return 'warn', 'ID needs review'
+        if self.status == self.Status.DECLINED:
+            return 'bad', 'ID declined'
+        if self.status == self.Status.PENDING:
+            return 'wait', 'ID being checked'
+        return 'bad', 'ID not finished'
+
+
+class IdentityPhoto(models.Model):
+    """The FRONT or BACK picture of an ID, copied from the verification service when the check finished. Only the owner can open it (arabela_admin/
+    identity_views.py); the file is deleted 30 days after the customer's last return, when the owner presses Delete, or when the account goes."""
+
+    class Side(models.TextChoices):
+        FRONT = 'front', 'Front'
+        BACK = 'back', 'Back'
+
+    id_check = models.ForeignKey(IdentityCheck, on_delete=models.CASCADE, related_name='photos')
+    side = models.CharField(max_length=5, choices=Side.choices)
+    storage_name = models.CharField(max_length=300)           # the name in the file storage (a long random name; never shown to anyone)
+    size_bytes = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['id_check_id', 'side']
+        constraints = [models.UniqueConstraint(fields=['id_check', 'side'], name='identityphoto_one_per_side')]
+
+    def __str__(self):
+        return f'{self.get_side_display()} of check {self.id_check_id}'
+
+
+from django.db.models.signals import post_delete       # noqa: E402
+from django.dispatch import receiver                    # noqa: E402
+
+
+@receiver(post_delete, sender=IdentityPhoto)
+def _delete_photo_file(sender, instance, **kwargs):
+    """The picture goes when its row goes (a row deleted by the cleanup, the owner's button, the wipe script, or an account being deleted)."""
+    if not instance.storage_name:
+        return
+    try:
+        from django.core.files.storage import default_storage
+        default_storage.delete(instance.storage_name)
+    except Exception:       # noqa: BLE001 -- a file that cannot be removed must never stop the row being removed; the cleanup reports leftovers
+        import logging
+        logging.getLogger(__name__).warning("An ID photo file could not be deleted (check %s)", instance.id_check_id)

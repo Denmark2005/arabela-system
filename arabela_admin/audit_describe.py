@@ -445,6 +445,64 @@ def gcash_active(ctx):
     return {"summary": f"switched the GCash customers pay to {_account_word(s.gcash_active)} GCash", "sensitive": True, "details": details}
 
 
+def _id_who(pk):
+    """The person an ID check is about, for the Audit Log (a name only: never anything from the ID itself)."""
+    from reservations.models import IdentityCheck
+    check = IdentityCheck.objects.select_related("customer__profile").filter(pk=pk).first()
+    if check is None:
+        return "an ID check", ("idcheck", "", "")
+    profile = getattr(check.customer, "profile", None) if check.customer_id else None
+    name = (profile.display_name if profile and profile.display_name else "") or check.subject_name or "a walk-in customer"
+    return f"the ID of {name}", ("idcheck", check.pk, name)
+
+
+def id_view(ctx):
+    text, target = _id_who(ctx.kwargs.get("pk"))
+    return {"summary": f"opened {text} and its pictures", "target": target, "sensitive": True}
+
+
+def id_decide(ctx):
+    text, target = _id_who(ctx.kwargs.get("pk"))
+    approve = bool((ctx.body or {}).get("approve"))
+    return {"summary": f"{'approved' if approve else 'declined'} {text}", "target": target, "details": _keep(ctx.body, "note"), "sensitive": True}
+
+
+def id_delete_photos(ctx):
+    text, target = _id_who(ctx.kwargs.get("pk"))
+    return {"summary": f"deleted the pictures of {text}", "target": target, "sensitive": True}
+
+
+def id_retry_photos(ctx):
+    text, target = _id_who(ctx.kwargs.get("pk"))
+    return {"summary": f"copied the pictures of {text} again", "target": target}
+
+
+def before_id_setting(request, kwargs):
+    from gowns.models import SiteSettings
+    return {"require": SiteSettings.load().require_id_before_payment}
+
+
+def id_setting(ctx):
+    from gowns.models import SiteSettings
+    new = SiteSettings.load().require_id_before_payment
+    return {"summary": ("turned ON" if new else "turned OFF") + " the rule that a valid ID must be verified before booking", "sensitive": True,
+            "details": {"Valid ID required": [ctx.before.get("require"), new]}}
+
+
+def id_walkin_start(ctx):
+    name = (ctx.body or {}).get("name") or "a walk-in customer"
+    return {"summary": f"opened an ID scan (QR code) for {name}"}
+
+
+def id_counter(ctx):
+    name = (ctx.body or {}).get("name") or "a walk-in customer"
+    return {"summary": f"recorded that the original ID of {name} was checked at the counter", "details": _keep(ctx.data, "idTypeLabel")}
+
+
+def id_walkin_cancel(ctx):
+    return {"summary": "closed an ID scan (QR code)"}
+
+
 def deposit_setting(ctx):
     from gowns.models import SiteSettings
     new = SiteSettings.load().security_deposit_per_gown

@@ -13,7 +13,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import AuditLog, UserProfile
-from accounts.test_support import agreed
+from accounts.test_support import agreed, id_rule_off
 from gowns import online_checkout, walkin_payment
 from gowns.models import Gown, GownUnavailability
 from gowns.test_xendit_checkout import SETTINGS, FakeXendit
@@ -43,6 +43,7 @@ class Base(TestCase):
         cls.gown2 = make_gown(2, name="Walkin Gown Two", price="2500")
 
     def setUp(self):
+        id_rule_off()                                  # about the walk-in payment; the ID rule has its own tests (arabela_admin/test_identity_admin.py)
         self.fake = FakeXendit()
         patcher = patch("reservations.xendit._request", side_effect=self.fake)
         patcher.start()

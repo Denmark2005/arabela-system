@@ -279,6 +279,8 @@ class WalkInBookingUsesTheSettingTests(TestCase):
         cls.gown = make_gown(50, name="Walk In Gown")
 
     def setUp(self):
+        from accounts.test_support import id_rule_off
+        id_rule_off()                                  # about the deposit, not the ID rule
         self.client.force_login(self.staff)
 
     def book(self):

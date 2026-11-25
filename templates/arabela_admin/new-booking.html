@@ -95,6 +95,25 @@
     .dark .nb-saved { background: rgba(18,183,106,.12); border-color: rgba(18,183,106,.35); color: #75e0a7; }
     .nb-saved-ref { font-size: 1.5rem; font-weight: 700; letter-spacing: .01em; margin: .25rem 0 .5rem; color: #054f31; }
     .dark .nb-saved-ref { color: #a6f4c5; }
+    .nb-id { margin-top: 1.1rem; padding-top: 1rem; border-top: 1px solid #eaecf0; }
+    .dark .nb-id { border-color: #1d2939; }
+    .nb-id-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: .6rem; }
+    .nb-idchip { display: inline-flex; align-items: center; padding: .15rem .6rem; border-radius: 999px; background: #f2f4f7; color: #475467; font-size: .75rem; font-weight: 600; white-space: nowrap; }
+    .nb-idchip--ok { background: #ecfdf3; color: #027a48; }
+    .nb-idchip--warn { background: #fffaeb; color: #b54708; }
+    .nb-idchip--bad { background: #fef3f2; color: #b42318; }
+    .dark .nb-idchip { background: rgba(255,255,255,.08); color: #d0d5dd; }
+    .dark .nb-idchip--ok { background: rgba(18,183,106,.16); color: #75e0a7; }
+    .dark .nb-idchip--warn { background: rgba(247,144,9,.16); color: #fdb022; }
+    .dark .nb-idchip--bad { background: rgba(240,68,56,.16); color: #fda29b; }
+    .nb-id-ok { margin: 0; padding: .65rem .85rem; border-radius: .7rem; background: #ecfdf3; color: #05603a; border: 1px solid #abefc6; font-size: .875rem; line-height: 1.5; }
+    .dark .nb-id-ok { background: rgba(18,183,106,.12); color: #75e0a7; border-color: rgba(18,183,106,.35); }
+    .nb-id-qr { display: grid; gap: 1rem; padding: 1rem; border: 1px solid #d0d5dd; border-radius: .8rem; background: #fff; }
+    .dark .nb-id-qr { background: rgba(255,255,255,.03); border-color: #344054; }
+    @media (min-width: 640px) { .nb-id-qr { grid-template-columns: auto minmax(0, 1fr); align-items: center; } }
+    .nb-id-qr img { display: block; width: 11rem; max-width: 100%; height: auto; padding: .4rem; border: 1px solid #e4e7ec; border-radius: .6rem; background: #fff; image-rendering: pixelated; }
+    .nb-id-counter { margin-top: .75rem; padding: .85rem; border: 1px dashed #d0d5dd; border-radius: .8rem; }
+    .dark .nb-id-counter { border-color: #344054; }
     .nb-info { margin-top: .75rem; padding: .65rem .85rem; border-radius: .7rem; background: #f5f8ff; color: #344054; border: 1px solid #d1e0ff; font-size: .8125rem; line-height: 1.5; }
     .dark .nb-info { background: rgba(70,95,255,.1); color: #d0d5dd; border-color: rgba(70,95,255,.35); }
     .nb-qr { display: grid; gap: 1.25rem; padding: 1.25rem; margin-bottom: 1.25rem; border: 1px solid #d0d5dd; border-radius: 1rem; background: #fff; }
@@ -299,7 +318,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'gown-board' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'gown-board' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients' || page === 'id-checks') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -675,6 +694,17 @@
                     Client List
                   </a>
                 </li>
+                {% if admin_is_owner %}
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:id_checks' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'id-checks' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    ID Checks
+                  </a>
+                </li>
+                {% endif %}
               </ul>
             </div>
             <!-- Dropdown Menu End -->
@@ -1448,6 +1478,80 @@
                       </div>
                     </div>
                   </template>
+
+                  <!-- The customer's valid ID: REQUIRED while the owner's rule is on (reservations/identity.py). Either the customer scans a QR code on their own phone (Didit), or staff
+                       say they checked the ORIGINAL ID at the counter (their name and the time are kept and audited). A linked website account that is already verified counts too.
+                       The check is made for this customer's mobile number and is good for this one booking. -->
+                  <div class="nb-id" x-show="ID_REQUIRED || idCheck || accountVerified" x-cloak>
+                    <div class="nb-id-head">
+                      <span class="nb-label" style="margin: 0;">Customer's valid ID <span class="nb-req" x-show="ID_REQUIRED">*</span>
+                        <details class="nb-tip" @click.outside="$el.removeAttribute('open')" @keydown.escape.stop="$el.removeAttribute('open')">
+                          <summary aria-label="About the customer's valid ID">?</summary>
+                          <div class="nb-tip-pop">Every walk-in customer's valid ID has to be checked before the booking is saved. Either the customer scans the QR code with their own phone and takes a selfie (the ID pictures are kept for the owner only), or you look at their ORIGINAL ID here and confirm it, which is recorded with your name. A website account that is already verified is enough by itself.</div>
+                        </details>
+                      </span>
+                      <span class="nb-idchip" :class="idChip.cls" x-text="idChip.text"></span>
+                    </div>
+
+                    <p class="nb-id-ok" x-show="accountVerified" x-cloak>The linked website account is already verified<span x-text="account &amp;&amp; account.idUntil ? ' (until ' + account.idUntil + ')' : ''"></span>. Nothing more to do.</p>
+
+                    <template x-if="!accountVerified &amp;&amp; idCheck &amp;&amp; idCheck.state === 'approved'">
+                      <div class="nb-id-ok">
+                        <strong x-text="idCheck.counter ? 'ID checked at the counter' : 'ID verified'"></strong><span x-text="idCheck.counter ? (' by ' + (idCheck.staffName || 'you') + '.') : ' on the customer\'s phone.'"></span>
+                        <span x-text="idCheck.idTypeLabel ? ' ' + idCheck.idTypeLabel + '.' : ''"></span>
+                        <button type="button" class="nb-btn nb-btn--ghost nb-btn--small" style="margin-left: .5rem;" @click="idReset()">Check again</button>
+                      </div>
+                    </template>
+
+                    <template x-if="!accountVerified &amp;&amp; idCheck &amp;&amp; idCheck.state === 'checking'">
+                      <div class="nb-id-qr" role="status" aria-live="polite">
+                        <div x-show="idCheck.qr"><img :src="idCheck.qr" alt="QR code for the customer's ID check"></div>
+                        <div>
+                          <p style="margin: 0 0 .35rem; font-weight: 600;">Ask the customer to scan this code</p>
+                          <p class="nb-help" style="margin: 0 0 .7rem;">They scan it with their phone camera, then scan their ID and take a selfie on the verification page. This screen updates by itself.<span x-show="ID_SCAN_TEST"> (Test mode: sample documents.)</span></p>
+                          <div class="nb-actions" style="justify-content: flex-start;">
+                            <a class="nb-btn nb-btn--ghost nb-btn--small" :href="idCheck.url || '#'" target="_blank" rel="noopener" x-show="idCheck.url">Open the page on this screen</a>
+                            <button type="button" class="nb-btn nb-btn--ghost nb-btn--small" :disabled="idBusy" @click="idCancelScan()">Cancel</button>
+                            <button type="button" class="nb-btn nb-btn--ghost nb-btn--small" @click="idUseCounter()">Check at the counter instead</button>
+                          </div>
+                        </div>
+                      </div>
+                    </template>
+
+                    <template x-if="!accountVerified &amp;&amp; idCheck &amp;&amp; (idCheck.state === 'declined' || idCheck.state === 'ended' || idCheck.state === 'review')">
+                      <div class="nb-hint" role="note" style="margin-top: 0;">
+                        <strong x-text="idCheck.state === 'review' ? 'The ID needs the owner\'s review.' : (idCheck.state === 'declined' ? 'The ID could not be verified.' : 'The scan was not finished.')"></strong>
+                        <template x-if="idCheck.reasons &amp;&amp; idCheck.reasons.length">
+                          <ul style="margin: .35rem 0 0 1.1rem; padding: 0; list-style: disc;"><template x-for="r in idCheck.reasons" :key="r"><li x-text="r"></li></template></ul>
+                        </template>
+                        <span x-show="idCheck.state === 'review'"> The owner decides this one. You can look at the original ID at the counter instead.</span>
+                      </div>
+                    </template>
+
+                    <div x-show="idSelecting" x-cloak style="margin-top: .6rem;">
+                      <label class="nb-label" for="nb-idtype">Kind of ID <span class="nb-req" x-show="ID_REQUIRED">*</span></label>
+                      <select class="nb-input" id="nb-idtype" x-model="idType" @change="idError = ''">
+                        <option value="">Choose the ID the customer showed</option>
+                        <template x-for="t in ID_TYPES" :key="t.value"><option :value="t.value" x-text="t.label"></option></template>
+                      </select>
+                      <p class="nb-help" x-show="!ID_SCAN" x-cloak>Scanning is not set up. Look at the original ID and confirm it below.</p>
+                      <div class="nb-actions" style="justify-content: flex-start; margin-top: .75rem;">
+                        <button type="button" class="nb-btn nb-btn--primary" x-show="ID_SCAN" :disabled="idBusy" @click="idStartScan()">
+                          <span x-show="idBusy" x-cloak class="nb-spinner"></span><span x-text="idBusy ? 'Opening\u2026' : 'Scan to verify'"></span>
+                        </button>
+                        <button type="button" class="nb-btn nb-btn--ghost" @click="idMode = (idMode === 'counter' ? '' : 'counter'); idError = ''">Checked at the counter</button>
+                      </div>
+                      <div class="nb-id-counter" x-show="idMode === 'counter'" x-cloak>
+                        <label class="nb-check"><input type="checkbox" x-model="idConfirm" @change="idError = ''"> I checked the customer's original valid ID</label>
+                        <label class="nb-label" for="nb-idnote" style="margin-top: .6rem;">Note <span class="nb-opt">(optional)</span></label>
+                        <input class="nb-input" id="nb-idnote" type="text" maxlength="200" autocomplete="off" x-model="idNote" placeholder="e.g. Driver's license, expires 2029">
+                        <div class="nb-actions" style="justify-content: flex-start; margin-top: .7rem;">
+                          <button type="button" class="nb-btn nb-btn--primary" :disabled="idBusy" @click="idConfirmCounter()">Confirm the ID was checked</button>
+                        </div>
+                      </div>
+                    </div>
+                    <p class="nb-error" x-show="idError" x-cloak x-text="idError" role="alert" style="margin-top: .7rem; margin-bottom: 0;"></p>
+                  </div>
                 </section>
 
                 <!-- ===== 2. Gowns: a short table; ONE row at a time opens into its editor ===== -->
@@ -1744,6 +1848,7 @@
     </div>
     <!-- ===== Page Wrapper End ===== -->
   {{ gown_categories|json_script:"nb-categories" }}
+  {{ id_types|json_script:"nb-id-types" }}
   <script>
     // New Booking: a walk-in booking recorded by staff. Every rule is checked again by the server
     // (arabela_admin/new_booking.py -> reservations/staff_booking.py); this page is the friendly front of it.
@@ -1755,10 +1860,24 @@
         hint: '{% url "arabela_admin:booking_customer_hint" %}',
         accounts: '{% url "arabela_admin:booking_account_search" %}',
         create: '{% url "arabela_admin:booking_create" %}',
-        payStart: '{% url "arabela_admin:booking_pay_start" %}'
+        payStart: '{% url "arabela_admin:booking_pay_start" %}',
+        idStart: '{% url "arabela_admin:booking_id_start" %}',
+        idCounter: '{% url "arabela_admin:booking_id_counter" %}'
       };
       var ONLINE_MAX = {{ online_max }};
       var ONLINE_LABEL = '{{ online_label|escapejs }}';
+      var ID_REQUIRED = {{ id_required|yesno:"true,false" }};
+      var ID_SCAN = {{ id_scan_available|yesno:"true,false" }};
+      var ID_SCAN_TEST = {{ id_scan_test|yesno:"true,false" }};
+      var ID_TYPES = [];
+      try { ID_TYPES = JSON.parse(document.getElementById('nb-id-types').textContent) || []; } catch (e) { ID_TYPES = []; }
+      // A mobile number the way the server keeps it (09XXXXXXXXX), so a check made for a number is compared with what is typed now.
+      function normPhone(raw) {
+        var d = String(raw || '').replace(/\D/g, '');
+        if (d.indexOf('63') === 0 && d.length === 12) { return '0' + d.slice(2); }
+        if (d.charAt(0) === '9' && d.length === 10) { return '0' + d; }
+        return d;
+      }
       var CSRF = '{{ csrf_token }}';
       var TODAY = '{{ today_iso }}';
       var IS_OWNER = {{ is_owner|yesno:"true,false" }};
@@ -1829,6 +1948,8 @@
         channel: 'Walk-in',
         ONLINE_MAX: ONLINE_MAX,
         name: '', phone: '', address: '', city: '', postal: '',
+        ID_REQUIRED: ID_REQUIRED, ID_SCAN: ID_SCAN, ID_SCAN_TEST: ID_SCAN_TEST, ID_TYPES: ID_TYPES,
+        idType: '', idMode: '', idCheck: null, idBusy: false, idError: '', idTimer: null, idPolling: false, idConfirm: false, idNote: '',
         account: null, accountQuery: '', accountResults: [], accountSeq: 0, linkOpen: false,
         hint: [], hintSeq: 0,
         lines: [firstLine],
@@ -1864,6 +1985,23 @@
           if (st === 'flagged') { return 'The payment arrived, but the booking could not be made by itself. Open Online payments to sort it out. The customer is not charged twice.'; }
           return 'They scan it with their phone camera, then pay with GCash, Maya or QR Ph on ' + ONLINE_LABEL + '\'s page. This screen updates by itself when the money arrives. If you leave this page, the booking is still made once they pay.';
         },
+        get accountVerified() { return !!(this.account && this.account.idVerified); },
+        get idOk() {
+          if (!ID_REQUIRED || this.accountVerified) { return true; }
+          return !!(this.idCheck && this.idCheck.state === 'approved' && this.idCheck.phone === normPhone(this.phone));
+        },
+        get idToken() { return (!this.accountVerified && this.idCheck && this.idCheck.state === 'approved') ? this.idCheck.token : ''; },
+        get idSelecting() { return !this.accountVerified && (!this.idCheck || ['declined', 'ended', 'review'].indexOf(this.idCheck.state) !== -1); },
+        get idChip() {
+          var c = this.idCheck;
+          if (this.accountVerified) { return { text: 'Verified', cls: 'nb-idchip--ok' }; }
+          if (c && c.state === 'approved') { return { text: c.counter ? 'Checked at the counter' : 'Verified', cls: 'nb-idchip--ok' }; }
+          if (c && c.state === 'checking') { return { text: 'Waiting for the customer', cls: 'nb-idchip--warn' }; }
+          if (c && c.state === 'review') { return { text: 'Needs the owner\'s review', cls: 'nb-idchip--warn' }; }
+          if (c && c.state === 'declined') { return { text: 'Declined', cls: 'nb-idchip--bad' }; }
+          if (c && c.state === 'ended') { return { text: 'Not finished', cls: 'nb-idchip--bad' }; }
+          return ID_REQUIRED ? { text: 'Not checked yet', cls: 'nb-idchip--warn' } : { text: 'Not checked', cls: '' };
+        },
         get editingLine() { var key = this.editKey; return this.lines.find(function (l) { return l.key === key; }) || null; },
         get hasRows() { var key = this.editKey; return this.lines.some(function (l) { return l.key !== key; }); },
         get canAdd() {
@@ -1879,6 +2017,8 @@
 
         // Opened from Gown Catalog's "Book it" (?gown=<id>&event=<date>): the first gown line starts filled in and checked.
         init: function () {
+          var me = this;
+          this.$watch('phone', function () { me.idPhoneChanged(); });
           var params = new URLSearchParams(window.location.search);
           var gownId = params.get('gown'), event = params.get('event') || '';
           if (!gownId) { return; }
@@ -2148,6 +2288,7 @@
           if (!this.channel) { out.push('Choose how the booking came in.'); }
           if (!this.name.trim()) { out.push("Type the customer's name."); }
           if (!this.phone.trim()) { out.push("Type the customer's mobile number."); }
+          if (ID_REQUIRED && !this.idOk) { out.push("Check the customer's valid ID: have them scan the QR code, or confirm that you checked the original ID at the counter."); }
           if (this.lines.some(function (l) { return !l.gown; })) { out.push('Choose a gown for every line, or remove the empty one.'); }
           if (this.lines.some(function (l) { return l.gown && !l.event; })) { out.push('Choose the event date for every gown.'); }
           if (this.lines.some(function (l) { return l.check && !l.check.ok; })) { out.push('A gown is not available on its date: change the date or the gown.'); }
@@ -2184,6 +2325,7 @@
               self.saving = false;
               if (!res.ok || !res.data.success) {
                 self.error = res.data.error || 'The booking could not be saved. Nothing was booked. Please try again.';
+                self.idRejected(res.data);
                 // Somebody may have just taken a gown: show each line's fresh answer.
                 if (res.status === 409) { self.lines.forEach(function (l) { if (l.gown && l.event) { self.runCheck(l); } }); }
                 return;
@@ -2206,6 +2348,7 @@
           form.append('city', this.city);
           form.append('postal_code', this.postal);
           form.append('account', this.account ? this.account.id : '');
+          form.append('id_check', this.idToken);
           form.append('lines', JSON.stringify(this.lines.map(function (l) {
             return {
               gown: l.gown.id, event: l.event, takes_now: l.takesNow,
@@ -2232,6 +2375,7 @@
               self.saving = false;
               if (!res.ok || !res.data.success) {
                 self.error = res.data.error || 'The payment page could not be opened. Nothing was booked or charged. Please try again.';
+                self.idRejected(res.data);
                 if (res.status === 409) { self.lines.forEach(function (l) { if (l.gown && l.event) { self.runCheck(l); } }); }
                 return;
               }
@@ -2279,8 +2423,8 @@
         cancelPay: function () {
           if (this.payBusy || !this.pay || !this.pay.cancelUrl) { return; }
           var self = this, url = this.pay.cancelUrl;
-          var ask = typeof window.arabelaConfirm === 'function'
-            ? window.arabelaConfirm({ title: 'Cancel this payment?', message: 'The QR code stops working. Nothing is charged and nothing is booked.', confirmText: 'Cancel payment', cancelText: 'Keep waiting', danger: true })
+          var ask = typeof window.adminConfirm === 'function'
+            ? window.adminConfirm({ title: 'Cancel this payment?', message: 'The QR code stops working. Nothing is charged and nothing is booked.', confirmText: 'Cancel payment', cancelText: 'Keep waiting', danger: true })
             : Promise.resolve(true);
           ask.then(function (ok) {
             if (!ok) { return; }
@@ -2302,6 +2446,89 @@
           this.pay = null; this.payError = ''; this.error = '';
           this.requestId = nbUid();
           this.lines.forEach(function (l) { if (l.gown && l.event) { self.runCheck(l); } });
+        },
+        // ---- the customer's valid ID (required while the owner's rule is on): a QR scan on the customer's phone, or "checked at the counter" ----
+        idNeedsCustomer: function () {
+          if (!this.name.trim() || normPhone(this.phone).length !== 11) { this.idError = 'Type the customer\'s name and mobile number first. The ID check is made for that customer.'; return true; }
+          if (!this.idType) { this.idError = 'Choose the kind of ID first.'; return true; }
+          return false;
+        },
+        idStop: function () { if (this.idTimer) { window.clearInterval(this.idTimer); this.idTimer = null; } },
+        idReset: function () { this.idStop(); this.idCheck = null; this.idMode = ''; this.idConfirm = false; this.idNote = ''; this.idError = ''; },
+        idTake: function (data) {
+          this.idCheck = Object.assign({}, this.idCheck || {}, data);
+          if (data.state !== 'checking') { this.idStop(); }
+          if (data.state === 'approved') { this.idPhoneChanged(); }          // a scan that finished for a number that is no longer the one typed does not count
+        },
+        idJSON: function (res) { return res.json().catch(function () { return {}; }).then(function (data) { return { ok: res.ok, status: res.status, data: data }; }); },
+        idStartScan: function () {
+          if (this.idBusy) { return; }
+          this.idError = '';
+          if (this.idNeedsCustomer()) { return; }
+          this.idBusy = true;
+          var self = this, form = new FormData();
+          form.append('name', this.name); form.append('phone', this.phone); form.append('id_type', this.idType);
+          fetch(URLS.idStart, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body: form, credentials: 'same-origin' })
+            .then(this.idJSON)
+            .then(function (res) {
+              self.idBusy = false;
+              if (!res.ok || !res.data.success) { self.idError = res.data.error || 'The ID scan could not be opened. Please try again.'; return; }
+              self.idMode = 'scan'; self.idCheck = null; self.idTake(res.data);
+              self.idStop();
+              if (res.data.state === 'checking') { self.idTimer = window.setInterval(function () { self.idPoll(); }, 2500); }
+            })
+            .catch(function (err) { self.idBusy = false; self.idError = requestError(err, 'The ID scan could not be opened (no connection). Please try again.'); });
+        },
+        idPoll: function () {
+          if (this.idPolling || !this.idCheck || !this.idCheck.statusUrl) { return; }
+          this.idPolling = true;
+          var self = this;
+          fetch(this.idCheck.statusUrl, { credentials: 'same-origin', headers: { 'Accept': 'application/json' }, cache: 'no-store' })
+            .then(this.idJSON)
+            .then(function (res) { self.idPolling = false; if (res.ok && res.data.success && self.idCheck) { self.idTake(res.data); } })
+            .catch(function () { self.idPolling = false; /* a dropped connection is not a failed check: keep asking */ });
+        },
+        idCancelScan: function () {
+          if (this.idBusy || !this.idCheck || !this.idCheck.cancelUrl) { this.idReset(); return; }
+          var self = this, url = this.idCheck.cancelUrl;
+          this.idBusy = true;
+          fetch(url, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body: '{}', credentials: 'same-origin' })
+            .then(function () { self.idBusy = false; self.idReset(); })
+            .catch(function () { self.idBusy = false; self.idReset(); });
+        },
+        idUseCounter: function () {
+          var self = this;
+          if (this.idCheck && this.idCheck.cancelUrl && this.idCheck.state === 'checking') { this.idCancelScan(); }
+          this.idStop(); this.idCheck = null; this.idMode = 'counter';
+          this.$nextTick(function () { var el = document.getElementById('nb-idnote'); if (el) { el.scrollIntoView({ block: 'center' }); } });
+        },
+        idConfirmCounter: function () {
+          if (this.idBusy) { return; }
+          this.idError = '';
+          if (this.idNeedsCustomer()) { return; }
+          if (!this.idConfirm) { this.idError = 'Tick the box to say you checked the customer\'s original valid ID.'; return; }
+          this.idBusy = true;
+          var self = this, form = new FormData();
+          form.append('name', this.name); form.append('phone', this.phone); form.append('id_type', this.idType); form.append('note', this.idNote); form.append('confirmed', '1');
+          fetch(URLS.idCounter, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body: form, credentials: 'same-origin' })
+            .then(this.idJSON)
+            .then(function (res) {
+              self.idBusy = false;
+              if (!res.ok || !res.data.success) { self.idError = res.data.error || 'The ID check could not be saved. Please try again.'; return; }
+              self.idStop(); self.idCheck = null; self.idTake(res.data); self.idMode = '';
+            })
+            .catch(function (err) { self.idBusy = false; self.idError = requestError(err, 'The ID check could not be saved (no connection). Please try again.'); });
+        },
+        // The check was made for one mobile number: when the number typed changes, the check no longer fits this customer.
+        idPhoneChanged: function () {
+          if (this.idCheck && this.idCheck.phone && this.idCheck.state === 'approved' && this.idCheck.phone !== normPhone(this.phone)) {
+            this.idReset();
+            this.idError = 'The mobile number changed, so the ID check was cleared. Check the customer\'s ID again.';
+          }
+        },
+        // The server said the ID check does not stand (it was used, is too old, or was made for another number): show it here and ask again.
+        idRejected: function (data) {
+          if (data && data.id_required) { this.idStop(); this.idCheck = null; this.idMode = ''; this.idError = data.error || 'Check the customer\'s valid ID again.'; }
         },
         startOver: function () { window.location.href = window.location.pathname; }
       };

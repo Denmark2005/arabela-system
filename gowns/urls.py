@@ -1,7 +1,7 @@
 from django.urls import path
 from django.views.generic import RedirectView
 
-from . import online_views, views
+from . import identity_views, online_views, views
 
 app_name = 'gowns'
 
@@ -71,6 +71,13 @@ urlpatterns = [
     path("reservation/pay/cancel/<str:token>/", online_views.payment_cancel, name="payment_cancel"),
     path("paymongo/webhook/", online_views.paymongo_webhook, name="paymongo_webhook"),
     path("xendit/webhook/", online_views.paymongo_webhook, name="xendit_webhook"),          # the same view: it checks the message the way the chosen service sends it
+    # Valid ID verification through Didit (gowns/identity_views.py, reservations/identity.py)
+    path("identity/start/", identity_views.identity_start, name="identity_start"),
+    path("identity/state/", identity_views.identity_state, name="identity_state"),
+    path("identity/return/<str:token>/", identity_views.identity_return, name="identity_return"),
+    path("identity/status/<str:token>/", identity_views.identity_status, name="identity_status"),
+    path("identity/shop/<str:token>/done/", identity_views.identity_walkin_done, name="identity_walkin_done"),
+    path("didit/webhook/", identity_views.didit_webhook, name="didit_webhook"),
     path("reservation/hold/start/", views.reservation_hold_start, name="reservation_hold_start"),
     path("reservation/hold/release/", views.reservation_hold_release, name="reservation_hold_release"),
     path("cart/fetch/", views.cart_fetch_view, name="cart_fetch"),

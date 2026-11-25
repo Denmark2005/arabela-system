@@ -223,6 +223,17 @@
       .rrd-note .rr-badge, .rrd-statusrow .rr-badge { font-size: .8125rem; padding: .125rem .625rem; }
       .rrd-chip { display: inline-flex; align-items: center; border: 1px solid #e4e7ec; border-radius: .5rem; padding: .125rem .625rem; font-size: .8125rem; color: #667085; }
       .dark .rrd-chip { border-color: #1f2a3d; color: #98a2b3; }
+      /* The booking's valid-ID chip (reservations/identity.py): green = verified, amber = needs a look, red = declined, blue = being checked, grey = none on file. */
+      .rrd-idchip { font-weight: 600; text-decoration: none; }
+      .rrd-idchip--ok { background: #ecfdf3; border-color: #abefc6; color: #027a48; }
+      .rrd-idchip--warn { background: #fffaeb; border-color: #fedf89; color: #b54708; }
+      .rrd-idchip--bad { background: #fef3f2; border-color: #fecdca; color: #b42318; }
+      .rrd-idchip--wait { background: #eff8ff; border-color: #b2ddff; color: #175cd3; }
+      a.rrd-idchip:hover { text-decoration: underline; }
+      .dark .rrd-idchip--ok { background: rgba(18,183,106,.16); border-color: rgba(18,183,106,.35); color: #75e0a7; }
+      .dark .rrd-idchip--warn { background: rgba(247,144,9,.16); border-color: rgba(247,144,9,.35); color: #fdb022; }
+      .dark .rrd-idchip--bad { background: rgba(240,68,56,.16); border-color: rgba(240,68,56,.35); color: #fda29b; }
+      .dark .rrd-idchip--wait { background: rgba(21,112,239,.16); border-color: rgba(21,112,239,.35); color: #84caff; }
 
       .rrd-body { display: flex; flex-direction: column; gap: 1rem; padding: 1.125rem 1.75rem 1.25rem; }
       .rrd-h { margin: 0 0 .75rem; display: flex; align-items: center; gap: .625rem; font-size: 1.0625rem; font-weight: 600; color: #101828; }
@@ -1372,7 +1383,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'gown-board' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'gown-board' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients' || page === 'id-checks') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
@@ -1748,6 +1759,17 @@
                     Client List
                   </a>
                 </li>
+                {% if admin_is_owner %}
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:id_checks' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'id-checks' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    ID Checks
+                  </a>
+                </li>
+                {% endif %}
               </ul>
             </div>
             <!-- Dropdown Menu End -->
@@ -2668,6 +2690,8 @@
                 <span x-show="viewing.staffRecorded" class="rrd-chip" x-text="'Recorded by ' + viewing.recordedBy"></span>
                 <span x-show="viewing.staffRecorded &amp;&amp; viewing.notebookNumber" class="rrd-chip" x-text="'Notebook no. ' + viewing.notebookNumber"></span>
                 <span x-show="viewing.staffRecorded &amp;&amp; !viewing.hasAccount" class="rrd-chip">No website account</span>
+                <a x-show="viewing.idBadge &amp;&amp; viewing.idBadge.link" :href="viewing.idBadge ? viewing.idBadge.link : '#'" class="rrd-chip rrd-idchip" :class="viewing.idBadge ? 'rrd-idchip--' + viewing.idBadge.kind : ''" title="Open this ID check in ID Checks" x-text="viewing.idBadge ? 'Valid ID: ' + viewing.idBadge.words : ''"></a>
+                <span x-show="viewing.idBadge &amp;&amp; !viewing.idBadge.link" class="rrd-chip rrd-idchip" :class="viewing.idBadge ? 'rrd-idchip--' + viewing.idBadge.kind : ''" title="The customer's valid ID. The owner opens it in ID Checks." x-text="viewing.idBadge ? 'Valid ID: ' + viewing.idBadge.words : ''"></span>
               </div>
             </header>
 

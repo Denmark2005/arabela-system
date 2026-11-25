@@ -82,7 +82,7 @@ def answer(attempt):
 
 # ---------------------------------------------------------------- 1. START
 def start(*, request, staff, staff_name, is_owner, name, phone, address, city, postal_code, account, notebook_number, lines, payment, note,
-          request_id, expected_amount=None):
+          request_id, expected_amount=None, id_check=None):
     """Opens the payment page for a walk-in form. Returns what the screen needs (see `answer`); raises staff_booking.BookingError when the form cannot
     be paid for (nothing has been saved)."""
     if not gateway.enabled():
@@ -152,6 +152,7 @@ def start(*, request, staff, staff_name, is_owner, name, phone, address, city, p
         "staff_name": staff_name,
         "rental_subtotal": str(rental_subtotal),
         "security_deposit": str(security_deposit),
+        "identity_check": id_check.pk if id_check is not None else None,       # the customer's valid-ID check the booking will rest on
     }
     try:
         with transaction.atomic():
@@ -195,12 +196,14 @@ def create_booking(attempt):
             account = staff_booking.find_account(payload.get("account_id"))
         except staff_booking.BookingError:
             account = None                                   # the linked website account is gone: the booking is still made, just not linked
+        from reservations.models import IdentityCheck
+        id_check = IdentityCheck.objects.filter(pk=payload["identity_check"]).first() if payload.get("identity_check") else None
         reservation = staff_booking.record_booking(
             recorded_by=attempt.staff, is_owner=is_owner, staff_name=payload.get("staff_name") or "the shop", channel=Reservation.Channel.WALK_IN,
             name=details.get("name") or attempt.customer_name, phone=details.get("phone", ""), account=account, address=details.get("address", ""),
             city=details.get("city", ""), postal_code=details.get("postal_code", ""), notebook_number=payload.get("notebook_number", ""),
             lines=lines, payment=payload.get("payment") or staff_booking.PAYMENT_DEPOSIT, method="", reference="", amount=attempt.paid_amount,
-            note=payload.get("note", ""), request_id="", now=now, online_attempt=attempt)
+            note=payload.get("note", ""), request_id="", now=now, online_attempt=attempt, identity_check=id_check)
     except staff_booking.BookingError as exc:
         raise online_checkout.BookingUnavailable(exc.message)
     # The same Audit Log line a cash booking writes (this runs from the payment's confirmation, not from a staff request, so it is written here).

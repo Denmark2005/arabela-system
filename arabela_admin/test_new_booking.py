@@ -28,7 +28,7 @@ User = get_user_model()
 EMAILS_ON = dict(CUSTOMER_EMAILS_ENABLED=True, CUSTOMER_EMAILS_BACKGROUND=False)
 from gowns.sample_images import TINY_JPEG      # a REAL picture, for the one test that goes through the customer's checkout
 from gowns.sample_payment import TYPED_AMOUNT, typed_reference
-from accounts.test_support import agreed
+from accounts.test_support import agreed, id_rule_off
 _JPEG_HEAD = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00"
 
 
@@ -53,6 +53,7 @@ class Base(TestCase):
         UserProfile.objects.update_or_create(user=cls.customer, defaults={"display_name": "Online Customer"})
 
     def setUp(self):
+        id_rule_off()                                  # these tests are about the booking itself; the ID rule has its own tests (arabela_admin/test_identity_admin.py)
         self.today = timezone.localdate()
         self.event = self.today + timedelta(days=20)
         self.client.force_login(self.staff)

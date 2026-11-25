@@ -456,4 +456,4 @@ class SidebarTests(TestCase):
                     self.assertEqual(text.count("{% url 'arabela_admin:payments' %}"), 1)
                 self.assertLess(text.index("{% url 'arabela_admin:payments' %}"), text.index("{% url 'arabela_admin:payment_verification' %}"))
                 self.assertIn("page === 'payments' || page === 'payment-verification' || page === 'security-deposits'", text)
-        self.assertEqual(found, 17)                                       # the Gown Board page has the sidebar too
+        self.assertEqual(found, 18)                                       # the Gown Board and ID Checks pages have the sidebar too

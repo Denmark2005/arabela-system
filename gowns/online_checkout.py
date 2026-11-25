@@ -36,7 +36,7 @@ from gowns import availability, deposit, late_fee, reservation_limits
 from gowns import views as checkout
 from gowns.context_processors import RESERVATION_HOLD_MINUTES
 from gowns.models import COOLDOWN_DAYS, Gown, GownUnavailability
-from reservations import gateway, payments
+from reservations import gateway, identity, payments
 from reservations import ledger
 from reservations.ledger import money, peso
 from reservations.models import Payment, PaymentAttempt, Reservation, ReservationItem, ReservationStatusEvent
@@ -156,6 +156,10 @@ def start_payment(request):
     refusal = checkout._terms_refusal(request)
     if refusal:
         return refusal
+    # A valid ID has to be verified before paying (the owner can switch this off). Checked here on the server, so a checkout page that skips the ID box cannot get past.
+    id_refusal = identity.online_gate(user)
+    if id_refusal is not None:
+        return _fail(id_refusal.message, id_refusal.status, **id_refusal.extra)
     try:
         raw_items = json.loads(request.POST.get("items") or "[]")
     except ValueError:
@@ -272,6 +276,7 @@ def start_payment(request):
         "rental_subtotal": str(rental_subtotal),
         "security_deposit": str(current_deposit),
         "late_fee_per_day": late_fee.per_day(),
+        "identity_check": getattr(identity.current_check_for(user), "pk", None),          # the verified ID this booking rests on (kept with the booking)
     }
     try:
         with transaction.atomic():
@@ -300,6 +305,19 @@ def start_payment(request):
         return _fail("We could not open the payment page just now. Nothing was charged. Please try again in a moment.", 502)
     PaymentAttempt.objects.filter(pk=attempt.pk).update(session_id=session.id, checkout_url=session.checkout_url)
     return JsonResponse({"success": True, "checkout_url": session.checkout_url, "token": attempt.token})
+
+
+def _identity_for(user, payload):
+    """The ID check a paid booking rests on: the customer's verified ID as it is now, else the one they had when they pressed Pay. (Money has been paid, so a check that ran out in
+    between never stops the booking: it just carries whatever is on file.)"""
+    current = identity.current_check_for(user)
+    if current is not None:
+        return current
+    wanted = payload.get("identity_check")
+    if wanted:
+        from reservations.models import IdentityCheck
+        return IdentityCheck.objects.filter(pk=wanted, customer=user).first()
+    return None
 
 
 # ---------------------------------------------------------------- 3. CONFIRM
@@ -437,6 +455,7 @@ def _create_booking(attempt):
         status=Reservation.Status.CONFIRMED, reviewed_at=now, channel=Reservation.Channel.ONLINE, payment_method=channel_method,
         rental_subtotal=rental_subtotal, security_deposit=security_deposit, late_fee_per_day=int(payload["late_fee_per_day"]) if payload.get("late_fee_per_day") is not None else late_fee.per_day(),
         total_amount=rental_subtotal + security_deposit,
+        identity_check=_identity_for(user, payload),
     )
     for item in items:
         gown = item["matched_gown"]

@@ -32,8 +32,8 @@ from arabela_admin.views import (
 from gowns import availability, deposit, online_checkout, typed_payment, walkin_payment
 from gowns.models import TAG_COLOR_HEX, Gown, SiteSettings
 from gowns.photos import sized
-from reservations import gateway, ledger, staff_booking
-from reservations.models import PaymentAttempt, Reservation
+from reservations import didit, gateway, identity, ledger, staff_booking
+from reservations.models import IdentityCheck, PaymentAttempt, Reservation
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +87,10 @@ def new_booking_view(request):
         "deposit_per_gown": deposit.per_gown(),
         "max_gowns": staff_booking.MAX_GOWNS,
         "note_max": staff_booking.NOTE_MAX,
+        "id_required": identity.required_walkin(),
+        "id_scan_available": didit.enabled(),
+        "id_scan_test": didit.is_test(),
+        "id_types": [{"value": value, "label": label} for value, label in IdentityCheck.IdType.choices],
         "online_enabled": gateway.enabled(),
         "online_label": gateway.label(),
         "online_max": int(min(online_checkout.MAX_ONLINE_AMOUNT, Decimal(gateway.max_amount()))) if gateway.enabled() else 0,
@@ -310,7 +314,9 @@ def booking_account_search_view(request):
     for user in users:
         profile = getattr(user, "profile", None)
         name = (profile.display_name if profile and profile.display_name else "") or user.get_full_name() or user.email
-        results.append({"id": user.id, "name": name, "email": user.email})
+        current = identity.valid_check(user)
+        results.append({"id": user.id, "name": name, "email": user.email, "idVerified": current is not None,
+                        "idUntil": f"{current.expires_at:%b} {current.expires_at.day}, {current.expires_at.year}" if current is not None else ""})
     return JsonResponse({"results": results})
 
 
@@ -338,13 +344,16 @@ def booking_pay_start_view(request):
         except json.JSONDecodeError:
             raise staff_booking.BookingError("Something in the gown list is wrong. Please refresh the page and try again.")
         lines = staff_booking.parse_lines(raw_lines, today=now.date(), is_owner=is_owner)
+        id_check = identity.walkin_requirement(account=account, phone=phone, token=(post.get("id_check") or "").strip())
         payment = (post.get("payment") or "").strip()
         expected = typed_payment.parse_amount(post.get("expected_amount") or "") if (post.get("expected_amount") or "").strip() else None
         result = walkin_payment.start(
             request=request, staff=request.user, staff_name=_staff_display_name(request.user), is_owner=is_owner, name=name, phone=phone,
             address=address, city=city, postal_code=postal_code, account=account, notebook_number=notebook_number, lines=lines, payment=payment,
             note=re.sub(r"\s+", " ", post.get("note") or "").strip()[:staff_booking.NOTE_MAX], request_id=(post.get("request_id") or "").strip(),
-            expected_amount=expected)
+            expected_amount=expected, id_check=id_check)
+    except identity.IdentityError as exc:
+        return JsonResponse({"error": exc.message, **exc.extra}, status=exc.status)
     except staff_booking.BookingError as exc:
         return JsonResponse({"error": exc.message}, status=exc.status)
     except Exception:
@@ -406,6 +415,8 @@ def booking_create_view(request):
         except json.JSONDecodeError:
             raise staff_booking.BookingError("Something in the gown list is wrong. Please refresh the page and try again.")
         lines = staff_booking.parse_lines(raw_lines, today=now.date(), is_owner=is_owner)
+        # The customer's valid ID (reservations/identity.py): a verified check made for this customer's number, or a verified website account. The owner can switch the rule off.
+        id_check = identity.walkin_requirement(account=account, phone=phone, token=(post.get("id_check") or "").strip())
         payment = (post.get("payment") or "").strip()      # "full" or "deposit": check_payment refuses anything else
         method = (post.get("method") or "").strip()         # Cash or GCash: reservations/payments.py refuses anything else
         reference = (post.get("reference") or "").strip()
@@ -433,7 +444,10 @@ def booking_create_view(request):
             note=post.get("note") or "",
             request_id=(post.get("request_id") or "").strip(),
             now=now,
+            identity_check=id_check,
         )
+    except identity.IdentityError as exc:
+        return JsonResponse({"error": exc.message, **exc.extra}, status=exc.status)
     except staff_booking.BookingError as exc:
         return JsonResponse({"error": exc.message}, status=exc.status)
     except Exception:

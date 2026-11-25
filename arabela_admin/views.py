@@ -62,6 +62,8 @@ from gowns.models import (
     visible_builtin_names,
 )
 from reservations import cancel_requests as reservation_cancel_requests
+from reservations import didit as reservation_didit
+from reservations import identity as reservation_identity
 from reservations import cancellation as reservation_cancellation
 from reservations import ledger as reservation_ledger
 from reservations import payments as reservation_payments
@@ -183,6 +185,12 @@ def dashboard_view(request):
     # panel: if messaging customers ever fails, staff must still get their dashboard.
     try:
         reservation_reminders.run_daily_sweep_if_due()
+    except Exception:
+        pass
+    # The ID pictures' clean-up (30 days after the customer's last return) rides on the same visit. It runs at most once an hour per server process,
+    # and the same rule: if it ever fails, staff still get their dashboard.
+    try:
+        reservation_identity.run_cleanup_if_due()
     except Exception:
         pass
 
@@ -1255,11 +1263,21 @@ def _peso(amount):
     return f"₱{amount:,.2f}"
 
 
+def _id_badge(reservation, owner):
+    """The small "Valid ID" chip of a booking (reservations/identity.py): what stands behind it, and -- for the OWNER only -- the ID Checks page that opens that check.
+    Read from the booking's own link (select_related), so a long list costs no extra questions. Never carries a picture or anything printed on the ID."""
+    info = reservation_identity.badge(reservation)
+    check = info["check"]
+    link = reverse("arabela_admin:id_checks") + "?" + urlencode({"show": "all", "open": check.pk}) if owner and check is not None else ""
+    return {"kind": info["kind"], "words": info["words"], "link": link}
+
+
 @_require_admin_staff
 def reservation_records_view(request):
     today = timezone.localdate()
+    owner = _is_owner(request)
     reservations = reservation_timeline.attach_to_reservations(
-        Reservation.objects.select_related("customer__profile", "recorded_by")
+        Reservation.objects.select_related("customer__profile", "recorded_by", "identity_check")
         .prefetch_related(
             Prefetch("items", queryset=ReservationItem.objects.select_related("gown").order_by("rental_date", "id")),
             Prefetch(
@@ -1382,6 +1400,7 @@ def reservation_records_view(request):
             "channel": r.channel,
             "channelLabel": r.get_channel_display(),
             "staffRecorded": r.is_staff_recorded,
+            "idBadge": _id_badge(r, owner),
             "hasAccount": r.has_account,
             "recordedBy": (
                 _staff_display_name(r.recorded_by) if r.recorded_by_id
@@ -1500,9 +1519,10 @@ def receipt_reservation_search_view(request):
 
 @_require_admin_staff
 def active_reservations_view(request):
+    owner = _is_owner(request)
     reservations = reservation_timeline.attach_to_reservations(
         Reservation.objects.filter(status__in=_SCHEDULED_STATUSES)
-        .select_related("customer__profile")
+        .select_related("customer__profile", "identity_check")
         .prefetch_related("items__gown", "payments", "deductions", "receipt_records")
     )
 
@@ -1574,6 +1594,7 @@ def active_reservations_view(request):
         reservation.balance_due = money.balance_due
         reservation.balance_text = f"{money.balance_due:,.2f}"
         reservation.has_receipt = reservation_payments.has_receipt(reservation)       # the Receipt button is shown only when there is a receipt to show
+        reservation.id_chip = _id_badge(reservation, owner)                            # the "Valid ID" chip in the opened booking
         if reservation.has_overdue_item:
             reservation.state = "overdue"
         elif any(i.stage != ReservationItem.Stage.PICKUP for i in live_items):
@@ -4321,6 +4342,10 @@ def page_view(request, page: str):
             # The shop's public phone, Facebook link and address are the OWNER's to change. This is the very check save_profile_view
             # makes before it writes them, so the page can never show a box the server would quietly throw away.
             "can_edit_shop_settings": _is_owner(request),
+            # The owner's "valid ID before booking" switch (Edit Profile card): its state, and whether Didit is set up at all.
+            "id_rule_on": reservation_identity.switch_on(),
+            "id_didit_on": reservation_didit.enabled(),
+            "id_didit_test": reservation_didit.is_test(),
             # The staff accounts the owner can pick to hold the manager's GCash phone (only she sees the GCash card, so only she pays for the list).
             "gcash_holders": [_holder_row(user) for user in _gcash_holders()] if _is_owner(request) else [],
             # A staff account sees what the owner allowed it to do besides the daily work ("Your access"); the owner has no such box.

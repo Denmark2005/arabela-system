@@ -31,9 +31,10 @@ from arabela_admin.views import _SCHEDULED_STATUSES, _staff_display_name
 from gowns.models import Gown
 from reservations import cancel_requests as reservation_cancel_requests
 from reservations import gateway
+from reservations import identity as reservation_identity
 from reservations import ledger as reservation_ledger
 from reservations import owner_check as reservation_owner_check
-from reservations.models import CancelRequest, Payment, PaymentAttempt, Reservation, ReservationItem
+from reservations.models import CancelRequest, IdentityCheck, Payment, PaymentAttempt, Reservation, ReservationItem
 
 # What each part of the bell is drawn from. The page includes these templates; the live feed
 # renders the same ones and hands the HTML to the script to swap in.
@@ -260,6 +261,24 @@ def build_items(user):
             when=w.decided_at,
             sort=w.decided_at,
         ))
+
+    # --- ID checks the verification service could not decide (reservations/identity.py): only the OWNER decides them -------------------
+    # One entry per waiting check, oldest first; it stays until she approves or declines it in ID Checks (so the count falls by itself). The same owner test as
+    # the ID Checks page and its Approve / Decline endpoints, so nobody is shown a task they cannot do. Clicking it opens that check.
+    if user.is_superuser or (profile is not None and profile.role == UserProfile.Role.OWNER):
+        for check in IdentityCheck.objects.filter(status=IdentityCheck.Status.REVIEW).select_related("customer__profile").order_by("updated_at", "id")[:10]:
+            items.append(_item(
+                key=f"idcheck:{check.pk}",
+                kind="customer",
+                level="warning",
+                actor=reservation_identity.who(check),
+                text="has an ID waiting for your review",
+                subject="",
+                module="Customers",
+                url=f"{reverse('arabela_admin:id_checks')}?{urlencode({'open': check.pk})}",
+                when=check.updated_at,
+                sort=check.updated_at,
+            ))
 
     # --- Overdue returns (the most time-critical queue) ----------------------------
     # A gown still at Pick-up never left the shop, so it cannot be overdue for return -- that is a missed pick-up, below.

@@ -364,6 +364,12 @@
         </div>
       </section>
 
+      {% if identity and identity.available %}
+      <section class="bg-white rounded-xl border border-gray-100 shadow-sm p-8 mb-8" data-purpose="user-id">
+        {% include "partials/identity_box.html" with idv_show=identity.available idv_flat=True %}
+      </section>
+      {% endif %}
+
       <footer class="flex items-center gap-6" data-purpose="account-actions">
         <a class="js-page-link px-6 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-custom-blue hover:bg-gray-50 transition-colors" data-purpose="sign-out-btn" href="{% url 'accounts:logout' %}">
           Sign out

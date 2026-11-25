@@ -472,6 +472,16 @@ XENDIT_CHANNELS = [m.strip().upper() for m in os.getenv('XENDIT_CHANNELS', 'GCAS
 # Which service takes the online payments: "xendit", "paymongo", or empty = Xendit while its key is set, else PayMongo (reservations/gateway.py).
 PAYMENT_PROVIDER = '' if _UNDER_TEST else os.getenv('PAYMENT_PROVIDER', '').strip().lower()
 
+# ID verification through Didit (reservations/didit.py): the customer scans their valid ID and takes a selfie on Didit's own page. ON only while a key AND a
+# workflow are set; a SANDBOX key (sk_test_...) uses test data and is never billed (Didit's page then offers sample documents and an outcome picker). A live key
+# is refused on a laptop copy of the database. DIDIT_WEBHOOK_SECRET is the signing secret Didit shows for the webhook endpoint (https://<your-site>/didit/webhook/);
+# without it every webhook is refused (the shop still reads results by itself, so verification works without a webhook). The test suite never reads these.
+DIDIT_API_KEY = '' if _UNDER_TEST else os.getenv('DIDIT_API_KEY', '').strip()
+DIDIT_WORKFLOW_ID = '' if _UNDER_TEST else os.getenv('DIDIT_WORKFLOW_ID', '').strip()
+DIDIT_WEBHOOK_SECRET = '' if _UNDER_TEST else os.getenv('DIDIT_WEBHOOK_SECRET', '').strip()
+DIDIT_API_BASE = os.getenv('DIDIT_API_BASE', 'https://verification.didit.me').strip().rstrip('/')
+DIDIT_TIMEOUT = int(os.getenv('DIDIT_TIMEOUT', '15'))
+
 # The practice shop (`python demo.py`): a separate throwaway database file, a practice payment gateway on this computer and sign-in links for a demo
 # customer and a demo owner, so the online payments can be shown without a PayMongo account. It can NEVER run against the live shop: it always uses
 # its own SQLite file (never the Postgres settings above) and refuses to start on Render. See demo.py and arabela_system/demo.py.

@@ -181,6 +181,10 @@
           <input class="res-input peer" id="phone" placeholder=" " type="tel" inputmode="numeric" autocomplete="tel" data-phone-digits>
           <label class="res-label" for="phone">Cellphone No.</label>
         </div>
+        {% if identity and identity.required %}
+        <!-- The customer's valid ID (reservations/identity.py): verified once, then good for 12 months. Pay stays blocked until it is verified; the server checks too. -->
+        <div class="md:col-span-2">{% include "partials/identity_box.html" with idv_show=identity.required %}</div>
+        {% endif %}
       </div>
     </section>
 
@@ -808,6 +812,17 @@
                 if (!firstInvalid) firstInvalid = proofZone;
             }
 
+            // The valid ID has to be verified before anything is paid (templates/partials/identity_box.html; the server refuses too).
+            if (window.arabelaIdBox) {
+                if (window.arabelaIdBox.ok()) {
+                    window.arabelaIdBox.problem('');
+                } else {
+                    window.arabelaIdBox.problem('Please verify your valid ID first. It only takes a minute.');
+                    invalidEls.push(window.arabelaIdBox.el);
+                    if (!firstInvalid) firstInvalid = window.arabelaIdBox.el;
+                }
+            }
+
             if (invalidEls.length) {
                 invalidEls.forEach(triggerReservationInvalidShake);
                 if (firstInvalid && firstInvalid.scrollIntoView) {
@@ -883,6 +898,17 @@
                     var again = document.getElementById('confirm-rental-btn');
                     if (agreed && again) again.click();
                 });
+                return;
+            }
+            if (err && err.data && err.data.id_required) {
+                // The server wants the ID verified first (the page was opened before the rule, or the check ran out): show it in the ID box.
+                if (window.arabelaIdBox) {
+                    window.arabelaIdBox.problem(err.data.error);
+                    window.arabelaIdBox.refresh();
+                    window.arabelaIdBox.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                } else {
+                    arabelaAlert({ title: 'Please verify your ID', message: err.data.error, danger: true });
+                }
                 return;
             }
             if (err && err.data && err.data.locked) {
