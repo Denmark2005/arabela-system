@@ -43,9 +43,9 @@
     .dark .ov-head .ov-lbl { color: rgba(255,255,255,.9); }
     .ov-num { margin-top: .2rem; font-size: 1.5rem; font-weight: 700; line-height: 1.75rem; font-variant-numeric: tabular-nums; color: #101828; }
     .dark .ov-num { color: rgba(255,255,255,.9); }
-    .ov-num--zero { color: #98a2b3; }
+    .ov-num--zero { color: #667085; }
     .dark .ov-num--zero { color: #667085; }
-    .ov-tag { padding: .05rem .5rem; border-radius: 999px; background: #f2f4f7; color: #667085; font-size: .7rem; font-weight: 500; white-space: nowrap; }
+    .ov-tag { padding: .05rem .5rem; border-radius: 999px; background: #f2f4f7; color: #667085; font-size: 0.8125rem; font-weight: 500; white-space: nowrap; }
     .dark .ov-tag { background: #1d2939; color: #98a2b3; }
     .ov-dot--available { background: #12b76a; box-shadow: 0 0 0 3px rgba(18,183,106,.18); }
     .ov-dot--reserved { background: #f79009; box-shadow: 0 0 0 3px rgba(247,144,9,.2); }
@@ -59,7 +59,7 @@
     .qv-title { margin: 0; font-size: 1.0625rem; font-weight: 600; color: #1d2939; }
     .dark .qv-title { color: rgba(255,255,255,.9); }
     .qv-dot { background: #f79009; }
-    .qv-pill { display: inline-flex; align-items: center; gap: .4rem; padding: .15rem .65rem; border-radius: 999px; background: #fffaeb; color: #b54708; font-size: .75rem; font-weight: 600; }
+    .qv-pill { display: inline-flex; align-items: center; gap: .4rem; padding: .15rem .65rem; border-radius: 999px; background: #fffaeb; color: #b54708; font-size: 0.8125rem; font-weight: 600; }
     .dark .qv-pill { background: rgba(247,144,9,.16); color: #fdb022; }
     .qv-all { display: inline-flex; align-items: center; gap: .35rem; font-size: .8125rem; font-weight: 500; color: #465fff; text-decoration: none; }
     .qv-all:hover { text-decoration: underline; }
@@ -70,15 +70,15 @@
        The title row (.qv-cols) uses the same columns; on a laptop or smaller screen it goes away and each value carries its own small label instead. */
     .qv-line { display: grid; grid-template-columns: minmax(8rem, 1.7fr) minmax(7.5rem, 1fr) 6.25rem 6.75rem 6.75rem 4.5rem 7.25rem; align-items: center; column-gap: 1rem; padding: .7rem 1.25rem; border-top: 1px solid #f2f4f7; }
     .dark .qv-line { border-color: #1d2939; }
-    .qv-cols { display: grid; grid-template-columns: minmax(8rem, 1.7fr) minmax(7.5rem, 1fr) 6.25rem 6.75rem 6.75rem 4.5rem 7.25rem; align-items: center; column-gap: 1rem; padding: .6rem 1.25rem; border-top: 1px solid #f2f4f7; border-bottom: 0; background: #f9fafb; font-size: .75rem; font-weight: 500; color: #667085; }
+    .qv-cols { display: grid; grid-template-columns: minmax(8rem, 1.7fr) minmax(7.5rem, 1fr) 6.25rem 6.75rem 6.75rem 4.5rem 7.25rem; align-items: center; column-gap: 1rem; padding: .6rem 1.25rem; border-top: 1px solid #f2f4f7; border-bottom: 0; background: #f9fafb; font-size: 0.8125rem; font-weight: 500; color: #667085; }
     .dark .qv-cols { background: rgba(255,255,255,.025); border-color: #1d2939; color: #98a2b3; }
     .qv-cols > span:last-child { text-align: right; }
-    .qv-tot { font-size: .6875rem; font-weight: 500; color: #98a2b3; }
+    .qv-tot { font-size: 0.8125rem; font-weight: 500; color: #667085; }
     .qv-day { font-size: .8125rem; color: #475467; white-space: nowrap; font-variant-numeric: tabular-nums; }
     .dark .qv-day { color: #d0d5dd; }
     .qv-line .ar-ref b { white-space: nowrap; }
     .qv-who { display: flex; flex-direction: column; min-width: 0; }
-    .qv-sub { margin-top: .1rem; font-size: .75rem; color: #98a2b3; overflow-wrap: anywhere; }
+    .qv-sub { margin-top: .1rem; font-size: 0.8125rem; color: #667085; overflow-wrap: anywhere; }
     .qv-amt { font-size: .875rem; font-weight: 600; font-variant-numeric: tabular-nums; color: #344054; }
     .dark .qv-amt { color: #d0d5dd; }
     .qv-date { font-size: .8125rem; color: #667085; white-space: nowrap; }
@@ -111,7 +111,7 @@
       .qv-line > .qv-ret { grid-area: ret; align-self: start; }
       .qv-line > .qv-date { grid-area: sent; align-self: start; text-align: right; }
       .qv-line > .qv-acts { grid-area: acts; }
-      .qv-line > [data-label]::before { content: attr(data-label); display: block; flex: 0 0 100%; margin-bottom: .15rem; font-size: .6875rem; font-weight: 500; line-height: 1.2; color: #98a2b3; white-space: nowrap; }
+      .qv-line > [data-label]::before { content: attr(data-label); display: block; flex: 0 0 100%; margin-bottom: .15rem; font-size: 0.8125rem; font-weight: 500; line-height: 1.2; color: #667085; white-space: nowrap; }
     }
     /* A small laptop: the gown strip's title takes its own line, the five figures share the next one. */
     @media (max-width: 1180px) {
@@ -149,9 +149,9 @@
     .lt-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; padding: .85rem 1.25rem; }
     .lt-title { margin: 0; font-size: 1.0625rem; font-weight: 600; color: #1d2939; }
     .dark .lt-title { color: rgba(255,255,255,.9); }
-    .lt-cols, .lt-line { display: grid; grid-template-columns: 8.5rem 9rem minmax(11rem, 1.8fr) minmax(10rem, 1.4fr) 7.5rem 5.5rem; align-items: center; column-gap: 1rem; padding: .7rem 1.25rem; border-top: 1px solid #f2f4f7; }
+    .lt-cols, .lt-line { display: grid; grid-template-columns: 8rem 8.5rem minmax(0, 1.8fr) minmax(0, 1.4fr) 7rem 5.5rem; align-items: center; column-gap: 1rem; padding: .7rem 1.25rem; border-top: 1px solid #f2f4f7; }
     .dark .lt-cols, .dark .lt-line { border-color: #1d2939; }
-    .lt-cols { background: #f9fafb; font-size: .75rem; font-weight: 500; color: #667085; padding-top: .6rem; padding-bottom: .6rem; }
+    .lt-cols { background: #f9fafb; font-size: 0.8125rem; font-weight: 500; color: #667085; padding-top: .6rem; padding-bottom: .6rem; }
     .dark .lt-cols { background: rgba(255,255,255,.025); color: #98a2b3; }
     .lt-cols > span:nth-child(5) { text-align: right; }
     .lt-line { cursor: pointer; transition: background-color .15s; }
@@ -161,10 +161,10 @@
     .dark .lt-when, .dark .lt-what, .dark .lt-who, .dark .lt-rent { color: #d0d5dd; }
     .lt-when b, .lt-what b, .lt-rent b, .lt-name { font-size: .875rem; font-weight: 600; color: #1d2939; overflow-wrap: anywhere; }
     .dark .lt-when b, .dark .lt-what b, .dark .lt-rent b, .dark .lt-name { color: rgba(255,255,255,.9); }
-    .lt-when span, .lt-what span, .lt-rent span, .lt-sub { margin-top: .1rem; font-size: .75rem; color: #98a2b3; overflow-wrap: anywhere; }
+    .lt-when span, .lt-what span, .lt-rent span, .lt-sub { margin-top: .1rem; font-size: 0.8125rem; color: #667085; overflow-wrap: anywhere; }
     .lt-who { gap: .15rem; }
     .lt-tags { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; margin-bottom: .1rem; }
-    .lt-pill { display: inline-flex; align-items: center; padding: .1rem .6rem; border-radius: 999px; background: #f2f4f7; color: #475467; font-size: .72rem; font-weight: 600; white-space: nowrap; }
+    .lt-pill { display: inline-flex; align-items: center; padding: .1rem .6rem; border-radius: 999px; background: #f2f4f7; color: #475467; font-size: 0.8125rem; font-weight: 600; white-space: nowrap; }
     .lt-pill--gcash { background: #e5f0ff; color: #0b5cd0; }
     .lt-pill--maya { background: #e1f7ea; color: #0a7a3d; }
     .lt-pill--qrph { background: #fde8ea; color: #b4232c; }
@@ -173,14 +173,14 @@
     .dark .lt-pill--gcash { background: rgba(21,112,239,.2); color: #84caff; }
     .dark .lt-pill--maya { background: rgba(18,183,106,.16); color: #32d583; }
     .dark .lt-pill--qrph { background: rgba(240,68,56,.18); color: #fda29b; }
-    .lt-test { padding: .05rem .5rem; border: 1px dashed #98a2b3; border-radius: 999px; color: #667085; font-size: .68rem; font-weight: 600; text-transform: lowercase; }
+    .lt-test { padding: .05rem .5rem; border: 1px dashed #98a2b3; border-radius: 999px; color: #667085; font-size: 0.8125rem; font-weight: 600; text-transform: lowercase; }
     .dark .lt-test { border-color: #667085; color: #98a2b3; }
     .lt-amt { text-align: right; font-size: .875rem; font-weight: 600; font-variant-numeric: tabular-nums; color: #101828; white-space: nowrap; }
     .dark .lt-amt { color: rgba(255,255,255,.9); }
     .lt-amt.is-out { color: #b42318; }
     .dark .lt-amt.is-out { color: #fda29b; }
     .lt-line.is-void .lt-amt { text-decoration: line-through; opacity: .6; }
-    .lt-st { display: inline-flex; align-items: center; padding: .1rem .6rem; border-radius: 999px; font-size: .72rem; font-weight: 600; white-space: nowrap; }
+    .lt-st { display: inline-flex; align-items: center; padding: .1rem .6rem; border-radius: 999px; font-size: 0.8125rem; font-weight: 600; white-space: nowrap; }
     .lt-st--ok { background: #d1fadf; color: #067647; }
     .lt-st--void { background: #f2f4f7; color: #667085; }
     .dark .lt-st--ok { background: rgba(18,183,106,.16); color: #32d583; }
@@ -196,7 +196,7 @@
       .lt-line > .lt-what { grid-area: what; align-self: start; }
       .lt-line > .lt-rent { grid-area: rent; align-self: start; }
       .lt-line > .lt-amt { grid-area: amt; align-self: start; }
-      .lt-line > [data-label]::before { content: attr(data-label); display: block; margin-bottom: .15rem; font-size: .6875rem; font-weight: 500; line-height: 1.2; color: #98a2b3; white-space: nowrap; }
+      .lt-line > [data-label]::before { content: attr(data-label); display: block; margin-bottom: .15rem; font-size: 0.8125rem; font-weight: 500; line-height: 1.2; color: #667085; white-space: nowrap; }
     }
     @media (max-width: 760px) {
       .lt-head, .lt-empty { padding-left: 1rem; padding-right: 1rem; }
@@ -215,6 +215,7 @@
   >
     <!-- ===== Preloader Start ===== -->
     <script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('admin-dark-boot');}catch(e){}</script>
+    <script>(function(){var h=document.documentElement,s='large';try{var v=localStorage.getItem('arabelaTextSize');if(v==='normal'||v==='xl'){s=v;}}catch(e){}h.setAttribute('data-text-size',s);})();</script>
     <div
   x-show="loaded"
   x-init="window.addEventListener('DOMContentLoaded', () => {setTimeout(() => loaded = false, 500)})"
@@ -260,7 +261,7 @@
     <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'gown-board' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients' || page === 'id-checks') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
-        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
+        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-500 dark:text-gray-400">
           <span
             class="menu-group-title"
             :class="sidebarToggle ? 'lg:hidden' : ''"
@@ -1462,7 +1463,7 @@
     <button
       type="button"
       @click="openReceiptModal = false"
-      class="transition-color absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300"
+      class="transition-color absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-500 dark:text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300"
     >
       <svg class="fill-current" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path fill-rule="evenodd" clip-rule="evenodd" d="M6.04289 16.5418C5.65237 16.9323 5.65237 17.5655 6.04289 17.956C6.43342 18.3465 7.06658 18.3465 7.45711 17.956L11.9987 13.4144L16.5408 17.9565C16.9313 18.347 17.5645 18.347 17.955 17.9565C18.3455 17.566 18.3455 16.9328 17.955 16.5423L13.4129 12.0002L17.955 7.45808C18.3455 7.06756 18.3455 6.43439 17.955 6.04387C17.5645 5.65335 16.9313 5.65335 16.5408 6.04387L11.9987 10.586L7.45711 6.04439C7.06658 5.65386 6.43342 5.65386 6.04289 6.04439C5.65237 6.43491 5.65237 7.06808 6.04289 7.4586L10.5845 12.0002L6.04289 16.5418Z" fill=""/>
@@ -1471,7 +1472,7 @@
     <div class="px-2 pr-14">
       <h4 class="mb-2 text-2xl font-semibold text-gray-800 dark:text-white/90">GCash Payment Proof</h4>
       <p class="mb-6 text-sm text-gray-500 dark:text-gray-400" x-text="receiptPreview.name ? `${receiptPreview.name} &middot; ${receiptPreview.reservation}` : ''"></p>
-      <p x-show="receiptPreview.bookedAs" class="-mt-4 mb-6 text-xs text-gray-400 dark:text-gray-500">Booked as: <span x-text="receiptPreview.bookedAs"></span></p>
+      <p x-show="receiptPreview.bookedAs" class="-mt-4 mb-6 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">Booked as: <span x-text="receiptPreview.bookedAs"></span></p>
     </div>
     <div class="px-2">
       {% include "arabela_admin/partials/gcash_reference_block.html" with var="receiptPreview" %}
@@ -1510,7 +1511,7 @@
         </div>
       </template>
       <template x-if="!receiptPreview.proofUrl && !(receiptPreview.receipts || []).length">
-        <div class="mb-6 flex h-[212px] items-center justify-center overflow-hidden rounded-2xl bg-gray-100 text-sm text-gray-400 dark:bg-gray-800">
+        <div class="mb-6 flex h-[212px] items-center justify-center overflow-hidden rounded-2xl bg-gray-100 text-sm text-gray-500 dark:text-gray-400 dark:bg-gray-800">
           No proof of payment uploaded
         </div>
       </template>

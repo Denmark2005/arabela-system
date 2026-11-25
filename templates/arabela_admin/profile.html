@@ -310,6 +310,7 @@
   >
     <!-- ===== Preloader Start ===== -->
     <script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('admin-dark-boot');}catch(e){}</script>
+    <script>(function(){var h=document.documentElement,s='large';try{var v=localStorage.getItem('arabelaTextSize');if(v==='normal'||v==='xl'){s=v;}}catch(e){}h.setAttribute('data-text-size',s);})();</script>
     <div
   x-show="loaded"
   x-init="window.addEventListener('DOMContentLoaded', () => {setTimeout(() => loaded = false, 500)})"
@@ -355,7 +356,7 @@
     <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'gown-board' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients' || page === 'id-checks') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
-        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
+        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-500 dark:text-gray-400">
           <span
             class="menu-group-title"
             :class="sidebarToggle ? 'lg:hidden' : ''"
@@ -1812,15 +1813,15 @@
                 .dark .gc-panel.is-active { border-color: #475467; }
                 .gc-panel-head { display: flex; align-items: center; gap: .6rem; margin: 0 0 1.1rem; font-size: 1rem; font-weight: 600; color: #1d2939; }
                 .dark .gc-panel-head { color: rgba(255,255,255,.9); }
-                .gc-badge { padding: .1rem .6rem; border-radius: 999px; font-size: .6875rem; font-weight: 600; background: #ecfdf3; color: #067647; }
+                .gc-badge { padding: .1rem .6rem; border-radius: 999px; font-size: 0.8125rem; font-weight: 600; background: #ecfdf3; color: #067647; }
                 .dark .gc-badge { background: rgba(18,183,106,.16); color: #32d583; }
                 .gc-body { display: flex; flex-wrap: wrap; gap: 1.25rem 1.5rem; }
                 .gc-qrcol { flex: none; width: 9.5rem; }
                 .gc-qrbox { display: flex; align-items: center; justify-content: center; width: 9.5rem; height: 9.5rem; padding: .5rem; border: 1px solid #e4e7ec; border-radius: .75rem; background: #fff; }
                 .dark .gc-qrbox { border-color: #344054; }
-                .gc-qrbox p { margin: 0; text-align: center; font-size: .8125rem; color: #98a2b3; }
+                .gc-qrbox p { margin: 0; text-align: center; font-size: .8125rem; color: #667085; }
                 .gc-links { display: flex; justify-content: center; gap: 1rem; margin-top: .6rem; }
-                .gc-link { padding: 0; border: 0; background: none; font-size: .75rem; color: #475467; text-decoration: underline; cursor: pointer; }
+                .gc-link { padding: 0; border: 0; background: none; font-size: 0.8125rem; color: #475467; text-decoration: underline; cursor: pointer; }
                 .gc-link--danger { color: #d92d20; }
                 .dark .gc-link { color: #98a2b3; }
                 .dark .gc-link--danger { color: #f97066; }
@@ -1828,13 +1829,13 @@
                 .gc-field ~ .gc-field { margin-top: 1rem; }               /* (~, not +: the Held by field is created after a <template> placeholder) */
                 /* inputs and buttons: the Security deposit card's own look (44px, 8px corners, #101828 in dark) */
                 .gc-input { display: block; width: 100%; height: 2.75rem; padding: .625rem 1rem; border: 1px solid #d0d5dd; border-radius: .5rem; background-color: transparent; font-size: .875rem; color: #1d2939; box-shadow: 0 1px 2px rgba(16,24,40,.05); }
-                .gc-input::placeholder { color: #98a2b3; }
+                .gc-input::placeholder { color: #667085; }
                 .gc-input:focus { outline: none; border-color: #9cb9ff; box-shadow: 0 0 0 3px rgba(70,95,255,.1); }
                 .dark .gc-input { border-color: #344054; background-color: #101828; color: rgba(255,255,255,.9); }
                 .dark .gc-input::placeholder { color: rgba(255,255,255,.3); }
                 .gc-select { appearance: none; padding-right: 2.5rem; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 20 20' fill='none' stroke='%2398a2b3' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M5 7.5l5 5 5-5'/></svg>"); background-repeat: no-repeat; background-position: right .85rem center; background-size: 1rem; }
                 .dark .gc-select option { background: #101828; color: #fff; }
-                .gc-btn { display: inline-flex; align-items: center; justify-content: center; padding: .5rem .75rem; border: 1px solid #d0d5dd; border-radius: .5rem; background: #fff; font-size: .75rem; font-weight: 500; color: #344054; cursor: pointer; box-shadow: 0 1px 2px rgba(16,24,40,.05); }
+                .gc-btn { display: inline-flex; align-items: center; justify-content: center; padding: .5rem .75rem; border: 1px solid #d0d5dd; border-radius: .5rem; background: #fff; font-size: 0.8125rem; font-weight: 500; color: #344054; cursor: pointer; box-shadow: 0 1px 2px rgba(16,24,40,.05); }
                 .gc-btn:hover:not(:disabled) { background: #f9fafb; }
                 .gc-btn:disabled { opacity: .6; cursor: not-allowed; }
                 .gc-btn--wide { width: 100%; }
@@ -1844,9 +1845,9 @@
                 .dark .gc-btn:hover:not(:disabled) { background: rgba(255,255,255,.03); color: #e4e7ec; }
                 .dark .gc-btn--dark { background: #101828; color: #fff; }
                 .gc-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; margin-top: 1.25rem; }
-                .gc-msg { font-size: .75rem; font-weight: 500; }
+                .gc-msg { font-size: 0.8125rem; font-weight: 500; }
                 /* the "Test amount" chip beside the Security deposit title (amber is the page's own warning colour, with a dark twin) */
-                .gc-chip { display: inline-flex; align-items: center; margin-left: .6rem; padding: .1rem .35rem .1rem .65rem; border-radius: 999px; background: #fffaeb; font-size: .75rem; font-weight: 600; color: #b54708; }
+                .gc-chip { display: inline-flex; align-items: center; margin-left: .6rem; padding: .1rem .35rem .1rem .65rem; border-radius: 999px; background: #fffaeb; font-size: 0.8125rem; font-weight: 600; color: #b54708; }
                 .dark .gc-chip { background: rgba(247,144,9,.16); color: #fdb022; }
                 .gc-chip .ht-tip { margin-left: .3rem; }
               </style>
@@ -2080,7 +2081,7 @@
                   <div class="relative rounded-3xl bg-white p-6 dark:bg-gray-900" style="width: min(560px, 92vw);">
                     <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem;">
                       <h4 class="text-lg font-semibold text-gray-800 dark:text-white/90">GCash QR</h4>
-                      <button type="button" @click="fullUrl = ''" class="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Close</button>
+                      <button type="button" @click="fullUrl = ''" class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Close</button>
                     </div>
                     <div class="rounded-2xl bg-white p-3" style="display: flex; justify-content: center;">
                       <img :src="fullUrl" alt="GCash QR code, full size" style="display: block; max-width: 100%; max-height: 70vh; object-fit: contain;" />
@@ -2136,7 +2137,7 @@
                     <p x-show="msg" x-cloak x-text="msg" class="text-xs font-medium" :class="ok ? 'text-success-700 dark:text-success-500' : 'text-error-600 dark:text-error-500'"></p>
                   </div>
                 </div>
-                <p class="mt-2 text-xs text-gray-400 dark:text-gray-400">Whole pesos, from 1 to 10,000. For example, 5 gowns at <span x-text="peso(perGown || 0)"></span> each is <span x-text="peso(perGown * 5)"></span>.</p>
+                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">Whole pesos, from 1 to 10,000. For example, 5 gowns at <span x-text="peso(perGown || 0)"></span> each is <span x-text="peso(perGown * 5)"></span>.</p>
               </div>
               <!-- Late fee per gown per day: taken from the customer's security deposit (Payments page, receipts). Owner-only; the endpoint enforces that too.
                    Applies to NEW bookings only: every booking keeps the rate it was made with. 0 means no late fee. -->
@@ -2181,7 +2182,7 @@
                     <p x-show="msg" x-cloak x-text="msg" class="text-xs font-medium" :class="ok ? 'text-success-700 dark:text-success-500' : 'text-error-600 dark:text-error-500'"></p>
                   </div>
                 </div>
-                <p class="mt-2 text-xs text-gray-400 dark:text-gray-400">Whole pesos, from 0 to 10,000. For example, 3 days late at <span x-text="peso(Number(amount) || 0)"></span> a day is <span x-text="peso((Number(amount) || 0) * 3)"></span> for one gown.</p>
+                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">Whole pesos, from 0 to 10,000. For example, 3 days late at <span x-text="peso(Number(amount) || 0)"></span> a day is <span x-text="peso((Number(amount) || 0) * 3)"></span> for one gown.</p>
               </div>
               <!-- Valid ID rule: a customer's valid ID has to be verified before they pay online, and before a walk-in booking is saved. Owner-only; the endpoint enforces that too. -->
               <script>
@@ -2220,7 +2221,7 @@
                   <span class="text-sm font-medium text-gray-700 dark:text-gray-300" x-text="on ? 'A valid ID is required before booking' : 'A valid ID is not required'"></span>
                   <p x-show="msg" x-cloak x-text="msg" class="text-xs font-medium" :class="ok ? 'text-success-700 dark:text-success-500' : 'text-error-600 dark:text-error-500'"></p>
                 </div>
-                <p class="mt-2 text-xs text-gray-400 dark:text-gray-400">{% if id_didit_on %}ID verification by Didit is set up{% if id_didit_test %} (<b>test mode</b>: sample documents, nothing real is checked){% endif %}.{% else %}Didit is <b>not set up</b> (no key), so customers cannot verify online yet; walk-ins can still be checked at the counter.{% endif %} <a href="{% url 'arabela_admin:id_checks' %}" class="underline">Open ID Checks</a></p>
+                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">{% if id_didit_on %}ID verification by Didit is set up{% if id_didit_test %} (<b>test mode</b>: sample documents, nothing real is checked){% endif %}.{% else %}Didit is <b>not set up</b> (no key), so customers cannot verify online yet; walk-ins can still be checked at the counter.{% endif %} <a href="{% url 'arabela_admin:id_checks' %}" class="underline">Open ID Checks</a></p>
               </div>
               {% endif %}
               <!-- Customer emails: preview every email, check delivery, send a test to the owner (owner-only page). -->
@@ -2255,7 +2256,7 @@
     <!-- close btn -->
     <button
       @click="isProfileInfoModal = false"
-      class="transition-color absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300"
+      class="transition-color absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-500 dark:text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300"
     >
       <svg
         class="fill-current"
@@ -2433,7 +2434,7 @@
     <!-- close btn -->
     <button
       @click="isProfileAddressModal = false"
-      class="transition-color absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300"
+      class="transition-color absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-500 dark:text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300"
     >
       <svg
         class="fill-current"
@@ -2547,7 +2548,7 @@
     <button
       @click="closePositionModal()"
       :class="avatarBusy && 'pointer-events-none opacity-60'"
-      class="transition-color absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300"
+      class="transition-color absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-500 dark:text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300"
     >
       <svg class="fill-current" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path
@@ -2637,7 +2638,7 @@
   >
     <button
       @click="isViewModal = false"
-      class="transition-color absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300"
+      class="transition-color absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-500 dark:text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300"
     >
       <svg class="fill-current" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path

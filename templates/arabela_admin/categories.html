@@ -23,6 +23,7 @@
   >
     <!-- ===== Preloader Start ===== -->
     <script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('admin-dark-boot');}catch(e){}</script>
+    <script>(function(){var h=document.documentElement,s='large';try{var v=localStorage.getItem('arabelaTextSize');if(v==='normal'||v==='xl'){s=v;}}catch(e){}h.setAttribute('data-text-size',s);})();</script>
     <div
   x-show="loaded"
   x-init="window.addEventListener('DOMContentLoaded', () => {setTimeout(() => loaded = false, 500)})"
@@ -68,7 +69,7 @@
     <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'gown-board' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown' || page === 'categories') { selected = 'InventoryManagement' } else if (page === 'clients' || page === 'id-checks') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
-        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
+        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-500 dark:text-gray-400">
           <span
             class="menu-group-title"
             :class="sidebarToggle ? 'lg:hidden' : ''"
@@ -1106,9 +1107,9 @@
 
             <style>
               /* Admin -> Categories. Namespaced (.cvr-) because the admin stylesheet is a trimmed Tailwind build. */
-              .cvr-hint { margin: 0 0 16px; font-size: 14px; line-height: 1.5; color: #667085; }
+              .cvr-hint { margin: 0 0 16px; font-size: 0.875rem; line-height: 1.5; color: #667085; }
               .dark .cvr-hint { color: #98a2b3; }
-              .cvr-notice { margin: 0 0 16px; padding: 10px 14px; border: 1px solid #fedf89; border-radius: 12px; background: #fffaeb; color: #b54708; font-size: 13px; line-height: 1.5; }
+              .cvr-notice { margin: 0 0 16px; padding: 10px 14px; border: 1px solid #fedf89; border-radius: 12px; background: #fffaeb; color: #b54708; font-size: 0.8125rem; line-height: 1.5; }
               .dark .cvr-notice { border-color: rgba(247,144,9,.3); background: rgba(247,144,9,.12); color: #fec84b; }
               .cvr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 16px; }
               .cvr-card { display: flex; flex-direction: column; gap: 10px; padding: 10px; border: 1px solid #e4e7ec; border-radius: 16px; background: #fff; }
@@ -1118,7 +1119,7 @@
               .cvr-tile { position: relative; aspect-ratio: 2 / 3; overflow: hidden; border-radius: 10px; background: #fbfbfb; }
               .cvr-tile[data-photo="0"] { background: #eae7e7; }
               .cvr-tile img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-              .cvr-badge { position: absolute; top: 8px; left: 8px; z-index: 1; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; line-height: 18px; }
+              .cvr-badge { position: absolute; top: 8px; left: 8px; z-index: 1; padding: 1px 8px; border-radius: 999px; font-size: 0.8125rem; font-weight: 500; line-height: 1.125rem; }
               .cvr-badge[hidden] { display: none; }
               .cvr-badge[data-kind="custom"] { background: #465fff; color: #fff; }
               .cvr-badge[data-kind="none"] { background: #fef0c7; color: #b54708; }
@@ -1126,17 +1127,17 @@
               .cvr-tile[data-preview="1"] { outline: 2px dashed #465fff; outline-offset: -2px; }
               .cvr-strip { position: absolute; left: 0; right: 0; bottom: 0; height: 17%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 8px; pointer-events: none;
                            background: linear-gradient(to top, #fbfbfb 0%, rgba(251,251,251,.85) 50%, rgba(251,251,251,0) 100%); }
-              .cvr-strip span { font-size: 11px; font-weight: 500; line-height: 1.3; letter-spacing: .18em; text-transform: uppercase; text-align: center; color: #615e57; }
+              .cvr-strip span { font-size: 0.8125rem; font-weight: 500; line-height: 1.3; letter-spacing: .18em; text-transform: uppercase; text-align: center; color: #615e57; }
               .cvr-strip i { display: block; width: 40px; margin-top: 6px; border-top: 1px solid rgba(97,94,87,.6); }
               .cvr-ph { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
-              .cvr-ph span { padding: 0 8px; font-size: 11px; font-weight: 500; letter-spacing: .18em; text-transform: uppercase; text-align: center; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.25); }
+              .cvr-ph span { padding: 0 8px; font-size: 0.8125rem; font-weight: 500; letter-spacing: .18em; text-transform: uppercase; text-align: center; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.25); }
               .cvr-ph i { display: block; width: 40px; margin-top: 8px; border-top: 1px solid #fff; }
               .cvr-tile[data-photo="0"] .cvr-strip { display: none; }
               .cvr-tile[data-photo="0"] .cvr-ph { display: flex; }
               .cvr-actions { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
               .cvr-file { position: absolute; left: 0; top: 0; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
               .cvr-btn { display: inline-flex; flex: 1 1 auto; align-items: center; justify-content: center; min-height: 36px; padding: 0 14px; border: 1px solid #d0d5dd; border-radius: 8px;
-                         background: #fff; color: #344054; font-size: 13px; font-weight: 500; line-height: 1; cursor: pointer; }
+                         background: #fff; color: #344054; font-size: 0.8125rem; font-weight: 500; line-height: 1; cursor: pointer; }
               .cvr-btn[hidden] { display: none; }
               .cvr-btn:not(.cvr-btn-primary):hover { background: #f9fafb; }
               .dark .cvr-btn:not(.cvr-btn-primary) { border-color: #344054; background: rgba(255,255,255,.03); color: #d0d5dd; }
@@ -1144,20 +1145,20 @@
               .cvr-btn-primary { border-color: #465fff; background: #465fff; color: #fff; }
               .cvr-btn-primary:hover { background: #3641f5; }
               .cvr-file:focus-visible + .cvr-btn { outline: 2px solid #465fff; outline-offset: 2px; }
-              .cvr-link { flex: 0 0 auto; padding: 4px 2px; border: 0; background: none; color: #667085; font-size: 13px; text-decoration: underline; cursor: pointer; }
+              .cvr-link { flex: 0 0 auto; padding: 4px 2px; border: 0; background: none; color: #667085; font-size: 0.8125rem; text-decoration: underline; cursor: pointer; }
               .cvr-link:hover { color: #d92d20; }
               .cvr-link[hidden] { display: none; }
               .dark .cvr-link { color: #98a2b3; }
               .dark .cvr-link:hover { color: #f97066; }
               .cvr-busy .cvr-btn, .cvr-busy .cvr-link { opacity: .55; cursor: wait; pointer-events: none; }
               .cvr-grid[data-ready="0"] .cvr-btn { opacity: .5; cursor: not-allowed; }
-              .cvr-msg { margin: 0; font-size: 12.5px; line-height: 1.4; color: #667085; }
+              .cvr-msg { margin: 0; font-size: 0.8125rem; line-height: 1.4; color: #667085; }
               .cvr-msg:empty { display: none; }
               .cvr-msg-ok { color: #039855; }
               .cvr-msg-bad { color: #d92d20; }
               .dark .cvr-msg-ok { color: #32d583; }
               .dark .cvr-msg-bad { color: #f97066; }
-              .cvr-empty { padding: 24px; border: 1px dashed #d0d5dd; border-radius: 16px; color: #667085; font-size: 14px; }
+              .cvr-empty { padding: 24px; border: 1px dashed #d0d5dd; border-radius: 16px; color: #667085; font-size: 0.875rem; }
               /* A tile with a real picture opens the big view when clicked (the View button does the same). */
               .cvr-tile[data-photo="1"] { cursor: zoom-in; }
               /* The big view of a picture: the same look as Payment Verification's "View Payment" window -- a wide white
@@ -1168,13 +1169,13 @@
               .dark .cvr-view-backdrop { background: rgba(0, 0, 0, 0.6); }
               .cvr-view-box { position: relative; width: 100%; max-width: min(820px, 94vw); max-height: calc(100vh - 40px); overflow-y: auto; padding: 32px; border-radius: 24px; background: #fff; box-shadow: 0 24px 48px -12px rgba(16,24,40,.25); }
               .dark .cvr-view-box { background: #101828; }
-              .cvr-view-x { position: absolute; top: 20px; right: 20px; z-index: 2; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 999px; background: #f2f4f7; color: #98a2b3; cursor: pointer; }
+              .cvr-view-x { position: absolute; top: 20px; right: 20px; z-index: 2; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 999px; background: #f2f4f7; color: #667085; cursor: pointer; }
               .cvr-view-x:hover { background: #e4e7ec; color: #667085; }
               .dark .cvr-view-x { background: rgba(255,255,255,.05); }
               .dark .cvr-view-x:hover { background: rgba(255,255,255,.09); color: #d0d5dd; }
-              .cvr-view-title { margin: 0 0 8px; padding-right: 56px; font-size: 24px; font-weight: 600; line-height: 1.3; color: #1d2939; }
+              .cvr-view-title { margin: 0 0 8px; padding-right: 56px; font-size: 1.5rem; font-weight: 600; line-height: 1.3; color: #1d2939; }
               .dark .cvr-view-title { color: rgba(255,255,255,.9); }
-              .cvr-view-sub { margin: 0 0 24px; padding-right: 56px; font-size: 14px; line-height: 1.5; color: #667085; }
+              .cvr-view-sub { margin: 0 0 24px; padding-right: 56px; font-size: 0.875rem; line-height: 1.5; color: #667085; }
               .dark .cvr-view-sub { color: #98a2b3; }
               .cvr-view-stage { display: flex; justify-content: center; margin-bottom: 12px; }
               /* Hugs the picture and never shows it bigger than the file really is (the page sets --cvr-nat-w/-h once it loads). */
@@ -1185,32 +1186,32 @@
               .cvr-view-frame img { display: block; width: auto; height: auto; max-width: min(100%, var(--cvr-nat-w, 100%)); max-height: min(max(320px, calc(100vh - 365px)), var(--cvr-nat-h, 9999px)); }
               .cvr-view-strip { position: absolute; left: 0; right: 0; bottom: 0; height: 17%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 12px; pointer-events: none;
                                 background: linear-gradient(to top, #fbfbfb 0%, rgba(251,251,251,.85) 50%, rgba(251,251,251,0) 100%); }
-              .cvr-view-strip span { font-size: 14px; font-weight: 500; line-height: 1.3; letter-spacing: .18em; text-transform: uppercase; text-align: center; color: #615e57; }
+              .cvr-view-strip span { font-size: 0.875rem; font-weight: 500; line-height: 1.3; letter-spacing: .18em; text-transform: uppercase; text-align: center; color: #615e57; }
               .cvr-view-strip i { display: block; width: 52px; margin-top: 8px; border-top: 1px solid rgba(97,94,87,.6); }
-              .cvr-view-fail { margin: 0; padding: 48px 16px; border-radius: 16px; background: #f2f4f7; color: #667085; font-size: 14px; line-height: 1.5; text-align: center; }
+              .cvr-view-fail { margin: 0; padding: 48px 16px; border-radius: 16px; background: #f2f4f7; color: #667085; font-size: 0.875rem; line-height: 1.5; text-align: center; }
               .cvr-view-fail[hidden] { display: none; }
               .dark .cvr-view-fail { background: rgba(255,255,255,.05); color: #98a2b3; }
-              .cvr-view-full { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 20px; font-size: 12px; font-weight: 500; color: #465fff; text-decoration: none; }
+              .cvr-view-full { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 20px; font-size: 0.8125rem; font-weight: 500; color: #465fff; text-decoration: none; }
               .cvr-view-full:hover { color: #3641f5; }
               .cvr-view-full[hidden] { display: none; }
               .dark .cvr-view-full { color: #7592ff; }
               .cvr-view-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 8px; }
               .cvr-view-grid p { margin: 0; }
-              .cvr-view-k { font-size: 12px; color: #667085; }
+              .cvr-view-k { font-size: 0.8125rem; color: #667085; }
               .dark .cvr-view-k { color: #98a2b3; }
-              .cvr-view-grid .cvr-view-v { margin-top: 4px; font-size: 14px; font-weight: 500; color: #1d2939; }
+              .cvr-view-grid .cvr-view-v { margin-top: 4px; font-size: 0.875rem; font-weight: 500; color: #1d2939; }
               .dark .cvr-view-grid .cvr-view-v { color: rgba(255,255,255,.9); }
               @media (max-width: 640px) {
                 .cvr-view { padding: 12px; }
                 .cvr-view-box { padding: 16px; border-radius: 20px; max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); }
                 .cvr-view-x { top: 12px; right: 12px; width: 40px; height: 40px; }
-                .cvr-view-title { font-size: 20px; padding-right: 48px; }
+                .cvr-view-title { font-size: 1.25rem; padding-right: 48px; }
                 .cvr-view-sub { padding-right: 48px; margin-bottom: 16px; }
                 .cvr-view-frame img { max-height: min(max(240px, calc(100vh - 330px)), var(--cvr-nat-h, 9999px)); max-height: min(max(240px, calc(100dvh - 330px)), var(--cvr-nat-h, 9999px)); }
               }
               @media (max-width: 640px) {
                 .cvr-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-                .cvr-strip span, .cvr-ph span { font-size: 9.5px; letter-spacing: .12em; }
+                .cvr-strip span, .cvr-ph span { font-size: 0.8125rem; letter-spacing: .12em; }
                 .cvr-strip i, .cvr-ph i { width: 28px; margin-top: 5px; }
               }
             </style>

@@ -24,8 +24,8 @@ pop-up). Everything the script needs is in the data-notif-* attributes on the ro
 <style>
   .anf-contents { display: contents; }
   /* ---- dropdown ---- */
-  .anf-dropdown { width: 350px; max-height: min(700px, calc(100vh - 96px)); }
-  @media (min-width: 640px) { .anf-dropdown { width: 384px; } }
+  .anf-dropdown { width: 21.875rem; max-height: min(700px, calc(100vh - 96px)); }
+  @media (min-width: 640px) { .anf-dropdown { width: 24rem; } }
   .anf-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-bottom: 0.25rem; }
   /* Scroll shadows: a soft edge appears at the top/bottom ONLY while there is more to scroll to. */
   .anf-scroll {
@@ -60,24 +60,24 @@ pop-up). Everything the script needs is in the data-notif-* attributes on the ro
   @media not all and (hover: hover) and (pointer: fine) { .pc-only { display: none !important; } }
   /* ---- rows ---- */
   .anf-row { padding: 10px 12px; }
-  .anf-text { display: block; font-size: 13.5px; line-height: 19px; margin-bottom: 4px; }
-  .anf-meta { font-size: 12px; line-height: 16px; }
+  .anf-text { display: block; font-size: 0.84375rem; line-height: 1.1875rem; margin-bottom: 4px; }
+  .anf-meta { font-size: 0.8125rem; line-height: 1rem; }
   .anf-new-pill {
     display: none; align-items: center; margin-left: auto; height: 18px; padding: 0 8px;
-    border-radius: 9999px; background: #465fff; color: #fff; font-size: 10px; font-weight: 600; letter-spacing: .02em;
+    border-radius: 9999px; background: #465fff; color: #fff; font-size: 0.8125rem; font-weight: 600; letter-spacing: .02em;
   }
   li[data-new="1"] > a { background: rgba(70, 95, 255, .07); }
   .dark li[data-new="1"] > a { background: rgba(70, 95, 255, .18); }
   li[data-new="1"] .anf-new-pill { display: inline-flex; }
   .anf-status {
     margin: -4px 0 10px; padding: 8px 10px; border-radius: 8px; background: #f9fafb; color: #475467;
-    font-size: 12px; line-height: 16px;
+    font-size: 0.8125rem; line-height: 1rem;
   }
   .dark .anf-status { background: rgba(255,255,255,.05); color: #d0d5dd; }
   /* ---- header switches ---- */
   .anf-icon-btn {
     display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px;
-    border-radius: 8px; color: #98a2b3; background: transparent; border: 0; cursor: pointer;
+    border-radius: 8px; color: #667085; background: transparent; border: 0; cursor: pointer;
   }
   .anf-icon-btn[hidden] { display: none; }
   .anf-icon-btn:hover { background: #f2f4f7; color: #475467; }
@@ -90,7 +90,7 @@ pop-up). Everything the script needs is in the data-notif-* attributes on the ro
   .anf-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
   .anf-tab {
     border: 1px solid #d0d5dd; background: #fff; color: #344054; border-radius: 9999px;
-    padding: 5px 12px; font-size: 12px; font-weight: 500; line-height: 16px; cursor: pointer;
+    padding: 5px 12px; font-size: 0.8125rem; font-weight: 500; line-height: 1rem; cursor: pointer;
   }
   .anf-tab:hover { background: #f9fafb; }
   .anf-tab[aria-pressed="true"] { background: #101828; border-color: #101828; color: #fff; }
@@ -124,20 +124,20 @@ pop-up). Everything the script needs is in the data-notif-* attributes on the ro
   }
   .dark .anf-toast { background: #101828; color: #d0d5dd; border-color: #344054; box-shadow: 0 12px 32px rgba(0, 0, 0, .5); }
   .anf-toast-body { flex: 1 1 auto; min-width: 0; }
-  .anf-toast-kicker { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #667085; }
-  .anf-toast-text { margin-top: 2px; font-size: 13.5px; line-height: 19px; word-break: break-word; }
-  .anf-toast-note { margin-top: 6px; font-size: 11.5px; line-height: 15px; color: #98a2b3; }
+  .anf-toast-kicker { font-size: 0.8125rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #667085; }
+  .anf-toast-text { margin-top: 2px; font-size: 0.84375rem; line-height: 1.1875rem; word-break: break-word; }
+  .anf-toast-note { margin-top: 6px; font-size: 0.8125rem; line-height: 0.9375rem; color: #667085; }
   .anf-toast-actions { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
   .anf-toast-btn {
     display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border-radius: 8px;
-    border: 1px solid #d0d5dd; background: #fff; color: #344054; font-size: 12px; font-weight: 500; cursor: pointer; text-decoration: none;
+    border: 1px solid #d0d5dd; background: #fff; color: #344054; font-size: 0.8125rem; font-weight: 500; cursor: pointer; text-decoration: none;
   }
   .anf-toast-btn:hover { background: #f9fafb; }
   .dark .anf-toast-btn { background: #1d2939; border-color: #344054; color: #d0d5dd; }
   .dark .anf-toast-btn:hover { background: #344054; }
   .anf-toast-x {
-    flex: none; width: 24px; height: 24px; border: 0; border-radius: 6px; background: transparent; color: #98a2b3;
-    font-size: 18px; line-height: 1; cursor: pointer;
+    flex: none; width: 24px; height: 24px; border: 0; border-radius: 6px; background: transparent; color: #667085;
+    font-size: 1.125rem; line-height: 1; cursor: pointer;
   }
   .anf-toast-x:hover { background: #f2f4f7; color: #475467; }
   .dark .anf-toast-x:hover { background: rgba(255,255,255,.08); }
@@ -147,6 +147,7 @@ pop-up). Everything the script needs is in the data-notif-* attributes on the ro
   }
 </style>
 
+{% include "arabela_admin/partials/text_size.html" %}
 <!-- Notification Menu Area -->
 <div
   id="arabela-notifier"
@@ -229,7 +230,7 @@ pop-up). Everything the script needs is in the data-notif-* attributes on the ro
       <button
         type="button"
         @click="isAllNotificationsModal = false"
-        class="transition-color absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300"
+        class="transition-color absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-500 dark:text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300"
         aria-label="Close"
       >
         <svg class="fill-current" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">

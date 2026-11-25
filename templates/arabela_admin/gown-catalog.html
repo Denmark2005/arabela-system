@@ -29,9 +29,9 @@
     .dark .gc-stat-label { color: #98a2b3; }
     .gc-stat-num { margin: .25rem 0 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem .7rem; font-size: 1.5rem; font-weight: 700; line-height: 1.2; color: #101828; font-variant-numeric: tabular-nums; }
     .dark .gc-stat-num { color: rgba(255, 255, 255, .92); }
-    .gc-stat-link { font-size: .75rem; font-weight: 500; color: #465fff; }
+    .gc-stat-link { font-size: 0.8125rem; font-weight: 500; color: #465fff; }
     .dark .gc-stat-link { color: #7592ff; }
-    .gc-stat-note { font-size: .75rem; font-weight: 400; color: #98a2b3; }
+    .gc-stat-note { font-size: 0.8125rem; font-weight: 400; color: #667085; }
 
     .gc-dot { display: inline-block; width: .75rem; height: .75rem; border-radius: 9999px; flex: none; vertical-align: middle; }
     .gc-dot--available { background: #12b76a; box-shadow: 0 0 0 3px rgba(18, 183, 106, .18); }
@@ -68,11 +68,11 @@
     .dark .gc-opt:hover { background: rgba(255, 255, 255, .06); }
     .gc-opt.is-on { background: #eef2ff; color: #3641f5; font-weight: 600; }
     .dark .gc-opt.is-on { background: rgba(70, 95, 255, .18); color: #9bb0ff; }
-    .gc-opt .gc-n { margin-left: auto; color: #98a2b3; font-variant-numeric: tabular-nums; }
-    .gc-opt--muted { color: #98a2b3; }
-    .gc-panel-sep { margin: .5rem .7rem .2rem; font-size: .6875rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #98a2b3; }
+    .gc-opt .gc-n { margin-left: auto; color: #667085; font-variant-numeric: tabular-nums; }
+    .gc-opt--muted { color: #667085; }
+    .gc-panel-sep { margin: .5rem .7rem .2rem; font-size: 0.8125rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #667085; }
 
-    .gc-i { display: inline-flex; align-items: center; justify-content: center; width: 1.6rem; height: 1.6rem; border: 1px solid #d0d5dd; border-radius: 9999px; font-size: .75rem; font-weight: 700; font-style: italic; font-family: Georgia, serif; color: #667085; cursor: pointer; }
+    .gc-i { display: inline-flex; align-items: center; justify-content: center; width: 1.6rem; height: 1.6rem; border: 1px solid #d0d5dd; border-radius: 9999px; font-size: 0.8125rem; font-weight: 700; font-style: italic; font-family: Georgia, serif; color: #667085; cursor: pointer; }
     .dark .gc-i { border-color: #344054; color: #98a2b3; }
     .gc-i:hover { color: #101828; background: #f2f4f7; }
     .dark .gc-i:hover { color: #fff; background: rgba(255, 255, 255, .06); }
@@ -114,7 +114,7 @@
     .gc-gtext { min-width: 0; }
     .gc-photo { flex: none; }
     .gc-gtext .ar-name { overflow-wrap: anywhere; }
-    .gc-sub { display: block; margin: .15rem 0 0 1.55rem; font-size: .75rem; color: #667085; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .gc-sub { display: block; margin: .15rem 0 0 1.55rem; font-size: 0.8125rem; color: #667085; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .dark .gc-sub { color: #98a2b3; }
     .gc-cat { min-width: 0; font-size: .8125rem; color: #475467; overflow-wrap: anywhere; }
     .dark .gc-cat { color: #98a2b3; }
@@ -126,10 +126,10 @@
     /* The opened gown: its facts in small labelled pairs (one quiet style for all of them, the physical-check line included). */
     .gc-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); gap: .75rem 1.5rem; margin: 0; padding: .85rem 1.25rem; }
     .gc-facts > div { min-width: 0; }
-    .gc-facts dt { margin: 0; font-size: .6875rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #98a2b3; }
+    .gc-facts dt { margin: 0; font-size: 0.8125rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #667085; }
     .gc-facts dd { margin: .25rem 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: .15rem .4rem; font-size: .875rem; color: #344054; overflow-wrap: anywhere; }
     .dark .gc-facts dd { color: #d0d5dd; }
-    .gc-held { display: block; width: 100%; font-size: .75rem; color: #667085; }
+    .gc-held { display: block; width: 100%; font-size: 0.8125rem; color: #667085; }
     .dark .gc-held { color: #98a2b3; }
     .gc-notes { margin: 0; padding: 0 1.25rem .85rem; font-size: .8125rem; color: #475467; overflow-wrap: anywhere; }
     .dark .gc-notes { color: #98a2b3; }
@@ -951,6 +951,7 @@
   >
     <!-- ===== Preloader Start ===== -->
     <script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('admin-dark-boot');}catch(e){}</script>
+    <script>(function(){var h=document.documentElement,s='large';try{var v=localStorage.getItem('arabelaTextSize');if(v==='normal'||v==='xl'){s=v;}}catch(e){}h.setAttribute('data-text-size',s);})();</script>
     <div
   x-show="loaded"
   x-init="window.addEventListener('DOMContentLoaded', () => {setTimeout(() => loaded = false, 500)})"
@@ -996,7 +997,7 @@
     <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'gown-board' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients' || page === 'id-checks') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
-        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
+        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-500 dark:text-gray-400">
           <span
             class="menu-group-title"
             :class="sidebarToggle ? 'lg:hidden' : ''"
@@ -2082,7 +2083,7 @@
             >
               <div class="flex items-center justify-between">
                 <h3 class="flex items-center text-base font-semibold text-gray-800 dark:text-white/90">Blocked Gowns Today<details class="ht-tip"><summary aria-label="About blocked gowns" title="About blocked gowns">?</summary><div class="ht-tip-pop">Sorted by soonest to free up. Click a gown to open it and release its block early if it's already done.</div></details></h3>
-                <button type="button" @click="showBlockedGownsList = false" class="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Close</button>
+                <button type="button" @click="showBlockedGownsList = false" class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Close</button>
               </div>
               <div class="mt-4 overflow-y-auto pr-1" style="max-height: 320px;">
                 <div class="divide-y divide-gray-100 dark:divide-gray-800">
@@ -2093,7 +2094,7 @@
                     class="flex w-full items-center justify-between gap-3 py-3 text-left transition hover:bg-gray-50 dark:hover:bg-white/[0.03]"
                   >
                     <div>
-                      <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ row.gown.gown_id }} <span class="font-normal text-gray-400">&middot; {{ row.gown.category }}</span></p>
+                      <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ row.gown.gown_id }} <span class="font-normal text-gray-500 dark:text-gray-400">&middot; {{ row.gown.category }}</span></p>
                       <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{{ row.block.reason }} &middot; {{ row.block.range }}</p>
                     </div>
                     <span class="admin-no-shrink text-xs font-medium text-brand-500 dark:text-brand-400">View &rarr;</span>
@@ -2112,7 +2113,7 @@
                 <div>
                   <h3 class="flex items-center text-base font-semibold text-gray-800 dark:text-white/90">Tag Colors<details class="ht-tip"><summary aria-label="About tag colors" title="About tag colors">?</summary><div class="ht-tip-pop">Every category has one tag color. Put a tag or ribbon in that color on each gown in the category and write the gown's number on it: the color tells you the category from across the room, the number tells you which gown.</div></details></h3>
                 </div>
-                <button type="button" @click="showTagColors = false" class="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Close</button>
+                <button type="button" @click="showTagColors = false" class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Close</button>
               </div>
               <div class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {% for row in category_rows %}
@@ -2160,7 +2161,7 @@
                 ></button>
               </div>
               {% else %}
-              <p class="mt-5 text-xs text-gray-400 dark:text-gray-500">Only the owner can change tag colors.</p>
+              <p class="mt-5 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">Only the owner can change tag colors.</p>
               {% endif %}
             </div>
 
@@ -2173,7 +2174,7 @@
                   <h3 class="text-base font-semibold text-gray-800 dark:text-white/90">Removal Log</h3>
                   <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Every gown taken out of the catalog, and why. If a number is missing from the catalog (say 003), it is explained here. A missing number that is <strong>not</strong> listed here is the one to ask about.</p>
                 </div>
-                <button type="button" @click="showRemovalLog = false" class="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Close</button>
+                <button type="button" @click="showRemovalLog = false" class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Close</button>
               </div>
               {% if gown_removals %}
               <div class="mt-5">
@@ -2189,7 +2190,7 @@
                   {% for r in gown_removals %}
                   <div class="flex items-start justify-between gap-3 py-3" x-show="removalMatches({{ forloop.counter0 }})">
                     <div>
-                      <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ r.gown_id }}{% if r.name %} <span class="font-normal text-gray-400">&middot; {{ r.name }}</span>{% endif %}</p>
+                      <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ r.gown_id }}{% if r.name %} <span class="font-normal text-gray-500 dark:text-gray-400">&middot; {{ r.name }}</span>{% endif %}</p>
                       <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                         {% if r.removed_at %}Removed {{ r.removed_at|date:"M j, Y" }}{% if r.removed_by_name %} by {{ r.removed_by_name }}{% endif %}{% else %}Removed before the Removal Log existed &mdash; the date wasn't recorded{% endif %}
                       </p>
@@ -2199,7 +2200,7 @@
                   </div>
                   {% endfor %}
                 </div>
-                <p x-show="removalNoMatch()" x-cloak class="py-6 text-center text-sm text-gray-400 dark:text-gray-500">Nothing in the log matches that.</p>
+                <p x-show="removalNoMatch()" x-cloak class="py-6 text-center text-sm text-gray-500 dark:text-gray-400 dark:text-gray-500">Nothing in the log matches that.</p>
               </div>
               {% else %}
               <p class="mt-5 rounded-lg bg-gray-50 p-4 text-sm text-gray-500 dark:bg-white/[0.03] dark:text-gray-400">No gowns have been removed yet.</p>
@@ -2215,7 +2216,7 @@
                 <div>
                   <h3 class="flex items-center text-base font-semibold text-gray-800 dark:text-white/90">Add Category<details class="ht-tip"><summary aria-label="About adding a category" title="About adding a category">?</summary><div class="ht-tip-pop">A new kind of gown or outfit, like &ldquo;Debut Gown&rdquo;. It shows up in Add Gown, in Tag Colors and on the customer website.</div></details></h3>
                 </div>
-                <button type="button" @click="showAddCategory = false" class="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Close</button>
+                <button type="button" @click="showAddCategory = false" class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Close</button>
               </div>
               <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.25rem;">
                 <div style="flex: 1; min-width: 220px; max-width: 420px;">
@@ -2232,7 +2233,7 @@
                         class="flex justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]"
                         x-text="categoryBusy ? 'Working...' : 'Add Category'"></button>
               </div>
-              <p class="mt-2 text-xs text-gray-400 dark:text-gray-400">Up to 20 characters. Letters, numbers, spaces and hyphens.</p>
+              <p class="mt-2 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">Up to 20 characters. Letters, numbers, spaces and hyphens.</p>
               <p x-show="categoryError" x-cloak x-text="categoryError" class="mt-3 rounded-lg bg-error-50 p-3 text-xs font-medium text-error-600"></p>
 
               <div style="margin-top: 1.5rem;">
@@ -2241,7 +2242,7 @@
                   {% for row in category_rows %}
                   <div class="flex items-center justify-between gap-3 py-3">
                     <div>
-                      <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ row.label }}{% if not row.custom %} <span class="text-xs font-normal text-gray-400 dark:text-gray-400">&middot; original</span>{% endif %}</p>
+                      <p class="text-sm font-medium text-gray-800 dark:text-white/90">{{ row.label }}{% if not row.custom %} <span class="text-xs font-normal text-gray-500 dark:text-gray-400 dark:text-gray-400">&middot; original</span>{% endif %}</p>
                       <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{{ row.total }} gown{{ row.total|pluralize }}</p>
                     </div>
                     <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
@@ -2263,12 +2264,12 @@
                             class="rounded-lg border border-error-300 bg-error-50 px-3 py-1.5 text-theme-xs font-medium shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-white/[0.03]">Remove</button>
                     {% endif %}
                     {% else %}
-                    <span class="text-xs text-gray-400 dark:text-gray-400">In use &mdash; move or remove its gowns to delete it</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">In use &mdash; move or remove its gowns to delete it</span>
                     {% endif %}
                     </div>
                   </div>
                   {% empty %}
-                  <p class="py-3 text-sm text-gray-400 dark:text-gray-400">There are no categories. Add one above.</p>
+                  <p class="py-3 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">There are no categories. Add one above.</p>
                   {% endfor %}
                 </div>
               </div>
@@ -2380,15 +2381,15 @@
                   <span class="gc-pick">
                     <input type="checkbox" class="admin-bulk-check" :checked="allVisibleSelected()" x-effect="$el.indeterminate = someVisibleSelected()" @change="toggleSelectAllVisible($event.target.checked)" aria-label="Select all visible gowns" />
                   </span>
-                  <button type="button" @click="sortGowns('gown')" class="gc-sort">Gown <span class="text-gray-400" x-show="sortKey === 'gown'" x-text="sortDir === 1 ? '↑' : '↓'"></span></button>
-                  <button type="button" @click="sortGowns('category')" class="gc-sort gc-h-cat">Category &middot; Size <span class="text-gray-400" x-show="sortKey === 'category'" x-text="sortDir === 1 ? '↑' : '↓'"></span></button>
-                  <button type="button" @click="sortGowns('price')" class="gc-sort">Price <span class="text-gray-400" x-show="sortKey === 'price'" x-text="sortDir === 1 ? '↑' : '↓'"></span></button>
+                  <button type="button" @click="sortGowns('gown')" class="gc-sort">Gown <span class="text-gray-500 dark:text-gray-400" x-show="sortKey === 'gown'" x-text="sortDir === 1 ? '↑' : '↓'"></span></button>
+                  <button type="button" @click="sortGowns('category')" class="gc-sort gc-h-cat">Category &middot; Size <span class="text-gray-500 dark:text-gray-400" x-show="sortKey === 'category'" x-text="sortDir === 1 ? '↑' : '↓'"></span></button>
+                  <button type="button" @click="sortGowns('price')" class="gc-sort">Price <span class="text-gray-500 dark:text-gray-400" x-show="sortKey === 'price'" x-text="sortDir === 1 ? '↑' : '↓'"></span></button>
                   <span>Actions</span>
                   <span></span>
                 </div>
                 {% if gowns %}
                 <div class="ar-empty" x-show="matchingGownCount() === 0" x-cloak>
-                  <p class="text-sm text-gray-400 dark:text-gray-500">No gowns match your filters.</p>
+                  <p class="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-500">No gowns match your filters.</p>
                 </div>
                 {% endif %}
                 {% for gown in gowns %}
@@ -2404,7 +2405,7 @@
                         type="button"
                         @click="photoUpdateError = ''; viewingGownImage = { id: {{ gown.id }}, gownId: '{{ gown.gown_id|escapejs }}', details: '{{ gown.category|escapejs }} &middot; {{ gown.color_name|escapejs }} &middot; {{ gown.size|escapejs }}', photoUrl: '{{ gown.photo_url|escapejs }}' }; isGownImageModal = true"
                         title="View or replace gown photo"
-                        class="gc-photo flex h-10 w-10 flex-none items-center justify-center overflow-hidden rounded-lg bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-800 dark:hover:bg-white/[0.05] dark:hover:text-gray-300"
+                        class="gc-photo flex h-10 w-10 flex-none items-center justify-center overflow-hidden rounded-lg bg-gray-100 text-gray-500 dark:text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-800 dark:hover:bg-white/[0.05] dark:hover:text-gray-300"
                       >
                         {% if gown.photo_url %}
                         <img src="{{ gown.photo_url }}" alt="{{ gown.gown_id }}" class="h-full w-full object-cover" />
@@ -2475,7 +2476,7 @@
                 </div>
                 {% empty %}
                 <div class="ar-empty">
-                  <p class="text-sm text-gray-400 dark:text-gray-500">No gowns in the catalog yet. Click &quot;Add Gown&quot; to create the first one.</p>
+                  <p class="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-500">No gowns in the catalog yet. Click &quot;Add Gown&quot; to create the first one.</p>
                 </div>
                 {% endfor %}
               </div>
@@ -2496,7 +2497,7 @@
   >
     <button
       @click="isAddGownModal = false"
-      class="transition-color absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300"
+      class="transition-color absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-500 dark:text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300"
     >
       <svg class="fill-current" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path fill-rule="evenodd" clip-rule="evenodd" d="M6.04289 16.5418C5.65237 16.9323 5.65237 17.5655 6.04289 17.956C6.43342 18.3465 7.06658 18.3465 7.45711 17.956L11.9987 13.4144L16.5408 17.9565C16.9313 18.347 17.5645 18.347 17.955 17.9565C18.3455 17.566 18.3455 16.9328 17.955 16.5423L13.4129 12.0002L17.955 7.45808C18.3455 7.06756 18.3455 6.43439 17.955 6.04387C17.5645 5.65335 16.9313 5.65335 16.5408 6.04387L11.9987 10.586L7.45711 6.04439C7.06658 5.65386 6.43342 5.65386 6.04289 6.04439C5.65237 6.43491 5.65237 7.06808 6.04289 7.4586L10.5845 12.0002L6.04289 16.5418Z" fill=""/>
@@ -2601,7 +2602,7 @@
                 class="font-semibold text-brand-500 hover:text-brand-600 dark:text-brand-400"
                 @click="newGownColorCode = suggestColorCode(newGownColorName, isEditMode ? editingGownId : null)"
                 x-text="suggestColorCode(newGownColorName, isEditMode ? editingGownId : null)"></button>
-              <span class="text-gray-400">&mdash; click to use it</span>
+              <span class="text-gray-500 dark:text-gray-400">&mdash; click to use it</span>
             </p>
           </div>
 
@@ -2628,7 +2629,7 @@
           </div>
 
           <div class="col-span-2 lg:col-span-1">
-            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Design Variant <span class="text-gray-400">(optional)</span></label>
+            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Design Variant <span class="text-gray-500 dark:text-gray-400">(optional)</span></label>
             <input
               type="text"
               x-model="newGownDesignVariant"
@@ -2671,7 +2672,7 @@
           </div>
 
           <div class="col-span-2">
-            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Notes <span class="text-gray-400">(optional)</span></label>
+            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Notes <span class="text-gray-500 dark:text-gray-400">(optional)</span></label>
             <textarea
               x-model="newGownNotes"
               rows="2"
@@ -2721,7 +2722,7 @@
           </div>
 
           <div class="col-span-2" x-show="!isEditMode" x-cloak>
-            <div class="mb-1.5 flex items-center"><label class="block text-sm font-medium text-gray-700 dark:text-gray-400">Gown Photo <span class="text-gray-400">(optional)</span></label><details class="ht-tip"><summary aria-label="About the gown photo" title="About the gown photo">?</summary><div class="ht-tip-pop">You can add the photo later if you don't have one yet. A portrait photo (3:4) works best; other shapes are cropped to fit on the customer site.</div></details></div>
+            <div class="mb-1.5 flex items-center"><label class="block text-sm font-medium text-gray-700 dark:text-gray-400">Gown Photo <span class="text-gray-500 dark:text-gray-400">(optional)</span></label><details class="ht-tip"><summary aria-label="About the gown photo" title="About the gown photo">?</summary><div class="ht-tip-pop">You can add the photo later if you don't have one yet. A portrait photo (3:4) works best; other shapes are cropped to fit on the customer site.</div></details></div>
             <input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" x-ref="newGownPhotoInput" @change="onGownPhotoChosen($event.target.files[0]); $event.target.value = ''" />
             <div
               class="dropzone hover:border-brand-500! dark:hover:border-brand-500! rounded-xl border border-dashed! border-gray-300! bg-gray-50 p-6 dark:border-gray-700! dark:bg-gray-900 cursor-pointer"
@@ -2800,7 +2801,7 @@
     <button
       type="button"
       @click="isGownImageModal = false"
-      class="transition-color absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300"
+      class="transition-color absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-500 dark:text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300"
     >
       <svg class="fill-current" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path fill-rule="evenodd" clip-rule="evenodd" d="M6.04289 16.5418C5.65237 16.9323 5.65237 17.5655 6.04289 17.956C6.43342 18.3465 7.06658 18.3465 7.45711 17.956L11.9987 13.4144L16.5408 17.9565C16.9313 18.347 17.5645 18.347 17.955 17.9565C18.3455 17.566 18.3455 16.9328 17.955 16.5423L13.4129 12.0002L17.955 7.45808C18.3455 7.06756 18.3455 6.43439 17.955 6.04387C17.5645 5.65335 16.9313 5.65335 16.5408 6.04387L11.9987 10.586L7.45711 6.04439C7.06658 5.65386 6.43342 5.65386 6.04289 6.04439C5.65237 6.43491 5.65237 7.06808 6.04289 7.4586L10.5845 12.0002L6.04289 16.5418Z" fill=""/>
@@ -2882,7 +2883,7 @@
     <button
       type="button"
       @click="isViewModal = false"
-      class="transition-color absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300"
+      class="transition-color absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-500 dark:text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300"
     >
       <svg class="fill-current" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path fill-rule="evenodd" clip-rule="evenodd" d="M6.04289 16.5418C5.65237 16.9323 5.65237 17.5655 6.04289 17.956C6.43342 18.3465 7.06658 18.3465 7.45711 17.956L11.9987 13.4144L16.5408 17.9565C16.9313 18.347 17.5645 18.347 17.955 17.9565C18.3455 17.566 18.3455 16.9328 17.955 16.5423L13.4129 12.0002L17.955 7.45808C18.3455 7.06756 18.3455 6.43439 17.955 6.04387C17.5645 5.65335 16.9313 5.65335 16.5408 6.04387L11.9987 10.586L7.45711 6.04439C7.06658 5.65386 6.43342 5.65386 6.04289 6.04439C5.65237 6.43491 5.65237 7.06808 6.04289 7.4586L10.5845 12.0002L6.04289 16.5418Z" fill=""/>
@@ -3052,7 +3053,7 @@
             </select>
           </div>
           <div>
-            <label class="mb-2 block text-xs font-medium text-gray-700 dark:text-gray-400">Note <span class="text-gray-400">(optional)</span></label>
+            <label class="mb-2 block text-xs font-medium text-gray-700 dark:text-gray-400">Note <span class="text-gray-500 dark:text-gray-400">(optional)</span></label>
             <input
               type="text"
               x-model="newBlockNote"
@@ -3172,7 +3173,7 @@
 
     <div class="mt-5">
       <label for="removeNoteInput" class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-        Note <span class="text-gray-400" x-text="removeReason === 'Other' ? '(required)' : '(optional)'"></span>
+        Note <span class="text-gray-500 dark:text-gray-400" x-text="removeReason === 'Other' ? '(required)' : '(optional)'"></span>
       </label>
       <input
         id="removeNoteInput"

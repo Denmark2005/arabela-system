@@ -12,16 +12,16 @@
          and written out when a gown's line is opened. */
       .ar-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; padding: .85rem 1.25rem; }
       .ar-search { position: relative; flex: 1 1 18rem; min-width: 0; }
-      .ar-search-ic { position: absolute; left: .8rem; top: 50%; width: 1rem; height: 1rem; transform: translateY(-50%); color: #98a2b3; pointer-events: none; }
+      .ar-search-ic { position: absolute; left: .8rem; top: 50%; width: 1rem; height: 1rem; transform: translateY(-50%); color: #667085; pointer-events: none; }
       .ar-search-input { display: block; width: 100%; height: 2.5rem; box-sizing: border-box; padding: .4rem .8rem .4rem 2.3rem; border: 1px solid #d0d5dd; border-radius: .6rem; background: transparent; color: #1d2939; font: inherit; font-size: .875rem; }
-      .ar-search-input::placeholder { color: #98a2b3; }
+      .ar-search-input::placeholder { color: #667085; }
       .ar-search-input:focus { outline: 2px solid #465fff; outline-offset: 1px; border-color: #465fff; }
       .dark .ar-search-input { background: #0c111d; border-color: #344054; color: #f2f4f7; }
       .ar-count { min-height: 1.4rem; padding: 0 1.25rem .6rem; font-size: .8125rem; color: #667085; }
       .dark .ar-count { color: #98a2b3; }
 
       .ar-head, .ar-line { display: grid; grid-template-columns: minmax(12rem, 2.2fr) minmax(9rem, 1.5fr) minmax(8.5rem, 1.1fr) 8rem 8rem 2.25rem; align-items: center; column-gap: .75rem; }
-      .ar-head { position: sticky; top: 0; z-index: 10; padding: .75rem 1.25rem; background: #fff; border-top: 1px solid #f2f4f7; border-bottom: 1px solid #f2f4f7; font-size: .75rem; font-weight: 500; color: #667085; }
+      .ar-head { position: sticky; top: 0; z-index: 10; padding: .75rem 1.25rem; background: #fff; border-top: 1px solid #f2f4f7; border-bottom: 1px solid #f2f4f7; font-size: 0.8125rem; font-weight: 500; color: #667085; }
       .dark .ar-head { background: #101828; border-color: #1d2939; color: #98a2b3; }
       .ar-booking { border-bottom: 1px solid #f2f4f7; }
       .dark .ar-booking { border-color: #1d2939; }
@@ -31,7 +31,7 @@
       .ar-who { display: flex; align-items: center; gap: .65rem; min-width: 0; }
       .ar-name { font-weight: 500; font-size: .875rem; color: #1d2939; overflow-wrap: anywhere; }
       .dark .ar-name { color: rgba(255,255,255,.9); }
-      .ar-ref { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; font-size: .75rem; }
+      .ar-ref { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; font-size: 0.8125rem; }
       .ar-ref b { font-weight: 500; padding: .1rem .5rem; border-radius: 999px; background: #f2f4f7; color: #475467; }
       .dark .ar-ref b { background: #1d2939; color: #98a2b3; }
       .ar-booking.is-overdue > .ar-line { box-shadow: inset 3px 0 0 #d92d20; }
@@ -42,7 +42,7 @@
       .ar-filter:hover { background: rgba(152,162,179,.12); }
       .ar-filter:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
       .ar-filter.is-on { background: #465fff; border-color: #465fff; color: #fff; }
-      .ar-filter .ar-n { min-width: 1.25rem; padding: 0 .4rem; border-radius: 999px; background: rgba(152,162,179,.22); font-size: .75rem; font-weight: 600; text-align: center; }
+      .ar-filter .ar-n { min-width: 1.25rem; padding: 0 .4rem; border-radius: 999px; background: rgba(152,162,179,.22); font-size: 0.8125rem; font-weight: 600; text-align: center; }
       .ar-filter.is-on .ar-n { background: rgba(255,255,255,.26); }
       .ar-filter--hot:not(.is-on) { border-color: #fda29b; color: #b42318; }
       .ar-filter--hot:not(.is-on) .ar-n { background: #fee4e2; color: #b42318; }
@@ -56,17 +56,17 @@
       .ar-dot--active { background: #1570ef; }
       .ar-dot--overdue { background: #d92d20; }
       .ar-dot--done { background: #667085; }
-      .ar-num { display: inline-flex; flex: none; align-items: center; justify-content: center; min-width: 1.5rem; height: 1.5rem; box-sizing: border-box; padding: 0 .4rem; border-radius: 999px; color: #fff; font-size: .75rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+      .ar-num { display: inline-flex; flex: none; align-items: center; justify-content: center; min-width: 1.5rem; height: 1.5rem; box-sizing: border-box; padding: 0 .4rem; border-radius: 999px; color: #fff; font-size: 0.8125rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
       .ar-num svg { width: .8rem; height: .8rem; display: block; }
       .ar-num--confirmed { background: #039855; }
       .ar-num--active { background: #1570ef; }
       .ar-num--overdue { background: #d92d20; }
       .ar-num--returned, .ar-num--cancelled { background: #667085; }
-      .ar-bal-chip { display: inline-flex; align-items: center; padding: .1rem .55rem; border-radius: 999px; background: #fee4e2; color: #b42318; font-size: .72rem; font-weight: 600; text-decoration: none; white-space: nowrap; }
+      .ar-bal-chip { display: inline-flex; align-items: center; padding: .1rem .55rem; border-radius: 999px; background: #fee4e2; color: #b42318; font-size: 0.8125rem; font-weight: 600; text-decoration: none; white-space: nowrap; }
       .ar-bal-chip:hover { background: #fecdca; }
       .dark .ar-bal-chip { background: rgba(240,68,56,.18); color: #fda29b; }
       /* The booking's valid-ID chip (reservations/identity.py): green = verified, amber = needs a look, red = declined, blue = being checked, grey = none on file. */
-      .ar-idchip { display: inline-flex; align-items: center; padding: .1rem .55rem; border-radius: 999px; background: #f2f4f7; color: #475467; font-size: .72rem; font-weight: 600; text-decoration: none; white-space: nowrap; }
+      .ar-idchip { display: inline-flex; align-items: center; padding: .1rem .55rem; border-radius: 999px; background: #f2f4f7; color: #475467; font-size: 0.8125rem; font-weight: 600; text-decoration: none; white-space: nowrap; }
       .ar-idchip--ok { background: #ecfdf3; color: #027a48; }
       .ar-idchip--warn { background: #fffaeb; color: #b54708; }
       .ar-idchip--bad { background: #fee4e2; color: #b42318; }
@@ -77,14 +77,14 @@
       .dark .ar-idchip--warn { background: rgba(247,144,9,.16); color: #fdb022; }
       .dark .ar-idchip--bad { background: rgba(240,68,56,.18); color: #fda29b; }
       .dark .ar-idchip--wait { background: rgba(21,112,239,.18); color: #84caff; }
-      .ar-count-pill { display: inline-flex; align-items: center; gap: .25rem; padding: .1rem .5rem; border-radius: 999px; background: #f2f4f7; color: #475467; font-size: .72rem; font-weight: 600; }
+      .ar-count-pill { display: inline-flex; align-items: center; gap: .25rem; padding: .1rem .5rem; border-radius: 999px; background: #f2f4f7; color: #475467; font-size: 0.8125rem; font-weight: 600; }
       .ar-count-pill svg { width: .75rem; height: .75rem; }
       .dark .ar-count-pill { background: #1d2939; color: #98a2b3; }
 
       .ar-date { font-size: .875rem; color: #667085; }
       .dark .ar-date { color: #98a2b3; }
       .ar-phone { font-size: .8125rem; color: #465fff; text-decoration: underline; }
-      .ar-none { color: #98a2b3; }
+      .ar-none { color: #667085; }
       .ar-chev { justify-self: end; display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border: 0; border-radius: .5rem; background: none; color: #667085; cursor: pointer; }
       .ar-chev:hover { background: rgba(152,162,179,.18); }
       .ar-chev:focus-visible { outline: 2px solid #465fff; outline-offset: 1px; }
@@ -107,7 +107,7 @@
 
       /* The "?" key: what the circles mean. */
       .ar-tip { position: relative; display: inline-block; }
-      .ar-tip > summary { list-style: none; display: inline-flex; align-items: center; justify-content: center; width: 1.5rem; height: 1.5rem; border: 1px solid #98a2b3; border-radius: 999px; color: #667085; font-size: .75rem; font-weight: 700; line-height: 1; cursor: pointer; user-select: none; }
+      .ar-tip > summary { list-style: none; display: inline-flex; align-items: center; justify-content: center; width: 1.5rem; height: 1.5rem; border: 1px solid #98a2b3; border-radius: 999px; color: #667085; font-size: 0.8125rem; font-weight: 700; line-height: 1; cursor: pointer; user-select: none; }
       .ar-tip > summary::-webkit-details-marker { display: none; }
       .ar-tip > summary::marker { content: ''; }
       .ar-tip > summary:hover, .ar-tip[open] > summary { background: #465fff; border-color: #465fff; color: #fff; }
@@ -118,12 +118,12 @@
       .ar-leg { list-style: none; margin: .55rem 0 0; padding: 0; display: grid; gap: .55rem; }
       .ar-leg li { display: flex; align-items: center; gap: .65rem; }
       .ar-leg .ar-num, .ar-leg .ar-dot, .ar-leg .ar-count-pill { flex: none; }
-      .ar-leg-note { margin: .65rem 0 0; font-size: .75rem; color: #98a2b3; }
+      .ar-leg-note { margin: .65rem 0 0; font-size: 0.8125rem; color: #667085; }
 
       /* An opened booking: its icon buttons, then one short line per gown. */
       .ar-panel { border-top: 1px dashed #e4e7ec; background: rgba(152,162,179,.04); }
       .dark .ar-panel { border-color: #1d2939; }
-      .ar-strip { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .6rem 1.25rem 0; font-size: .75rem; color: #98a2b3; }
+      .ar-strip { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .6rem 1.25rem 0; font-size: 0.8125rem; color: #667085; }
       .ar-acts { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .7rem 1.25rem; }
       .ar-gowns { border-top: 1px solid #f2f4f7; }
       .dark .ar-gowns { border-color: #1d2939; }
@@ -134,9 +134,9 @@
       .ar-gname { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .6rem; }
       .ar-gtitle { font-size: .875rem; font-weight: 500; color: #1d2939; overflow-wrap: anywhere; }
       .dark .ar-gtitle { color: rgba(255,255,255,.9); }
-      .ar-of { padding: .05rem .45rem; border-radius: 999px; background: #f2f4f7; color: #667085; font-size: .7rem; font-weight: 500; }
+      .ar-of { padding: .05rem .45rem; border-radius: 999px; background: #f2f4f7; color: #667085; font-size: 0.8125rem; font-weight: 500; }
       .dark .ar-of { background: #1d2939; color: #98a2b3; }
-      .ar-tag { display: inline-flex; align-items: center; gap: .35rem; font-size: .75rem; color: #98a2b3; }
+      .ar-tag { display: inline-flex; align-items: center; gap: .35rem; font-size: 0.8125rem; color: #667085; }
       .ar-gdates { display: inline-flex; align-items: center; gap: .4rem; font-size: .8125rem; color: #475467; white-space: nowrap; }
       .dark .ar-gdates { color: #98a2b3; }
       .ar-chg { display: inline-flex; color: #b54708; }
@@ -161,7 +161,7 @@
         .ar-line > .ar-date[data-label="Rental"] { grid-area: rental; }
         .ar-line > .ar-date[data-label="Return"] { grid-area: return; }
         .ar-line > .ar-chev { grid-area: chev; }
-        .ar-line > .ar-date::before { content: attr(data-label) ": "; color: #98a2b3; }
+        .ar-line > .ar-date::before { content: attr(data-label) ": "; color: #667085; }
         .ar-filters { position: relative; }
         .ar-tip { position: static; }
         .ar-tip-pop { left: 0; right: 0; width: auto; max-width: none; }

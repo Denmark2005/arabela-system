@@ -48,14 +48,14 @@
       .rr-toolbar2 { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem .9rem; padding: 0 1.25rem .85rem; }
       .rr-lbl { font-size: .8125rem; color: #667085; }
       .dark .rr-lbl { color: #98a2b3; }
-      .rr-fine { font-size: .75rem; color: #667085; }
+      .rr-fine { font-size: 0.8125rem; color: #667085; }
       .dark .rr-fine { color: #98a2b3; }
       .rr-pickup { gap: .5rem; }
       .rr-countrow { display: flex; flex-wrap: wrap; align-items: center; gap: .1rem .75rem; }
 
       /* The key to the circles: a small button on the right of the count line, so it takes no height of its own. */
       .rr-key { margin-left: auto; }
-      .rr-key > summary { width: auto; height: 1.75rem; padding: 0 .7rem; gap: .45rem; border-color: #d0d5dd; font-size: .75rem; font-weight: 500; color: #475467; }
+      .rr-key > summary { width: auto; height: 1.75rem; padding: 0 .7rem; gap: .45rem; border-color: #d0d5dd; font-size: 0.8125rem; font-weight: 500; color: #475467; }
       .rr-key > summary:hover, .rr-key[open] > summary { background: rgba(70,95,255,.1); border-color: #9bb0ff; color: #3641f5; }
       .dark .rr-key > summary { border-color: #344054; color: #98a2b3; }
       .dark .rr-key > summary:hover, .dark .rr-key[open] > summary { background: rgba(70,95,255,.18); border-color: #6172f3; color: #c7d2fe; }
@@ -84,13 +84,13 @@
       .dark .rr-dates { color: #98a2b3; }
       .ar-booking.is-highlight > .ar-line { background: #ecf3ff; }
       .dark .ar-booking.is-highlight > .ar-line { background: rgba(70,95,255,.12); }
-      .rr-warn { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 1.1rem; height: 1.1rem; border-radius: 999px; background: #fffaeb; border: 1px solid #fec84b; color: #b54708; font-size: .7rem; font-weight: 700; line-height: 1; cursor: help; }
+      .rr-warn { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 1.1rem; height: 1.1rem; border-radius: 999px; background: #fffaeb; border: 1px solid #fec84b; color: #b54708; font-size: 0.8125rem; font-weight: 700; line-height: 1; cursor: help; }
       .dark .rr-warn { background: rgba(247,144,9,.16); border-color: rgba(247,144,9,.5); color: #fdb022; }
 
       /* The opened booking: the facts (status in words, deposit, receipts, booked) with the two icon buttons, then one short line per gown. */
       .rr-pbar { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: .75rem 1.5rem; padding: .8rem 1.25rem; }
       .rr-facts { display: flex; flex-wrap: wrap; gap: .65rem 2.25rem; margin: 0; min-width: 0; }
-      .rr-facts dt { margin: 0; font-size: .6875rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #98a2b3; }
+      .rr-facts dt { margin: 0; font-size: 0.8125rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #667085; }
       .rr-facts dd { margin: .25rem 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .5rem; font-size: .875rem; color: #344054; }
       .dark .rr-facts dd { color: #d0d5dd; }
       .rr-facts .rr-channel { margin: 0; }
@@ -106,12 +106,12 @@
       .dark .rr-gstate.is-ok { color: #32d583; }
       .dark .rr-gstate.is-info { color: #84caff; }
       .dark .rr-gstate.is-bad { color: #fda29b; }
-      .rr-nogown { padding: .8rem 1.25rem; font-size: .8125rem; color: #98a2b3; }
+      .rr-nogown { padding: .8rem 1.25rem; font-size: .8125rem; color: #667085; }
 
       /* A small laptop: the five counts stay in one row, and the search shares its row with the three boxes instead of leaving one alone below. */
       @media (max-width: 1180px) {
         .rr-tile { padding: .8rem .9rem; }
-        .rr-tile-l { font-size: .75rem; }
+        .rr-tile-l { font-size: 0.8125rem; }
         .ar-search-input.rr-select { flex-basis: 8rem; width: 8rem; }
         .rr-card .ar-search { flex-basis: 12rem; }
       }
@@ -143,9 +143,9 @@
       .dark .rr-seg button.is-on { background: #1d2939; color: #fff; }
       .rr-date { color-scheme: light; }
       .dark .rr-date { color-scheme: dark; }
-      .rr-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: .125rem .625rem; font-size: .75rem; font-weight: 500; white-space: nowrap; }
+      .rr-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: .125rem .625rem; font-size: 0.8125rem; font-weight: 500; white-space: nowrap; }
       /* How a staff-recorded booking came in (Walk-in / Facebook / Phone call), and its payment warning. */
-      .rr-channel { display: inline-flex; align-items: center; margin-top: .25rem; margin-right: .25rem; border-radius: 999px; padding: .0625rem .5rem; font-size: .6875rem; font-weight: 600; white-space: nowrap; background: #eef4ff; color: #3538cd; }
+      .rr-channel { display: inline-flex; align-items: center; margin-top: .25rem; margin-right: .25rem; border-radius: 999px; padding: .0625rem .5rem; font-size: 0.8125rem; font-weight: 600; white-space: nowrap; background: #eef4ff; color: #3538cd; }
       .dark .rr-channel { background: rgba(70, 95, 255, .16); color: #9bb0ff; }
       .rr-channel--warn { background: #fffaeb; color: #b54708; }
       .dark .rr-channel--warn { background: rgba(247, 144, 9, .16); color: #fdb022; }
@@ -163,7 +163,7 @@
       .rr-panel { max-width: 980px; }
       .rr-section { margin-top: 1.5rem; border-top: 1px solid #f2f4f7; padding-top: 1.25rem; }
       .dark .rr-section { border-top-color: #1d2939; }
-      .rr-section-title { margin-bottom: .75rem; font-size: .75rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #667085; }
+      .rr-section-title { margin-bottom: .75rem; font-size: 0.8125rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #667085; }
       .dark .rr-section-title { color: #98a2b3; }
       .rr-cancelled { border: 1px solid #fecdca; background: #fef3f2; border-radius: .75rem; padding: .875rem 1rem; }
       .dark .rr-cancelled { border-color: rgba(240, 68, 56, .4); background: rgba(240, 68, 56, .1); }
@@ -172,7 +172,7 @@
       .rr-kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .875rem 1.25rem; }
       .rr-kv > div { min-width: 0; overflow-wrap: anywhere; }
       .rr-mini-table { width: 100%; border-collapse: collapse; font-size: .8125rem; }
-      .rr-mini-table th { text-align: left; font-weight: 500; font-size: .75rem; color: #667085; padding: .5rem .75rem; white-space: nowrap; border-bottom: 1px solid #f2f4f7; }
+      .rr-mini-table th { text-align: left; font-weight: 500; font-size: 0.8125rem; color: #667085; padding: .5rem .75rem; white-space: nowrap; border-bottom: 1px solid #f2f4f7; }
       .rr-mini-table td { padding: .625rem .75rem; color: #344054; white-space: nowrap; border-bottom: 1px solid #f2f4f7; vertical-align: top; }
       .dark .rr-mini-table th { color: #98a2b3; border-bottom-color: #1d2939; }
       .dark .rr-mini-table td { color: #d0d5dd; border-bottom-color: #1d2939; }
@@ -271,7 +271,7 @@
       .rrd-contact { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
       .rrd-row { display: flex; align-items: center; gap: .75rem; border: 1px solid #e4e7ec; border-radius: .875rem; padding: .75rem .875rem; min-width: 0; }
       .dark .rrd-row { border-color: #1f2a3d; }
-      .rrd-row > svg { flex: none; color: #98a2b3; }
+      .rrd-row > svg { flex: none; color: #667085; }
       .rrd-grow { flex: 1 1 auto; min-width: 0; }
 
       .rrd-btn { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; border: 1px solid #d0d5dd; background: transparent; border-radius: .625rem; padding: .4375rem .875rem; font-size: .875rem; font-weight: 500; color: #344054; white-space: nowrap; cursor: pointer; }
@@ -366,7 +366,7 @@
       .rrd-history .arb-tl-row:first-child .arb-tl-label { color: #101828; }
       .rrd-history .arb-tl-meta { font-size: .8125rem; color: #667085; }
       .rrd-history .arb-tl-detail { font-size: .9375rem; line-height: 1.55; color: #344054; max-width: 64ch; }
-      .rrd-history .arb-tl-pill { font-size: .6875rem; }
+      .rrd-history .arb-tl-pill { font-size: 0.8125rem; }
       .dark .rrd-history .arb-tl-label, .dark .rrd-history .arb-tl-row:first-child .arb-tl-label { color: rgba(255, 255, 255, .92); }
       .dark .rrd-history .arb-tl-meta { color: #98a2b3; }
       .dark .rrd-history .arb-tl-detail { color: #d0d5dd; }
@@ -391,10 +391,10 @@
       .rrd-contactline { display: flex; flex-wrap: wrap; gap: .5rem .75rem; }
       .rrd-cchip { display: inline-flex; align-items: center; gap: .6rem; min-width: 0; max-width: 100%; padding: .375rem .5rem .375rem .875rem; border: 1px solid #e4e7ec; border-radius: .75rem; font-size: .9375rem; color: #101828; }
       .dark .rrd-cchip { border-color: #1f2a3d; color: rgba(255, 255, 255, .9); }
-      .rrd-cchip > svg { flex: none; width: 1.1rem; height: 1.1rem; color: #98a2b3; }
+      .rrd-cchip > svg { flex: none; width: 1.1rem; height: 1.1rem; color: #667085; }
       .rrd-cchip.is-empty { padding-right: .875rem; }
       .rrd-cval { min-width: 0; overflow-wrap: anywhere; font-weight: 500; }
-      .rrd-cchip.is-empty .rrd-cval { font-weight: 400; color: #98a2b3; }
+      .rrd-cchip.is-empty .rrd-cval { font-weight: 400; color: #667085; }
 
       .rrd-gh { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem 1rem; margin-bottom: .625rem; }
       .rrd-gh .rrd-h { margin: 0; }
@@ -454,7 +454,7 @@
       .rrd-rech { display: flex; align-items: center; gap: .75rem; }
       .rrd-rech .rrd-h { margin: 0; }
       .rrd-rech .rrd-ib { margin-left: auto; }
-      .rrd-recnone { margin: 0; font-size: .875rem; color: #98a2b3; }
+      .rrd-recnone { margin: 0; font-size: .875rem; color: #667085; }
       .rrd-reclist { display: flex; flex-direction: column; gap: .5rem; margin-top: .625rem; }
       .rrd-reclist .rrd-receipt + .rrd-receipt { margin-top: 0; }
       .rrd-reclist .rrd-thumb { width: 2.5rem; height: 2.5rem; }
@@ -1341,6 +1341,7 @@
     </script>
     <!-- ===== Preloader Start ===== -->
     <script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('admin-dark-boot');}catch(e){}</script>
+    <script>(function(){var h=document.documentElement,s='large';try{var v=localStorage.getItem('arabelaTextSize');if(v==='normal'||v==='xl'){s=v;}}catch(e){}h.setAttribute('data-text-size',s);})();</script>
     <div
   x-show="loaded"
   x-init="window.addEventListener('DOMContentLoaded', () => {setTimeout(() => loaded = false, 500)})"
@@ -1386,7 +1387,7 @@
     <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'gown-board' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients' || page === 'id-checks') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
-        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
+        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-500 dark:text-gray-400">
           <span
             class="menu-group-title"
             :class="sidebarToggle ? 'lg:hidden' : ''"
@@ -2880,13 +2881,13 @@
       <div class="rr-backdrop" @click="openPhoto = false"></div>
       <div class="no-scrollbar relative w-full overflow-y-auto rounded-3xl bg-white p-5 dark:bg-gray-900 lg:p-8" style="max-width: min(1100px, 92vw); max-height: calc(100vh - 2.5rem);">
         <button type="button" @click="openPhoto = false" aria-label="Close"
-          class="absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07]">
+          class="absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-500 dark:text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07]">
           <svg class="fill-current" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M6.04289 16.5418C5.65237 16.9323 5.65237 17.5655 6.04289 17.956C6.43342 18.3465 7.06658 18.3465 7.45711 17.956L11.9987 13.4144L16.5408 17.9565C16.9313 18.347 17.5645 18.347 17.955 17.9565C18.3455 17.566 18.3455 16.9328 17.955 16.5423L13.4129 12.0002L17.955 7.45808C18.3455 7.06756 18.3455 6.43439 17.955 6.04387C17.5645 5.65335 16.9313 5.65335 16.5408 6.04387L11.9987 10.586L7.45711 6.04439C7.06658 5.65386 6.43342 5.65386 6.04289 6.04439C5.65237 6.43491 5.65237 7.06808 6.04289 7.4586L10.5845 12.0002L6.04289 16.5418Z" fill=""/></svg>
         </button>
         <div style="padding-right: 3.5rem;">
           <h4 class="mb-1 text-2xl font-semibold text-gray-800 dark:text-white/90">Receipt Photo</h4>
           <p class="text-sm text-gray-500 dark:text-gray-400" x-text="photo.customer + ' · ' + photo.reference"></p>
-          <p class="mb-5 text-theme-xs text-gray-400" x-text="'Uploaded ' + photo.uploaded + (photo.uploadedBy ? ' by ' + photo.uploadedBy : '')"></p>
+          <p class="mb-5 text-theme-xs text-gray-500 dark:text-gray-400" x-text="'Uploaded ' + photo.uploaded + (photo.uploadedBy ? ' by ' + photo.uploadedBy : '')"></p>
         </div>
         <template x-if="photo.url">
           <div>

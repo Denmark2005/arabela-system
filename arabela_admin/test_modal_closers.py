@@ -25,7 +25,7 @@ ONLY_CLOSE = {
     "partials/receipt_preview.html": 1,      # the Receipt window: Close and Print Receipt side by side, no corner X
 }
 # How the allowed ones look in the served page: the two own-window partials by id, the panel / QR links by their small grey style.
-ALLOWED_MARKS = ('id="ca-close"', 'id="ar-close"', 'id="rcm-close"', 'class="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"')
+ALLOWED_MARKS = ('id="ca-close"', 'id="ar-close"', 'id="rcm-close"', 'class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"')
 # Windows that lost their Close button: file -> the flags their X is wired to.
 LOST_CLOSE = {
     "dashboard.html": ["openReceiptModal"],

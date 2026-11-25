@@ -33,7 +33,7 @@
   // Small "kind" tag so a gown result can't be mistaken for a reservation at a glance --
   // reservation rows render exactly as before (no tag), this is purely additive.
   var GOWN_TAG =
-    '<span class="rounded-full bg-gray-100 px-2 py-1 font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400" style="font-size:10px;">Gown</span>';
+    '<span class="rounded-full bg-gray-100 px-2 py-1 font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400" style="font-size:0.8125rem;">Gown</span>';
 
   function renderResult(r) {
     if (r.type === "gown") {

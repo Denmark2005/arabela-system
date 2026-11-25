@@ -541,6 +541,8 @@ class PageTests(AuditBase):
         html = self.get().content.decode()
         self.assertIn("The Audit Log starts on", html)
         self.assertIn("cannot be changed or deleted", html)
+        policy = html[html.index("The Audit Log starts on") - 400:html.index("The Audit Log starts on")]
+        self.assertIn('<div class="ht-tip-pop">', policy)                      # the policy sentence sits behind a "?" instead of being printed under the list
 
     def test_an_empty_log_says_so(self):
         AuditLog.objects.purge_older_than(timezone.now() + timedelta(days=1))
@@ -714,7 +716,7 @@ class LayoutTests(PageTests):
         self.assertIn(f'Staff activity <span class="au-n">{people}</span>', html)
 
     def test_the_owner_tag_is_not_repeated_on_every_line_but_is_in_the_opened_line(self):
-        rows = self.html().split('data-arpg=".au-entry"', 1)[1].split('<p class="au-note">', 1)[0]          # the lines only (the Staff activity tab keeps its tag)
+        rows = self.html().split('data-arpg=".au-entry"', 1)[1].split('class="au-note"', 1)[0]          # the lines only (the Staff activity tab keeps its tag)
         self.assertNotIn('class="au-role"', rows)
         self.assertIn('<dt>Role</dt><dd>Owner</dd>', rows)
 

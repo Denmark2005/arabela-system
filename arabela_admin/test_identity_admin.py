@@ -254,6 +254,19 @@ class PageTests(Base):
         self.assertIn("not required</strong>", page)
         self.assertIn("ID verification is not set up", page)
 
+    def test_the_long_note_is_one_short_line_with_the_rest_behind_a_question_mark(self):
+        import re
+        page = self.owner_client.get(reverse("arabela_admin:id_checks")).content.decode()
+        note = re.search(r'<div class="idc-note">(.*?)</div></details>\s*</div>', page, re.S).group(1)
+        popup = re.search(r'<div class="ht-tip-pop">(.*)$', note, re.S).group(1)
+        visible = re.sub(r"<[^>]+>", " ", note.replace(popup, ""))                       # what is printed on the page all the time
+        self.assertLess(len(" ".join(visible.split())), 120)
+        self.assertIn("Only you can see this page and the ID pictures.", visible)
+        self.assertIn("ID required", visible)                                              # the rule and Didit's state stay visible as two short words
+        for words in ("A verified ID counts for 365 days", "deleted 30 days after the customer's last return", "the selfie is never kept"):
+            self.assertIn(words, popup)                                                    # the long explanation opens on demand
+            self.assertNotIn(words, visible)
+
     def test_the_empty_pages_explain_themselves(self):
         self.assertIn("No ID check needs your review", self.owner_client.get(reverse("arabela_admin:id_checks")).content.decode())
         self.assertIn("No ID checks yet", self.owner_client.get(reverse("arabela_admin:id_checks") + "?show=all").content.decode())

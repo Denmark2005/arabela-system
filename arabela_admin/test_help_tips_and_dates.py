@@ -155,11 +155,11 @@ class SharedPiecesAreOnEveryPageTests(SimpleTestCase):
     def test_the_bubble_looks_like_new_bookings(self):
         text = (ADMIN / "partials" / "help_tip_styles.html").read_text(encoding="utf8")
         booking = (ADMIN / "new-booking.html").read_text(encoding="utf8")
-        for rule in (".nb-tip > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 1.1rem; height: 1.1rem;",
-                     "border-radius: 999px; color: #667085; font-size: .68rem; font-weight: 700; line-height: 1;"):
+        for rule in (".nb-tip > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 1.3rem; height: 1.3rem;",
+                     "border-radius: 999px; color: #667085; font-size: 0.8125rem; font-weight: 700; line-height: 1;"):
             self.assertIn(rule, booking)
-        for rule in (".ht-tip > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 1.1rem; height: 1.1rem;",
-                     "border-radius: 999px; color: #667085; font-size: .68rem; font-weight: 700; line-height: 1;", "background: #101828; color: #f2f4f7;", ".dark .ht-tip-pop { background: #1d2939;"):
+        for rule in (".ht-tip > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 1.3rem; height: 1.3rem;",
+                     "border-radius: 999px; color: #667085; font-size: 0.8125rem; font-weight: 700; line-height: 1;", "background: #101828; color: #f2f4f7;", ".dark .ht-tip-pop { background: #1d2939;"):
             self.assertIn(rule, text)
         self.assertIn(".nb-tip", booking)                                                      # New Booking's own "?" is left as it was
 

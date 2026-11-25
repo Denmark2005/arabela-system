@@ -20,7 +20,7 @@
     .dark .idc-card { background: rgba(255,255,255,.03); border-color: #1d2939; }
     .idc-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem .75rem; padding: 1rem 1.25rem .75rem; }
     .idc-tab { display: inline-flex; align-items: center; gap: .5rem; padding: .35rem .85rem; border: 1px solid #d0d5dd; border-radius: 999px; color: #475467; font-size: .875rem; font-weight: 500; text-decoration: none; }
-    .idc-tab b { min-width: 1.25rem; padding: 0 .4rem; border-radius: 999px; background: rgba(152,162,179,.22); font-size: .75rem; font-weight: 600; text-align: center; }
+    .idc-tab b { min-width: 1.25rem; padding: 0 .4rem; border-radius: 999px; background: rgba(152,162,179,.22); font-size: 0.8125rem; font-weight: 600; text-align: center; }
     .idc-tab:hover { background: rgba(152,162,179,.12); }
     .idc-tab:focus-visible, .idc-btn:focus-visible, .idc-input:focus, .idc-open:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
     .idc-tab.is-on { background: #465fff; border-color: #465fff; color: #fff; }
@@ -30,23 +30,25 @@
     .dark .idc-tab { border-color: #344054; color: #d0d5dd; }
     .idc-search { display: flex; flex: 1 1 16rem; gap: .5rem; justify-content: flex-end; min-width: 0; }
     .idc-input { box-sizing: border-box; width: 100%; max-width: 20rem; height: 2.5rem; padding: .4rem .8rem; border: 1px solid #d0d5dd; border-radius: .6rem; background-color: transparent; color: #1d2939; font: inherit; font-size: .875rem; }
-    .idc-input::placeholder { color: #98a2b3; }
+    .idc-input::placeholder { color: #667085; }
     .dark .idc-input { background-color: #0c111d; border-color: #344054; color: #f2f4f7; }
     .idc-note { margin: 0 1.25rem .9rem; padding: .7rem .9rem; border-radius: .7rem; background: #f9fafb; color: #475467; font-size: .8125rem; line-height: 1.55; }
     .dark .idc-note { background: rgba(255,255,255,.04); color: #98a2b3; }
     .idc-note strong { color: #1d2939; }
+    .idc-state { display: inline-block; margin-left: .35rem; padding: .05rem .6rem; border-radius: 999px; background: #eaecf0; color: #344054; font-size: .8125rem; font-weight: 600; white-space: nowrap; }
+    .dark .idc-state { background: rgba(255,255,255,.08); color: #d0d5dd; }
     .dark .idc-note strong { color: #f2f4f7; }
-    .idc-head, .idc-row { display: grid; grid-template-columns: minmax(11rem, 2fr) minmax(9rem, 1.3fr) minmax(10rem, 1.6fr) 7rem minmax(7rem, 1fr) 7.5rem; column-gap: .75rem; align-items: center; }
-    .idc-head { padding: .7rem 1.25rem; border-top: 1px solid #f2f4f7; border-bottom: 1px solid #f2f4f7; font-size: .75rem; font-weight: 500; color: #667085; }
+    .idc-head, .idc-row { display: grid; grid-template-columns: minmax(10rem, 2fr) minmax(8rem, 1.3fr) minmax(9rem, 1.6fr) 6.5rem minmax(6.5rem, 1fr) 7rem; column-gap: .75rem; align-items: center; }
+    .idc-head { padding: .7rem 1.25rem; border-top: 1px solid #f2f4f7; border-bottom: 1px solid #f2f4f7; font-size: 0.8125rem; font-weight: 500; color: #667085; }
     .dark .idc-head { border-color: #1d2939; color: #98a2b3; }
     .idc-row { padding: .85rem 1.25rem; border-bottom: 1px solid #f2f4f7; font-size: .875rem; color: #344054; }
     .dark .idc-row { border-color: #1d2939; color: #d0d5dd; }
     .idc-row:hover { background: rgba(152,162,179,.06); }
     .idc-who b { display: block; font-weight: 600; color: #1d2939; overflow-wrap: anywhere; }
     .dark .idc-who b { color: #f2f4f7; }
-    .idc-who small, .idc-sub { display: block; margin-top: .1rem; font-size: .75rem; color: #667085; }
+    .idc-who small, .idc-sub { display: block; margin-top: .1rem; font-size: 0.8125rem; color: #667085; }
     .dark .idc-who small, .dark .idc-sub { color: #98a2b3; }
-    .idc-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .15rem .6rem; border-radius: 999px; font-size: .75rem; font-weight: 600; white-space: nowrap; }
+    .idc-chip { display: inline-flex; align-items: center; gap: .35rem; max-width: 100%; padding: .15rem .6rem; border-radius: 999px; font-size: 0.8125rem; font-weight: 600; line-height: 1.3; }
     .idc-chip--ok { background: #ecfdf3; color: #027a48; }
     .idc-chip--warn { background: #fffaeb; color: #b54708; }
     .idc-chip--bad { background: #fef3f2; color: #b42318; }
@@ -56,7 +58,7 @@
     .dark .idc-chip--warn { background: rgba(247,144,9,.16); color: #fdb022; }
     .dark .idc-chip--bad { background: rgba(240,68,56,.16); color: #fda29b; }
     .dark .idc-chip--wait, .dark .idc-chip--none { background: rgba(255,255,255,.08); color: #d0d5dd; }
-    .idc-flag { display: block; margin-top: .3rem; font-size: .75rem; line-height: 1.4; color: #b54708; }
+    .idc-flag { display: block; margin-top: .3rem; font-size: 0.8125rem; line-height: 1.4; color: #b54708; }
     .dark .idc-flag { color: #fdb022; }
     .idc-ref a { color: #465fff; font-weight: 600; text-decoration: none; }
     .idc-ref a:hover { text-decoration: underline; }
@@ -90,10 +92,10 @@
     .dark .idc-facts dd { color: #f2f4f7; }
     .idc-pics { display: grid; gap: .9rem; align-content: start; }
     .idc-pic { margin: 0; }
-    .idc-pic figcaption { margin-bottom: .35rem; font-size: .75rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #667085; }
+    .idc-pic figcaption { margin-bottom: .35rem; font-size: 0.8125rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #667085; }
     .idc-pic img { display: block; width: 100%; max-height: 22rem; object-fit: contain; border: 1px solid #e4e7ec; border-radius: .7rem; background: #f2f4f7; }
     .dark .idc-pic img { border-color: #344054; background: #0c111d; }
-    .idc-conf { margin: 0; font-size: .75rem; color: #b42318; font-weight: 600; }
+    .idc-conf { margin: 0; font-size: 0.8125rem; color: #b42318; font-weight: 600; }
     .idc-dlg-foot { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; padding: 1rem 1.25rem; border-top: 1px solid #eaecf0; }
     .dark .idc-dlg-foot { border-color: #1d2939; }
     .idc-dlg-foot textarea { flex: 1 1 100%; box-sizing: border-box; min-height: 3rem; padding: .5rem .7rem; border: 1px solid #d0d5dd; border-radius: .6rem; background: transparent; color: #1d2939; font: inherit; font-size: .875rem; resize: vertical; }
@@ -118,6 +120,7 @@
   >
     <!-- ===== Preloader Start ===== -->
     <script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('admin-dark-boot');}catch(e){}</script>
+    <script>(function(){var h=document.documentElement,s='large';try{var v=localStorage.getItem('arabelaTextSize');if(v==='normal'||v==='xl'){s=v;}}catch(e){}h.setAttribute('data-text-size',s);})();</script>
     <div
   x-show="loaded"
   x-init="window.addEventListener('DOMContentLoaded', () => {setTimeout(() => loaded = false, 500)})"
@@ -163,7 +166,7 @@
     <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'gown-board' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients' || page === 'id-checks') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
-        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
+        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-500 dark:text-gray-400">
           <span
             class="menu-group-title"
             :class="sidebarToggle ? 'lg:hidden' : ''"
@@ -1209,12 +1212,15 @@
                   {% if query %}<a class="idc-btn" href="?show={{ show }}">Clear</a>{% endif %}
                 </form>
               </div>
-              <p class="idc-note">
+              <div class="idc-note">
                 <strong>Only you can see this page and the ID pictures.</strong>
-                {% if setting_on %}A valid ID is <strong>required</strong> before a customer pays online and before a walk-in booking is saved.{% else %}A valid ID is <strong>not required</strong> right now (switched off in Edit Profile).{% endif %}
-                A verified ID counts for {{ valid_days }} days. The front and back pictures are deleted {{ keep_days }} days after the customer's last return; the selfie is never kept.
-                {% if not didit_on %}<strong>ID verification is not set up</strong> (no Didit key), so customers cannot verify online; staff can still check the ID at the counter.{% elif didit_test %}Didit is in <strong>test mode</strong>: sample documents, no real checks.{% endif %}
-              </p>
+                <span class="idc-state">{% if setting_on %}ID required{% else %}ID not required{% endif %}{% if not didit_on %} &middot; Didit not set up{% elif didit_test %} &middot; Didit test mode{% endif %}</span>
+                <details class="ht-tip"><summary aria-label="About ID checks" title="About ID checks">?</summary><div class="ht-tip-pop">
+                  <p>{% if setting_on %}A valid ID is <strong>required</strong> before a customer pays online and before a walk-in booking is saved.{% else %}A valid ID is <strong>not required</strong> right now (switched off in Edit Profile).{% endif %}</p>
+                  <p>A verified ID counts for {{ valid_days }} days. The front and back pictures are deleted {{ keep_days }} days after the customer's last return; the selfie is never kept.</p>
+                  <p>{% if not didit_on %}<strong>ID verification is not set up</strong> (no Didit key), so customers cannot verify online; staff can still check the ID at the counter.{% elif didit_test %}Didit is in <strong>test mode</strong>: sample documents, no real checks.{% else %}Didit checks every ID for real.{% endif %}</p>
+                </div></details>
+              </div>
 
               <div class="idc-head" role="row" aria-hidden="true">
                 <div>Customer</div><div>ID</div><div>Result</div><div>Date</div><div>Booking</div><div></div>

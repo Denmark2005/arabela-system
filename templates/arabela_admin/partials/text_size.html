@@ -1,0 +1,72 @@
+{% comment %}
+  The "Aa" text-size switch in the admin header (Normal / Large / Extra large), included ONCE per admin page from partials/notifications.html (the header partial every
+  admin page has), right before the bell. The choice is kept in this browser only (localStorage "arabelaTextSize"); a one-line script after <body> on every admin page
+  applies it before anything is drawn, so a page never flashes at another size. The sizes themselves (100% / 112.5% / 125%) live at the end of static/arabela_admin/style.css.
+  Large is the default for everyone: the panel's text was 11-14px and the readers it is shown to are over 45.
+  Namespaced .tsz- styles, because the admin's compiled stylesheet only holds the classes the template pack uses.
+{% endcomment %}
+<style>
+  .tsz-pop { position: absolute; right: 0; top: calc(100% + .6rem); z-index: 60; width: 19rem; max-width: calc(100vw - 2rem); padding: .6rem; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; box-shadow: 0 12px 28px -8px rgba(16,24,40,.22); color: #1d2939; }
+  .dark .tsz-pop { border-color: #1d2939; background: #101828; color: #f2f4f7; box-shadow: 0 12px 28px -8px rgba(0,0,0,.6); }
+  .tsz-title { margin: 0; padding: .35rem .6rem .5rem; font-size: 0.8125rem; font-weight: 600; letter-spacing: .02em; color: #475467; }
+  .dark .tsz-title { color: #98a2b3; }
+  .tsz-opt { display: flex; width: 100%; align-items: center; gap: .85rem; padding: .55rem .6rem; border: 1px solid transparent; border-radius: .75rem; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+  .tsz-opt:hover { background: #f2f4f7; }
+  .dark .tsz-opt:hover { background: rgba(255,255,255,.06); }
+  .tsz-opt:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+  .tsz-opt[aria-pressed="true"] { border-color: #465fff; background: #f0f4ff; }
+  .dark .tsz-opt[aria-pressed="true"] { border-color: #6b82ff; background: rgba(70,95,255,.16); }
+  .tsz-sample { flex: none; width: 2.75rem; text-align: center; font-weight: 600; line-height: 1; color: #344054; }
+  .dark .tsz-sample { color: #e4e7ec; }
+  .tsz-name { display: block; font-size: 0.9375rem; font-weight: 600; }
+  .tsz-note { display: block; margin-top: .1rem; font-size: 0.8125rem; color: #667085; }
+  .dark .tsz-note { color: #98a2b3; }
+  .tsz-foot { margin: 0; padding: .45rem .6rem .2rem; font-size: 0.8125rem; color: #667085; }
+  .dark .tsz-foot { color: #98a2b3; }
+</style>
+<script>
+  (function () {
+    if (window.arabelaSetTextSize) { return; }
+    // Normal / Large / Extra large. Anything else means Large. Saved in this browser only; if the browser will not save it, it still applies for this page.
+    window.arabelaSetTextSize = function (size) {
+      if (size !== 'normal' && size !== 'large' && size !== 'xl') { size = 'large'; }
+      document.documentElement.setAttribute('data-text-size', size);
+      try { window.localStorage.setItem('arabelaTextSize', size); } catch (e) { /* not saved: it still applies now */ }
+      try { window.dispatchEvent(new Event('resize')); } catch (e) { /* only so pop-ups that place themselves look again */ }
+      return size;
+    };
+    // another tab of the panel changed the size: follow it
+    window.addEventListener('storage', function (event) {
+      if (event.key === 'arabelaTextSize' && (event.newValue === 'normal' || event.newValue === 'large' || event.newValue === 'xl')) {
+        document.documentElement.setAttribute('data-text-size', event.newValue);
+      }
+    });
+  })();
+</script>
+<div class="relative" id="tsz-switch"
+     x-data="{ open: false, size: (document.documentElement.getAttribute('data-text-size') || 'large') }"
+     @click.outside="open = false" @keydown.escape.window="open = false"
+     @storage.window="size = (document.documentElement.getAttribute('data-text-size') || 'large')">
+  <button type="button"
+          class="hover:text-dark-900 relative flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
+          aria-label="Text size" title="Text size" aria-haspopup="true" :aria-expanded="open ? 'true' : 'false'" aria-controls="tsz-pop"
+          @click="open = !open">
+    <span aria-hidden="true" style="font-size: 1.0625rem; font-weight: 600; line-height: 1;">Aa</span>
+  </button>
+  <div class="tsz-pop" id="tsz-pop" x-show="open" x-cloak role="group" aria-label="Text size">
+    <p class="tsz-title">TEXT SIZE</p>
+    <button type="button" class="tsz-opt" :aria-pressed="size === 'normal' ? 'true' : 'false'" @click="size = arabelaSetTextSize('normal'); open = false">
+      <span class="tsz-sample" style="font-size: 1rem;">A</span>
+      <span><span class="tsz-name">Normal</span><span class="tsz-note">The smaller text</span></span>
+    </button>
+    <button type="button" class="tsz-opt" :aria-pressed="size === 'large' ? 'true' : 'false'" @click="size = arabelaSetTextSize('large'); open = false">
+      <span class="tsz-sample" style="font-size: 1.25rem;">A+</span>
+      <span><span class="tsz-name">Large</span><span class="tsz-note">Recommended</span></span>
+    </button>
+    <button type="button" class="tsz-opt" :aria-pressed="size === 'xl' ? 'true' : 'false'" @click="size = arabelaSetTextSize('xl'); open = false">
+      <span class="tsz-sample" style="font-size: 1.5rem;">A++</span>
+      <span><span class="tsz-name">Extra large</span><span class="tsz-note">For a projector or a big room</span></span>
+    </button>
+    <p class="tsz-foot">Saved on this computer.</p>
+  </div>
+</div>

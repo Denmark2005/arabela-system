@@ -21,7 +21,7 @@
     .pm-tab { display: inline-flex; align-items: center; padding: .4rem 1rem; border: 1px solid #d0d5dd; border-radius: 999px; color: #475467; font-size: .875rem; font-weight: 500; text-decoration: none; }
     .pm-tab:hover { background: rgba(152,162,179,.12); }
     .pm-tab.is-on { background: #101828; border-color: #101828; color: #fff; }
-    .pm-badge { margin-left: .45rem; min-width: 1.15rem; padding: 0 .4rem; border-radius: 999px; background: #d92d20; color: #fff; font-size: .7rem; font-weight: 700; line-height: 1.15rem; text-align: center; }
+    .pm-badge { margin-left: .45rem; min-width: 1.15rem; padding: 0 .4rem; border-radius: 999px; background: #d92d20; color: #fff; font-size: 0.8125rem; font-weight: 700; line-height: 1.15rem; text-align: center; }
     .pm-table tr.is-hot td { background: rgba(254, 228, 226, .45); }
     .dark .pm-table tr.is-hot td { background: rgba(240, 68, 56, .1); }
     .pm-note { margin: 0 0 .9rem; padding: .6rem .8rem; border-radius: .6rem; background: #f2f4f7; color: #475467; font-size: .8125rem; line-height: 1.45; }
@@ -33,8 +33,8 @@
     .dark .pm-collect { color: #fda29b; }
 
     /* customer | booking no. | total | paid | balance | deposit | status | arrow. Every column is fixed or has a minimum (never "auto"). */
-    .pm-head, .pm-line { display: grid; grid-template-columns: minmax(9rem, 1.7fr) minmax(7.5rem, 1fr) 5.5rem 5.5rem 6rem minmax(7rem, .9fr) minmax(7.5rem, .9fr) 2rem; align-items: center; column-gap: .75rem; }
-    .pm-head { padding: .7rem 1.25rem; background: #f9fafb; border-top: 1px solid #f2f4f7; border-bottom: 1px solid #f2f4f7; font-size: .75rem; font-weight: 500; color: #667085; }
+    .pm-head, .pm-line { display: grid; grid-template-columns: minmax(8rem, 1.7fr) minmax(6.5rem, 1fr) 5.5rem 5.5rem 5.5rem minmax(6rem, .9fr) minmax(6.5rem, .9fr) 2rem; align-items: center; column-gap: .75rem; }
+    .pm-head { padding: .7rem 1.25rem; background: #f9fafb; border-top: 1px solid #f2f4f7; border-bottom: 1px solid #f2f4f7; font-size: 0.8125rem; font-weight: 500; color: #667085; }
     .dark .pm-head { background: rgba(255,255,255,.025); border-color: #1d2939; color: #98a2b3; }
     .pm-head > span.r, .pm-line > .pm-amt { text-align: right; }
     .pm-row { border-bottom: 1px solid #f2f4f7; }
@@ -43,7 +43,7 @@
     .pm-line:hover { background: rgba(152,162,179,.08); }
     .pm-line:focus-visible { outline: 2px solid #465fff; outline-offset: -2px; }
     .pm-who { display: flex; flex-direction: column; min-width: 0; }
-    .pm-sub { margin-top: .1rem; font-size: .75rem; color: #98a2b3; overflow-wrap: anywhere; }
+    .pm-sub { margin-top: .1rem; font-size: 0.8125rem; color: #667085; overflow-wrap: anywhere; }
     .pm-amt { font-size: .875rem; font-weight: 500; font-variant-numeric: tabular-nums; color: #344054; white-space: nowrap; }
     .dark .pm-amt { color: #d0d5dd; }
     .pm-bal.is-due { font-weight: 700; color: #b42318; }
@@ -51,9 +51,9 @@
     .pm-dep { font-size: .8125rem; color: #475467; }
     .dark .pm-dep { color: #98a2b3; }
     .pm-stat { display: flex; flex-wrap: wrap; gap: .3rem; }
-    .pm-chev { justify-self: end; color: #98a2b3; }
+    .pm-chev { justify-self: end; color: #667085; }
     .pm-chev svg { width: 1rem; height: 1rem; display: block; }
-    .pm-chip { display: inline-flex; align-items: center; padding: .12rem .6rem; border-radius: 999px; font-size: .72rem; font-weight: 600; white-space: nowrap; }
+    .pm-chip { display: inline-flex; align-items: center; max-width: 100%; padding: .12rem .6rem; border-radius: 999px; font-size: 0.8125rem; font-weight: 600; line-height: 1.3; }
     .pm-chip--balance { background: #fee4e2; color: #b42318; }
     .pm-chip--refund { background: #fef0c7; color: #b54708; }
     .pm-chip--paid { background: #d1fadf; color: #067647; }
@@ -83,7 +83,7 @@
       .pm-line > .pm-bal { grid-area: bal; }
       .pm-line > .pm-dep { grid-area: dep; }
       .pm-chev { display: none; }
-      .pm-line > [data-label]:not(.pm-stat)::before { content: attr(data-label); display: block; flex: 0 0 100%; margin-bottom: .12rem; font-size: .6875rem; font-weight: 500; color: #98a2b3; white-space: nowrap; }
+      .pm-line > [data-label]:not(.pm-stat)::before { content: attr(data-label); display: block; flex: 0 0 100%; margin-bottom: .12rem; font-size: 0.8125rem; font-weight: 500; color: #667085; white-space: nowrap; }
       .pm-line > .pm-amt { text-align: left; }
     }
     @media (max-width: 760px) {
@@ -107,7 +107,7 @@
     .pm-sum { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .6rem; }
     .pm-sum > div { padding: .7rem .85rem; border: 1px solid #e4e7ec; border-radius: .8rem; }
     .dark .pm-sum > div { border-color: #1d2939; }
-    .pm-sum span { display: block; font-size: .72rem; color: #667085; }
+    .pm-sum span { display: block; font-size: 0.8125rem; color: #667085; }
     .pm-sum b { display: block; margin-top: .15rem; font-size: 1.1rem; font-variant-numeric: tabular-nums; color: #101828; }
     .dark .pm-sum b { color: #f2f4f7; }
     .pm-sum .is-due b { color: #b42318; }
@@ -120,7 +120,7 @@
     .pm-l + .pm-l { border-top: 1px solid #f2f4f7; }
     .dark .pm-l { color: #d0d5dd; }
     .dark .pm-l + .pm-l { border-color: #1d2939; }
-    .pm-l small { display: block; font-size: .72rem; color: #98a2b3; }
+    .pm-l small { display: block; font-size: 0.8125rem; color: #667085; }
     .pm-l b { font-variant-numeric: tabular-nums; white-space: nowrap; }
     .pm-l.is-total { background: #f9fafb; font-weight: 700; }
     .dark .pm-l.is-total { background: rgba(255,255,255,.03); }
@@ -133,14 +133,14 @@
     .pm-b:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
     .pm-b--main { background: #465fff; border-color: #465fff; color: #fff; }
     .pm-b--main:hover:not(:disabled) { background: #3641f5; }
-    .pm-b--small { min-height: 1.9rem; padding: 0 .65rem; font-size: .75rem; }
+    .pm-b--small { min-height: 1.9rem; padding: 0 .65rem; font-size: 0.8125rem; }
     .pm-b--danger { border-color: #fda29b; color: #b42318; }
     .dark .pm-b { background: transparent; border-color: #344054; color: #d0d5dd; }
     .dark .pm-b:hover:not(:disabled) { background: rgba(255,255,255,.06); }
     .dark .pm-b--main { background: #465fff; border-color: #465fff; color: #fff; }
     .pm-form { display: grid; gap: .7rem; padding: .9rem; border: 1px solid #e4e7ec; border-radius: .8rem; background: #f9fafb; }
     .dark .pm-form { border-color: #1d2939; background: rgba(255,255,255,.02); }
-    .pm-form label { display: block; margin-bottom: .25rem; font-size: .75rem; font-weight: 500; color: #475467; }
+    .pm-form label { display: block; margin-bottom: .25rem; font-size: 0.8125rem; font-weight: 500; color: #475467; }
     .dark .pm-form label { color: #98a2b3; }
     .pm-in { display: block; width: 100%; height: 2.5rem; box-sizing: border-box; padding: .4rem .75rem; border: 1px solid #d0d5dd; border-radius: .55rem; background: #fff; color: #1d2939; font: inherit; font-size: .9rem; }
     .pm-in:focus { outline: 2px solid #465fff; outline-offset: 1px; border-color: #465fff; }
@@ -150,18 +150,18 @@
     .pm-radios label.is-on { border-color: #465fff; background: #eef4ff; color: #3538cd; }
     .dark .pm-radios label { background: transparent; border-color: #344054; color: #d0d5dd; }
     .dark .pm-radios label.is-on { border-color: #6172f3; background: rgba(70,95,255,.16); color: #c7d2fe; }
-    .pm-hint { margin: 0; font-size: .75rem; color: #667085; }
+    .pm-hint { margin: 0; font-size: 0.8125rem; color: #667085; }
     .pm-err { margin: 0; padding: .55rem .8rem; border-radius: .6rem; background: #fef3f2; color: #b42318; font-size: .8125rem; }
     .dark .pm-err { background: rgba(240,68,56,.14); color: #fda29b; }
     .pm-ok { padding: .75rem .9rem; border-radius: .8rem; background: #ecfdf3; color: #067647; font-size: .875rem; }
     .dark .pm-ok { background: rgba(18,183,106,.14); color: #32d583; }
     .pm-ok .pm-btns { margin-top: .5rem; }
-    .pm-legacy { font-size: .72rem; color: #98a2b3; }
+    .pm-legacy { font-size: 0.8125rem; color: #667085; }
     .pm-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
-    .pm-table th { padding: .6rem 1rem; background: #f9fafb; border-bottom: 1px solid #f2f4f7; font-size: .72rem; font-weight: 500; color: #667085; text-align: left; white-space: nowrap; }
+    .pm-table th { padding: .6rem 1rem; background: #f9fafb; border-bottom: 1px solid #f2f4f7; font-size: 0.8125rem; font-weight: 500; color: #667085; text-align: left; white-space: nowrap; }
     .pm-table td { padding: .6rem 1rem; border-bottom: 1px solid #f2f4f7; color: #344054; vertical-align: top; }
     .pm-table td.r, .pm-table th.r { text-align: right; }
-    .pm-table tr.is-void td { color: #98a2b3; }
+    .pm-table tr.is-void td { color: #667085; }
     .dark .pm-table th { background: rgba(255,255,255,.025); border-color: #1d2939; color: #98a2b3; }
     .dark .pm-table td { border-color: #1d2939; color: #d0d5dd; }
     .pm-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .6rem; padding: .85rem 1.25rem; }
@@ -179,6 +179,7 @@
   >
     <!-- ===== Preloader Start ===== -->
     <script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('admin-dark-boot');}catch(e){}</script>
+    <script>(function(){var h=document.documentElement,s='large';try{var v=localStorage.getItem('arabelaTextSize');if(v==='normal'||v==='xl'){s=v;}}catch(e){}h.setAttribute('data-text-size',s);})();</script>
     <div
   x-show="loaded"
   x-init="window.addEventListener('DOMContentLoaded', () => {setTimeout(() => loaded = false, 500)})"
@@ -224,7 +225,7 @@
     <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'gown-board' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients' || page === 'id-checks') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
-        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
+        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-500 dark:text-gray-400">
           <span
             class="menu-group-title"
             :class="sidebarToggle ? 'lg:hidden' : ''"

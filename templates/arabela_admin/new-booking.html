@@ -27,7 +27,7 @@
     .nb-label { display: block; margin: 0 0 .35rem; font-size: .8125rem; font-weight: 500; color: #344054; }
     .dark .nb-label { color: #d0d5dd; }
     .nb-req { color: #d92d20; }
-    .nb-help { margin: .3rem 0 0; font-size: .75rem; color: #667085; line-height: 1.4; }
+    .nb-help { margin: .3rem 0 0; font-size: 0.8125rem; color: #667085; line-height: 1.4; }
     .dark .nb-help { color: #98a2b3; }
     .nb-datebtn { cursor: pointer; }
     .nb-datebtn:disabled { cursor: not-allowed; opacity: .7; }
@@ -65,7 +65,7 @@
     .nb-thumb--empty { display: inline-block; }
     .nb-gname { font-size: .875rem; font-weight: 600; color: #1d2939; }
     .dark .nb-gname { color: #f2f4f7; }
-    .nb-gmeta { font-size: .75rem; color: #667085; line-height: 1.45; }
+    .nb-gmeta { font-size: 0.8125rem; color: #667085; line-height: 1.45; }
     .dark .nb-gmeta { color: #98a2b3; }
     .nb-tagdot { display: inline-block; width: .6rem; height: .6rem; border-radius: 999px; vertical-align: -1px; margin-right: .2rem; box-shadow: 0 0 0 1px rgba(0,0,0,.15); }
     .nb-check { display: flex; align-items: center; gap: .5rem; font-size: .875rem; color: #344054; cursor: pointer; }
@@ -98,7 +98,7 @@
     .nb-id { margin-top: 1.1rem; padding-top: 1rem; border-top: 1px solid #eaecf0; }
     .dark .nb-id { border-color: #1d2939; }
     .nb-id-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: .6rem; }
-    .nb-idchip { display: inline-flex; align-items: center; padding: .15rem .6rem; border-radius: 999px; background: #f2f4f7; color: #475467; font-size: .75rem; font-weight: 600; white-space: nowrap; }
+    .nb-idchip { display: inline-flex; align-items: center; padding: .15rem .6rem; border-radius: 999px; background: #f2f4f7; color: #475467; font-size: 0.8125rem; font-weight: 600; white-space: nowrap; }
     .nb-idchip--ok { background: #ecfdf3; color: #027a48; }
     .nb-idchip--warn { background: #fffaeb; color: #b54708; }
     .nb-idchip--bad { background: #fef3f2; color: #b42318; }
@@ -135,10 +135,10 @@
     /* ---- compact layout (avoid crowding, repetition and wasted space) ---- */
     .nb-card-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin: 0 0 .75rem; }
     .nb-card-head .nb-step { margin: 0; }
-    .nb-count { margin-left: .15rem; padding: .05rem .5rem; border-radius: 999px; background: #f2f4f7; color: #475467; font-size: .75rem; font-weight: 600; }
+    .nb-count { margin-left: .15rem; padding: .05rem .5rem; border-radius: 999px; background: #f2f4f7; color: #475467; font-size: 0.8125rem; font-weight: 600; }
     .dark .nb-count { background: rgba(255,255,255,.08); color: #98a2b3; }
     @media (min-width: 720px) { .nb-grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-    .nb-opt { font-size: .75rem; font-weight: 400; color: #667085; }
+    .nb-opt { font-size: 0.8125rem; font-weight: 400; color: #667085; }
     .dark .nb-opt { color: #98a2b3; }
     .nb-lblrow { display: flex; align-items: center; gap: .35rem; margin: 0 0 .35rem; }
     .nb-lblrow .nb-label { margin: 0; }
@@ -164,12 +164,12 @@
 
     /* the "?" that holds the long explanations */
     .nb-tip { position: relative; display: inline-block; vertical-align: middle; }
-    .nb-tip > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 1.1rem; height: 1.1rem; border: 1px solid #98a2b3; border-radius: 999px; color: #667085; font-size: .68rem; font-weight: 700; line-height: 1; user-select: none; }
+    .nb-tip > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 1.3rem; height: 1.3rem; border: 1px solid #98a2b3; border-radius: 999px; color: #667085; font-size: 0.8125rem; font-weight: 700; line-height: 1; user-select: none; }
     .nb-tip > summary::-webkit-details-marker { display: none; }
     .nb-tip > summary::marker { content: ''; }
     .nb-tip > summary:hover, .nb-tip[open] > summary { background: #465fff; border-color: #465fff; color: #fff; }
     .nb-tip > summary:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
-    .nb-tip-pop { position: absolute; z-index: 40; left: -.4rem; top: calc(100% + .4rem); width: max-content; max-width: min(19rem, calc(100vw - 3rem)); padding: .65rem .8rem; border-radius: .65rem; background: #101828; color: #f2f4f7; font-size: .78rem; font-weight: 400; line-height: 1.45; text-align: left; box-shadow: 0 12px 24px -8px rgba(16,24,40,.35); }
+    .nb-tip-pop { position: absolute; z-index: 40; left: -.4rem; top: calc(100% + .4rem); width: max-content; max-width: min(19rem, calc(100vw - 3rem)); padding: .65rem .8rem; border-radius: .65rem; background: #101828; color: #f2f4f7; font-size: 0.8125rem; font-weight: 400; line-height: 1.45; text-align: left; box-shadow: 0 12px 24px -8px rgba(16,24,40,.35); }
     @media (min-width: 720px) { .nb-tip--right .nb-tip-pop { left: auto; right: -.4rem; } }       /* only where the date sits in the right-hand column */
     /* on a phone the help opens across the width of its own row, so it can never run off the screen */
     @media (max-width: 719px) {
@@ -181,13 +181,13 @@
 
     /* the gown table: one short row per gown */
     .nb-thead, .nb-row { display: grid; grid-template-columns: 1.75rem minmax(0, 1fr) 11rem 5.5rem 4.75rem 4.5rem; column-gap: .75rem; align-items: center; }
-    .nb-thead { padding: 0 .75rem .35rem; font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #667085; }
+    .nb-thead { padding: 0 .75rem .35rem; font-size: 0.8125rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #667085; }
     .dark .nb-thead { color: #98a2b3; }
     .nb-row { padding: .55rem .75rem; margin-bottom: .45rem; border: 1px solid #e4e7ec; border-radius: .75rem; background: #fff; }
     .dark .nb-row { background: rgba(255,255,255,.02); border-color: #1d2939; }
     .nb-row--bad { border-color: #fda29b; background: #fffbfa; }
     .dark .nb-row--bad { border-color: rgba(240,68,56,.5); background: rgba(240,68,56,.07); }
-    .nb-c-no { width: 1.5rem; height: 1.5rem; border-radius: 999px; background: #f2f4f7; color: #475467; font-size: .75rem; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+    .nb-c-no { width: 1.5rem; height: 1.5rem; border-radius: 999px; background: #f2f4f7; color: #475467; font-size: 0.8125rem; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
     .dark .nb-c-no { background: rgba(255,255,255,.08); color: #98a2b3; }
     .nb-c-gown { display: flex; align-items: center; gap: .6rem; min-width: 0; }
     .nb-c-gown .nb-gname, .nb-c-gown .nb-gmeta { overflow-wrap: anywhere; }
@@ -231,7 +231,7 @@
     .dark .nb-pick-btn { background: #0c111d; border-color: #344054; color: #f2f4f7; }
     .nb-pick-btn[aria-expanded="true"], .nb-pick-btn:focus-visible { outline: 2px solid #465fff; outline-offset: 1px; border-color: #465fff; }
     .nb-pick-sel { flex: 1 1 auto; min-width: 0; line-height: 1.3; }
-    .nb-pick-ph { flex: 1 1 auto; color: #98a2b3; }
+    .nb-pick-ph { flex: 1 1 auto; color: #667085; }
     .nb-pick-chev { width: 1rem; height: 1rem; margin-left: auto; flex: none; color: #667085; }
     .nb-pick-panel { position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + .35rem); border: 1px solid #d0d5dd; border-radius: .75rem; background: #fff; box-shadow: 0 16px 32px -12px rgba(16,24,40,.28); overflow: hidden; }
     .dark .nb-pick-panel { background: #101828; border-color: #344054; box-shadow: 0 16px 32px -12px rgba(0,0,0,.6); }
@@ -240,7 +240,7 @@
     .nb-pick-tools input { flex: 1 1 12rem; min-width: 0; }
     .nb-pick-tools .nb-cat { flex: 0 1 11rem; min-width: 0; }
     .nb-pick-list { max-height: 19rem; overflow-y: auto; overscroll-behavior: contain; }
-    .nb-pick-cat { position: sticky; top: 0; z-index: 1; padding: .3rem .75rem; background: #f9fafb; border-bottom: 1px solid #f2f4f7; font-size: .7rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #667085; }
+    .nb-pick-cat { position: sticky; top: 0; z-index: 1; padding: .3rem .75rem; background: #f9fafb; border-bottom: 1px solid #f2f4f7; font-size: 0.8125rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #667085; }
     .dark .nb-pick-cat { background: #0c111d; border-bottom-color: #1d2939; color: #98a2b3; }
     .nb-result.is-active:not(:disabled) { background: #f2f4f7; }
     .dark .nb-result.is-active:not(:disabled) { background: rgba(255,255,255,.07); }
@@ -276,6 +276,7 @@
   >
     <!-- ===== Preloader Start ===== -->
     <script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('admin-dark-boot');}catch(e){}</script>
+    <script>(function(){var h=document.documentElement,s='large';try{var v=localStorage.getItem('arabelaTextSize');if(v==='normal'||v==='xl'){s=v;}}catch(e){}h.setAttribute('data-text-size',s);})();</script>
     <div
   x-show="loaded"
   x-init="window.addEventListener('DOMContentLoaded', () => {setTimeout(() => loaded = false, 500)})"
@@ -321,7 +322,7 @@
     <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'gown-board' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients' || page === 'id-checks') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
-        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
+        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-500 dark:text-gray-400">
           <span
             class="menu-group-title"
             :class="sidebarToggle ? 'lg:hidden' : ''"

@@ -20,12 +20,12 @@
     .sd-year-wrap { flex: none; width: 6.5rem; }
     .sd-year-input { padding-left: .8rem; }
     .sd-countrow { display: flex; flex-wrap: wrap; align-items: center; gap: .1rem .75rem; }
-    .sd-month { color: #98a2b3; }
+    .sd-month { color: #667085; }
     /* customer | gown | deposit | date held | status | payment | arrow. Every column is fixed or has a minimum, never "auto" (an auto column is sized per row and
        the column titles would stop lining up). */
-    .ar-head.sd-grid, .ar-line.sd-grid { grid-template-columns: minmax(9rem, 1.5fr) minmax(9rem, 1.5fr) 6.5rem 7.5rem minmax(10rem, 1.2fr) 5.5rem 2.25rem; }
+    .ar-head.sd-grid, .ar-line.sd-grid { grid-template-columns: minmax(8rem, 1.5fr) minmax(8rem, 1.5fr) 6rem 7rem minmax(9rem, 1.2fr) 5.5rem 2.25rem; }
     .sd-acts { display: flex; align-items: center; justify-content: flex-end; gap: .35rem; }
-    .sd-handback { display: inline-block; margin: .3rem 0 0 1.25rem; font-size: .75rem; font-weight: 600; color: #465fff; text-decoration: none; }
+    .sd-handback { display: inline-block; margin: .3rem 0 0 1.25rem; font-size: 0.8125rem; font-weight: 600; color: #465fff; text-decoration: none; }
     .sd-handback:hover { text-decoration: underline; }
     .dark .sd-handback { color: #9bb0ff; }
     .sd-money span { padding: .1rem .55rem; border-radius: 999px; background: #f2f4f7; color: #475467; }
@@ -38,7 +38,7 @@
     .sd-dot--returned { background: #039855; }
     .sd-g1 { font-size: .875rem; font-weight: 500; color: #1d2939; overflow-wrap: anywhere; }
     .dark .sd-g1 { color: rgba(255,255,255,.9); }
-    .sd-g2 { margin-top: .2rem; font-size: .75rem; color: #98a2b3; }
+    .sd-g2 { margin-top: .2rem; font-size: 0.8125rem; color: #667085; }
     .sd-g2.sd-names { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .sd-amt { font-size: .875rem; font-weight: 600; color: #344054; font-variant-numeric: tabular-nums; }
     .dark .sd-amt { color: #d0d5dd; }
@@ -46,7 +46,7 @@
     .dark .sd-day { color: #98a2b3; }
     .sd-st { display: flex; align-items: center; gap: .5rem; font-size: .875rem; font-weight: 500; color: #344054; }
     .dark .sd-st { color: #d0d5dd; }
-    .sd-note { margin-top: .2rem; font-size: .72rem; color: #667085; overflow-wrap: anywhere; }
+    .sd-note { margin-top: .2rem; font-size: 0.8125rem; color: #667085; overflow-wrap: anywhere; }
     .dark .sd-note { color: #98a2b3; }
     .sd-status .sd-note { margin-left: 1.25rem; }
     .sd-note--bad { color: #d92d20; font-weight: 500; }
@@ -130,6 +130,7 @@
   >
     <!-- ===== Preloader Start ===== -->
     <script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('admin-dark-boot');}catch(e){}</script>
+    <script>(function(){var h=document.documentElement,s='large';try{var v=localStorage.getItem('arabelaTextSize');if(v==='normal'||v==='xl'){s=v;}}catch(e){}h.setAttribute('data-text-size',s);})();</script>
     <div
   x-show="loaded"
   x-init="window.addEventListener('DOMContentLoaded', () => {setTimeout(() => loaded = false, 500)})"
@@ -175,7 +176,7 @@
     <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'gown-board' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients' || page === 'id-checks') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
-        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
+        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-500 dark:text-gray-400">
           <span
             class="menu-group-title"
             :class="sidebarToggle ? 'lg:hidden' : ''"

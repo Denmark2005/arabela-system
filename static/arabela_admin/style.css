@@ -5054,3 +5054,41 @@ span.flatpickr-weekday,
 .admin-no-shrink {
   flex: none;
 }
+
+/* ===== Readable admin text =====
+   Added so readers over 45 can read the admin panel. ONE dial for the whole panel: the page's base size, set by <html data-text-size="normal | large | xl">.
+   Everything written in rem (the utilities above AND each page's own styles) grows with it, spacing included, so layouts keep their proportions.
+   Normal = 100% (16px), Large = 112.5% (18px, the default), Extra large = 125% (20px). A small script after <body> on every admin page sets the attribute
+   from the saved choice, and the "Aa" switch in the header (partials/text_size.html) changes it. Media queries ignore this size, so the layouts still
+   change at the same screen widths. Pages and files that do not carry the attribute (the sign-in pages, printed receipts, the customer website) stay as they are. */
+html[data-text-size="normal"] { font-size: 100%; }
+html[data-text-size="large"] { font-size: 112.5%; }
+html[data-text-size="xl"] { font-size: 125%; }
+html[data-text-size] {
+  /* the theme's own text sizes were written in px, so they would not follow the dial: written in rem they do. The smallest is lifted to 13px (before the dial). */
+  --text-xs: 0.8125rem;
+  --text-theme-xs: 0.8125rem;
+  --text-theme-xs--line-height: 1.25rem;
+  --text-theme-sm: 0.875rem;
+  --text-theme-sm--line-height: 1.25rem;
+  --text-theme-xl: 1.25rem;
+  --text-theme-xl--line-height: 1.875rem;
+  --text-title-sm: 1.875rem;
+  --text-title-sm--line-height: 2.375rem;
+  --text-title-md: 2.25rem;
+  --text-title-md--line-height: 2.75rem;
+  --text-title-2xl: 4.5rem;
+  --text-title-2xl--line-height: 5.625rem;
+}
+/* the menu is never narrower than its old 290px and grows just enough for its bigger labels (a menu label must never run into its arrow); the narrow collapsed menu (90px) is left alone */
+html[data-text-size="normal"] .sidebar:not(.lg\:w-\[90px\]), html[data-text-size="normal"] .sidebar:hover { width: 18.125rem; }
+html[data-text-size="large"] .sidebar:not(.lg\:w-\[90px\]), html[data-text-size="large"] .sidebar:hover { width: max(290px, 17rem); }
+html[data-text-size="xl"] .sidebar:not(.lg\:w-\[90px\]), html[data-text-size="xl"] .sidebar:hover { width: max(290px, 17.5rem); }
+/* On narrower screens the bigger sizes ease back so the pages' wide table layouts keep fitting (every admin page was checked at 1024 to 1920px wide):
+   Large is 18px from 1366px wide, 17px from 1280px, and the normal 16px below that (tablets, small laptops). Extra large is 20px from 1600px, 19px from 1440px, then the same as Large.
+   On phones the pages are one fluid column, so the bigger size applies again: 17px (Large and Extra large alike: a phone has no room for more). */
+@media (max-width: 1599px) { html[data-text-size="xl"] { font-size: 118.75%; } }
+@media (max-width: 1439px) { html[data-text-size="xl"] { font-size: 112.5%; } }
+@media (max-width: 1365px) { html[data-text-size="large"], html[data-text-size="xl"] { font-size: 106.25%; } }
+@media (max-width: 1279px) { html[data-text-size="large"], html[data-text-size="xl"] { font-size: 100%; } }
+@media (max-width: 699px) { html[data-text-size="large"], html[data-text-size="xl"] { font-size: 106.25%; } }

@@ -59,7 +59,7 @@
     .pv-vt-head { display: flex; flex-wrap: wrap; align-items: center; gap: .15rem .6rem; padding: .75rem 1.25rem; }
     .pv-vt-head h3 { margin: 0; font-size: .875rem; font-weight: 600; color: #1d2939; }
     .dark .pv-vt-head h3 { color: rgba(255,255,255,.9); }
-    .pv-vt-n { min-width: 1.4rem; padding: 0 .45rem; border-radius: 999px; background: #ecfdf3; color: #027a48; font-size: .75rem; font-weight: 600; text-align: center; }
+    .pv-vt-n { min-width: 1.4rem; padding: 0 .45rem; border-radius: 999px; background: #ecfdf3; color: #027a48; font-size: 0.8125rem; font-weight: 600; text-align: center; }
     .dark .pv-vt-n { background: rgba(18,183,106,.16); color: #32d583; }
     #verified-today-list { max-height: 420px; overflow-y: auto; scroll-behavior: smooth; }
     .pv-vt-item { border-top: 1px solid #f2f4f7; }
@@ -96,7 +96,7 @@
     .pv-year-wrap { flex: none; width: 5.5rem; }
     .ar-search-input.pv-year { padding-left: .8rem; }
     .pv-countrow { display: flex; flex-wrap: wrap; align-items: center; gap: .1rem .75rem; }
-    .pv-legend { display: flex; flex-wrap: wrap; align-items: center; gap: .15rem .9rem; margin-left: auto; font-size: .75rem; color: #667085; }
+    .pv-legend { display: flex; flex-wrap: wrap; align-items: center; gap: .15rem .9rem; margin-left: auto; font-size: 0.8125rem; color: #667085; }
     .dark .pv-legend { color: #98a2b3; }
     .pv-legend > span { display: inline-flex; align-items: center; gap: .35rem; }
     .pv-legend .ar-dot { width: .6rem; height: .6rem; box-shadow: none; }
@@ -109,7 +109,7 @@
     .pv-sub b { white-space: nowrap; }
     .pv-amt { font-size: .875rem; font-weight: 600; color: #344054; font-variant-numeric: tabular-nums; }
     .dark .pv-amt { color: #d0d5dd; }
-    .pv-note { margin-top: .2rem; font-size: .72rem; color: #667085; overflow-wrap: anywhere; }
+    .pv-note { margin-top: .2rem; font-size: 0.8125rem; color: #667085; overflow-wrap: anywhere; }
     .dark .pv-note { color: #98a2b3; }
     .pv-note--bad { color: #d92d20; font-weight: 500; }
     /* The GCash reference number of the payment: readable size, never squeezed in with the small notes, so the owner can compare it with her GCash. */
@@ -221,6 +221,7 @@
   >
     <!-- ===== Preloader Start ===== -->
     <script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('admin-dark-boot');}catch(e){}</script>
+    <script>(function(){var h=document.documentElement,s='large';try{var v=localStorage.getItem('arabelaTextSize');if(v==='normal'||v==='xl'){s=v;}}catch(e){}h.setAttribute('data-text-size',s);})();</script>
     <div
   x-show="loaded"
   x-init="window.addEventListener('DOMContentLoaded', () => {setTimeout(() => loaded = false, 500)})"
@@ -266,7 +267,7 @@
     <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'gown-board' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients' || page === 'id-checks') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
-        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
+        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-500 dark:text-gray-400">
           <span
             class="menu-group-title"
             :class="sidebarToggle ? 'lg:hidden' : ''"
@@ -1550,7 +1551,7 @@
                 <button
                   type="button"
                   @click="openReceiptModal = false"
-                  class="transition-color absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300"
+                  class="transition-color absolute right-5 top-5 z-999 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-500 dark:text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-gray-300"
                 >
                   <svg class="fill-current" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path fill-rule="evenodd" clip-rule="evenodd" d="M6.04289 16.5418C5.65237 16.9323 5.65237 17.5655 6.04289 17.956C6.43342 18.3465 7.06658 18.3465 7.45711 17.956L11.9987 13.4144L16.5408 17.9565C16.9313 18.347 17.5645 18.347 17.955 17.9565C18.3455 17.566 18.3455 16.9328 17.955 16.5423L13.4129 12.0002L17.955 7.45808C18.3455 7.06756 18.3455 6.43439 17.955 6.04387C17.5645 5.65335 16.9313 5.65335 16.5408 6.04387L11.9987 10.586L7.45711 6.04439C7.06658 5.65386 6.43342 5.65386 6.04289 6.04439C5.65237 6.43491 5.65237 7.06808 6.04289 7.4586L10.5845 12.0002L6.04289 16.5418Z" fill=""/>
@@ -1559,7 +1560,7 @@
                 <div class="px-2 pr-14">
                   <h4 class="mb-2 text-2xl font-semibold text-gray-800 dark:text-white/90">GCash Payment Proof</h4>
                   <p class="mb-6 text-sm text-gray-500 dark:text-gray-400" x-text="viewingPayment.name ? `${viewingPayment.name} &middot; ${viewingPayment.reservation}` : ''"></p>
-                  <p x-show="viewingPayment.bookedAs" class="-mt-4 mb-6 text-xs text-gray-400 dark:text-gray-500">Booked as: <span x-text="viewingPayment.bookedAs"></span></p>
+                  <p x-show="viewingPayment.bookedAs" class="-mt-4 mb-6 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-500">Booked as: <span x-text="viewingPayment.bookedAs"></span></p>
                 </div>
                 <div class="px-2">
                   {% include "arabela_admin/partials/gcash_reference_block.html" with var="viewingPayment" %}
@@ -1604,7 +1605,7 @@
                     </div>
                   </template>
                   <template x-if="!viewingPayment.proofUrl && !(viewingPayment.receipts || []).length">
-                    <div class="mb-6 flex h-[212px] items-center justify-center overflow-hidden rounded-2xl bg-gray-100 text-sm text-gray-400 dark:bg-gray-800">
+                    <div class="mb-6 flex h-[212px] items-center justify-center overflow-hidden rounded-2xl bg-gray-100 text-sm text-gray-500 dark:text-gray-400 dark:bg-gray-800">
                       No proof of payment uploaded
                     </div>
                   </template>

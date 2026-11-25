@@ -43,14 +43,14 @@
     .au-tab[aria-selected="true"] { color: #465fff; border-bottom-color: #465fff; }
     .dark .au-tab[aria-selected="true"] { color: #9db2ff; border-bottom-color: #9db2ff; }
     .au-tab:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; border-radius: .4rem; }
-    .au-n { min-width: 1.25rem; padding: 0 .4rem; border-radius: 999px; background: rgba(152,162,179,.22); font-size: .75rem; font-weight: 600; text-align: center; }
+    .au-n { min-width: 1.25rem; padding: 0 .4rem; border-radius: 999px; background: rgba(152,162,179,.22); font-size: 0.8125rem; font-weight: 600; text-align: center; }
     /* the search and the filters: a labelled row of controls, never one long squeezed line */
     .au-toolbar { display: grid; gap: .9rem; padding: 1.1rem 1.25rem; }
     .au-toolrow { display: flex; align-items: center; gap: .75rem; }
     .au-toolrow .ar-search { flex: 1 1 auto; }
     .au-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .75rem 1rem; }
     .au-field { display: flex; flex-direction: column; gap: .3rem; flex: 0 1 11.5rem; min-width: 8.5rem; }
-    .au-lbl { font-size: .75rem; font-weight: 600; letter-spacing: .01em; color: #667085; }
+    .au-lbl { font-size: 0.8125rem; font-weight: 600; letter-spacing: .01em; color: #667085; }
     .dark .au-lbl { color: #98a2b3; }
     .au-field .ar-search-input { padding-left: .8rem; font-size: .875rem; }
     .au-toggles { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-left: auto; }
@@ -93,12 +93,12 @@
     .dark .au-sentence strong { color: #f2f4f7; }
     .au-meta { display: flex; flex-wrap: wrap; gap: .1rem 0; margin: .2rem 0 0; font-size: .8125rem; color: #667085; }
     .dark .au-meta { color: #98a2b3; }
-    .au-meta > span + span::before { content: "\00b7"; margin: 0 .5rem; color: #98a2b3; }
+    .au-meta > span + span::before { content: "\00b7"; margin: 0 .5rem; color: #667085; }
     a.au-link { color: #465fff; text-decoration: underline; text-underline-offset: 2px; }
     a.au-link:hover { color: #3641f5; }
     .dark a.au-link { color: #9db2ff; }
     .au-chips { display: flex; flex-wrap: wrap; gap: .4rem; padding-top: .1rem; }
-    .au-chip { padding: .15rem .65rem; border-radius: 999px; font-size: .75rem; font-weight: 600; white-space: nowrap; }
+    .au-chip { padding: .15rem .65rem; border-radius: 999px; font-size: 0.8125rem; font-weight: 600; white-space: nowrap; }
     .au-chip--important { background: #fffaeb; color: #b54708; }
     .dark .au-chip--important { background: rgba(247,144,9,.16); color: #fdb022; }
     .au-chip--bad { background: #fef3f2; color: #b42318; }
@@ -122,7 +122,7 @@
     .dark .au-dl dd { color: #f2f4f7; }
     .au-was { font-weight: 400; color: #667085; text-decoration: line-through; text-decoration-color: rgba(152,162,179,.7); }
     .dark .au-was { color: #98a2b3; }
-    .au-arrow { padding: 0 .35rem; color: #98a2b3; }
+    .au-arrow { padding: 0 .35rem; color: #667085; }
     .au-now { font-weight: 600; }
     .au-why { font-weight: 400; color: #667085; }
     .dark .au-why { color: #98a2b3; }
@@ -153,7 +153,7 @@
     .au-person-id { min-width: 0; }
     .au-person-name { display: flex; flex-wrap: wrap; align-items: center; gap: .15rem .5rem; margin: 0; font-size: 1rem; font-weight: 600; color: #1d2939; }
     .dark .au-person-name { color: #f2f4f7; }
-    .au-role { padding: .05rem .5rem; border-radius: 999px; background: #eef4ff; color: #3538cd; font-size: .6875rem; font-weight: 600; }
+    .au-role { padding: .05rem .5rem; border-radius: 999px; background: #eef4ff; color: #3538cd; font-size: 0.8125rem; font-weight: 600; }
     .dark .au-role { background: rgba(70,95,255,.18); color: #9db2ff; }
     .au-role--off { background: #f2f4f7; color: #667085; }
     .dark .au-role--off { background: rgba(152,162,179,.16); color: #98a2b3; }
@@ -166,17 +166,17 @@
     .dark .au-num-n { color: #f2f4f7; }
     .au-num-n.is-hot { color: #b54708; }
     .dark .au-num-n.is-hot { color: #fdb022; }
-    .au-num-l { display: flex; flex-wrap: wrap; align-items: center; gap: .1rem 0; margin-top: .2rem; font-size: .75rem; color: #667085; }
+    .au-num-l { display: flex; flex-wrap: wrap; align-items: center; gap: .1rem 0; margin-top: .2rem; font-size: 0.8125rem; color: #667085; }
     .dark .au-num-l { color: #98a2b3; }
     .au-num-l .ht-tip { margin-left: .25rem; }
     .au-last { font-size: .875rem; color: #344054; }
     .dark .au-last { color: #d0d5dd; }
     .au-last p { margin: .2rem 0 0; line-height: 1.45; overflow-wrap: anywhere; }
-    .au-k { display: block; font-size: .75rem; font-weight: 600; letter-spacing: .01em; color: #667085; }
+    .au-k { display: block; font-size: 0.8125rem; font-weight: 600; letter-spacing: .01em; color: #667085; }
     .dark .au-k { color: #98a2b3; }
     .au-last-when { font-size: .8125rem; color: #667085; }
     .dark .au-last-when { color: #98a2b3; }
-    .au-none { color: #98a2b3; }
+    .au-none { color: #667085; }
     .au-seeall { margin-top: auto; font-size: .875rem; font-weight: 600; color: #465fff; text-decoration: none; }
     .au-seeall:hover { text-decoration: underline; }
     .au-seeall:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; border-radius: .25rem; }
@@ -185,7 +185,7 @@
       .au-stats { gap: .6rem; }
       .au-stat-main { padding: .8rem .85rem; }
       .au-stat-n { font-size: 1.4rem; }
-      .au-stat-l { font-size: .75rem; }
+      .au-stat-l { font-size: 0.8125rem; }
       .au-stat .ht-tip { top: .55rem; right: .55rem; }
       .au-tabs { padding: .35rem 1rem 0; }
       .au-toolbar { padding: .9rem 1rem; }
@@ -217,6 +217,7 @@
   >
     <!-- ===== Preloader Start ===== -->
     <script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('admin-dark-boot');}catch(e){}</script>
+    <script>(function(){var h=document.documentElement,s='large';try{var v=localStorage.getItem('arabelaTextSize');if(v==='normal'||v==='xl'){s=v;}}catch(e){}h.setAttribute('data-text-size',s);})();</script>
     <div
   x-show="loaded"
   x-init="window.addEventListener('DOMContentLoaded', () => {setTimeout(() => loaded = false, 500)})"
@@ -262,7 +263,7 @@
     <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'gown-board' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients' || page === 'id-checks') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
-        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-400">
+        <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-500 dark:text-gray-400">
           <span
             class="menu-group-title"
             :class="sidebarToggle ? 'lg:hidden' : ''"
@@ -1380,7 +1381,7 @@
                 </div>
                 {% endfor %}
               </div>
-              <p class="au-note"><span id="ar-count" aria-live="polite"></span>{% if hidden_signins and rows %}<span>{{ hidden_signins }} routine sign-in{{ hidden_signins|pluralize }} left out. <a href="{{ signins_link }}" class="au-link">Show</a></span>{% endif %}{% if starts_on %}<span>The Audit Log starts on {{ starts_on }} and keeps the last 12 months. It cannot be changed or deleted.{% if capped %} Showing the newest {{ max_rows }} of {{ total }}: narrow the dates or search to see the rest.{% endif %}</span>{% endif %}</p>
+              <div class="au-note"><span id="ar-count" aria-live="polite"></span>{% if hidden_signins and rows %}<span>{{ hidden_signins }} routine sign-in{{ hidden_signins|pluralize }} left out. <a href="{{ signins_link }}" class="au-link">Show</a></span>{% endif %}{% if starts_on and capped %}<span>Showing the newest {{ max_rows }} of {{ total }}: narrow the dates or search to see the rest.</span>{% endif %}{% if starts_on %}<details class="ht-tip"><summary aria-label="About the Audit Log" title="About the Audit Log">?</summary><div class="ht-tip-pop"><p>The Audit Log starts on {{ starts_on }} and keeps the last 12 months. It cannot be changed or deleted.</p></div></details>{% endif %}</div>
               </div>
 
               <!-- Staff activity: the second tab of the same card, one card per person. -->
