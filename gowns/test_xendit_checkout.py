@@ -41,6 +41,8 @@ class FakeXendit:
         if name in self.fail:
             raise self.fail[name]
         if name == "create_session":
+            if body.get("expires_at") and datetime.fromisoformat(body["expires_at"].replace("Z", "+00:00")) < timezone.now() + timedelta(minutes=10):
+                raise xendit.XenditError("expires_at must be at least 10 minutes in the future", status=400)       # Xendit's own answer (real call, 2026-11-25)
             self.n += 1
             sid = f"ps-{self.n:024d}"
             self.sessions[sid] = {"body": body, "status": "ACTIVE", "payment_id": ""}

@@ -95,6 +95,20 @@
     .dark .nb-saved { background: rgba(18,183,106,.12); border-color: rgba(18,183,106,.35); color: #75e0a7; }
     .nb-saved-ref { font-size: 1.5rem; font-weight: 700; letter-spacing: .01em; margin: .25rem 0 .5rem; color: #054f31; }
     .dark .nb-saved-ref { color: #a6f4c5; }
+    .nb-info { margin-top: .75rem; padding: .65rem .85rem; border-radius: .7rem; background: #f5f8ff; color: #344054; border: 1px solid #d1e0ff; font-size: .8125rem; line-height: 1.5; }
+    .dark .nb-info { background: rgba(70,95,255,.1); color: #d0d5dd; border-color: rgba(70,95,255,.35); }
+    .nb-qr { display: grid; gap: 1.25rem; padding: 1.25rem; margin-bottom: 1.25rem; border: 1px solid #d0d5dd; border-radius: 1rem; background: #fff; }
+    .dark .nb-qr { background: rgba(255,255,255,.03); border-color: #344054; }
+    @media (min-width: 720px) { .nb-qr { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 1.75rem; } }
+    .nb-qr-img { display: block; width: 15rem; max-width: 100%; height: auto; padding: .5rem; border: 1px solid #e4e7ec; border-radius: .75rem; background: #fff; image-rendering: pixelated; }
+    .nb-qr-title { margin: 0 0 .25rem; font-size: 1rem; font-weight: 600; color: #1d2939; }
+    .dark .nb-qr-title { color: #f2f4f7; }
+    .nb-qr-amount { margin: 0 0 .5rem; font-size: 2rem; font-weight: 700; letter-spacing: -.01em; color: #1d2939; font-variant-numeric: tabular-nums; }
+    .dark .nb-qr-amount { color: #fff; }
+    .nb-qr-sub { margin: 0 0 .75rem; font-size: .875rem; line-height: 1.55; color: #475467; }
+    .dark .nb-qr-sub { color: #98a2b3; }
+    .nb-qr-clock { display: inline-block; margin: 0 0 .9rem; padding: .2rem .6rem; border-radius: 999px; background: #f2f4f7; color: #344054; font-size: .8125rem; font-variant-numeric: tabular-nums; }
+    .dark .nb-qr-clock { background: rgba(255,255,255,.08); color: #d0d5dd; }
     .nb-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: .75rem; }
     .nb-spinner { display: inline-block; width: .9rem; height: .9rem; border: 2px solid currentColor; border-top-color: transparent; border-radius: 999px; animation: nb-spin .8s linear infinite; vertical-align: -2px; }
     @keyframes nb-spin { to { transform: rotate(360deg); } }
@@ -1319,7 +1333,7 @@
                 <div class="nb-saved" role="status" aria-live="polite">
                   <p style="margin: 0; font-weight: 600;">Booking saved</p>
                   <p class="nb-saved-ref" x-text="saved.reference_code"></p>
-                  <p style="margin: 0 0 .5rem;" x-text="'Confirmed and on the calendar. Payment received, receipt ' + saved.receiptNumber + '.'"></p>
+                  <p style="margin: 0 0 .5rem;" x-text="'Confirmed and on the calendar. Payment received' + (saved.paidWith ? ' online with ' + saved.paidWith : '') + ', receipt ' + saved.receiptNumber + '.'"></p>
                   <p style="margin: 0 0 .9rem;" x-text="saved.depositOnly ? ('Only the deposit was paid. Balance still to pay at the shop: ' + peso(Number(String(saved.balance).replace(/,/g, ''))) + '. Record it in Payments when the customer pays it.') : 'Nothing is left to pay. Tell the customer the booking number.'"></p>
                   <div class="nb-actions" style="justify-content: flex-start;">
                     <a class="nb-btn nb-btn--primary" :href="saved.receiptUrl" target="_blank" rel="noopener">Print receipt</a>
@@ -1329,7 +1343,28 @@
                 </div>
               </template>
 
-              <form x-show="!saved" @submit.prevent="save()" novalidate>
+              <!-- The customer is paying on their phone: the QR code, and the live answer of the payment service -->
+              <template x-if="pay">
+                <section class="nb-qr" role="status" aria-live="polite">
+                  <div x-show="pay.qr"><img class="nb-qr-img" :src="pay.qr" alt="QR code of the payment page"></div>
+                  <div>
+                    <p class="nb-qr-title" x-text="payTitle"></p>
+                    <p class="nb-qr-amount" x-text="'₱' + pay.amount"></p>
+                    <p class="nb-qr-sub" x-text="paySub"></p>
+                    <p class="nb-qr-clock" x-show="pay.state === 'waiting'" x-text="'The payment page closes in ' + payClock"></p>
+                    <p class="nb-error" x-show="payError" x-cloak x-text="payError" role="alert"></p>
+                    <div class="nb-actions" style="justify-content: flex-start;">
+                      <a class="nb-btn nb-btn--ghost" x-show="pay.state === 'waiting' &amp;&amp; pay.checkoutUrl" :href="pay.checkoutUrl" target="_blank" rel="noopener">Open the payment page on this screen</a>
+                      <button type="button" class="nb-btn nb-btn--ghost" x-show="pay.state === 'waiting'" :disabled="payBusy" @click="cancelPay()">Cancel payment</button>
+                      <button type="button" class="nb-btn nb-btn--primary" x-show="pay.state === 'ended' || pay.state === 'refunded'" @click="backToForm()">Back to the booking form</button>
+                      <a class="nb-btn nb-btn--primary" x-show="pay.state === 'flagged'" href="{% url 'arabela_admin:payment_online' %}">Open Online payments</a>
+                      <button type="button" class="nb-btn nb-btn--ghost" x-show="pay.state === 'flagged'" @click="startOver()">Record another booking</button>
+                    </div>
+                  </div>
+                </section>
+              </template>
+
+              <form x-show="!saved" :hidden="!!pay" @submit.prevent="save()" novalidate>
                 <!-- ===== 1. Customer ===== -->
                 <section class="nb-card" aria-labelledby="nb-step-1">
                   <div class="nb-card-head">
@@ -1352,6 +1387,16 @@
                     <div>
                       <label class="nb-label" for="nb-address">Address <span class="nb-opt">(optional)</span></label>
                       <input class="nb-input" id="nb-address" type="text" maxlength="255" autocomplete="off" x-model="address">
+                    </div>
+                  </div>
+                  <div class="nb-grid nb-grid--2" style="margin-top: 1rem;">
+                    <div>
+                      <label class="nb-label" for="nb-city">City <span class="nb-opt">(optional)</span></label>
+                      <input class="nb-input" id="nb-city" type="text" maxlength="100" autocomplete="off" x-model="city" placeholder="e.g. Antipolo">
+                    </div>
+                    <div>
+                      <label class="nb-label" for="nb-postal">Postal code <span class="nb-opt">(optional)</span></label>
+                      <input class="nb-input" id="nb-postal" type="text" inputmode="numeric" maxlength="10" autocomplete="off" x-model="postal" placeholder="e.g. 1870">
                     </div>
                   </div>
 
@@ -1634,13 +1679,18 @@
                         <div class="nb-seg" role="radiogroup" aria-labelledby="nb-method-label">
                           <label :class="method === 'Cash' &amp;&amp; 'is-on'"><input type="radio" name="nb-method" value="Cash" x-model="method"> Cash</label>
                           <label :class="method === 'GCash' &amp;&amp; 'is-on'"><input type="radio" name="nb-method" value="GCash" x-model="method"> GCash</label>
+                          {% if online_enabled %}<label :class="method === 'Online' &amp;&amp; 'is-on'"><input type="radio" name="nb-method" value="Online" x-model="method"> Pay online</label>{% endif %}
+                        </div>
+                        <div class="nb-info" x-show="method === 'Online'" x-cloak>
+                          A QR code appears after you press the button. The customer scans it with their phone and pays <strong x-text="peso(amountDue)"></strong> with GCash, Maya or QR Ph. The booking and the receipt are made by themselves the moment the money arrives, and the deposit can later be sent back with one click. The code closes after {{ online_minutes }} minutes.
+                          <span x-show="amountDue &gt; ONLINE_MAX" x-cloak><br><strong>This is more than can be paid online (₱<span x-text="ONLINE_MAX.toLocaleString('en-PH')"></span> at most).</strong> Choose "Deposit only", or take cash.</span>
                         </div>
                         <div x-show="method === 'GCash'" x-cloak style="margin-top: .75rem;">
                           <label class="nb-label" for="nb-ref">GCash reference number <span class="nb-req">*</span></label>
                           <input class="nb-input" id="nb-ref" type="text" inputmode="numeric" maxlength="24" x-model="reference" placeholder="5046 933 479702" autocomplete="off">
                           <p class="nb-hint">The 13-digit Ref No. on the customer's GCash screen. One reference number pays only once.</p>
                         </div>
-                        <div style="margin-top: .75rem;">
+                        <div x-show="method !== 'Online'" style="margin-top: .75rem;">
                           <label class="nb-label" for="nb-amount">Amount received (pesos) <span class="nb-req">*</span></label>
                           <input class="nb-input" id="nb-amount" type="text" inputmode="decimal" :value="amountText" @input="amount = $event.target.value; amountEdited = true" autocomplete="off">
                           <p class="nb-hint" x-text="'It must be exactly ' + peso(amountDue) + ' (' + (payment === 'full' ? 'the rental and the deposit' : 'the deposit') + '). Check it against what the customer handed over.'"></p>
@@ -1680,7 +1730,7 @@
                   <button type="submit" class="nb-btn nb-btn--primary" :disabled="saving">
                     <span x-show="saving" x-cloak class="nb-spinner"></span>
                     <svg x-show="!saving" class="nb-btn-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
-                    <span x-text="saving ? 'Saving…' : 'Save booking'"></span>
+                    <span x-text="saving ? (method === 'Online' ? 'Opening…' : 'Saving…') : (method === 'Online' ? 'Show payment QR' : 'Save booking')"></span>
                   </button>
                 </div>
               </form>
@@ -1704,8 +1754,11 @@
         calendar: '{% url "arabela_admin:availability_calendar" %}',
         hint: '{% url "arabela_admin:booking_customer_hint" %}',
         accounts: '{% url "arabela_admin:booking_account_search" %}',
-        create: '{% url "arabela_admin:booking_create" %}'
+        create: '{% url "arabela_admin:booking_create" %}',
+        payStart: '{% url "arabela_admin:booking_pay_start" %}'
       };
+      var ONLINE_MAX = {{ online_max }};
+      var ONLINE_LABEL = '{{ online_label|escapejs }}';
       var CSRF = '{{ csrf_token }}';
       var TODAY = '{{ today_iso }}';
       var IS_OWNER = {{ is_owner|yesno:"true,false" }};
@@ -1774,13 +1827,15 @@
         ownerMin: daysBefore(TODAY, BACKDATE_DAYS),
 
         channel: 'Walk-in',
-        name: '', phone: '', address: '',
+        ONLINE_MAX: ONLINE_MAX,
+        name: '', phone: '', address: '', city: '', postal: '',
         account: null, accountQuery: '', accountResults: [], accountSeq: 0, linkOpen: false,
         hint: [], hintSeq: 0,
         lines: [firstLine],
         editKey: firstLine.key,                // the one gown row that is open as an editor (0 = none)
         payment: '', method: 'Cash', reference: '', amount: '', amountEdited: false, requestId: nbUid(), note: '',
         saving: false, error: '', saved: null,
+        pay: null, payError: '', payBusy: false, payTicks: 0, payLeft: 0, payEndsAt: 0, payTimer: null, payAsking: false,
 
         get chosenLines() { return this.lines.filter(function (l) { return l.gown; }); },
         get anyTakesNow() { return this.lines.some(function (l) { return l.takesNow; }); },
@@ -1789,6 +1844,26 @@
         // What the payment choice asks for, exactly: the deposit alone, or the rental and the deposit. The box starts with it; staff confirm or correct it.
         get amountDue() { return this.payment === 'full' ? this.rentalTotal + this.depositTotal : this.depositTotal; },
         get amountText() { return this.amountEdited ? this.amount : (this.payment === '' || !this.amountDue ? '' : String(this.amountDue)); },
+        get payClock() { var s = this.payLeft; return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); },
+        get payTitle() {
+          var st = this.pay && this.pay.state;
+          if (st === 'confirming') { return 'Payment received. Making the booking…'; }
+          if (st === 'ended') { return 'The payment page was closed'; }
+          if (st === 'refunded') { return 'The booking could not be made'; }
+          if (st === 'flagged') { return 'The payment needs a look'; }
+          return 'Ask the customer to scan this code';
+        },
+        get paySub() {
+          var p = this.pay || {}, st = p.state;
+          if (st === 'confirming') { return 'The money arrived. The booking and the receipt are being made, one moment.'; }
+          if (st === 'ended') { return 'Nothing was charged and nothing was booked. You can change the form and try again.'; }
+          if (st === 'refunded') {
+            return (p.message ? p.message + ' ' : '') + 'The ₱' + p.amount + ' is being sent back to the account the customer paid with' +
+              (p.refundFailed ? ', but that did not go through: please open Online payments.' : '. If it was paid by QR Ph, it has to be handed back by the shop.');
+          }
+          if (st === 'flagged') { return 'The payment arrived, but the booking could not be made by itself. Open Online payments to sort it out. The customer is not charged twice.'; }
+          return 'They scan it with their phone camera, then pay with GCash, Maya or QR Ph on ' + ONLINE_LABEL + '\'s page. This screen updates by itself when the money arrives. If you leave this page, the booking is still made once they pay.';
+        },
         get editingLine() { var key = this.editKey; return this.lines.find(function (l) { return l.key === key; }) || null; },
         get hasRows() { var key = this.editKey; return this.lines.some(function (l) { return l.key !== key; }); },
         get canAdd() {
@@ -2078,8 +2153,11 @@
           if (this.lines.some(function (l) { return l.check && !l.check.ok; })) { out.push('A gown is not available on its date: change the date or the gown.'); }
           if (this.payment === '') { out.push('Choose "Paid in full" or "Deposit only".'); }
           if (this.payment === 'deposit' && this.anyTakesNow) { out.push('A gown can only leave the shop once the rental is paid.'); }
-          if (this.payment !== '') {
-            if (this.method !== 'Cash' && this.method !== 'GCash') { out.push('Choose Cash or GCash.'); }
+          if (this.payment !== '' && this.method === 'Online') {
+            if (!ONLINE_MAX) { out.push('Online payment is not available right now. Choose Cash or GCash.'); }
+            else if (this.amountDue > ONLINE_MAX) { out.push('This is more than can be paid online. Choose "Deposit only", or take cash.'); }
+          } else if (this.payment !== '') {
+            if (this.method !== 'Cash' && this.method !== 'GCash') { out.push('Choose Cash, GCash or Pay online.'); }
             if (this.method === 'GCash' && !String(this.reference).replace(/\D/g, '')) { out.push('Type the GCash reference number.'); }
             if (Math.abs(Number(String(this.amountText).replace(/[^0-9.]/g, '')) - this.amountDue) > 0.001) { out.push('The amount received must be exactly ' + this.peso(this.amountDue) + '.'); }
           }
@@ -2091,24 +2169,11 @@
           if (problems.length) { this.error = problems.join(' '); return; }
           this.error = '';
           this.closeOpenEditor();                                      // every gown is complete here, so this just closes the open row
-          var form = new FormData();
-          form.append('channel', this.channel);
-          form.append('name', this.name);
-          form.append('phone', this.phone);
-          form.append('address', this.address);
-          form.append('account', this.account ? this.account.id : '');
-          form.append('lines', JSON.stringify(this.lines.map(function (l) {
-            return {
-              gown: l.gown.id, event: l.event, takes_now: l.takesNow,
-              picked_up_on: l.takesNow ? (IS_OWNER ? (l.pickedUpOn || TODAY) : TODAY) : ''
-            };
-          })));
-          form.append('payment', this.payment);
-          form.append('note', this.note);
+          if (this.method === 'Online') { return this.startOnline(); }
+          var form = this.baseForm();
           form.append('method', this.method);
           form.append('reference', this.reference);
           form.append('amount', this.amountText);
-          form.append('request_id', this.requestId);
           this.saving = true;
           var self = this;
           fetch(URLS.create, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body: form, credentials: 'same-origin' })
@@ -2130,6 +2195,113 @@
               self.saving = false;
               self.error = requestError(err, 'The booking could not be saved (no connection). Nothing was booked. Please try again.');
             });
+        },
+        // The fields every booking sends, whoever takes the money.
+        baseForm: function () {
+          var form = new FormData();
+          form.append('channel', this.channel);
+          form.append('name', this.name);
+          form.append('phone', this.phone);
+          form.append('address', this.address);
+          form.append('city', this.city);
+          form.append('postal_code', this.postal);
+          form.append('account', this.account ? this.account.id : '');
+          form.append('lines', JSON.stringify(this.lines.map(function (l) {
+            return {
+              gown: l.gown.id, event: l.event, takes_now: l.takesNow,
+              picked_up_on: l.takesNow ? (IS_OWNER ? (l.pickedUpOn || TODAY) : TODAY) : ''
+            };
+          })));
+          form.append('payment', this.payment);
+          form.append('note', this.note);
+          form.append('request_id', this.requestId);
+          return form;
+        },
+
+        // ---- Pay online: the customer pays on their phone from a QR code; this screen only shows what the server reads back from the payment service ----
+        startOnline: function () {
+          var form = this.baseForm();
+          form.append('expected_amount', String(this.amountDue));
+          this.saving = true; this.payError = '';
+          var self = this;
+          fetch(URLS.payStart, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body: form, credentials: 'same-origin' })
+            .then(function (r) {
+              return r.json().catch(function () { return {}; }).then(function (data) { return { ok: r.ok, status: r.status, data: data }; });
+            })
+            .then(function (res) {
+              self.saving = false;
+              if (!res.ok || !res.data.success) {
+                self.error = res.data.error || 'The payment page could not be opened. Nothing was booked or charged. Please try again.';
+                if (res.status === 409) { self.lines.forEach(function (l) { if (l.gown && l.event) { self.runCheck(l); } }); }
+                return;
+              }
+              self.pay = res.data;
+              self.payAsk(res.data);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            })
+            .catch(function (err) {
+              self.saving = false;
+              self.error = requestError(err, 'The payment page could not be opened (no connection). Nothing was booked or charged. Please try again.');
+            });
+        },
+        // Takes the server's latest picture of the payment: keeps asking while it is open, stops when it has ended one way or another.
+        payAsk: function (data) {
+          var self = this;
+          if (data.state === 'booked') {
+            this.payStop();
+            this.saved = data;
+            this.pay = null;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+          }
+          this.pay = Object.assign({}, this.pay || {}, data);
+          if (data.state === 'waiting') { this.payEndsAt = Date.now() + (Number(data.secondsLeft) || 0) * 1000; this.payLeft = Number(data.secondsLeft) || 0; }
+          if (data.state === 'waiting' || data.state === 'confirming') {
+            if (!this.payTimer) { this.payTimer = window.setInterval(function () { self.payTick(); }, 1000); }
+          } else {
+            this.payStop();
+          }
+        },
+        payStop: function () { if (this.payTimer) { window.clearInterval(this.payTimer); this.payTimer = null; } },
+        payTick: function () {
+          if (!this.pay) { this.payStop(); return; }
+          if (this.pay.state === 'waiting') { this.payLeft = Math.max(0, Math.round((this.payEndsAt - Date.now()) / 1000)); }
+          this.payTicks += 1;
+          if (this.payTicks % 3 === 0 || this.payLeft === 0) { this.payPoll(); }
+        },
+        payPoll: function () {
+          if (this.payAsking || !this.pay || !this.pay.statusUrl) { return; }
+          this.payAsking = true;
+          var self = this, url = this.pay.statusUrl;
+          getJSON(url).then(function (data) { self.payAsking = false; self.payError = ''; if (self.pay) { self.payAsk(data); } })
+            .catch(function () { self.payAsking = false; /* a dropped connection is not a failed payment: keep asking */ });
+        },
+        cancelPay: function () {
+          if (this.payBusy || !this.pay || !this.pay.cancelUrl) { return; }
+          var self = this, url = this.pay.cancelUrl;
+          var ask = typeof window.arabelaConfirm === 'function'
+            ? window.arabelaConfirm({ title: 'Cancel this payment?', message: 'The QR code stops working. Nothing is charged and nothing is booked.', confirmText: 'Cancel payment', cancelText: 'Keep waiting', danger: true })
+            : Promise.resolve(true);
+          ask.then(function (ok) {
+            if (!ok) { return; }
+            self.payBusy = true; self.payError = '';
+            fetch(url, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body: '{}', credentials: 'same-origin' })
+              .then(function (r) { return r.json().catch(function () { return {}; }).then(function (data) { return { ok: r.ok, data: data }; }); })
+              .then(function (res) {
+                self.payBusy = false;
+                if (!res.ok || !res.data.success) { self.payError = res.data.error || 'The payment could not be cancelled. Please try again.'; return; }
+                self.payAsk(res.data);
+              })
+              .catch(function (err) { self.payBusy = false; self.payError = requestError(err, 'The payment could not be cancelled (no connection). Please try again.'); });
+          });
+        },
+        // The payment page ended without a booking: back to the same form, ready for a new press (a new id, and every gown asked again).
+        backToForm: function () {
+          var self = this;
+          this.payStop();
+          this.pay = null; this.payError = ''; this.error = '';
+          this.requestId = nbUid();
+          this.lines.forEach(function (l) { if (l.gown && l.event) { self.runCheck(l); } });
         },
         startOver: function () { window.location.href = window.location.pathname; }
       };

@@ -430,7 +430,7 @@ def online_method(channel):
     return ONLINE_METHODS.get((channel or "").lower(), Payment.Method.PM_OTHER)
 
 
-def record_online_payment(*, reservation, purpose, amount, channel, provider_ref, paid_at=None, livemode=False, request_id=""):
+def record_online_payment(*, reservation, purpose, amount, channel, provider_ref, paid_at=None, livemode=False, request_id="", served_by_user=None):
     """Record the payment a customer made on PayMongo's checkout, with its numbered Payment Receipt.
 
     Called by the online checkout INSIDE the transaction that makes the booking (gowns/online_checkout.py), right after the booking's rows exist,
@@ -438,9 +438,12 @@ def record_online_payment(*, reservation, purpose, amount, channel, provider_ref
     so nothing is "derived" from older data (a booking with no rows is read as an old one, which is exactly what must not happen here).
 
     The amount must be exactly what the choice asks for -- the deposit, or the rental and the deposit -- else it refuses and the booking is not made.
-    Returns the Payment (an earlier one when `request_id` was already used). The customer's bell message and email are sent like any payment."""
+    Returns the Payment (an earlier one when `request_id` was already used). The customer's bell message and email are sent like any payment.
+    `served_by_user`: a walk-in customer who paid on their phone at the counter -- the receipt then names the staff member who served them
+    (an online customer's says "Online payment")."""
     request_id = (request_id or "")[:40] or None
     amount = money(amount)
+    served_by = staff_display_name(served_by_user) if served_by_user is not None else ONLINE_SERVED_BY
     if purpose not in (Payment.Purpose.DEPOSIT, Payment.Purpose.FULL):
         raise PaymentError("An online payment is the deposit or the deposit with the rental.")
     deposit_due, rental_due = money(reservation.security_deposit), ledger.rental_due(reservation)
@@ -458,14 +461,15 @@ def record_online_payment(*, reservation, purpose, amount, channel, provider_ref
         note = f"Paid online on {gateway.label()}'s checkout ({how})." + ("" if livemode else " TEST PAYMENT: no real money moved.")
         payment = Payment.objects.create(
             reservation=reservation, direction=Payment.Direction.IN, purpose=purpose, method=method, amount=amount, reference="", paid_at=paid_at or now,
-            recorded_by=None, recorded_by_name=ONLINE_SERVED_BY, note=note, request_id=request_id, provider=gateway.name(), provider_ref=(provider_ref or "")[:60],
+            recorded_by=served_by_user if getattr(served_by_user, "pk", None) else None, recorded_by_name=served_by, note=note, request_id=request_id,
+            provider=gateway.name(), provider_ref=(provider_ref or "")[:60],
             receipt_number=ReceiptSequence.next_number(timezone.localtime(now).year),
         )
         # The statement is read AFTER the row exists (so it is this booking's own row that is counted, never an old-booking guess); the figures
         # "before" are the same ones less this payment.
         after = ledger.statement(_fresh(reservation.pk))
         before = ledger.Statement(**{**after.__dict__, "received": money(after.received) - amount})
-        payment.snapshot = _snapshot(reservation, payment, before, after, served_by=ONLINE_SERVED_BY)
+        payment.snapshot = _snapshot(reservation, payment, before, after, served_by=served_by)
         payment.save(update_fields=["snapshot"])
         ReservationStatusEvent.record(
             reservation, PAYMENT_EVENT, detail=f"{peso(amount)} received ({payment.get_purpose_display()}, {how}). Receipt {payment.receipt_number}.",

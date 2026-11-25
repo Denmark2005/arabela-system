@@ -1325,7 +1325,7 @@
                   {% for a in attempts %}
                     <tr data-attempt-id="{{ a.id }}"{% if a.attention %} class="is-hot"{% endif %}>
                       <td>{{ a.created_at|date:"M j, Y" }}<div class="pm-legacy">{{ a.created_at|date:"g:i A" }}</div></td>
-                      <td>{{ a.who }}</td>
+                      <td>{{ a.who }}{% if a.source == "walkin" %}<div class="pm-legacy">At the shop{% if a.staff_label %} &middot; {{ a.staff_label }}{% endif %}</div>{% endif %}</td>
                       <td>{{ a.kind_label }}</td>
                       <td class="r">&#8369;{{ a.amount|floatformat:"2g" }}</td>
                       <td>{{ a.channel_label }}</td>

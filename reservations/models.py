@@ -1209,8 +1209,14 @@ class PaymentAttempt(models.Model):
         DEPOSIT = 'deposit', 'Deposit only'
         FULL = 'full', 'Paid in full'
 
+    class Source(models.TextChoices):
+        ONLINE = 'online', 'Online checkout'              # the customer, on their own account (gowns/online_checkout.py start_payment)
+        WALKIN = 'walkin', 'Walk-in at the shop'          # staff, in New Booking: the customer pays on their phone from a QR code (gowns/walkin_payment.py)
+
     token = models.CharField(max_length=43, unique=True)          # the secret the success and cancel addresses carry (never PayMongo's own query)
     customer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='payment_attempts')
+    source = models.CharField(max_length=6, choices=Source.choices, default=Source.ONLINE)
+    staff = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='walkin_payment_attempts')   # who started a walk-in one
     customer_name = models.CharField(max_length=120, blank=True, default='')
     purpose = models.CharField(max_length=10, choices=Purpose.choices)
     amount = models.DecimalField(max_digits=10, decimal_places=2)                     # exactly what the customer is asked to pay
@@ -1239,6 +1245,7 @@ class PaymentAttempt(models.Model):
         ordering = ['-created_at', '-id']
         constraints = [
             models.UniqueConstraint(fields=['customer', 'request_id'], condition=~models.Q(request_id=''), name='paymentattempt_one_per_press'),
+            models.UniqueConstraint(fields=['staff', 'request_id'], condition=~models.Q(request_id=''), name='paymentattempt_walkin_one_per_press'),
             models.UniqueConstraint(fields=['session_id'], condition=~models.Q(session_id=''), name='paymentattempt_session_unique'),
             models.UniqueConstraint(fields=['provider_payment_id'], condition=~models.Q(provider_payment_id=''), name='paymentattempt_payment_unique'),
         ]

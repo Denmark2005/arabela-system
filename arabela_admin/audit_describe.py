@@ -66,6 +66,16 @@ def booking_create(ctx):
             "details": _keep(ctx.data, "reference", "reference_code")}
 
 
+def booking_pay_start(ctx):
+    amount = ctx.data.get("amount") or ""
+    return {"summary": f"opened an online payment page for a walk-in booking{f' (₱{amount})' if amount else ''}",
+            "details": _keep(ctx.data, "amount", "purposeLabel")}
+
+
+def booking_pay_cancel(ctx):
+    return {"summary": "closed a walk-in online payment page", "details": _keep(ctx.data, "state")}
+
+
 def booking_approve(ctx):
     reservation = _reservation(ctx.kwargs.get("pk"))
     return {"summary": f"approved {_booking_text(reservation)}", "target": _booking_target(reservation)}

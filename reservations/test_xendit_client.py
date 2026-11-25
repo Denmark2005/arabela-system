@@ -83,7 +83,7 @@ class CreateSessionTests(SimpleTestCase):
         self.assertTrue(19 < delta <= 20.5, delta)
         _, short = self.create(expires_minutes=2)
         delta = (datetime.fromisoformat(short.call_args.args[2]["expires_at"].replace("Z", "+00:00")) - datetime.now(dt_timezone.utc)).total_seconds() / 60
-        self.assertTrue(9 < delta <= 10.5, delta)
+        self.assertTrue(10 < delta <= 11.5, delta)           # Xendit refuses a page that is open for 10 minutes or less (found by a real test call, 2026-11-25)
         _, none = self.create()
         self.assertNotIn("expires_at", none.call_args.args[2])
 

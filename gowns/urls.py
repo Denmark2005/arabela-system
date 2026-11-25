@@ -67,6 +67,7 @@ urlpatterns = [
     path("reservation/pay/start/", online_views.pay_start, name="pay_start"),
     path("reservation/pay/return/<str:token>/", online_views.payment_return, name="payment_return"),
     path("reservation/pay/status/<str:token>/", online_views.payment_status, name="payment_status"),
+    path("pay/shop/<str:token>/done/", online_views.walkin_pay_done, name="walkin_pay_done"),
     path("reservation/pay/cancel/<str:token>/", online_views.payment_cancel, name="payment_cancel"),
     path("paymongo/webhook/", online_views.paymongo_webhook, name="paymongo_webhook"),
     path("xendit/webhook/", online_views.paymongo_webhook, name="xendit_webhook"),          # the same view: it checks the message the way the chosen service sends it

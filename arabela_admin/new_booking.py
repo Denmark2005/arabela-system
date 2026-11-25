@@ -9,6 +9,7 @@ import json
 import logging
 import re
 from datetime import date, timedelta
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.db.models import Q
@@ -16,6 +17,7 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils.http import urlencode
+from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods
 
 from accounts.audit import audited
@@ -27,11 +29,11 @@ from arabela_admin.views import (
     _require_admin_staff,
     _staff_display_name,
 )
-from gowns import availability, deposit, typed_payment
+from gowns import availability, deposit, online_checkout, typed_payment, walkin_payment
 from gowns.models import TAG_COLOR_HEX, Gown, SiteSettings
 from gowns.photos import sized
-from reservations import ledger, staff_booking
-from reservations.models import Reservation
+from reservations import gateway, ledger, staff_booking
+from reservations.models import PaymentAttempt, Reservation
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +87,10 @@ def new_booking_view(request):
         "deposit_per_gown": deposit.per_gown(),
         "max_gowns": staff_booking.MAX_GOWNS,
         "note_max": staff_booking.NOTE_MAX,
+        "online_enabled": gateway.enabled(),
+        "online_label": gateway.label(),
+        "online_max": int(min(online_checkout.MAX_ONLINE_AMOUNT, Decimal(gateway.max_amount()))) if gateway.enabled() else 0,
+        "online_minutes": walkin_payment.WALKIN_MINUTES,
         # The picker's category filter: only categories that really have gowns, so the filter never leads to an empty list.
         "gown_categories": sorted(set(Gown.objects.order_by().values_list("category", flat=True))),
     })
@@ -308,6 +314,75 @@ def booking_account_search_view(request):
     return JsonResponse({"results": results})
 
 
+# ---------------------------------------------------------------- the customer pays on their phone (QR code)
+@require_http_methods(["POST"])
+@audited("booking.pay_start", "Bookings", audit_describe.booking_pay_start)
+def booking_pay_start_view(request):
+    """Save pressed with "Pay online": nothing is booked yet. The form is checked like a cash booking, a payment page is opened for the exact amount and its
+    QR code is answered; the booking is made by itself (gowns/walkin_payment.py) once Xendit confirms the money."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    post = request.POST
+    is_owner = _is_owner(request)
+    now = availability.now_local()
+    try:
+        name = staff_booking.clean_name(post.get("name"))
+        phone = staff_booking.clean_phone(post.get("phone"))
+        address = staff_booking.clean_address(post.get("address"))
+        city = staff_booking.clean_city(post.get("city"))
+        postal_code = staff_booking.clean_postal_code(post.get("postal_code"))
+        notebook_number = staff_booking.clean_notebook_number(post.get("notebook_number"))
+        account = staff_booking.find_account(post.get("account"))
+        try:
+            raw_lines = json.loads(post.get("lines") or "[]")
+        except json.JSONDecodeError:
+            raise staff_booking.BookingError("Something in the gown list is wrong. Please refresh the page and try again.")
+        lines = staff_booking.parse_lines(raw_lines, today=now.date(), is_owner=is_owner)
+        payment = (post.get("payment") or "").strip()
+        expected = typed_payment.parse_amount(post.get("expected_amount") or "") if (post.get("expected_amount") or "").strip() else None
+        result = walkin_payment.start(
+            request=request, staff=request.user, staff_name=_staff_display_name(request.user), is_owner=is_owner, name=name, phone=phone,
+            address=address, city=city, postal_code=postal_code, account=account, notebook_number=notebook_number, lines=lines, payment=payment,
+            note=re.sub(r"\s+", " ", post.get("note") or "").strip()[:staff_booking.NOTE_MAX], request_id=(post.get("request_id") or "").strip(),
+            expected_amount=expected)
+    except staff_booking.BookingError as exc:
+        return JsonResponse({"error": exc.message}, status=exc.status)
+    except Exception:
+        logger.exception("The walk-in payment page could not be opened")
+        return JsonResponse({"error": "The payment page could not be opened just now. Nothing was booked or charged. Please try again."}, status=500)
+    return JsonResponse(result)
+
+
+def _walkin_attempt(token):
+    return PaymentAttempt.objects.filter(token=token, source=PaymentAttempt.Source.WALKIN).select_related("reservation").first()
+
+
+@never_cache
+@require_http_methods(["GET"])
+def booking_pay_status_view(request, token):
+    """The staff screen asks every few seconds: has the customer paid? (Xendit is asked, never the screen.)"""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    attempt = _walkin_attempt(token)
+    if attempt is None:
+        return JsonResponse({"error": "That payment was not found."}, status=404)
+    attempt, state = walkin_payment.refreshed_state(attempt)
+    return JsonResponse({"success": True, **state})
+
+
+@require_http_methods(["POST"])
+@audited("booking.pay_cancel", "Bookings", audit_describe.booking_pay_cancel)
+def booking_pay_cancel_view(request, token):
+    """Staff close the QR code (the customer changed their mind, or something was typed wrong). A payment that already arrived is honoured instead."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    attempt = _walkin_attempt(token)
+    if attempt is None:
+        return JsonResponse({"error": "That payment was not found."}, status=404)
+    attempt = online_checkout.cancel_attempt(attempt.pk) or attempt
+    return JsonResponse({"success": True, **walkin_payment.state(attempt)})
+
+
 # ---------------------------------------------------------------- saving
 @require_http_methods(["POST"])
 @audited("booking.create", "Bookings", audit_describe.booking_create)
@@ -321,6 +396,9 @@ def booking_create_view(request):
     try:
         name = staff_booking.clean_name(post.get("name"))
         phone = staff_booking.clean_phone(post.get("phone"))
+        address = staff_booking.clean_address(post.get("address"))
+        city = staff_booking.clean_city(post.get("city"))
+        postal_code = staff_booking.clean_postal_code(post.get("postal_code"))
         notebook_number = staff_booking.clean_notebook_number(post.get("notebook_number"))
         account = staff_booking.find_account(post.get("account"))
         try:
@@ -343,7 +421,9 @@ def booking_create_view(request):
             name=name,
             phone=phone,
             account=account,
-            address=(post.get("address") or "").strip(),
+            address=address,
+            city=city,
+            postal_code=postal_code,
             notebook_number=notebook_number,
             lines=lines,
             payment=payment,

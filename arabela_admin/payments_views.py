@@ -448,6 +448,7 @@ def _online_row(attempt, now):
     attempt.channel_label = gateway.CHANNEL_LABELS.get(attempt.channel, attempt.channel or "-")
     attempt.who = attempt.customer_name or (attempt.customer.get_username() if attempt.customer_id else "-")
     attempt.booking_code = attempt.reservation.reference_code if attempt.reservation_id else ""
+    attempt.staff_label = (attempt.payload or {}).get("staff_name", "") if attempt.source == PaymentAttempt.Source.WALKIN else ""
     attempt.can_refund = attempt.attention and attempt.refund_can_be_asked
     attempt.can_handle = attempt.attention
     return attempt

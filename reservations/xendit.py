@@ -211,7 +211,7 @@ def create_checkout_session(*, amount, name, description, reference_number, succ
         "metadata": {str(k)[:40]: str(v)[:500] for k, v in (metadata or {}).items()},
     }
     if expires_minutes:
-        body["expires_at"] = _iso_utc(datetime.now(dt_timezone.utc) + timedelta(minutes=max(int(expires_minutes), 10)))
+        body["expires_at"] = _iso_utc(datetime.now(dt_timezone.utc) + timedelta(minutes=max(int(expires_minutes), 11)))
     payload = _request("POST", "/sessions", body)
     session_id = str(payload.get("payment_session_id") or "")
     if not session_id.startswith("ps-"):

@@ -59,6 +59,14 @@ def payment_return(request, token):
     })
 
 
+@never_cache
+def walkin_pay_done(request, token):
+    """Where a walk-in customer's phone lands after the payment page (paid, closed or cancelled). It says nothing about the payment -- the shop's own screen
+    shows that -- so it needs no sign-in and shows no details."""
+    get_object_or_404(PaymentAttempt, token=token, source=PaymentAttempt.Source.WALKIN)
+    return render(request, "walkin_pay_done.html", {})
+
+
 @login_required(login_url="accounts:login")
 @never_cache
 def payment_status(request, token):

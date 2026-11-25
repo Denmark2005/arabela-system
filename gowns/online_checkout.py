@@ -405,6 +405,9 @@ def _make_booking(attempt_id):
 def _create_booking(attempt):
     """Make the confirmed booking and its payment for a paid attempt. Runs inside the caller's transaction; raises BookingUnavailable (before writing
     anything that matters) when a gown can no longer be booked."""
+    if attempt.source == PaymentAttempt.Source.WALKIN:
+        from gowns import walkin_payment                    # a walk-in customer paid on their phone from the shop's QR code
+        return walkin_payment.create_booking(attempt)
     payload = attempt.payload or {}
     user = attempt.customer
     if user is None:

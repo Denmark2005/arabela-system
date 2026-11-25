@@ -83,6 +83,31 @@ def phone_display(phone: str) -> str:
     return phone or ""
 
 
+def clean_city(raw) -> str:
+    """Optional. The town or city, as typed (100 characters at most, the same limit the website's checkout keeps)."""
+    city = re.sub(r"\s+", " ", str(raw or "")).strip()
+    if len(city) > 100:
+        raise BookingError("The city is too long (100 characters at most).")
+    return city
+
+
+def clean_postal_code(raw) -> str:
+    """Optional. Letters, digits, spaces and dashes, 10 characters at most (the website's postal box keeps 10)."""
+    code = re.sub(r"\s+", " ", str(raw or "")).strip()
+    if len(code) > 10:
+        raise BookingError("The postal code is too long (10 characters at most).")
+    if code and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 -]*", code):
+        raise BookingError("The postal code can only have letters, numbers, spaces and dashes.")
+    return code
+
+
+def clean_address(raw) -> str:
+    address = re.sub(r"\s+", " ", str(raw or "")).strip()
+    if len(address) > 255:
+        raise BookingError("The address is too long (255 characters at most).")
+    return address
+
+
 def clean_notebook_number(raw) -> str:
     """Optional. Capital letters, digits, spaces, dashes, slashes and #; at most 30 characters."""
     number = re.sub(r"\s+", " ", str(raw or "")).strip().upper()
@@ -187,6 +212,19 @@ def check_line(line, *, now, is_owner):
     )
 
 
+def lock_and_check(lines, *, now, is_owner):
+    """Locks the chosen gowns (in the same order record_booking and checkout lock them) and judges every line; sets line["pickup"] and
+    line["return_date"]. MUST run inside transaction.atomic(). Raises BookingError (409) for the first gown that cannot be booked."""
+    ordered = sorted(lines, key=lambda line: (line["gown"].name.casefold(), line["gown"].id))
+    for line in ordered:
+        line["gown"] = Gown.objects.select_for_update().get(id=line["gown"].id)
+        result = check_line(line, now=now, is_owner=is_owner)
+        if not result["ok"]:
+            raise BookingError(availability.check_message(line["gown"], result), status=409)
+        line["pickup"] = result["pickup"]
+        line["return_date"] = result["return_date"]
+
+
 # ---------------------------------------------------------------- payment
 def purpose_for(payment) -> str:
     """What the payment recorded with the booking is for: decided by the Payment choice, never asked for separately."""
@@ -204,12 +242,22 @@ def check_payment(*, payment, lines):
 
 
 # ---------------------------------------------------------------- saving
+def _online_method(attempt):
+    """The booking's "how it was paid" label for a payment that came in online (the same labels the website's checkout writes); '' for a counter payment."""
+    if attempt is None:
+        return ""
+    return {"gcash": Reservation.PaymentMethod.GCASH, "paymaya": Reservation.PaymentMethod.MAYA, "qrph": Reservation.PaymentMethod.QRPH}.get(attempt.channel, "")
+
+
 def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, account, address, notebook_number,
-                   lines, payment, method, reference, amount, note, request_id="", now=None):
+                   lines, payment, method, reference, amount, note, request_id="", now=None, city="", postal_code="", online_attempt=None):
     """Save the booking AND the payment taken for it. Everything is checked again inside one transaction with the gowns locked, so neither
     another staff member nor an online customer can take the same gown in between: either the whole booking (with its receipt) is saved,
     or nothing. `method` is Cash or GCash (with its 13-digit `reference`), `amount` is what the staff member confirmed was received (it must
-    be exactly what the choice asks for). Returns the new Reservation, with the Payment on `reservation.first_payment`."""
+    be exactly what the choice asks for). Returns the new Reservation, with the Payment on `reservation.first_payment`.
+
+    `online_attempt`: the customer paid on their phone from the shop's QR code (gowns/walkin_payment.py). The booking is made exactly the same
+    way, but the payment recorded with it is that online payment (method, amount and reference come from the PaymentAttempt, not from staff typing)."""
     now = now or availability.now_local()
     if channel not in STAFF_CHANNELS:
         raise BookingError("Only walk-in bookings can be recorded here. Bookings from the website come in by themselves.")
@@ -225,14 +273,7 @@ def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, a
         with transaction.atomic():
             # Lock the chosen gowns one by one in the same order checkout locks gowns (by name), so this can never deadlock
             # with an online checkout for the same gowns; whoever is second waits, then sees the first one's booking.
-            ordered = sorted(lines, key=lambda line: (line["gown"].name.casefold(), line["gown"].id))
-            for line in ordered:
-                line["gown"] = Gown.objects.select_for_update().get(id=line["gown"].id)
-                result = check_line(line, now=now, is_owner=is_owner)
-                if not result["ok"]:
-                    raise BookingError(availability.check_message(line["gown"], result), status=409)
-                line["pickup"] = result["pickup"]
-                line["return_date"] = result["return_date"]
+            lock_and_check(lines, now=now, is_owner=is_owner)
 
             rental_subtotal = sum((line["gown"].rental_price for line in lines), Decimal("0"))
             security_deposit = deposit.for_gowns(len(lines))
@@ -241,6 +282,9 @@ def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, a
                 customer_name=name,
                 phone=phone,
                 address=(address or "")[:255],
+                city=(city or "")[:100],
+                postal_code=(postal_code or "")[:10],
+                payment_method=_online_method(online_attempt),
                 status=Reservation.Status.CONFIRMED,        # something was paid at the shop, so it is confirmed at once
                 rental_subtotal=rental_subtotal,
                 security_deposit=security_deposit,
@@ -292,6 +336,8 @@ def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, a
             )
             full = payment == PAYMENT_FULL
             payment_text = "Paid in full." if full else "Deposit paid; the rental is still to pay."
+            if online_attempt is not None:
+                payment_text = "Paid online on the customer's phone (QR code). " + payment_text
             ReservationStatusEvent.record(
                 reservation, STAFF_NOTE_LABEL,
                 detail=f"{staff_name}: {channel_text}. {payment_text}" + (f" Note: {note}" if note else ""),
@@ -299,8 +345,8 @@ def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, a
             )
             ReservationStatusEvent.record(
                 reservation, APPROVED_LABEL,
-                detail="Paid at the shop. Your booking is confirmed." if full
-                else "Deposit paid at the shop. Your booking is confirmed.",
+                detail=("Paid at the shop. Your booking is confirmed." if full else "Deposit paid at the shop. Your booking is confirmed.")
+                if online_attempt is None else "Your payment was received. Your booking is confirmed.",
                 actor=ReservationStatusEvent.Actor.STAFF,
             )
             for line in lines:
@@ -314,9 +360,20 @@ def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, a
             # The payment taken at the counter: recorded with its numbered receipt in this same transaction. A refusal (a wrong amount, a GCash
             # number that was already used) undoes the whole booking, so nothing is half-saved.
             try:
-                reservation.first_payment = payments.record_payment(
-                    reservation_id=reservation.pk, purpose=purpose_for(payment), amount=amount, method=method, reference=reference,
-                    user=recorded_by, request_id=request_id, now=timezone.now())
+                if online_attempt is None:
+                    reservation.first_payment = payments.record_payment(
+                        reservation_id=reservation.pk, purpose=purpose_for(payment), amount=amount, method=method, reference=reference,
+                        user=recorded_by, request_id=request_id, now=timezone.now())
+                else:
+                    reservation.first_payment = payments.record_online_payment(
+                        reservation=reservation, purpose=purpose_for(payment), amount=online_attempt.paid_amount, channel=online_attempt.channel,
+                        provider_ref=online_attempt.provider_payment_id, paid_at=online_attempt.paid_at, livemode=online_attempt.livemode,
+                        request_id=f"pm-{online_attempt.pk}", served_by_user=recorded_by)
+                    ReservationStatusEvent.record(
+                        reservation, "Booked and paid online",
+                        detail=(f"{staff_name} started the payment at the shop; the customer paid on their phone and it was confirmed automatically. "
+                                f"Payment {online_attempt.provider_payment_id}." + ("" if online_attempt.livemode else " TEST PAYMENT: no real money moved.")),
+                        actor=ReservationStatusEvent.Actor.SYSTEM, staff_only=True)
             except payments.PaymentError as exc:
                 raise BookingError(exc.message, status=exc.status)
     except IntegrityError:
