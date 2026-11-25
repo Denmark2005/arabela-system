@@ -44,6 +44,14 @@ def jpeg_bytes(size=(800, 500), color="white", exif=False):
     return out.getvalue()
 
 
+def stored_files():
+    """The names of the picture files in the (temporary) file storage right now: a test compares before and after to prove no file was left behind."""
+    try:
+        return set(default_storage.listdir("id_photos")[1])
+    except FileNotFoundError:
+        return set()
+
+
 def set_switch(on):
     """The owner's switch (the settings row is created on first read, so it is made first)."""
     shop = SiteSettings.load()
@@ -649,6 +657,29 @@ class PictureTests(Base):
         with patch.object(identity_photos, "MAX_PIXELS", 100), self.assertRaises(identity_photos.PhotoError):
             identity_photos.shrink(jpeg_bytes())
 
+    def test_what_staff_upload_is_read_only_when_it_is_there_and_a_sensible_size(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        self.assertIsNone(identity_photos.read_upload(None, "front"))
+        self.assertEqual(identity_photos.read_upload(SimpleUploadedFile("a.jpg", b"abc"), "front"), b"abc")
+        with self.assertRaises(identity_photos.PhotoError) as empty:
+            identity_photos.read_upload(SimpleUploadedFile("a.jpg", b""), "back")
+        self.assertIn("back picture is empty", str(empty.exception))
+        with patch.object(identity_photos, "UPLOAD_MAX_BYTES", 10), self.assertRaises(identity_photos.PhotoError) as big:
+            identity_photos.read_upload(SimpleUploadedFile("a.jpg", b"x" * 11), "front")
+        self.assertEqual(big.exception.code, "too_large")
+
+    def test_removing_files_never_raises(self):
+        identity_photos.remove_files(["id_photos/does-not-exist.jpg", "", None])
+        identity_photos.remove_files(None)
+        with patch("reservations.identity_photos.default_storage.delete", side_effect=OSError("locked")):
+            identity_photos.remove_files(["id_photos/x.jpg"])
+
+    def test_a_huge_jpeg_is_decoded_already_scaled_down_and_comes_out_the_same_size_as_before(self):
+        big = jpeg_bytes(size=(6000, 4000))
+        kept = Image.open(io.BytesIO(identity_photos.shrink(big)))
+        self.assertEqual(max(kept.size), identity_photos.MAX_SIDE)
+        self.assertAlmostEqual(kept.width / kept.height, 6000 / 4000, delta=0.02)               # the shape is kept
+
     def test_one_picture_failing_keeps_the_other_and_a_later_try_finishes_the_job(self):
         started = self.start()
         check = IdentityCheck.objects.get(token=started["token"])
@@ -766,6 +797,8 @@ class WalkInTests(Base):
         kwargs.setdefault("name", "Lorna Reyes")
         kwargs.setdefault("phone", self.PHONE)
         kwargs.setdefault("id_type", "drivers_license")
+        kwargs.setdefault("front", jpeg_bytes())              # a counter check always leaves the front of the ID on file ...
+        kwargs.setdefault("consent", True)                    # ... with the customer's agreement
         return identity.counter_check(staff=self.staff, **kwargs)
 
     def test_checking_the_original_id_at_the_counter_is_recorded_with_who_and_when(self):
@@ -773,14 +806,122 @@ class WalkInTests(Base):
         self.assertEqual((check.source, check.status, check.decision_source, check.staff, check.decided_by, check.customer), ("counter", "approved", "counter", self.staff, self.staff, None))
         self.assertEqual((check.subject_name, check.subject_phone, check.id_type, check.note), ("Lorna Reyes", "09171234567", "drivers_license", "Checked the licence, expires 2029"))
         self.assertTrue(check.is_valid)
-        self.assertEqual((check.photos_state, check.photos.count()), ("", 0))            # a counter check has no picture
+        self.assertEqual((check.photos_state, check.photos.count()), ("stored", 1))      # the front of the ID is kept, for the owner
+        self.assertIsNotNone(check.consent_at)                                           # with the customer's agreement
         self.assertEqual(check.badge, ("ok", "ID checked at the counter"))
 
     def test_a_counter_check_needs_a_real_type_a_name_and_a_mobile_number(self):
+        before = stored_files()
         for kwargs in (dict(id_type="library_card"), dict(name=""), dict(phone=""), dict(phone="123")):
             with self.subTest(kwargs=kwargs), self.assertRaises(identity.IdentityError):
                 self.counter(**kwargs)
-        self.assertFalse(IdentityCheck.objects.exists())
+        self.assertEqual((IdentityCheck.objects.count(), stored_files() - before), (0, set()))
+
+    def test_a_counter_check_keeps_the_front_and_the_back_for_the_owner_and_nothing_from_the_camera(self):
+        before = stored_files()
+        check = self.counter(front=jpeg_bytes(size=(3000, 2000), exif=True), back=jpeg_bytes(size=(900, 600)))
+        self.assertEqual(sorted(check.photos.values_list("side", flat=True)), ["back", "front"])
+        self.assertEqual((check.photos_state, len(stored_files() - before)), ("stored", 2))
+        for photo in check.photos.all():
+            self.assertTrue(photo.storage_name.startswith("id_photos/"))
+            self.assertGreater(len(photo.storage_name), 40)                              # a long random name, never anything about the customer
+            kept = Image.open(io.BytesIO(identity_photos.read_photo(photo)))
+            self.assertEqual((kept.format, len(kept.getexif())), ("JPEG", 0))             # no camera or location details survive
+            self.assertLessEqual(max(kept.size), identity_photos.MAX_SIDE)
+        self.assertEqual(identity.staff_state(check)["pictures"], 2)
+
+    def test_the_back_of_the_id_is_optional_but_the_front_is_not(self):
+        only_front = self.counter()
+        self.assertEqual(list(only_front.photos.values_list("side", flat=True)), ["front"])
+        self.assertEqual(identity.staff_state(only_front)["pictures"], 1)
+        before = stored_files()
+        for kwargs in (dict(front=None), dict(front=None, back=jpeg_bytes())):
+            with self.subTest(kwargs=sorted(kwargs)), self.assertRaises(identity.IdentityError) as caught:
+                self.counter(name="Cora Diaz", phone="09170000000", **kwargs)
+            self.assertIn("front of the ID", caught.exception.message)
+        self.assertEqual((IdentityCheck.objects.count(), stored_files() - before), (1, set()))
+
+    def test_a_counter_check_needs_the_customers_agreement_that_the_shop_keeps_the_picture(self):
+        before = stored_files()
+        for consent in (False, None, "yes", 1):
+            with self.subTest(consent=consent), self.assertRaises(identity.IdentityError) as caught:
+                self.counter(consent=consent)
+            self.assertIn("customer agreed", caught.exception.message)
+        self.assertEqual((IdentityCheck.objects.count(), stored_files() - before), (0, set()))
+
+    def test_a_picture_that_cannot_be_read_stops_the_whole_check_and_no_file_is_left(self):
+        before = stored_files()
+        for bad in (b"", b"not a picture", b"%PDF-1.4 fake", b"<html>hi</html>"):
+            with self.subTest(front=bad[:8]), self.assertRaises(identity.IdentityError) as caught:
+                self.counter(front=bad)
+            self.assertEqual((caught.exception.status, "front picture" in caught.exception.message), (400, True))
+        with self.assertRaises(identity.IdentityError) as caught:
+            self.counter(back=b"junk")              # the front was fine and was saved first: it is taken away again
+        self.assertIn("back picture", caught.exception.message)
+        with patch.object(identity_photos, "MAX_PIXELS", 100), self.assertRaises(identity.IdentityError) as caught:
+            self.counter()
+        self.assertIn("too large", caught.exception.message)
+        self.assertEqual((IdentityCheck.objects.count(), IdentityPhoto.objects.count(), stored_files() - before), (0, 0, set()))
+
+    def test_a_storage_failure_halfway_takes_the_first_picture_away_again(self):
+        before = stored_files()
+        real, calls = default_storage.save, []
+
+        def flaky(name, content, *args, **kwargs):
+            calls.append(name)
+            if len(calls) == 2:
+                raise OSError("disk full")
+            return real(name, content, *args, **kwargs)
+
+        with patch("reservations.identity_photos.default_storage.save", side_effect=flaky), self.assertRaises(identity.IdentityError) as caught:
+            self.counter(back=jpeg_bytes())
+        self.assertEqual((len(calls), caught.exception.status, "could not be saved" in caught.exception.message), (2, 400, True))
+        self.assertEqual((IdentityCheck.objects.count(), IdentityPhoto.objects.count(), stored_files() - before), (0, 0, set()))
+
+    def test_a_failure_after_the_pictures_were_saved_leaves_no_check_and_no_file(self):
+        before = stored_files()
+        with patch("reservations.identity_photos.IdentityCheck") as broken, self.assertRaises(RuntimeError):
+            broken.objects.filter.return_value.update.side_effect = RuntimeError("boom")        # the very last step of keeping the pictures
+            self.counter(back=jpeg_bytes())
+        self.assertEqual((IdentityCheck.objects.count(), IdentityPhoto.objects.count(), stored_files() - before), (0, 0, set()))
+
+    def test_a_check_can_be_made_without_a_picture_only_when_the_caller_says_so(self):
+        check = self.counter(front=None, consent=False, require_photo=False)
+        self.assertEqual((check.photos_state, check.photos.count(), check.consent_at), ("", 0, None))
+        self.assertEqual(identity.staff_state(check)["pictures"], 0)
+
+    def test_checking_again_deletes_an_unused_counter_check_and_its_pictures_at_once(self):
+        check = self.counter(back=jpeg_bytes())
+        names = list(check.photos.values_list("storage_name", flat=True))
+        self.assertTrue(all(default_storage.exists(name) for name in names))
+        self.assertEqual(identity.discard_counter_check(token=check.token, staff=self.staff), "Lorna Reyes")
+        self.assertEqual((IdentityCheck.objects.count(), IdentityPhoto.objects.count()), (0, 0))
+        self.assertFalse(any(default_storage.exists(name) for name in names))
+
+    def test_only_the_one_who_made_the_check_or_the_owner_can_discard_it_and_never_one_a_booking_uses(self):
+        check = self.counter()
+        other = User.objects.create_user("cp_other_staff", password="x", is_staff=True)
+        with self.assertRaises(identity.IdentityError) as caught:
+            identity.discard_counter_check(token=check.token, staff=other)
+        self.assertEqual(caught.exception.status, 403)
+        self.assertTrue(IdentityCheck.objects.filter(pk=check.pk).exists())
+        reservation = Reservation.objects.create(customer=None, customer_name="Lorna", phone="09171234567", channel="Walk-in", status="Confirmed", identity_check=check)
+        with self.assertRaises(identity.IdentityError) as used:
+            identity.discard_counter_check(token=check.token, staff=self.staff, owner=True)
+        self.assertEqual(used.exception.status, 409)
+        self.assertEqual((IdentityCheck.objects.filter(pk=check.pk).exists(), check.photos.count()), (True, 1))
+        reservation.delete()
+        self.assertEqual(identity.discard_counter_check(token=check.token, staff=other, owner=True), "Lorna Reyes")      # the owner may
+
+    def test_checking_again_never_touches_a_qr_check_a_website_check_or_a_made_up_token(self):
+        online = self.verified()
+        qr = identity.start_walkin(staff=self.staff, name="Lorna Reyes", phone=self.PHONE, id_type="philid", callback_for=self.callback_for)
+        for token in (online.token, qr["token"], "nonsense", "", None):
+            with self.subTest(token=token), self.assertRaises(identity.IdentityError) as caught:
+                identity.discard_counter_check(token=token, staff=self.staff, owner=True)
+            self.assertEqual(caught.exception.status, 404)
+        self.assertEqual(IdentityCheck.objects.count(), 2)
+        self.assertEqual(online.photos.count(), 2)
 
     def test_the_qr_code_opens_a_page_for_the_customers_own_phone(self):
         answer = identity.start_walkin(staff=self.staff, name="Lorna Reyes", phone=self.PHONE, id_type="philid", callback_for=self.callback_for)
@@ -912,6 +1053,63 @@ class CleanupTests(Base):
         self.assertEqual(identity.cleanup_photos()[0], 0)
         IdentityCheck.objects.filter(pk=check.pk).update(verified_at=timezone.now() - timedelta(days=31))
         self.assertEqual(identity.cleanup_photos()[0], 1)
+
+    def counter_check(self, name="Lorna Reyes", phone="09171234567"):
+        return identity.counter_check(staff=self.staff, name=name, phone=phone, id_type="drivers_license", front=jpeg_bytes(), back=jpeg_bytes(), consent=True)
+
+    def aged(self, check, hours):
+        moment = timezone.now() - timedelta(hours=hours)
+        IdentityCheck.objects.filter(pk=check.pk).update(created_at=moment, verified_at=moment)
+
+    def test_a_counter_checks_pictures_go_twelve_hours_after_it_when_no_booking_was_made(self):
+        check = self.counter_check()
+        names = list(check.photos.values_list("storage_name", flat=True))
+        self.assertEqual(identity.cleanup_photos()[0], 0)                                   # just made: still good for a booking
+        self.aged(check, 11)
+        self.assertEqual(identity.cleanup_photos()[0], 0)
+        self.aged(check, 13)
+        self.assertEqual(identity.cleanup_photos()[0], 1)
+        check.refresh_from_db()
+        self.assertEqual((check.photos_state, check.photos.count()), ("deleted", 0))
+        self.assertFalse(any(default_storage.exists(name) for name in names))
+        self.assertEqual(identity.cleanup_photos()[0], 0)                                   # again: harmless
+
+    def test_a_qr_walk_in_check_that_never_became_a_booking_follows_the_same_twelve_hours(self):
+        answer = identity.start_walkin(staff=self.staff, name="Lorna Reyes", phone="09171234567", id_type="philid", callback_for=self.callback_for)
+        check = IdentityCheck.objects.get(token=answer["token"])
+        self.fake.finish(check.session_id, "Approved", name="LORNA REYES")
+        check = self.poll(check)
+        self.assertEqual((check.photos_state, check.photos.count()), ("stored", 2))
+        self.aged(check, 11)
+        self.assertEqual(identity.cleanup_photos()[0], 0)
+        self.aged(check, 13)
+        self.assertEqual(identity.cleanup_photos()[0], 1)
+        self.assertEqual(IdentityCheck.objects.get(pk=check.pk).photos_state, "deleted")
+
+    def test_a_walk_ins_check_that_became_a_booking_keeps_its_pictures_thirty_days_after_the_return(self):
+        check = self.counter_check()
+        self.aged(check, 40)                                                                 # old, but a booking stands on it
+        self.booking(check, status="Active", returned=None)
+        self.assertEqual(identity.cleanup_photos()[0], 0)
+        Reservation.objects.all().delete()
+        self.booking(check, returned=timezone.localdate() - timedelta(days=5))
+        self.assertEqual(identity.cleanup_photos()[0], 0)                                   # returned 5 days ago: the 30 days have not passed
+        Reservation.objects.all().delete()
+        self.booking(check, returned=timezone.localdate() - timedelta(days=31))
+        self.assertEqual(identity.cleanup_photos()[0], 1)
+
+    def test_an_online_customers_check_is_not_cut_to_twelve_hours(self):
+        check = self.verified()
+        self.aged(check, 100)
+        self.assertEqual(identity.cleanup_photos()[0], 0)                                   # 30 days from verification, as before
+
+    def test_the_twelve_hour_rule_is_met_even_with_a_long_queue_of_checks_that_must_stay(self):
+        keep = [self.verified(user) for user in (self.ana, self.ben)]
+        stale = self.counter_check()
+        self.aged(stale, 13)
+        self.assertEqual(identity.cleanup_photos(limit=1)[0], 1)                            # the queue is only one long, yet the walk-in check is the one that goes
+        self.assertEqual([c.photos.count() for c in keep], [2, 2])
+        self.assertEqual(IdentityCheck.objects.get(pk=stale.pk).photos_state, "deleted")
 
     def test_running_it_twice_or_on_a_check_with_no_pictures_is_harmless(self):
         check = self.verified()

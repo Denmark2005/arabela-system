@@ -3,11 +3,12 @@
 The rules (decided with the owner, 2026-11-25):
   * A customer must have a verified valid ID BEFORE they can pay online, and staff must record one for every walk-in booking. The owner has one switch for both
     (SiteSettings.require_id_before_payment); the online rule also needs Didit to be set up (reservations/didit.py), because a customer cannot verify without it.
-  * Staff can satisfy the walk-in rule two ways: the customer verifies on their own phone from a QR code (Didit), or staff look at the ORIGINAL ID at the counter
-    and confirm it (their name and the time are kept, and it is audited). A linked website account that is already verified also counts.
+  * Staff can satisfy the walk-in rule two ways: the customer verifies on their own phone from a QR code (Didit), or staff look at the ORIGINAL ID at the counter,
+    add a photo of its FRONT (and its back if it has one) and confirm it, with the customer's agreement that the shop keeps the picture (their name and the time are kept,
+    and it is audited). A linked website account that is already verified also counts.
   * A verified ID counts for 12 months. Didit's "In Review" results are decided by the OWNER (approve / decline); staff cannot.
-  * What is kept: the result, the ID type and the front and back pictures (owner-only, deleted 30 days after the customer's last return). Never the selfie or the
-    ID number.
+  * What is kept: the result, the ID type and the front and back pictures (owner-only, deleted 30 days after the customer's last return -- or 12 hours after a walk-in's
+    check when it never became a booking). Never the selfie or the ID number.
 
 Like a payment, a check is never believed from the browser or from a webhook's body: the server reads the decision back from Didit (`refresh`)."""
 import logging
@@ -37,9 +38,12 @@ WALKIN_CHECK_LIFE = timedelta(hours=12)       # a walk-in's check must be used f
 START_LIMIT = (10, 60 * 60)                   # "Verify my ID" presses per account per hour
 WALKIN_START_LIMIT = (30, 10 * 60)            # QR codes / counter checks per staff member per 10 minutes
 RETRY_FAILED_FOR = timedelta(days=3)          # a picture copy that failed is tried again for this long
+UNUSED_PHOTOS_KEEP = WALKIN_CHECK_LIFE        # a walk-in's pictures go this long after its check when no booking was ever made on it (the check is useless after that anyway)
 
 CONSENT_TEXT = ("I agree that Arabela Gown Rental may check my valid ID with its verification service, and may keep the front and back "
                 "pictures of my ID, seen only by the shop owner, until 30 days after my last return.")
+# What staff tick at the counter after asking the customer out loud (the customer is standing there, so staff answer for them; who ticked, and when, is kept and audited).
+COUNTER_CONSENT_TEXT = "The customer agreed that the shop keeps a picture of their ID, seen only by the owner, until 30 days after their last return."
 
 S = IdentityCheck.Status
 SRC = IdentityCheck.Source
@@ -380,21 +384,59 @@ def start_walkin(*, staff, name, phone, id_type, callback_for):
     return _open_session(check, vendor_data=f"w{check.pk}", callback_for=callback_for)
 
 
-def counter_check(*, staff, name, phone, id_type, note=""):
-    """Staff looked at the customer's ORIGINAL valid ID at the counter and confirm it. Kept: who, when, the ID type and a note (no picture). Returns the check."""
+def counter_check(*, staff, name, phone, id_type, note="", front=None, back=None, consent=False, require_photo=True):
+    """Staff looked at the customer's ORIGINAL valid ID at the counter and confirm it. Kept: who, when, the ID type, a note and the picture(s) of the ID that staff added:
+    the FRONT is required (`require_photo`, so a counter check always leaves the ID on file), the back is optional. Adding pictures needs `consent` (the customer agreed that
+    the shop keeps them). `front` / `back` are the picture bytes (identity_photos.read_upload). ALL OR NOTHING: when anything fails, no check is made and no file is left behind."""
     if id_type not in IdentityCheck.IdType.values:
         raise IdentityError("Choose the kind of ID you checked.")
     name = re.sub(r"\s+", " ", str(name or "")).strip()[:120]
     digits = _clean_phone(phone)
     if not name or len(digits) != 11:
         raise IdentityError("Type the customer's name and mobile number first. The ID check is made for that customer.")
+    if require_photo and front is None:
+        raise IdentityError("Add a photo of the front of the ID. The shop keeps it on file for the owner.")
+    if back is not None and front is None:
+        raise IdentityError("Add the photo of the front of the ID first.")
+    if front is not None and consent is not True:
+        raise IdentityError("Tick the box to say the customer agreed that the shop keeps a picture of their ID.")
     if not rate_limit.allowed(f"idwalkin:{staff.pk}", *WALKIN_START_LIMIT):
         raise IdentityError("That was a lot of ID checks in a short time. Please wait a minute and try again.", 429)
     now = timezone.now()
-    return IdentityCheck.objects.create(
-        token=secrets.token_urlsafe(24), source=SRC.COUNTER, status=S.APPROVED, staff=staff, subject_name=name, subject_phone=digits, id_type=id_type,
-        note=re.sub(r"\s+", " ", str(note or "")).strip()[:200], decision_source=IdentityCheck.DecisionSource.COUNTER, decided_by=staff, decided_at=now,
-        verified_at=now, expires_at=now + VALID_FOR, finished_at=now, consent_at=now)
+    names = []
+    try:
+        with transaction.atomic():
+            check = IdentityCheck.objects.create(
+                token=secrets.token_urlsafe(24), source=SRC.COUNTER, status=S.APPROVED, staff=staff, subject_name=name, subject_phone=digits, id_type=id_type,
+                note=re.sub(r"\s+", " ", str(note or "")).strip()[:200], decision_source=IdentityCheck.DecisionSource.COUNTER, decided_by=staff, decided_at=now,
+                verified_at=now, expires_at=now + VALID_FOR, finished_at=now, consent_at=now if front is not None else None)
+            if front is not None:
+                names = identity_photos.store_photos(check, [("front", front)] + ([("back", back)] if back is not None else []))
+    except identity_photos.PhotoError as exc:
+        identity_photos.remove_files(names)
+        raise IdentityError(str(exc), 400) from exc
+    except Exception:
+        identity_photos.remove_files(names)             # a failure after the pictures were saved (even the commit itself): no file is left behind
+        raise
+    return check
+
+
+def discard_counter_check(*, token, staff, owner=False):
+    """Staff pressed "Check again" (or changed the mobile number) on a counter check that no booking uses: it is DELETED at once, with its pictures. Only the member of staff who
+    made it (or the owner) can; a check a booking already rests on is never touched. Returns the customer's name (for the Audit Log)."""
+    with transaction.atomic():
+        # The row is locked while it is judged and deleted: a booking saved at the same moment either finishes first (then this refuses) or waits and finds the check gone (then
+        # that booking is not saved and the screen asks to check the ID again). A booking can never lose its ID check halfway.
+        check = IdentityCheck.objects.select_for_update().filter(token=str(token or ""), source=SRC.COUNTER).first()
+        if check is None:
+            raise IdentityError("That ID check was not found.", 404)
+        if check.staff_id != staff.pk and not owner:
+            raise IdentityError("Only the person who made this ID check can discard it.", 403)
+        if check.reservations.exists():
+            raise IdentityError("This ID check is already used for a booking.", 409)
+        name = check.subject_name
+        check.delete()              # its pictures go with it: each picture's file is removed by the record's delete rule
+    return name
 
 
 def staff_state(check):
@@ -404,6 +446,8 @@ def staff_state(check):
            "reasons": list(check.reasons or []), "counter": check.decision_source == IdentityCheck.DecisionSource.COUNTER}
     if check.status == S.APPROVED and check.expires_at:
         out["until"] = _plain_day(timezone.localtime(check.expires_at))
+    if check.source == SRC.COUNTER:
+        out["pictures"] = check.photos.count()                  # how many pictures were kept (never the pictures themselves: staff do not see them again)
     return out
 
 
@@ -492,12 +536,15 @@ def _last_return_day(check):
 
 
 def photos_due(check, now=None):
-    """True when this check's pictures should be gone: no booking on it is still open, and 30 days have passed since the last return (or, with no booking, since it was verified)."""
+    """True when this check's pictures should be gone: no booking on it is still open, and 30 days have passed since the last return. A WALK-IN's check (QR or counter) that never
+    became a booking is useless after 12 hours (it cannot be used for one any more), so its pictures go then. An online customer's check is not tied to a booking: 30 days after it was verified."""
     now = now or timezone.now()
     last = _last_return_day(check)
     if last is None and check.reservations.filter(status__in=OPEN_RESERVATION).exists():
         return False
     anchor = timezone.make_aware(datetime.combine(last, time.min)) if last else (check.verified_at or check.created_at)
+    if last is None and check.source in (SRC.WALKIN, SRC.COUNTER) and not check.reservations.exists():
+        return now - anchor >= UNUSED_PHOTOS_KEEP
     return now - anchor >= PHOTOS_KEEP
 
 
@@ -505,14 +552,25 @@ def cleanup_photos(now=None, limit=200):
     """Delete the pictures that are due, and try again the copies that failed. Returns (deleted_checks, retried). Safe to run any number of times."""
     now = now or timezone.now()
     deleted = 0
-    kept = IdentityCheck.objects.filter(photos_state__in=('stored', 'failed', 'pending', 'copying')).order_by('id')[:limit]
-    for check in kept:
-        try:
-            if photos_due(check, now):
-                identity_photos.delete_photos(check)
-                deleted += 1
-        except Exception:       # noqa: BLE001 -- one bad row must not stop the rest
-            logger.exception("ID photos of check %s could not be cleaned up", check.pk)
+    live = ('stored', 'failed', 'pending', 'copying')
+    batches = (
+        # A walk-in's check that never became a booking and is past its 12 hours goes first, however many other checks are waiting behind it.
+        IdentityCheck.objects.filter(source__in=(SRC.WALKIN, SRC.COUNTER), photos_state__in=live, reservations__isnull=True,
+                                     created_at__lte=now - UNUSED_PHOTOS_KEEP).order_by('id'),
+        IdentityCheck.objects.filter(photos_state__in=live).order_by('id'),
+    )
+    seen = set()
+    for batch in batches:
+        for check in batch[:limit]:
+            if check.pk in seen:
+                continue
+            seen.add(check.pk)
+            try:
+                if photos_due(check, now):
+                    identity_photos.delete_photos(check)
+                    deleted += 1
+            except Exception:       # noqa: BLE001 -- one bad row must not stop the rest
+                logger.exception("ID photos of check %s could not be cleaned up", check.pk)
     retried = 0
     for check in IdentityCheck.objects.filter(photos_state__in=('failed', 'pending'), status__in=(S.APPROVED, S.DECLINED, S.REVIEW),
                                               updated_at__gte=now - RETRY_FAILED_FOR).exclude(session_id='')[:10]:

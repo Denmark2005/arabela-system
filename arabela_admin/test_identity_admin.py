@@ -9,6 +9,7 @@ from unittest.mock import patch
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.files.storage import default_storage
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
 from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
@@ -20,7 +21,7 @@ from gowns.models import Gown, SiteSettings
 from gowns.test_xendit_checkout import FakeXendit, SETTINGS as XENDIT_SETTINGS
 from reservations import didit, identity, identity_photos
 from reservations.models import IdentityCheck, IdentityPhoto, PaymentAttempt, Reservation, ReservationItem
-from reservations.test_identity import FakeDidit, SETTINGS as DIDIT_SETTINGS, set_switch
+from reservations.test_identity import FakeDidit, SETTINGS as DIDIT_SETTINGS, jpeg_bytes, set_switch, stored_files
 
 User = get_user_model()
 S = IdentityCheck.Status
@@ -83,6 +84,8 @@ class Base(TestCase):
         kwargs.setdefault("name", "Lorna Reyes")
         kwargs.setdefault("phone", PHONE)
         kwargs.setdefault("id_type", "drivers_license")
+        kwargs.setdefault("front", jpeg_bytes())                    # a counter check always leaves the front of the ID on file, with the customer's agreement
+        kwargs.setdefault("consent", True)
         return identity.counter_check(staff=self.staff, **kwargs)
 
     def post_json(self, client, url, body=None):
@@ -355,11 +358,26 @@ class OpenAndPictureTests(Base):
         self.assertEqual(AuditLog.objects.get(action="id.view").outcome, "refused")        # the refusal is written too
         self.assertEqual(self.staff_client.post(url).status_code, 405)
 
-    def test_a_counter_check_opens_with_no_pictures_and_says_who_checked_it(self):
-        check = self.counter(note="Checked the licence")
+    def test_a_counter_check_opens_with_its_pictures_front_first_and_says_who_checked_it(self):
+        check = self.counter(note="Checked the licence", back=jpeg_bytes())
         body = self.owner_client.get(reverse("arabela_admin:id_check_open", args=[check.pk])).json()
-        self.assertEqual((body["photosList"], body["canDelete"], body["decidedBy"], body["note"]), ([], False, "Maria Cruz", "Checked the licence"))
+        self.assertEqual([p["side"] for p in body["photosList"]], ["Front", "Back"])
+        self.assertEqual((body["canDelete"], body["decidedBy"], body["note"], body["photosWords"]), (True, "Maria Cruz", "Checked the licence", "Front and back kept"))
         self.assertEqual(body["words"], "ID checked at the counter")
+        for photo in body["photosList"]:
+            self.assertEqual(self.owner_client.get(photo["url"]).status_code, 200)             # the owner sees them ...
+            self.assertEqual(self.staff_client.get(photo["url"]).status_code, 403)             # ... the member of staff who took them does not
+
+    def test_a_counter_check_with_only_the_front_says_so(self):
+        check = self.counter()
+        body = self.owner_client.get(reverse("arabela_admin:id_check_open", args=[check.pk])).json()
+        self.assertEqual(([p["side"] for p in body["photosList"]], body["photosWords"]), (["Front"], "Front kept"))
+
+    def test_an_older_counter_check_without_pictures_says_none_were_kept(self):
+        check = self.counter(front=None, consent=False, require_photo=False)
+        body = self.owner_client.get(reverse("arabela_admin:id_check_open", args=[check.pk])).json()
+        self.assertEqual((body["photosList"], body["canDelete"], body["photosWords"]), ([], False, "None kept"))
+        self.assertIn("No pictures were kept for this check.", self.owner_client.get(reverse("arabela_admin:id_checks") + "?show=all").content.decode())
 
     def test_the_owner_opens_a_picture_through_our_own_address_and_it_is_never_cached(self):
         check = self.verified_online()
@@ -619,26 +637,159 @@ class WalkInEndpointTests(Base):
         self.assertEqual(self.staff_client.get(reverse("arabela_admin:booking_id_status", args=[online.token])).status_code, 404)
         self.assertEqual(self.staff_client.get(reverse("arabela_admin:booking_id_status", args=["nonsense"])).status_code, 404)
 
-    def test_the_counter_check_needs_the_tick_and_records_who_and_when(self):
-        url = reverse("arabela_admin:booking_id_counter")
-        data = {"name": "Lorna Reyes", "phone": PHONE, "id_type": "drivers_license", "note": "Original licence, expires 2029"}
-        self.assertEqual(self.staff_client.post(url, data=data).status_code, 400)                       # no tick
-        self.assertEqual(self.staff_client.post(url, data={**data, "confirmed": "0"}).status_code, 400)
-        response = self.staff_client.post(url, data={**data, "confirmed": "1"})
+    def upload(self, *, front=True, back=False, client=None, drop=(), **extra):
+        """What the New Booking screen sends for "Checked at the counter": the words as form fields and the pictures as files (multipart)."""
+        data = {"name": "Lorna Reyes", "phone": PHONE, "id_type": "drivers_license", "note": "Original licence, expires 2029", "confirmed": "1", "consent": "1"}
+        for side, value in (("front", front), ("back", back)):
+            if value:
+                data[side] = SimpleUploadedFile(f"{side}.jpg", value if isinstance(value, bytes) else jpeg_bytes(), content_type="image/jpeg")
+        data.update(extra)
+        for key in drop:
+            data.pop(key, None)
+        return (client or self.staff_client).post(reverse("arabela_admin:booking_id_counter"), data=data)
+
+    def test_the_counter_check_keeps_the_front_picture_and_records_who_when_and_the_agreement(self):
+        before = stored_files()
+        response = self.upload()
         body = response.json()
-        self.assertEqual((response.status_code, body["state"], body["counter"], body["staffName"], body["phone"]), (200, "approved", True, "Maria Cruz", PHONE))
+        self.assertEqual((response.status_code, body["state"], body["counter"], body["staffName"], body["phone"], body["pictures"]), (200, "approved", True, "Maria Cruz", PHONE, 1))
         check = IdentityCheck.objects.get(token=body["token"])
         self.assertEqual((check.source, check.status, check.decided_by, check.note), ("counter", "approved", self.staff, "Original licence, expires 2029"))
-        self.assertIn("recorded that the original ID of Lorna Reyes was checked at the counter", AuditLog.objects.get(action="id.counter_check").summary)
+        self.assertEqual((check.photos_state, list(check.photos.values_list("side", flat=True)), len(stored_files() - before)), ("stored", ["front"], 1))
+        self.assertIsNotNone(check.consent_at)
+        self.assertNotIn("photosList", body)                                                           # staff are never handed a picture or a link to one
+        self.assertFalse([key for key in body if "url" in key.lower() or "photo" in key.lower()])
+        row = AuditLog.objects.get(action="id.counter_check")
+        self.assertIn("recorded that the original ID of Lorna Reyes was checked at the counter and kept a picture of it for the owner", row.summary)
+        self.assertEqual(row.details, {"Kind of ID": "Driver's license", "Pictures kept for the owner": "front only"})
+
+    def test_the_back_of_the_id_is_kept_when_staff_took_it(self):
+        body = self.upload(back=True).json()
+        self.assertEqual(body["pictures"], 2)
+        self.assertEqual(sorted(IdentityCheck.objects.get(token=body["token"]).photos.values_list("side", flat=True)), ["back", "front"])
+        self.assertEqual(AuditLog.objects.get(action="id.counter_check").details["Pictures kept for the owner"], "front and back")
+
+    def test_the_counter_check_needs_the_tick_the_front_picture_and_the_customers_agreement(self):
+        before = stored_files()
+        no_tick, zero_tick = self.upload(drop=("confirmed",)), self.upload(confirmed="0")
+        self.assertEqual((no_tick.status_code, zero_tick.status_code), (400, 400))
+        self.assertIn("checked the customer's original ID", no_tick.json()["error"])
+        no_front = self.upload(front=False)
+        self.assertEqual(no_front.status_code, 400)
+        self.assertIn("front of the ID", no_front.json()["error"])
+        only_back = self.upload(front=False, back=True)
+        self.assertEqual((only_back.status_code, "front of the ID" in only_back.json()["error"]), (400, True))
+        for extra in (dict(drop=("consent",)), dict(consent="0"), dict(consent="")):
+            with self.subTest(extra=extra):
+                no_consent = self.upload(**extra)
+                self.assertEqual(no_consent.status_code, 400)
+                self.assertIn("customer agreed", no_consent.json()["error"])
+        self.assertEqual((IdentityCheck.objects.count(), stored_files() - before, AuditLog.objects.filter(action="id.counter_check").count()), (0, set(), 0))
+
+    def test_a_file_that_is_not_a_picture_or_too_big_is_refused_in_words_and_nothing_is_saved(self):
+        before = stored_files()
+        for junk in (b"hello", b"%PDF-1.4 not a picture", b"<html>hi</html>"):
+            with self.subTest(junk=junk[:6]):
+                response = self.upload(front=junk)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("front picture", response.json()["error"])
+        bad_back = self.upload(back=b"junk")                                                          # the front is good: it must not stay behind
+        self.assertEqual((bad_back.status_code, "back picture" in bad_back.json()["error"]), (400, True))
+        empty = self.upload(front=b"\xff")                                                            # a one-byte file is not a picture either
+        self.assertEqual(empty.status_code, 400)
+        big = self.upload(front=b"\xff\xd8" + b"0" * (9 * 1024 * 1024))
+        self.assertEqual(big.status_code, 400)
+        self.assertIn("over 8 MB", big.json()["error"])
+        self.assertEqual((IdentityCheck.objects.count(), IdentityPhoto.objects.count(), stored_files() - before), (0, 0, set()))
+
+    def test_a_request_far_too_big_is_turned_away_before_it_is_read(self):
+        before = stored_files()
+        huge = self.upload(front=b"\xff\xd8" + b"0" * (9 * 1024 * 1024), back=b"\xff\xd8" + b"0" * (9 * 1024 * 1024))
+        self.assertEqual(huge.status_code, 413)
+        self.assertIn("too big", huge.json()["error"])
+        self.assertEqual((IdentityCheck.objects.count(), stored_files() - before), (0, set()))
 
     def test_the_counter_check_needs_the_customer_and_a_staff_session(self):
-        url = reverse("arabela_admin:booking_id_counter")
-        good = {"name": "Lorna Reyes", "phone": PHONE, "id_type": "philid", "confirmed": "1"}
-        for extra in (dict(name=""), dict(phone="12"), dict(id_type="nope")):
-            self.assertEqual(self.staff_client.post(url, data={**good, **extra}).status_code, 400)
-        self.assertEqual(Client().post(url, data=good).status_code, 401)
-        self.assertEqual(self.login(self.customer).post(url, data=good).status_code, 401)
+        for extra in (dict(name=""), dict(phone="12"), dict(id_type="nope"), dict(id_type="")):
+            self.assertEqual(self.upload(**extra).status_code, 400)
+        self.assertEqual(self.upload(client=Client()).status_code, 401)
+        self.assertEqual(self.upload(client=self.login(self.customer)).status_code, 401)
+        self.assertEqual(self.staff_client.get(reverse("arabela_admin:booking_id_counter")).status_code, 405)
         self.assertFalse(IdentityCheck.objects.exists())
+
+    def test_the_new_booking_page_shows_the_picture_boxes_the_agreement_words_and_the_discard_address(self):
+        page = self.staff_client.get(reverse("arabela_admin:new_booking")).content.decode()
+        self.assertIn(identity.COUNTER_CONSENT_TEXT, page)                                       # the exact words staff tick for the customer
+        for words in ('id="nb-idcounter"', "Front of the ID", "Back of the ID", "Ask the customer first", "Picture of the ID"):
+            self.assertIn(words, page)
+        self.assertIn(reverse("arabela_admin:booking_id_discard", args=["TOKEN"]), page)         # "Check again" deletes the unused copy at this address
+        self.assertNotIn("{%", page)
+
+    def test_opening_new_booking_also_sweeps_the_pictures_that_are_due_and_a_failing_sweep_never_stops_the_page(self):
+        with patch("reservations.identity.run_cleanup_if_due") as sweep:
+            self.assertEqual(self.staff_client.get(reverse("arabela_admin:new_booking")).status_code, 200)
+        sweep.assert_called_once_with()
+        with patch("reservations.identity.run_cleanup_if_due", side_effect=RuntimeError("boom")):
+            self.assertEqual(self.staff_client.get(reverse("arabela_admin:new_booking")).status_code, 200)
+
+    def test_a_walk_in_check_nobody_booked_loses_its_pictures_when_new_booking_is_opened_twelve_hours_later(self):
+        from django.core.cache import cache
+        check = IdentityCheck.objects.get(token=self.upload(back=True).json()["token"])
+        moment = timezone.now() - timedelta(hours=13)
+        IdentityCheck.objects.filter(pk=check.pk).update(created_at=moment, verified_at=moment)
+        names = list(check.photos.values_list("storage_name", flat=True))
+        cache.delete("arabela:id-photos:last-run")
+        self.assertEqual(self.staff_client.get(reverse("arabela_admin:new_booking")).status_code, 200)
+        cache.delete("arabela:id-photos:last-run")
+        check.refresh_from_db()
+        self.assertEqual((check.photos_state, check.photos.count()), ("deleted", 0))
+        self.assertFalse(any(default_storage.exists(name) for name in names))
+
+    def test_many_counter_checks_in_a_short_time_are_slowed_down_and_leave_no_file(self):
+        before = stored_files()
+        with patch("reservations.identity.WALKIN_START_LIMIT", (2, 600)):
+            statuses = [self.upload().status_code for _ in range(4)]
+        self.assertEqual(statuses, [200, 200, 429, 429])
+        self.assertEqual((IdentityCheck.objects.count(), len(stored_files() - before)), (2, 2))
+
+    def test_checking_again_throws_away_an_unused_counter_check_and_its_pictures(self):
+        check = IdentityCheck.objects.get(token=self.upload(back=True).json()["token"])
+        names = list(check.photos.values_list("storage_name", flat=True))
+        url = reverse("arabela_admin:booking_id_discard", args=[check.token])
+        response = self.staff_client.post(url)
+        self.assertEqual((response.status_code, response.json()), (200, {"success": True, "name": "Lorna Reyes"}))
+        self.assertEqual((IdentityCheck.objects.count(), IdentityPhoto.objects.count()), (0, 0))
+        self.assertFalse(any(default_storage.exists(name) for name in names))
+        self.assertIn("discarded the unused ID check of Lorna Reyes and deleted its pictures", AuditLog.objects.get(action="id.counter_discard").summary)
+        self.assertEqual(self.staff_client.post(url).status_code, 404)                                  # again: nothing left, nothing breaks
+
+    def test_only_the_one_who_made_it_or_the_owner_can_discard_and_never_a_check_a_booking_uses(self):
+        check = IdentityCheck.objects.get(token=self.upload().json()["token"])
+        url = reverse("arabela_admin:booking_id_discard", args=[check.token])
+        other = User.objects.create_user("ida_other_staff", password="x", is_staff=True)
+        UserProfile.objects.update_or_create(user=other, defaults={"role": UserProfile.Role.STAFF})
+        self.assertEqual(self.login(other).post(url).status_code, 403)
+        self.assertEqual(Client().post(url).status_code, 401)
+        self.assertEqual(self.login(self.customer).post(url).status_code, 401)
+        self.assertEqual(self.staff_client.get(url).status_code, 405)
+        self.assertEqual((IdentityCheck.objects.filter(pk=check.pk).exists(), check.photos.count()), (True, 1))
+        reservation = Reservation.objects.create(customer=None, customer_name="Lorna", phone=PHONE, channel="Walk-in", status="Confirmed", identity_check=check)
+        self.assertEqual(self.owner_client.post(url).status_code, 409)                                    # a booking stands on it
+        self.assertEqual((IdentityCheck.objects.filter(pk=check.pk).exists(), check.photos.count()), (True, 1))
+        reservation.delete()
+        self.assertEqual(self.owner_client.post(url).status_code, 200)                                    # the owner may, once nothing stands on it
+        self.assertFalse(IdentityCheck.objects.exists())
+
+    def test_checking_again_never_touches_a_qr_check_or_a_website_check(self):
+        online = self.verified_online()
+        qr = IdentityCheck.objects.get(token=self.start_qr().json()["token"])
+        for token in (online.token, qr.token, "nonsense"):
+            self.assertEqual(self.owner_client.post(reverse("arabela_admin:booking_id_discard", args=[token])).status_code, 404)
+        self.assertEqual(IdentityCheck.objects.count(), 2)
+        self.assertEqual(online.photos.count(), 2)
+
+    def start_qr(self):
+        return self.staff_client.post(reverse("arabela_admin:booking_id_start"), data={"name": "Cora Diaz", "phone": "09170000000", "id_type": "philid"})
 
     def test_staff_can_close_a_qr_code_that_is_still_open_and_not_one_that_finished(self):
         body = self.start().json()

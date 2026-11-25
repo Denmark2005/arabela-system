@@ -21,6 +21,7 @@ from .models import IdentityCheck, IdentityPhoto
 logger = logging.getLogger(__name__)
 
 MAX_SIDE = 1600                       # the longest side of a kept picture, in pixels
+UPLOAD_MAX_BYTES = 8 * 1024 * 1024    # one picture staff add at the counter (a phone's photo is routinely 3-8 MB; it is shrunk before it is kept)
 MAX_PIXELS = 40_000_000               # a picture bigger than this is refused (a decompression bomb)
 COPY_STALE = timedelta(minutes=10)    # a copy that has been "being copied" this long was interrupted: it may be claimed again
 VIEW_SALT = "arabela-id-photo-view"
@@ -28,7 +29,11 @@ VIEW_MAX_AGE = 300                    # seconds a viewing link works
 
 
 class PhotoError(Exception):
-    """A picture that cannot be kept (not a picture, or too big)."""
+    """A picture that cannot be kept (not a picture, or too big). `code`: "unreadable" | "too_large" | "" (the words to show are the message)."""
+
+    def __init__(self, message, code=""):
+        super().__init__(message)
+        self.code = code
 
 
 def shrink(data):
@@ -38,7 +43,8 @@ def shrink(data):
             probe.verify()
         with Image.open(io.BytesIO(data)) as picture:
             if picture.width * picture.height > MAX_PIXELS:
-                raise PhotoError("The picture is too large.")
+                raise PhotoError("The picture is too large.", code="too_large")
+            picture.draft("RGB", (MAX_SIDE, MAX_SIDE))          # a big JPEG is decoded already scaled down (never below 1600 px): far less memory and time; other kinds ignore this
             picture = ImageOps.exif_transpose(picture).convert("RGB")
             picture.thumbnail((MAX_SIDE, MAX_SIDE))
             out = io.BytesIO()
@@ -47,7 +53,60 @@ def shrink(data):
     except PhotoError:
         raise
     except Exception as exc:        # noqa: BLE001 -- anything Pillow cannot read is "not a picture"
-        raise PhotoError("That is not a picture we can keep.") from exc
+        raise PhotoError("That is not a picture we can keep.", code="unreadable") from exc
+
+
+def read_upload(uploaded, side):
+    """The bytes of one picture a member of staff added at the counter (an entry of request.FILES), or None when nothing was added, or PhotoError in words for staff.
+    Only the SIZE is judged here; what the file really is gets decided by Pillow in shrink() (never by its name or the type the browser claims)."""
+    if uploaded is None:
+        return None
+    size = getattr(uploaded, "size", 0) or 0
+    if size <= 0:
+        raise PhotoError(f"The {side} picture is empty. Please take it again or choose it again.", code="unreadable")
+    if size > UPLOAD_MAX_BYTES:
+        raise PhotoError(f"The {side} picture is over 8 MB. Please take it again or choose a smaller photo.", code="too_large")
+    data = uploaded.read(UPLOAD_MAX_BYTES + 1)
+    if not data or len(data) > UPLOAD_MAX_BYTES:
+        raise PhotoError(f"The {side} picture could not be read. Please take it again or choose it again.", code="unreadable")
+    return data
+
+
+def remove_files(names):
+    """Remove stored picture files by name (after something failed). Never raises: a file that cannot be removed now is left to the clean-up."""
+    for name in names or []:
+        try:
+            default_storage.delete(name)
+        except Exception:       # noqa: BLE001
+            logger.warning("An ID picture file could not be removed just now")
+
+
+def store_photos(check, pictures):
+    """Keep the pictures staff added at the counter for `check`: [("front", bytes), ("back", bytes)]. Each one is shrunk, cleaned of camera and location details and kept under a
+    long random name, exactly like the pictures copied from Didit. ALL OR NOTHING: when one cannot be kept, the ones already saved are removed again and PhotoError (in words for
+    staff) is raised. Returns the stored file names."""
+    names = []
+    try:
+        for side, data in pictures:
+            try:
+                jpeg = shrink(data)
+            except PhotoError as exc:
+                if exc.code == "too_large":
+                    raise PhotoError(f"The {side} picture is too large. Please take it again.", code="too_large") from exc
+                raise PhotoError(f"The {side} picture is not a photo we can read. Please take it again or choose a JPG, PNG or WEBP picture.", code="unreadable") from exc
+            try:
+                name = default_storage.save(f"id_photos/{secrets.token_urlsafe(24)}.jpg", ContentFile(jpeg))
+            except Exception as exc:        # noqa: BLE001 -- the storage can fail; staff are told in words and nothing is left half-saved
+                logger.exception("A counter ID picture (%s) of check %s could not be stored", side, check.pk)
+                raise PhotoError(f"The {side} picture could not be saved just now. Please try again.") from exc
+            names.append(name)
+            IdentityPhoto.objects.create(id_check=check, side=side, storage_name=name, size_bytes=len(jpeg))
+        IdentityCheck.objects.filter(pk=check.pk).update(photos_state="stored", updated_at=timezone.now())
+        check.photos_state = "stored"               # the object in hand says what the row now says
+    except Exception:
+        remove_files(names)
+        raise
+    return names
 
 
 def copy_photos(check_id, decision=None):

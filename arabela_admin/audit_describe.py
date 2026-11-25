@@ -496,7 +496,22 @@ def id_walkin_start(ctx):
 
 def id_counter(ctx):
     name = (ctx.body or {}).get("name") or "a walk-in customer"
-    return {"summary": f"recorded that the original ID of {name} was checked at the counter", "details": _keep(ctx.data, "idTypeLabel")}
+    pictures = int((ctx.data or {}).get("pictures") or 0)
+    kept = {1: "front only", 2: "front and back"}.get(pictures, "")
+    details = {}
+    if (ctx.data or {}).get("idTypeLabel"):
+        details["Kind of ID"] = ctx.data["idTypeLabel"]
+    if kept:
+        details["Pictures kept for the owner"] = kept
+    summary = f"recorded that the original ID of {name} was checked at the counter"
+    if kept:
+        summary += " and kept a picture of it for the owner"
+    return {"summary": summary, "details": details}
+
+
+def id_counter_discard(ctx):
+    name = (ctx.data or {}).get("name") or "a walk-in customer"
+    return {"summary": f"discarded the unused ID check of {name} and deleted its pictures"}
 
 
 def id_walkin_cancel(ctx):

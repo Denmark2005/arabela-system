@@ -1217,7 +1217,7 @@
                 <span class="idc-state">{% if setting_on %}ID required{% else %}ID not required{% endif %}{% if not didit_on %} &middot; Didit not set up{% elif didit_test %} &middot; Didit test mode{% endif %}</span>
                 <details class="ht-tip"><summary aria-label="About ID checks" title="About ID checks">?</summary><div class="ht-tip-pop">
                   <p>{% if setting_on %}A valid ID is <strong>required</strong> before a customer pays online and before a walk-in booking is saved.{% else %}A valid ID is <strong>not required</strong> right now (switched off in Edit Profile).{% endif %}</p>
-                  <p>A verified ID counts for {{ valid_days }} days. The front and back pictures are deleted {{ keep_days }} days after the customer's last return; the selfie is never kept.</p>
+                  <p>A verified ID counts for {{ valid_days }} days. The pictures of the ID are deleted {{ keep_days }} days after the customer's last return, or 12 hours after a walk-in's check if no booking was made; the selfie is never kept.</p>
                   <p>{% if not didit_on %}<strong>ID verification is not set up</strong> (no Didit key), so customers cannot verify online; staff can still check the ID at the counter.{% elif didit_test %}Didit is in <strong>test mode</strong>: sample documents, no real checks.{% else %}Didit checks every ID for real.{% endif %}</p>
                 </div></details>
               </div>
@@ -1329,7 +1329,7 @@
           var n = document.createElement('p'); n.className = 'idc-sub';
           n.textContent = d.photos === 'deleted' ? 'The pictures were deleted. The result stays on record.'
             : (d.photos === 'failed' || d.photos === 'pending' || d.photos === 'copying') ? ('The pictures are not here yet. ' + (d.canRetry ? 'Press “Copy the pictures again” to try once more.' : 'They are being copied.'))
-            : 'There are no pictures for this check (a check at the counter keeps none).';
+            : 'No pictures were kept for this check.';
           pics.appendChild(n);
         }
         approve.hidden = decline.hidden = noteBox.hidden = !d.canDecide;
@@ -1365,7 +1365,7 @@
         sure('Decline this ID?', 'The customer is told their ID could not be verified and can try again.', function () { post('decide', { approve: false, note: noteBox.value }, function () { window.location.reload(); }); });
       });
       del.addEventListener('click', function () {
-        sure('Delete the pictures?', 'The front and back pictures are deleted for good. The result stays on record.', function () { post('delete', {}, function () { open(current.id); }); });
+        sure('Delete the pictures?', 'The pictures of this ID are deleted for good. The result stays on record.', function () { post('delete', {}, function () { open(current.id); }); });
       });
       retry.addEventListener('click', function () { post('retry', {}, function (d) { open(current.id); }); });
       Array.prototype.forEach.call(document.querySelectorAll('[data-open]'), function (b) { b.addEventListener('click', function () { open(b.getAttribute('data-open')); }); });

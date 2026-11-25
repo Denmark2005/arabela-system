@@ -79,6 +79,12 @@ def _backdate_days(request):
 @_require_admin_staff
 def new_booking_view(request):
     today = availability.now_local().date()
+    # The ID pictures of a walk-in check that never became a booking go 12 hours after it (reservations/identity.py). The shop has no scheduler, so the clean-up rides on the
+    # staff's visits: this is the page staff open for every walk-in. It runs at most once an hour per server process and never stops the page from opening.
+    try:
+        identity.run_cleanup_if_due()
+    except Exception:
+        logger.exception("The ID picture clean-up could not run")
     return render(request, "arabela_admin/new-booking.html", {
         "page": "new-booking",
         "today_iso": today.isoformat(),
@@ -91,6 +97,7 @@ def new_booking_view(request):
         "id_scan_available": didit.enabled(),
         "id_scan_test": didit.is_test(),
         "id_types": [{"value": value, "label": label} for value, label in IdentityCheck.IdType.choices],
+        "id_counter_consent": identity.COUNTER_CONSENT_TEXT,
         "online_enabled": gateway.enabled(),
         "online_label": gateway.label(),
         "online_max": int(min(online_checkout.MAX_ONLINE_AMOUNT, Decimal(gateway.max_amount()))) if gateway.enabled() else 0,

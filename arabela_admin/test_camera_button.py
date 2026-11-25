@@ -52,7 +52,7 @@ class EveryCameraButtonIsMarkedTests(SimpleTestCase):
                     self.assertGreaterEqual(len(buttons), 1, "a camera input nobody can press")
                     for button in buttons:
                         self.assertRegex(button, r'class="(?:[^"]* )?touch-only[ "]')
-        self.assertEqual(total, 1)                                    # only the old Pending Approval "Attach receipt" window: New Booking and Records record payments now, with no receipt photo
+        self.assertEqual(total, 3)                                    # the old Pending Approval "Attach receipt" window, and the front and the back of the ID in New Booking's "Checked at the counter" (no receipt photo there)
 
     def test_the_customer_pages_never_open_a_camera(self):
         for path in sorted(ROOT.glob("*.html")):
@@ -106,9 +106,27 @@ class LabelsAndFocusTests(SimpleTestCase):
 
     def test_new_booking_gallery_icon_has_a_wording_true_on_every_device(self):
         text = read(ADMIN / "new-booking.html")
-        for gone in ("Choose the receipt photo", "Take a photo of the receipt", "nbReceiptCamera", "from the gallery", "capture="):   # a walk-in pays in the system now: no receipt photo
+        for gone in ("Choose the receipt photo", "Take a photo of the receipt", "nbReceiptCamera", "from the gallery"):   # a walk-in pays in the system now: no receipt photo
             with self.subTest(gone=gone):
                 self.assertNotIn(gone, text)
+
+    def test_new_booking_takes_the_id_pictures_with_a_camera_button_for_touch_screens_only(self):
+        """New Booking's "Checked at the counter" asks for the front and the back of the ID: each side has a camera input (back camera), a file input, and the same labels as the
+        receipt window: "Take photo" only on a phone or tablet, "Choose from gallery" there and "Choose photo" on a computer."""
+        text = read(ADMIN / "new-booking.html")
+        self.assertEqual(sorted(name for kind, name in camera_inputs(text)), ["idBackCamera", "idFrontCamera"])
+        for side in ("Front", "Back"):
+            with self.subTest(side=side):
+                camera = [b for b in button_tags(text) if f"$refs.id{side}Camera.click()" in b]
+                gallery = [b for b in button_tags(text) if f"$refs.id{side}File.click()" in b]
+                self.assertEqual((len(camera), len(gallery)), (1, 1))
+                self.assertRegex(camera[0], r'class="(?:[^"]* )?touch-only[ "]')                  # hidden when the main pointer is a mouse
+                self.assertNotRegex(gallery[0], r'class="(?:[^"]* )?touch-only[ "]')              # the file button is for every device
+        self.assertEqual(text.count('<span class="touch-only">Choose from gallery</span><span class="pc-only">Choose photo</span>'), 2)
+        self.assertEqual(text.count('accept="image/png,image/jpeg,image/webp"'), 4)               # only pictures can be chosen, camera or file
+        self.assertNotIn('capture="user"', text)                                                  # the back camera, never the selfie camera
+        self.assertIn("arabelaPreparePhotoForUpload", text)                                       # the phone-safe copy (and shrink) of a picked photo
+        self.assertIn("static 'js/picked-file.js'", text)
 
 
 class RenderedPagesTests(TestCase):

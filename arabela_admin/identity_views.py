@@ -10,11 +10,12 @@ OWNER ONLY -- the ID Checks page, the pictures, the decision on a check Didit se
   * POST api/id-setting/                     "Require a valid ID before booking" (on / off)
 ANY SIGNED-IN STAFF -- the walk-in ID row of New Booking:
   * POST api/bookings/id/start/              a QR code for the customer's own phone
-  * POST api/bookings/id/counter/            "I checked the original ID at the counter"
+  * POST api/bookings/id/counter/            "I checked the original ID at the counter": the front (and back) picture, the customer's agreement, saved all or nothing
   * GET  api/bookings/id/<token>/status/     what the screen shows for that QR code
   * POST api/bookings/id/<token>/cancel/     close the QR code
+  * POST api/bookings/id/<token>/discard/    "Check again" on a counter check no booking uses: it is deleted at once, with its pictures
 
-Staff never see a picture. A picture is opened only through the owner's session and a signed link good for five minutes, and every opening is in the Audit Log."""
+Staff never see a picture again once it is saved. A picture is opened only through the owner's session and a signed link good for five minutes, and every opening is in the Audit Log."""
 import json
 import logging
 
@@ -128,6 +129,15 @@ def id_checks_view(request):
     })
 
 
+def _photos_words(check, photos):
+    """What the window says about the pictures: which sides are kept (a counter check keeps the front, and the back only when staff took it)."""
+    if check.photos_state == "stored":
+        sides = {photo["side"] for photo in photos}
+        return "Front and back kept" if sides == {"Front", "Back"} else ("Front kept" if sides == {"Front"} else "Back kept" if sides == {"Back"} else "None kept")
+    return {"failed": "The pictures could not be copied", "pending": "The pictures are being copied", "copying": "The pictures are being copied",
+            "deleted": "Deleted"}.get(check.photos_state, "None kept")
+
+
 @require_http_methods(["GET"])
 @never_cache
 @audited("id.view", "Customers", audit_describe.id_view, sensitive=True)
@@ -148,8 +158,7 @@ def id_check_open_view(request, pk):
         "decisionSource": check.get_decision_source_display() if check.decision_source else "", "staff": _staff_display_name(check.staff) if check.staff_id else "",
         "canDecide": check.status == S.REVIEW, "canDelete": bool(photos),
         "canRetry": check.photos_state in ("failed", "pending") and check.status in (S.APPROVED, S.DECLINED, S.REVIEW) and bool(check.session_id),
-        "photosWords": {"stored": "Front and back kept", "failed": "The pictures could not be copied", "pending": "The pictures are being copied", "copying": "The pictures are being copied",
-                        "deleted": "Deleted", "": "None kept"}.get(check.photos_state, ""),
+        "photosWords": _photos_words(check, photos),
         "name": check.subject_name,
         "nameWords": "" if didit.is_test() else {"match": "Matches the name given", "differs": "Differs from the name given"}.get(check.name_check, ""),
         "typeWords": "" if didit.is_test() else {"match": "The kind the customer chose", "differs": "Not the kind the customer chose"}.get(check.type_check, ""),
@@ -270,20 +279,51 @@ def booking_id_start_view(request):
     })
 
 
+COUNTER_UPLOAD_LIMIT = 2 * identity_photos.UPLOAD_MAX_BYTES + 512 * 1024         # the whole request: two pictures and the few words that go with them
+_TICKED = ("1", "true", "on")
+
+
 @require_http_methods(["POST"])
 @audited("id.counter_check", "Customers", audit_describe.id_counter)
 def booking_id_counter_view(request):
-    """Staff say they looked at the customer's ORIGINAL valid ID at the counter. They must tick that they did; their name and the time are kept."""
+    """Staff say they looked at the customer's ORIGINAL valid ID at the counter. They must tick that they did, add a picture of the FRONT of it (the back is optional) and tick that
+    the customer agreed that the shop keeps it. The check and its pictures are saved together or not at all. Their name and the time are kept."""
     if not _is_admin_staff(request):
         return _unauthorized()
+    try:
+        length = int(request.META.get("CONTENT_LENGTH") or 0)
+    except ValueError:
+        length = 0
+    if length > COUNTER_UPLOAD_LIMIT:                       # refused before the body is read
+        return JsonResponse({"error": "The pictures are too big. Please take them again or choose smaller photos."}, status=413)
     post = request.POST
-    if (post.get("confirmed") or "") not in ("1", "true", "on"):
+    if (post.get("confirmed") or "") not in _TICKED:
         return JsonResponse({"error": "Please tick the box to say you checked the customer's original ID."}, status=400)
     try:
-        check = identity.counter_check(staff=request.user, name=post.get("name"), phone=post.get("phone"), id_type=(post.get("id_type") or "").strip(), note=post.get("note") or "")
+        front = identity_photos.read_upload(request.FILES.get("front"), "front")
+        back = identity_photos.read_upload(request.FILES.get("back"), "back")
+    except identity_photos.PhotoError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    try:
+        check = identity.counter_check(staff=request.user, name=post.get("name"), phone=post.get("phone"), id_type=(post.get("id_type") or "").strip(), note=post.get("note") or "",
+                                       front=front, back=back, consent=(post.get("consent") or "") in _TICKED)
     except identity.IdentityError as exc:
         return _error(exc)
     return JsonResponse({"success": True, **identity.staff_state(check), "phone": check.subject_phone, "staffName": _staff_display_name(request.user)})
+
+
+@require_http_methods(["POST"])
+@audited("id.counter_discard", "Customers", audit_describe.id_counter_discard)
+def booking_id_discard_view(request, token):
+    """Staff press "Check again" on a counter check that no booking uses (they typed the wrong number, or took a poor picture): it is deleted at once, with its pictures.
+    Only the member of staff who made it (or the owner) can, and a check a booking already rests on is never touched."""
+    if not _is_admin_staff(request):
+        return _unauthorized()
+    try:
+        name = identity.discard_counter_check(token=token, staff=request.user, owner=_is_owner(request))
+    except identity.IdentityError as exc:
+        return _error(exc)
+    return JsonResponse({"success": True, "name": name})
 
 
 @never_cache

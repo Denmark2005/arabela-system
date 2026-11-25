@@ -1,6 +1,7 @@
 """python manage.py cleanup_id_photos [--dry-run]
 
-Deletes the pictures of valid IDs that are due to go: 30 days after the customer's last return (or, for a check with no booking, 30 days after it was verified).
+Deletes the pictures of valid IDs that are due to go: 30 days after the customer's last return (or, for an online customer's check with no booking, 30 days after it was
+verified; or, for a walk-in's check at the shop that never became a booking, 12 hours after it was made).
 It also tries again the pictures that could not be copied from the verification service the first time.
 The shop's own pages already do this by themselves (the dashboard and the ID Checks page, at most once an hour), so this command is only for running it on a clock
 from a scheduled job. It is safe to run at any time, any number of times. --dry-run only counts what would be deleted."""

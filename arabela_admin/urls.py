@@ -23,6 +23,7 @@ from .gown_board import gown_board_view
 from .identity_views import (
     booking_id_cancel_view,
     booking_id_counter_view,
+    booking_id_discard_view,
     booking_id_start_view,
     booking_id_status_view,
     id_check_decide_view,
@@ -146,6 +147,7 @@ urlpatterns = [
     path("api/bookings/id/counter/", booking_id_counter_view, name="booking_id_counter"),
     path("api/bookings/id/<str:token>/status/", booking_id_status_view, name="booking_id_status"),
     path("api/bookings/id/<str:token>/cancel/", booking_id_cancel_view, name="booking_id_cancel"),
+    path("api/bookings/id/<str:token>/discard/", booking_id_discard_view, name="booking_id_discard"),
     path("id-checks/", id_checks_view, name="id_checks"),
     path("api/id-checks/photo/<str:token>/", id_photo_view, name="id_photo"),
     path("api/id-checks/<int:pk>/open/", id_check_open_view, name="id_check_open"),

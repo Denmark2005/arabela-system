@@ -112,8 +112,26 @@
     .dark .nb-id-qr { background: rgba(255,255,255,.03); border-color: #344054; }
     @media (min-width: 640px) { .nb-id-qr { grid-template-columns: auto minmax(0, 1fr); align-items: center; } }
     .nb-id-qr img { display: block; width: 11rem; max-width: 100%; height: auto; padding: .4rem; border: 1px solid #e4e7ec; border-radius: .6rem; background: #fff; image-rendering: pixelated; }
-    .nb-id-counter { margin-top: .75rem; padding: .85rem; border: 1px dashed #d0d5dd; border-radius: .8rem; }
+    .nb-id-counter { margin-top: .75rem; padding: .85rem; border: 1px dashed #d0d5dd; border-radius: .8rem; scroll-margin-top: 6rem; }
     .dark .nb-id-counter { border-color: #344054; }
+    /* The picture of the ID taken or chosen at the counter: a box for the front, a box for the back. The preview lives only in this browser until the check is saved. */
+    .nb-idpics { display: grid; gap: .85rem; grid-template-columns: repeat(2, minmax(0, 18rem)); justify-content: start; margin-top: .6rem; }
+    @media (max-width: 560px) { .nb-idpics { grid-template-columns: minmax(0, 1fr); } }
+    .nb-idpic { display: grid; gap: .5rem; align-content: start; min-width: 0; }
+    .nb-idpic-name { margin: 0; font-size: .8125rem; font-weight: 600; color: #344054; }
+    .dark .nb-idpic-name { color: #d0d5dd; }
+    .nb-idpic-frame { aspect-ratio: 8 / 5; display: flex; align-items: center; justify-content: center; padding: .5rem; border: 1.5px dashed #b6bdca; border-radius: .7rem; background: #f9fafb; color: #667085; font-size: .8125rem; text-align: center; overflow: hidden; }
+    .dark .nb-idpic-frame { background: rgba(255,255,255,.03); border-color: #475467; color: #98a2b3; }
+    .nb-idpic.is-filled .nb-idpic-frame { padding: 0; border-style: solid; border-color: #12b76a; background: #101828; }
+    .nb-idpic-frame img { display: block; width: 100%; height: 100%; object-fit: contain; }
+    .nb-idpic-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+    .nb-idfile { display: none; }
+    .nb-id-consent { margin-top: .9rem; padding: .7rem .8rem; border: 1px solid #e4e7ec; border-radius: .7rem; background: #f9fafb; }
+    .dark .nb-id-consent { background: rgba(255,255,255,.03); border-color: #344054; }
+    .nb-id-consent-title { margin: 0 0 .35rem; font-size: .8125rem; font-weight: 600; color: #344054; }
+    .dark .nb-id-consent-title { color: #d0d5dd; }
+    .nb-id-consent .nb-check { align-items: flex-start; line-height: 1.45; }
+    .nb-id-consent .nb-check input { flex: none; margin-top: .2rem; }
     .nb-info { margin-top: .75rem; padding: .65rem .85rem; border-radius: .7rem; background: #f5f8ff; color: #344054; border: 1px solid #d1e0ff; font-size: .8125rem; line-height: 1.5; }
     .dark .nb-info { background: rgba(70,95,255,.1); color: #d0d5dd; border-color: rgba(70,95,255,.35); }
     .nb-qr { display: grid; gap: 1.25rem; padding: 1.25rem; margin-bottom: 1.25rem; border: 1px solid #d0d5dd; border-radius: 1rem; background: #fff; }
@@ -1488,7 +1506,7 @@
                       <span class="nb-label" style="margin: 0;">Customer's valid ID <span class="nb-req" x-show="ID_REQUIRED">*</span>
                         <details class="nb-tip" @click.outside="$el.removeAttribute('open')" @keydown.escape.stop="$el.removeAttribute('open')">
                           <summary aria-label="About the customer's valid ID">?</summary>
-                          <div class="nb-tip-pop">Every walk-in customer's valid ID has to be checked before the booking is saved. Either the customer scans the QR code with their own phone and takes a selfie (the ID pictures are kept for the owner only), or you look at their ORIGINAL ID here and confirm it, which is recorded with your name. A website account that is already verified is enough by itself.</div>
+                          <div class="nb-tip-pop">Every walk-in customer's valid ID has to be checked before the booking is saved. Either the customer scans the QR code with their own phone and takes a selfie, or you look at their ORIGINAL ID here, take a picture of it and confirm it. Either way the ID pictures are kept for the owner only, and your confirmation is recorded with your name. A website account that is already verified is enough by itself.</div>
                         </details>
                       </span>
                       <span class="nb-idchip" :class="idChip.cls" x-text="idChip.text"></span>
@@ -1500,7 +1518,8 @@
                       <div class="nb-id-ok">
                         <strong x-text="idCheck.counter ? 'ID checked at the counter' : 'ID verified'"></strong><span x-text="idCheck.counter ? (' by ' + (idCheck.staffName || 'you') + '.') : ' on the customer\'s phone.'"></span>
                         <span x-text="idCheck.idTypeLabel ? ' ' + idCheck.idTypeLabel + '.' : ''"></span>
-                        <button type="button" class="nb-btn nb-btn--ghost nb-btn--small" style="margin-left: .5rem;" @click="idReset()">Check again</button>
+                        <span x-show="idCheck.counter &amp;&amp; idCheck.pictures" x-text="' ' + (idCheck.pictures === 1 ? 'The picture is' : 'The pictures are') + ' kept for the owner only.'"></span>
+                        <button type="button" class="nb-btn nb-btn--ghost nb-btn--small" style="margin-left: .5rem;" :disabled="idBusy" @click="idCheckAgain()">Check again</button>
                       </div>
                     </template>
 
@@ -1542,12 +1561,56 @@
                         </button>
                         <button type="button" class="nb-btn nb-btn--ghost" @click="idMode = (idMode === 'counter' ? '' : 'counter'); idError = ''">Checked at the counter</button>
                       </div>
-                      <div class="nb-id-counter" x-show="idMode === 'counter'" x-cloak>
+                      <div class="nb-id-counter" id="nb-idcounter" x-show="idMode === 'counter'" x-cloak>
                         <label class="nb-check"><input type="checkbox" x-model="idConfirm" @change="idError = ''"> I checked the customer's original valid ID</label>
-                        <label class="nb-label" for="nb-idnote" style="margin-top: .6rem;">Note <span class="nb-opt">(optional)</span></label>
+
+                        <div style="margin-top: .9rem;">
+                          <span class="nb-label" style="margin: 0;">Picture of the ID <span class="nb-req">*</span></span>
+                          <p class="nb-help">Take a clear picture of the front, and of the back if the ID has one. Make sure the whole ID is in the picture and the words can be read. Only the owner can see it.</p>
+                        </div>
+                        <div class="nb-idpics">
+                          <div class="nb-idpic" :class="idPics.front ? 'is-filled' : ''">
+                            <p class="nb-idpic-name">Front of the ID <span class="nb-req">*</span></p>
+                            <div class="nb-idpic-frame">
+                              <template x-if="idPics.front"><img :src="idPics.front" alt="The picture of the front of the ID"></template>
+                              <span x-show="!idPics.front">No picture yet</span>
+                            </div>
+                            <div class="nb-idpic-actions">
+                              <!-- The camera button is for phones and tablets (see .touch-only in partials/notifications.html); a computer only gets the file button. -->
+                              <button type="button" class="nb-btn nb-btn--ghost nb-btn--small touch-only" :disabled="idBusy" @click="$refs.idFrontCamera.click()">Take photo</button>
+                              <button type="button" class="nb-btn nb-btn--ghost nb-btn--small" :disabled="idBusy" @click="$refs.idFrontFile.click()"><span class="touch-only">Choose from gallery</span><span class="pc-only">Choose photo</span></button>
+                              <button type="button" class="nb-btn nb-btn--ghost nb-btn--small" x-show="idPics.front" :disabled="idBusy" @click="idDropPic('front')">Remove</button>
+                            </div>
+                            <input type="file" class="nb-idfile" accept="image/png,image/jpeg,image/webp" capture="environment" x-ref="idFrontCamera" @change="idPick('front', $event)" tabindex="-1" aria-hidden="true">
+                            <input type="file" class="nb-idfile" accept="image/png,image/jpeg,image/webp" x-ref="idFrontFile" @change="idPick('front', $event)" tabindex="-1" aria-hidden="true">
+                          </div>
+                          <div class="nb-idpic" :class="idPics.back ? 'is-filled' : ''">
+                            <p class="nb-idpic-name">Back of the ID <span class="nb-opt">(if it has one)</span></p>
+                            <div class="nb-idpic-frame">
+                              <template x-if="idPics.back"><img :src="idPics.back" alt="The picture of the back of the ID"></template>
+                              <span x-show="!idPics.back">No picture yet</span>
+                            </div>
+                            <div class="nb-idpic-actions">
+                              <button type="button" class="nb-btn nb-btn--ghost nb-btn--small touch-only" :disabled="idBusy" @click="$refs.idBackCamera.click()">Take photo</button>
+                              <button type="button" class="nb-btn nb-btn--ghost nb-btn--small" :disabled="idBusy" @click="$refs.idBackFile.click()"><span class="touch-only">Choose from gallery</span><span class="pc-only">Choose photo</span></button>
+                              <button type="button" class="nb-btn nb-btn--ghost nb-btn--small" x-show="idPics.back" :disabled="idBusy" @click="idDropPic('back')">Remove</button>
+                            </div>
+                            <input type="file" class="nb-idfile" accept="image/png,image/jpeg,image/webp" capture="environment" x-ref="idBackCamera" @change="idPick('back', $event)" tabindex="-1" aria-hidden="true">
+                            <input type="file" class="nb-idfile" accept="image/png,image/jpeg,image/webp" x-ref="idBackFile" @change="idPick('back', $event)" tabindex="-1" aria-hidden="true">
+                          </div>
+                        </div>
+
+                        <div class="nb-id-consent">
+                          <p class="nb-id-consent-title">Ask the customer first</p>
+                          <label class="nb-check"><input type="checkbox" x-model="idConsent" @change="idError = ''"> <span>{{ id_counter_consent }}</span></label>
+                        </div>
+
+                        <label class="nb-label" for="nb-idnote" style="margin-top: .9rem;">Note <span class="nb-opt">(optional)</span></label>
                         <input class="nb-input" id="nb-idnote" type="text" maxlength="200" autocomplete="off" x-model="idNote" placeholder="e.g. Driver's license, expires 2029">
                         <div class="nb-actions" style="justify-content: flex-start; margin-top: .7rem;">
-                          <button type="button" class="nb-btn nb-btn--primary" :disabled="idBusy" @click="idConfirmCounter()">Confirm the ID was checked</button>
+                          <button type="button" class="nb-btn nb-btn--primary" :disabled="idBusy" @click="idConfirmCounter()">
+                            <span x-show="idBusy" x-cloak class="nb-spinner"></span><span x-text="idBusy ? 'Saving…' : 'Confirm the ID was checked'"></span>
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -1863,7 +1926,8 @@
         create: '{% url "arabela_admin:booking_create" %}',
         payStart: '{% url "arabela_admin:booking_pay_start" %}',
         idStart: '{% url "arabela_admin:booking_id_start" %}',
-        idCounter: '{% url "arabela_admin:booking_id_counter" %}'
+        idCounter: '{% url "arabela_admin:booking_id_counter" %}',
+        idDiscard: '{% url "arabela_admin:booking_id_discard" "TOKEN" %}'
       };
       var ONLINE_MAX = {{ online_max }};
       var ONLINE_LABEL = '{{ online_label|escapejs }}';
@@ -1887,6 +1951,10 @@
       var CATEGORIES = [];
       try { CATEGORIES = JSON.parse(document.getElementById('nb-categories').textContent) || []; } catch (e) { CATEGORIES = []; }
       var keySeq = 0;
+      // The pictures staff add at the counter. They are kept OUT of the page's reactive state on purpose: a File seen through Alpine's proxy is refused by FormData.
+      var ID_FILES = { front: null, back: null };
+      var ID_PIC_SEQ = { front: 0, back: 0 };               // a newer pick of the same side wins over an older one that is still being read
+      var ID_PIC_MAX = 8 * 1024 * 1024;                      // what the server accepts for one picture (a big camera photo is shrunk before it is sent)
 
       function isoDay(d) {
         return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -1927,9 +1995,12 @@
           });
         });
       }
+      // The words for a failed request. The shared helper answers with {kind, message}; this page shows its own wording when the request never got an answer, and the
+      // helper's words when a picture could not be opened or the server's answer was not ours.
       function requestError(err, fallback) {
-        if (window.arabelaDescribeRequestError) { return window.arabelaDescribeRequestError(err, fallback); }
-        return (err && err.message) || fallback;
+        var told = window.arabelaDescribeRequestError ? window.arabelaDescribeRequestError(err, fallback) : null;
+        if (!told) { return (err && err.message) || fallback; }
+        return (told.kind === 'network' || told.kind === 'unknown') ? fallback : (told.message || fallback);
       }
 
       function nbUid() {
@@ -1951,6 +2022,7 @@
         name: '', phone: '', address: '', city: '', postal: '',
         ID_REQUIRED: ID_REQUIRED, ID_SCAN: ID_SCAN, ID_SCAN_TEST: ID_SCAN_TEST, ID_TYPES: ID_TYPES,
         idType: '', idMode: '', idCheck: null, idBusy: false, idError: '', idTimer: null, idPolling: false, idConfirm: false, idNote: '',
+        idConsent: false, idPics: { front: '', back: '' },
         account: null, accountQuery: '', accountResults: [], accountSeq: 0, linkOpen: false,
         hint: [], hintSeq: 0,
         lines: [firstLine],
@@ -2455,7 +2527,54 @@
           return false;
         },
         idStop: function () { if (this.idTimer) { window.clearInterval(this.idTimer); this.idTimer = null; } },
-        idReset: function () { this.idStop(); this.idCheck = null; this.idMode = ''; this.idConfirm = false; this.idNote = ''; this.idError = ''; },
+        idReset: function () { this.idStop(); this.idCheck = null; this.idMode = ''; this.idConfirm = false; this.idConsent = false; this.idNote = ''; this.idError = ''; this.idClearPics(); },
+        // "Check again" on a check made at the counter: the unused copy is deleted at once with its pictures (the screen does not wait for it; if it cannot be reached now,
+        // the shop's own clean-up removes it within 12 hours). A QR check just clears the screen.
+        idCheckAgain: function () {
+          var c = this.idCheck;
+          if (c && c.source === 'counter' && c.token) { this.idDiscardCopy(c.token); }
+          this.idReset();
+        },
+        idDiscardCopy: function (token) {
+          try {
+            fetch(URLS.idDiscard.replace('TOKEN', encodeURIComponent(token)), { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body: '{}', credentials: 'same-origin', keepalive: true })
+              .catch(function () { /* the 12-hour clean-up covers it */ });
+          } catch (e) { /* same */ }
+        },
+        // ---- the pictures of the ID taken or chosen at the counter ----
+        idPick: function (side, event) {
+          var input = event && event.target, picked = input && input.files && input.files[0];
+          if (!picked) { return; }
+          var self = this, seq = ++ID_PIC_SEQ[side], type = String(picked.type || '').toLowerCase();
+          this.idError = '';
+          if ((type && !/^image\/(jpeg|png|webp)$/.test(type)) || (!type && !/\.(jpe?g|png|webp)$/i.test(picked.name || ''))) {
+            input.value = '';
+            this.idError = 'Please choose a picture of the ID (JPG, PNG or WEBP).';
+            return;
+          }
+          var ready = window.arabelaPreparePhotoForUpload ? window.arabelaPreparePhotoForUpload(picked) : Promise.resolve(picked);
+          ready.then(function (file) {
+            input.value = '';                                  // so the very same picture can be chosen again
+            if (seq !== ID_PIC_SEQ[side]) { return; }
+            if (file.size > ID_PIC_MAX) { self.idError = 'That picture is over 8 MB. Please take it again or choose a smaller photo.'; return; }
+            self.idSetPic(side, file);
+          }).catch(function (err) {
+            input.value = '';
+            if (seq === ID_PIC_SEQ[side]) { self.idError = requestError(err, 'That picture could not be opened. Please try again.'); }
+          });
+        },
+        idSetPic: function (side, file) {
+          if (this.idPics[side]) { URL.revokeObjectURL(this.idPics[side]); }
+          ID_FILES[side] = file;
+          this.idPics[side] = URL.createObjectURL(file);
+        },
+        idDropPic: function (side) {
+          ID_PIC_SEQ[side]++;
+          if (this.idPics[side]) { URL.revokeObjectURL(this.idPics[side]); }
+          ID_FILES[side] = null;
+          this.idPics[side] = '';
+        },
+        idClearPics: function () { this.idDropPic('front'); this.idDropPic('back'); },
         idTake: function (data) {
           this.idCheck = Object.assign({}, this.idCheck || {}, data);
           if (data.state !== 'checking') { this.idStop(); }
@@ -2501,28 +2620,36 @@
           var self = this;
           if (this.idCheck && this.idCheck.cancelUrl && this.idCheck.state === 'checking') { this.idCancelScan(); }
           this.idStop(); this.idCheck = null; this.idMode = 'counter';
-          this.$nextTick(function () { var el = document.getElementById('nb-idnote'); if (el) { el.scrollIntoView({ block: 'center' }); } });
+          this.$nextTick(function () { var el = document.getElementById('nb-idcounter'); if (el) { el.scrollIntoView({ block: 'start' }); } });
         },
         idConfirmCounter: function () {
           if (this.idBusy) { return; }
           this.idError = '';
           if (this.idNeedsCustomer()) { return; }
           if (!this.idConfirm) { this.idError = 'Tick the box to say you checked the customer\'s original valid ID.'; return; }
+          if (!ID_FILES.front) { this.idError = ID_FILES.back ? 'Add the picture of the front of the ID first.' : 'Add a picture of the front of the ID. The shop keeps it on file for the owner.'; return; }
+          if (!this.idConsent) { this.idError = 'Tick the box to say the customer agreed that the shop keeps a picture of their ID.'; return; }
           this.idBusy = true;
           var self = this, form = new FormData();
-          form.append('name', this.name); form.append('phone', this.phone); form.append('id_type', this.idType); form.append('note', this.idNote); form.append('confirmed', '1');
+          form.append('name', this.name); form.append('phone', this.phone); form.append('id_type', this.idType); form.append('note', this.idNote); form.append('confirmed', '1'); form.append('consent', '1');
+          form.append('front', ID_FILES.front, ID_FILES.front.name || 'front.jpg');
+          if (ID_FILES.back) { form.append('back', ID_FILES.back, ID_FILES.back.name || 'back.jpg'); }
           fetch(URLS.idCounter, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body: form, credentials: 'same-origin' })
             .then(this.idJSON)
             .then(function (res) {
               self.idBusy = false;
-              if (!res.ok || !res.data.success) { self.idError = res.data.error || 'The ID check could not be saved. Please try again.'; return; }
-              self.idStop(); self.idCheck = null; self.idTake(res.data); self.idMode = '';
+              if (!res.ok || !res.data.success) {
+                self.idError = res.data.error || (res.status === 413 ? 'The pictures are too big. Please take them again or choose smaller photos.' : 'The ID check could not be saved. Please try again.');
+                return;
+              }
+              self.idStop(); self.idCheck = null; self.idTake(res.data); self.idMode = ''; self.idClearPics(); self.idConsent = false;      // the pictures are on the shop's file now: none stay on this screen
             })
             .catch(function (err) { self.idBusy = false; self.idError = requestError(err, 'The ID check could not be saved (no connection). Please try again.'); });
         },
-        // The check was made for one mobile number: when the number typed changes, the check no longer fits this customer.
+        // The check was made for one mobile number: when the number typed changes, the check no longer fits this customer (an unused copy at the shop is deleted with its pictures).
         idPhoneChanged: function () {
           if (this.idCheck && this.idCheck.phone && this.idCheck.state === 'approved' && this.idCheck.phone !== normPhone(this.phone)) {
+            if (this.idCheck.source === 'counter' && this.idCheck.token) { this.idDiscardCopy(this.idCheck.token); }
             this.idReset();
             this.idError = 'The mobile number changed, so the ID check was cleared. Check the customer\'s ID again.';
           }
