@@ -273,9 +273,24 @@ class PageTests(Base):
     def test_a_row_names_the_things_worth_a_look(self):
         check = self.verified_online()
         IdentityCheck.objects.filter(pk=check.pk).update(name_check="differs", type_check="differs")
-        page = self.owner_client.get(reverse("arabela_admin:id_checks") + "?show=all").content.decode()
+        with override_settings(DIDIT_API_KEY="sk_live_unit"):                                  # a real key: the name and the kind of ID are real, so they are compared
+            page = self.owner_client.get(reverse("arabela_admin:id_checks") + "?show=all").content.decode()
         self.assertIn("The name on the ID differs from the name given", page)
         self.assertIn("The ID scanned is not the kind the customer chose", page)
+
+    def test_in_test_mode_there_are_no_false_warnings_because_didits_sample_data_is_not_compared(self):
+        # Seen on the live site: a real Philippine National ID scanned in Didit's sandbox came back as a Brazilian passport with a made-up name.
+        check = self.verified_online()
+        IdentityCheck.objects.filter(pk=check.pk).update(name_check="differs", type_check="differs")
+        page = self.owner_client.get(reverse("arabela_admin:id_checks") + "?show=all").content.decode()          # the tests' key is a sandbox key
+        self.assertNotIn("differs from the name given", page)
+        self.assertNotIn("not the kind the customer chose", page)
+        body = self.owner_client.get(reverse("arabela_admin:id_check_open", args=[check.pk])).json()
+        self.assertEqual((body["nameWords"], body["typeWords"]), ("", ""))
+        self.assertIn("test mode sends sample", body["compareNote"])
+        with override_settings(DIDIT_API_KEY="sk_live_unit"):
+            real = self.owner_client.get(reverse("arabela_admin:id_check_open", args=[check.pk])).json()
+        self.assertEqual((real["nameWords"], real["typeWords"], real["compareNote"]), ("Differs from the name given", "Not the kind the customer chose", ""))
 
     def test_the_sidebar_link_is_the_owners_alone(self):
         link = reverse("arabela_admin:id_checks")
@@ -295,7 +310,8 @@ class PageTests(Base):
 class OpenAndPictureTests(Base):
     def test_opening_a_check_gives_the_facts_and_short_lived_links_and_is_written_to_the_audit_log(self):
         check = self.verified_online()
-        response = self.owner_client.get(reverse("arabela_admin:id_check_open", args=[check.pk]))
+        with override_settings(DIDIT_API_KEY="sk_live_unit"):                                  # a real key: the name and the kind of ID are real, so they are compared
+            response = self.owner_client.get(reverse("arabela_admin:id_check_open", args=[check.pk]))
         body = response.json()
         self.assertEqual((response.status_code, body["success"], body["who"], body["words"], body["idType"]), (200, True, "Ana Cruz", "ID verified", "PhilID (National ID)"))
         self.assertEqual([p["side"] for p in body["photosList"]], ["Front", "Back"])                       # the front first, then the back

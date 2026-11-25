@@ -1309,7 +1309,7 @@
         fact('Verified on', d.verifiedAt); fact('Counts until', d.until);
         fact('Decided by', d.decidedBy ? (d.decidedBy + (d.decisionSource ? ' (' + d.decisionSource + ')' : '')) : (d.decisionSource || ''));
         fact('Note', d.note);
-        fact('Name on the ID', d.nameWords); fact('Kind of ID', d.typeWords);
+        fact('Name on the ID', d.nameWords); fact('Kind of ID', d.typeWords); fact('Name and kind of ID', d.compareNote);
         (d.reasons || []).forEach(function (r) { fact('Reason', r); });
         fact('Pictures', d.photosWords);
         (d.photosList || []).forEach(function (p) {

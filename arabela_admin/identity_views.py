@@ -77,14 +77,20 @@ def _day(moment):
     return f"{local:%b} {local.day}, {local.year}"
 
 
+# Didit's TEST mode (a sandbox key) sends SAMPLE data for the name and the kind of ID whatever is scanned (a Philippine National ID comes back as a Brazilian passport), so
+# comparing them with what the customer gave only shows false warnings. They are compared (and shown) once a real key is used.
+TEST_MODE_COMPARE_NOTE = "Not compared (Didit's test mode sends sample names and kinds of ID)"
+
+
 def _row(check):
     kind, words = check.badge
     bookings = [r.reference_code for r in check.reservations.all()][:3]
     flags = []
-    if check.name_check == "differs":
-        flags.append("The name on the ID differs from the name given")
-    if check.type_check == "differs":
-        flags.append("The ID scanned is not the kind the customer chose")
+    if not didit.is_test():
+        if check.name_check == "differs":
+            flags.append("The name on the ID differs from the name given")
+        if check.type_check == "differs":
+            flags.append("The ID scanned is not the kind the customer chose")
     return {
         "id": check.pk, "who": _who(check), "phone": check.subject_phone or "", "email": check.customer.email if check.customer_id else "",
         "source": check.get_source_display(), "idType": check.get_id_type_display(), "status": check.status, "kind": kind, "words": words,
@@ -145,8 +151,9 @@ def id_check_open_view(request, pk):
         "photosWords": {"stored": "Front and back kept", "failed": "The pictures could not be copied", "pending": "The pictures are being copied", "copying": "The pictures are being copied",
                         "deleted": "Deleted", "": "None kept"}.get(check.photos_state, ""),
         "name": check.subject_name,
-        "nameWords": {"match": "Matches the name given", "differs": "Differs from the name given"}.get(check.name_check, ""),
-        "typeWords": {"match": "The kind the customer chose", "differs": "Not the kind the customer chose"}.get(check.type_check, ""),
+        "nameWords": "" if didit.is_test() else {"match": "Matches the name given", "differs": "Differs from the name given"}.get(check.name_check, ""),
+        "typeWords": "" if didit.is_test() else {"match": "The kind the customer chose", "differs": "Not the kind the customer chose"}.get(check.type_check, ""),
+        "compareNote": TEST_MODE_COMPARE_NOTE if didit.is_test() and (check.name_check or check.type_check) else "",
     })
     return JsonResponse(data)
 
