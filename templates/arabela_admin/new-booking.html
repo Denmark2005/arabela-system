@@ -14,7 +14,7 @@
   <style>
     /* New Booking (arabela_admin/new_booking.py). Its own small set of styles: the admin's compiled CSS only carries the
        classes the template pack itself uses. Light and dark follow the panel's own .dark switch. */
-    .nb-wrap { max-width: 64rem; }
+    /* The form follows the admin's page width (.adm-page in static/arabela_admin/style.css) like every other page: no width of its own. */
     .nb-card { background: #fff; border: 1px solid #e4e7ec; border-radius: 1rem; padding: 1rem; margin-bottom: 1rem; }
     .dark .nb-card { background: rgba(255,255,255,.03); border-color: #1d2939; }
     @media (min-width: 640px) { .nb-card { padding: 1.1rem 1.25rem; } }
@@ -1336,7 +1336,7 @@
 <!-- ===== Header End ===== -->
         <!-- ===== Main Content Start ===== -->
         <main>
-          <div class="mx-auto max-w-(--breakpoint-2xl) p-4 md:p-6">
+          <div class="mx-auto adm-page p-4 md:p-6">
             <!-- Breadcrumb Start -->
             <div x-data="{ pageName: `New Booking`}">
               <div class="mb-4 flex flex-wrap items-center justify-end gap-3">
