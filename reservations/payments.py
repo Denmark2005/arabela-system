@@ -36,6 +36,10 @@ REASON_MAX = 200
 METHODS = (Payment.Method.CASH, Payment.Method.GCASH)
 PAYMENT_EVENT = "Payment received"
 RETURN_EVENT = "Security deposit returned"
+SETTLED_EVENT = "Security deposit settled"          # accounts.customer_emails.EVENT_KINDS emails it under the same words
+SETTLED_DETAIL = "Your security deposit has been settled. This reservation is complete."
+UNSETTLED_EVENT = "Security deposit not yet settled"
+UNSETTLED_DETAIL = "The deposit still has to be settled. Please contact the shop if you have a question."
 VOID_EVENT = "Receipt voided"
 DEDUCTION_EVENT = "Deduction from the security deposit"
 
@@ -359,6 +363,30 @@ def _event(reservation, label, detail):
     ReservationStatusEvent.record(reservation, label, detail=detail, actor=ReservationStatusEvent.Actor.STAFF)
 
 
+def sync_settled(reservation_id, *, quiet=False, actor=ReservationStatusEvent.Actor.STAFF, reopens=False):
+    """Keeps the booking's history truthful after a gown comes back or money moves: "Security deposit settled" is written only once nothing is left to
+    move (ledger.is_settled). `reopens`: the change can open a settled deposit again (a deduction, a voided receipt or deduction, a refund that failed),
+    so a line says so when it did -- a payment or a hand-back never can (an older booking's check-in line, from before this rule, is left alone).
+    `quiet`: the change that got it there already told the customer, so the line sends no email of its own.
+
+    The booking row is locked while it decides, so two staff acting at once can't write the line twice. Like every history line, it is a record OF an
+    action and never a reason that action fails: a problem here is logged and the action stands."""
+    try:
+        with transaction.atomic():
+            reservation = Reservation.objects.select_for_update(of=("self",)).filter(pk=reservation_id).first()
+            if reservation is None:
+                return
+            settled = ledger.is_settled(reservation, ledger.statement(reservation))
+            last = reservation.status_events.filter(label__in=(SETTLED_EVENT, UNSETTLED_EVENT)).order_by("occurred_at", "id").last()
+            was_settled = last is not None and last.label == SETTLED_EVENT
+            if settled and not was_settled:
+                ReservationStatusEvent.record(reservation, SETTLED_EVENT, detail=SETTLED_DETAIL, actor=actor, quiet=quiet)
+            elif reopens and was_settled and not settled and reservation.status != Reservation.Status.CANCELLED:
+                ReservationStatusEvent.record(reservation, UNSETTLED_EVENT, detail=UNSETTLED_DETAIL, actor=actor, quiet=True)
+    except Exception:
+        logger.exception("Could not bring the deposit-settled line up to date for reservation %s", reservation_id)
+
+
 # ---------------------------------------------------------------- what a window may offer
 def choices(statement):
     """What the Record payment window should offer for this statement, so the page and the rules can never disagree.
@@ -479,6 +507,7 @@ def record_payment(*, reservation_id, purpose, amount, method, reference="", not
         _event(reservation, PAYMENT_EVENT, f"{peso(amount)} received ({payment.get_purpose_display()}, {_way(payment)}). "
                                            f"Receipt {payment.receipt_number}.")
         _notify(reservation, payment, _notice_text(payment), subject=_subject(payment), heading=_heading(payment))
+        sync_settled(reservation.pk, quiet=True)
     return payment
 
 
@@ -589,6 +618,7 @@ def return_deposit(*, reservation_id, amount, method, reference="", note="", use
         _event(reservation, RETURN_EVENT, f"{peso(amount)} of the security deposit was handed back ({_way(payment)}). "
                                           f"Receipt {payment.receipt_number}.")
         _notify(reservation, payment, _notice_text(payment), subject=_subject(payment), heading=_heading(payment))
+        sync_settled(reservation.pk, quiet=True)
     return payment
 
 
@@ -723,6 +753,7 @@ def return_deposit_online(*, reservation_id, amount, note="", user=None, request
         _event(reservation, RETURN_EVENT, f"{peso(amount)} of the security deposit was sent back to the customer through {gateway.label()} "
                                           f"({_way(payment)}). Receipt {payment.receipt_number}.")
         _notify(reservation, payment, _notice_text(payment), subject=_subject(payment), heading=_heading(payment))
+        sync_settled(reservation.pk, quiet=True)
     return payment
 
 
@@ -752,6 +783,7 @@ def on_online_refund_updated(refund_id, status):
             notify_user(reservation.customer, f"We could not send your security deposit of {peso(locked.amount)} for {reservation.reference_code} back automatically. "
                                               "The shop will hand it back to you. Please contact the shop if you have a question.",
                         subject="We will hand your security deposit back at the shop", heading="Your security deposit")
+        sync_settled(reservation.pk, quiet=True, actor=ReservationStatusEvent.Actor.SYSTEM, reopens=True)
     return True
 
 
@@ -785,6 +817,7 @@ def add_deduction(*, reservation_id, amount, reason, user=None, request_id="", n
                 f"{peso(amount)} was taken off the security deposit of {reservation.reference_code}: {reason}. "
                 f"Deposit to get back: {peso(after.refundable_total)}.",
                 subject=f"A deduction on your security deposit - {reservation.reference_code}", heading="A deduction on your security deposit")
+        sync_settled(reservation.pk, quiet=True, reopens=True)
     return deduction
 
 
@@ -815,6 +848,7 @@ def void_payment(*, payment_id, reason, user=None, now=None):
             raise PaymentError("The deposit was already handed back out of this money. Void the deposit return receipt first.", status=409)
         _event(reservation, VOID_EVENT, f"Receipt {payment.receipt_number} ({peso(payment.amount)}) was voided: {reason}.")
         _notify(reservation, payment, _notice_text(payment), subject=_subject(payment), heading=_heading(payment))
+        sync_settled(reservation.pk, quiet=True, reopens=True)
     return payment
 
 
@@ -839,6 +873,7 @@ def void_deduction(*, deduction_id, reason, user=None, now=None):
         _event(reservation, DEDUCTION_EVENT, f"The {peso(deduction.amount)} deduction was removed: {reason}.")
         _notify(reservation, None, f"The {peso(deduction.amount)} deduction on the security deposit of {reservation.reference_code} was removed: {reason}.",
                 subject=f"A deduction was removed - {reservation.reference_code}", heading="A deduction was removed")
+        sync_settled(reservation.pk, quiet=True, reopens=True)
     return deduction
 
 

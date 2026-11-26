@@ -231,11 +231,11 @@
       document.body.style.overflow = '';
       var reload = function () { window.location.reload(); };
       var title = 'Booking cancelled';
-      var message = (data.reference || fallbackRef) + ' was cancelled. The customer has been told by message and email, and the gown is free again. You can find the booking in Reservation Records under Cancelled.';
+      var message = (data.reference || fallbackRef) + ' was cancelled. The customer has been told by message and email, and the gown is free again. You can find the booking in All Bookings under Cancelled.';
       if (mode !== 'booking') {
         var many = (data.count || 1) > 1;
         if (data.booking_cancelled) {
-          message = (data.gowns || 'The gown') + ' cancelled. That was the last gown left, so ' + (data.reference || fallbackRef) + ' is now cancelled as a whole. The customer has been told by message and email, and you can find the booking in Reservation Records under Cancelled.';
+          message = (data.gowns || 'The gown') + ' cancelled. That was the last gown left, so ' + (data.reference || fallbackRef) + ' is now cancelled as a whole. The customer has been told by message and email, and you can find the booking in All Bookings under Cancelled.';
         } else {
           title = many ? 'Gowns cancelled' : 'Gown cancelled';
           message = (data.gowns || 'The gown') + (many ? ' were' : ' was') + ' cancelled from ' + (data.reference || fallbackRef) + '. The customer has been told by message and email, and ' + (many ? 'the gowns are' : 'the gown is') + ' free again. The rest of the booking carries on.';

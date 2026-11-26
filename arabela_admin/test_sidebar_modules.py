@@ -1,6 +1,6 @@
-"""The admin sidebar: "Payments & Deposits" (Payment Verification + Security Deposits) is its own module, and Financial Report holds
-only Reservation Records. The sidebar is copied into every admin page, so this renders all of them and checks the same structure on each
--- a page that drifts from the others (or a link that went missing) fails here."""
+"""The admin sidebar: "Payments & Deposits" (Payment Verification + Security Deposits) is its own module, and Records holds only
+All Bookings. The sidebar is copied into every admin page, so this renders all of them and checks the same structure on each
+-- a page that drifts from the others (or a link that went missing, or an old name left behind) fails here."""
 import re
 
 from django.contrib.auth import get_user_model
@@ -85,20 +85,24 @@ class SidebarModulesTests(TestCase):
             with self.subTest(page=name):
                 names = [n for n, _ in modules]
                 self.assertEqual(names.count("Payments & Deposits"), 1)
-                self.assertEqual(names.count("Financial Report"), 1)
-                self.assertEqual(names.index("Payments & Deposits") + 1, names.index("Financial Report"))      # right before it
-                self.assertEqual(names.index("Financial Report") + 1, names.index("Profile"))                  # and Profile stays last
+                self.assertEqual(names.count("Records"), 1)
+                self.assertEqual(names.index("Payments & Deposits") + 1, names.index("Records"))      # right before it
+                self.assertEqual(names.index("Records") + 1, names.index("Profile"))                  # and Profile stays last
+                self.assertRegex(dict(modules)["Records"], r'class="menu-item-text"[^>]*>\s*Records\s*</span>')
+                self.assertRegex(dict(modules)["Records"], r"page === 'reservation-records' \?[^>]*>\s*All Bookings\s*</a>")
+                for old in ("Financial Report", "Reservation Records"):
+                    self.assertNotIn(old, html)
                 if owner:
                     self.assertIn("Staff Management", names[:names.index("Payments & Deposits")])
                 else:
                     self.assertNotIn("Staff Management", names)
                 by_name = dict(modules)
                 self.assertEqual(hrefs(by_name["Payments & Deposits"]), [PAY, PV, SD])               # Payments is the first item
-                self.assertEqual(hrefs(by_name["Financial Report"]), [RR])
+                self.assertEqual(hrefs(by_name["Records"]), [RR])
                 self.assertNotIn("Financial", by_name["Payments & Deposits"])
                 self.assertIn("Payments & Deposits", by_name["Payments & Deposits"])
                 self.assertEqual(by_name["Payments & Deposits"].count("PaymentsDeposits"), 6)       # its own open/close key
-                self.assertNotIn("PaymentsDeposits", by_name["Financial Report"])
+                self.assertNotIn("PaymentsDeposits", by_name["Records"])
                 # which module opens for which page
                 rule = re.search(r'x-init="([^"]*)"', nav_of(html)).group(1)
                 self.assertIn("else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' }", rule)
@@ -128,10 +132,10 @@ class SidebarModulesTests(TestCase):
         for name in ("payment-verification", "security-deposits"):
             html = found[name][0]
             self.assertIn("Year applied across Payments &amp; Deposits", html)
-            self.assertNotIn("Year applied across Financial Report", html)
+            self.assertNotIn("Year applied across Records", html)
             self.assertIn("financialReportYear", html)                  # the shared year is still remembered under the same key
         for name, (html, _) in found.items():
-            self.assertNotIn("Year applied across Financial Report", html)
+            self.assertNotIn("Year applied across Records", html)
 
     def test_the_moved_pages_still_open_and_show_their_link_as_the_current_one(self):
         found = self.sidebars(self.owner)
@@ -139,7 +143,7 @@ class SidebarModulesTests(TestCase):
         self.assertIn(":class=\"page === 'payment-verification' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'\"", pv)
         sd = dict(found["security-deposits"][1])["Payments & Deposits"]
         self.assertIn(":class=\"page === 'security-deposits' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'\"", sd)
-        rr = dict(found["reservation-records"][1])["Financial Report"]
+        rr = dict(found["reservation-records"][1])["Records"]
         self.assertIn(":class=\"page === 'reservation-records' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'\"", rr)
         self.assertIn("x-data=\"{ page: 'payment-verification'", found["payment-verification"][0])
         self.assertIn("x-data=\"{ page: 'security-deposits'", found["security-deposits"][0])

@@ -1,7 +1,7 @@
-"""Reservation Records, redesigned: the five counts are ONE strip of filter buttons (the Gown Catalog look, only the label and the number), the search and
+"""All Bookings (Reservation Records), redesigned: the five counts are ONE strip of filter buttons (the Gown Catalog look, only the label and the number), the search and
 the filters and the list are ONE card, every booking is one short line (a status circle before the name, the booking number with "N gowns", the rental
 dates on one line) and everything else about it -- the status in words, the deposit, the receipts, who recorded it, each gown and the two icon buttons --
-is in the line's dropdown. The eight statuses each have their own circle colour, with a key. Nothing else changed: the filters, the counts, the links
+is in the line's dropdown. The nine statuses each have their own circle colour, with a key. Nothing else changed: the filters, the counts, the links
 other pages send, the View window and the upload keep their own tests.
 
 The rows are drawn by the page's script (Alpine) from the data the view sends, so what a server-side test can check is the page's markup, its script's
@@ -19,12 +19,13 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from arabela_admin.test_active_dropdown import ActiveDropdownBase, P, R, RET
-from reservations.models import Reservation
+from reservations import payments as reservation_payments
+from reservations.models import Payment, Reservation, ReservationItem
 
 User = get_user_model()
 URL = reverse("arabela_admin:reservation_records")
 ADMIN = Path(settings.BASE_DIR) / "templates" / "arabela_admin"
-PROGRESS = ["Pending approval", "Awaiting pickup", "With customer", "Partly returned", "Overdue", "Completed", "Rejected", "Cancelled"]
+PROGRESS = ["Pending approval", "Awaiting pickup", "With customer", "Partly returned", "Overdue", "Not picked up", "Completed", "Rejected", "Cancelled"]
 
 
 def source():
@@ -177,48 +178,101 @@ class RowTests(RecordsBase):
 
 
 class StatusCircleTests(RecordsBase):
-    def test_each_of_the_eight_statuses_has_its_own_colour_and_its_own_words(self):
+    def test_each_of_the_nine_statuses_has_its_own_colour_and_its_own_words(self):
         text = source()
         kinds = re.search(r"statusKind\(progress\) \{\s*return \(\{(.*?)\}\)\[progress\]", text, re.S).group(1)
         mapped = dict(re.findall(r"'([^']+)': '([a-z]+)'", kinds))
         self.assertEqual(sorted(mapped), sorted(PROGRESS))
-        self.assertEqual(len(set(mapped.values())), 8)                                  # no two statuses share a circle
+        self.assertEqual(len(set(mapped.values())), 9)                                  # no two statuses share a circle
         tips = re.search(r"statusTip\(progress\) \{\s*return \(\{(.*?)\}\)\[progress\]", text, re.S).group(1)
         for status in PROGRESS:
             self.assertIn(f"'{status}': '{status}:", tips)                              # each hover starts with the status's own name
-        self.assertIn("progressOptions: ['Pending approval', 'Awaiting pickup', 'With customer', 'Partly returned', 'Overdue', 'Completed', 'Rejected', 'Cancelled'],", text)
+        self.assertIn("progressOptions: ['Pending approval', 'Awaiting pickup', 'With customer', 'Partly returned', 'Overdue', 'Not picked up', 'Completed', 'Rejected', 'Cancelled'],", text)
 
-    def test_the_eight_circles_are_eight_different_looks(self):
+    def test_the_nine_circles_are_nine_different_looks(self):
         text = source()
         looks = {}
-        for kind in ("pending", "pickup", "out", "partly", "overdue", "done", "rejected", "cancelled"):
+        for kind in ("pending", "pickup", "out", "partly", "overdue", "missed", "done", "rejected", "cancelled"):
             rule = re.search(r"\.rr-dot--%s \{([^}]*)\}" % kind, text).group(1)
             looks[kind] = re.sub(r"\s+", " ", rule.strip())
-        self.assertEqual(len(set(looks.values())), 8, looks)
+        self.assertEqual(len(set(looks.values())), 9, looks)
         self.assertIn("border: 2px solid #98a2b3", looks["cancelled"])                   # Cancelled is the empty ring
         self.assertIn("background: transparent", looks["cancelled"])
-        for kind in ("pending", "pickup", "out", "partly", "overdue", "done", "rejected"):
+        for kind in ("pending", "pickup", "out", "partly", "overdue", "missed", "done", "rejected"):
             self.assertRegex(looks[kind], r"^background: #[0-9a-f]{6};$")
 
-    def test_the_key_lists_all_eight_with_the_same_circles(self):
+    def test_the_key_lists_all_nine_with_the_same_circles(self):
         self.book("Key", "09170000031", [(3, 6, P, {})])
         _, html = self.page()
         key = html[html.index('<details class="ar-tip rr-key"'):html.index("</details>")]
         items = re.findall(r'<li><span class="ar-dot (rr-dot--[a-z]+)"></span><span><b>([^<]+):</b>', key)
         self.assertEqual([words for _, words in items], PROGRESS)
-        self.assertEqual(len({dot for dot, _ in items}), 8)
+        self.assertEqual(len({dot for dot, _ in items}), 9)
         self.assertIn('@click.outside="$el.removeAttribute(\'open\')"', key)
         self.assertIn('@keydown.escape.stop="$el.removeAttribute(\'open\')"', key)
         self.assertIn("Colour key", key)
 
     def test_the_same_statuses_still_come_from_the_view(self):
-        """The circle only draws what _reservation_progress already says; nothing about when a booking is Overdue / Completed / ... changed."""
+        """The circle only draws what _reservation_progress says: Overdue is a gown OUT past its return date, and a booking nobody collected is "Not picked up"."""
         self.book("Pending", "09170000032", [(3, 6, P, {})])
         self.book("Back", "09170000033", [(-9, -2, RET, {"picked_up_on": self.today - timedelta(days=9), "returned_on": self.today - timedelta(days=2)})])
+        self.book("Missed", "09170000034", [(-9, -2, P, {})])
+        self.book("Late", "09170000035", [(-9, -2, ReservationItem.Stage.RETURN, {"picked_up_on": self.today - timedelta(days=9)})])
+        self.book("Half Missed", "09170000036", [(-9, -2, P, {}), (-9, -2, RET, {"returned_on": self.today - timedelta(days=2)})])
         response, _ = self.page()
-        progress = {r["customer"]: r["progress"] for r in response.context["records"]}
-        self.assertEqual(progress["Back"], "Completed")
-        self.assertEqual(progress["Pending"], "Awaiting pickup")
+        records = {r["customer"]: r for r in response.context["records"]}
+        progress = {name: r["progress"] for name, r in records.items()}
+        self.assertEqual(progress, {"Back": "Completed", "Pending": "Awaiting pickup", "Missed": "Not picked up", "Late": "Overdue", "Half Missed": "Not picked up"})
+        self.assertEqual([i["stage"] for i in records["Missed"]["items"]], ["Not picked up"])
+        self.assertEqual([i["stage"] for i in records["Late"]["items"]], ["Overdue"])            # the old "Return" stage past its date is overdue too
+        self.assertEqual([i["stage"] for i in records["Half Missed"]["items"]], ["Not picked up", "Returned"])
+
+
+class MoneyWordsTests(RecordsBase):
+    """The deposit says what Security Deposits says, and the payment says what is still owed."""
+
+    def record(self, reservation):
+        response, _ = self.page()
+        return next(r for r in response.context["records"] if r["reference"] == reservation.reference_code)
+
+    def test_a_gown_out_holds_the_deposit_and_the_balance_is_still_to_pay(self):
+        reservation, _ = self.book("Held", "09170000041", [(-1, 3, R, {"picked_up_on": self.today - timedelta(days=1)})])
+        row = self.record(reservation)
+        self.assertEqual((row["depositStatus"], row["paymentState"], row["depositReturnedOn"]), ("Held", "Balance ₱3,000.00 to pay", ""))
+        self.assertEqual(row["depositLinkLabel"], "Open in Security Deposits")
+        self.assertIn(reverse("arabela_admin:security_deposits"), row["depositLink"])
+
+    def test_a_walk_in_that_paid_nothing_has_no_deposit_yet(self):
+        reservation, _ = self.book("Unpaid", "09170000042", [(3, 6, P, {})], channel=Reservation.Channel.WALK_IN)
+        row = self.record(reservation)
+        self.assertEqual((row["depositStatus"], row["paymentState"]), ("Not paid yet", "Balance ₱5,000.00 to pay"))
+        self.assertEqual(row["depositLinkLabel"], "Open in Security Deposits")
+
+    def test_every_gown_back_the_deposit_is_due_until_it_is_handed_back(self):
+        reservation, _ = self.book("Due", "09170000043", [(-9, -2, RET, {"picked_up_on": self.today - timedelta(days=9), "returned_on": self.today - timedelta(days=2)})])
+        row = self.record(reservation)
+        self.assertEqual((row["depositStatus"], row["depositReturnedOn"]), ("Return due", ""))
+        reservation_payments.record_payment(reservation_id=reservation.pk, purpose=Payment.Purpose.BALANCE, amount=Decimal("3000"),
+                                            method=Payment.Method.CASH, user=self.staff)
+        reservation_payments.return_deposit(reservation_id=reservation.pk, amount=Decimal("2000"), method=Payment.Method.CASH, user=self.staff)
+        row = self.record(reservation)
+        self.assertEqual(row["depositStatus"], "Returned")
+        self.assertEqual(row["depositReturnedOn"], f"{self.today:%b} {self.today.day}, {self.today.year}")
+        self.assertEqual(row["paymentState"], Reservation.objects.get(pk=reservation.pk).payment_state)       # nothing owed: where the payment stands
+
+    def test_a_cancelled_booking_keeps_what_was_paid(self):
+        paid, _ = self.book("Cancelled Paid", "09170000044", [(3, 6, P, {})])
+        unpaid, _ = self.book("Cancelled Unpaid", "09170000045", [(3, 6, P, {})], channel=Reservation.Channel.WALK_IN)
+        Reservation.objects.filter(pk__in=[paid.pk, unpaid.pk]).update(status=Reservation.Status.CANCELLED)
+        self.assertEqual(self.record(paid)["depositStatus"], "Paid, not refunded")
+        self.assertEqual(self.record(unpaid)["depositStatus"], "Not paid yet")
+        self.assertNotIn("Balance", self.record(unpaid)["paymentState"])                       # a cancelled booking asks for nothing more
+
+    def test_the_page_draws_the_new_deposit_words_with_their_colours(self):
+        text = source()
+        self.assertIn("case 'Return due':", text)
+        self.assertIn("case 'Not paid yet': return 'bg-error-50", text)
+        self.assertIn("r.depositStatus === 'Return due'", text)
 
 
 class UnchangedLogicTests(RecordsBase):

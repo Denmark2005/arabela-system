@@ -1,6 +1,6 @@
 """What the gown photo window shows for one booking line (templates/arabela_admin/partials/gown_photo_window.html).
 
-Staff click a gown's name on Active Reservations, Reservation Records and Pending Approval and see that gown's picture. These two small
+Staff click a gown's name on Active Reservations, All Bookings and Pending Approval and see that gown's picture. These two small
 functions decide WHICH picture and the line under the name. They read only what the pages already load (each line's `gown`), so they cost
 no database query, and they never change anything.
 

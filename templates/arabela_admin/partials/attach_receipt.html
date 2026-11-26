@@ -1,7 +1,7 @@
 {% comment %}
   "Attach receipt" for a booking staff recorded (walk-in, Facebook, phone) that is still waiting for payment in Pending Approval:
   when the customer pays, staff attach the shop's receipt photo here and then press Approve. Uploads through the same endpoint
-  Reservation Records uses (arabela_admin.views.receipt_upload_view), so the same checks apply -- including "this exact photo is
+  All Bookings uses (arabela_admin.views.receipt_upload_view), so the same checks apply -- including "this exact photo is
   already on another booking".
 
   Self-contained like partials/cancel_booking.html: its own styles (the admin's compiled CSS only has the pack's own classes),

@@ -684,7 +684,7 @@
           </li>
           <!-- Menu Item Payments & Deposits -->
 
-          <!-- Menu Item Financial Report -->
+          <!-- Menu Item Records -->
           <li>
             <a
               href="#"
@@ -707,7 +707,7 @@
                 class="menu-item-text"
                 :class="sidebarToggle ? 'lg:hidden' : ''"
               >
-                Financial Report
+                Records
               </span>
 
               <svg
@@ -744,14 +744,14 @@
                     class="menu-dropdown-item group"
                     :class="page === 'reservation-records' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
-                    Reservation Records
+                    All Bookings
                   </a>
                 </li>
               </ul>
             </div>
             <!-- Dropdown Menu End -->
           </li>
-          <!-- Menu Item Financial Report -->
+          <!-- Menu Item Records -->
 
           <!-- Menu Item Profile -->
           <li>
@@ -1394,7 +1394,7 @@
     </div>
     <div x-show="!pendingFlagAction" class="mt-6 flex flex-col gap-3 px-2 sm:flex-row sm:justify-end">
       <!-- Every reservation this customer has made -- dates, deposit, receipts and full
-           history -- on Reservation Records. Filtered by account id, not name: several
+           history -- on All Bookings. Filtered by account id, not name: several
            different customers can share one display name. -->
       <a
         :href="'{% url 'arabela_admin:reservation_records' %}?customer=' + viewingCustomer.userId"

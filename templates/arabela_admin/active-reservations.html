@@ -128,6 +128,13 @@
       .ar-gbtns { gap: .75rem; padding-top: .95rem; border-top: 1px dashed #d0d5dd; }
       .dark .ar-gbtns { border-color: #344054; }
       .ar-sp { flex: 1 1 1rem; }
+      /* The event day outside the rental days: an amber note on the gown and its "Set new event date" button. */
+      .ar-ib.ar-warn { background: #fffaeb; border-color: #fedf89; color: #b54708; }
+      .ar-ib.ar-warn:hover:not(:disabled) { background: #fef0c7; color: #93370d; }
+      .dark .ar-ib.ar-warn { background: rgba(247,144,9,.14); border-color: rgba(247,144,9,.5); color: #fdb022; }
+      .dark .ar-ib.ar-warn:hover:not(:disabled) { background: rgba(247,144,9,.22); color: #fec84b; }
+      .ar-evnote { display: inline-flex; align-items: center; padding: .3rem .8rem; border-radius: .65rem; background: #fffaeb; color: #b54708; font-size: .8125rem; font-weight: 600; line-height: 1.35; }
+      .dark .ar-evnote { background: rgba(247,144,9,.16); color: #fdb022; }
       /* The fees (what will be taken from the security deposit): the date change fee amber, the overdue fee red; each a link to the booking in Payments. */
       .ar-feechip, .ar-feeline { display: inline-flex; align-items: center; border-radius: 999px; background: #fffaeb; color: #b54708; font-size: .8125rem; font-weight: 600; text-decoration: none; }
       .ar-feechip { padding: .1rem .55rem; white-space: nowrap; }
@@ -774,7 +781,7 @@
           </li>
           <!-- Menu Item Payments & Deposits -->
 
-          <!-- Menu Item Financial Report -->
+          <!-- Menu Item Records -->
           <li>
             <a
               href="#"
@@ -797,7 +804,7 @@
                 class="menu-item-text"
                 :class="sidebarToggle ? 'lg:hidden' : ''"
               >
-                Financial Report
+                Records
               </span>
 
               <svg
@@ -834,14 +841,14 @@
                     class="menu-dropdown-item group"
                     :class="page === 'reservation-records' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
-                    Reservation Records
+                    All Bookings
                   </a>
                 </li>
               </ul>
             </div>
             <!-- Dropdown Menu End -->
           </li>
-          <!-- Menu Item Financial Report -->
+          <!-- Menu Item Records -->
 
           <!-- Menu Item Profile -->
           <li>
@@ -1320,7 +1327,7 @@
                            and the total rental price. A date a staff member moved shows the day it was booked for under it. -->
                       <div class="ar-dts">
                         <div class="ar-dt" data-label="Pick-up">{{ r.span_start|date:"M j, Y" }}{% if r.pickup_was %}<small class="ar-was">was {{ r.pickup_was|date:"M j" }}</small>{% endif %}</div>
-                        <div class="ar-dt" data-label="Event">{{ r.span_event_start|date:"M j, Y" }}{% if r.span_event_end != r.span_event_start %}<small class="ar-to">to {{ r.span_event_end|date:"M j, Y" }}</small>{% endif %}</div>
+                        <div class="ar-dt" data-label="Event">{{ r.span_event_start|date:"M j, Y" }}{% if r.span_event_end != r.span_event_start %}<small class="ar-to">to {{ r.span_event_end|date:"M j, Y" }}</small>{% endif %}{% if r.event_off %}<small class="ar-was" title="The event date is outside the rental days. Open the booking, then Set new event date.">needs a new date</small>{% endif %}</div>
                         <div class="ar-dt" data-label="Return">{{ r.span_end|date:"M j, Y" }}{% if r.return_was %}<small class="ar-was">was {{ r.return_was|date:"M j" }}</small>{% endif %}</div>
                         <div class="ar-dt ar-pr" data-label="Rental price" title="The rental price of the gowns, without the security deposit">&#8369;{{ r.total_rental|floatformat:'-2g' }}</div>
                       </div>
@@ -1420,7 +1427,7 @@
                               {% endif %}
                             </div>
                             <!-- Where the gown stands, in words (a phone has no hover, and the circle's colour alone is easy to misread). -->
-                            <div class="ar-gstat" data-item-status="{{ item.id }}">{% for remark in item.line_remarks %}<span class="inline-flex items-center rounded-full px-2 py-0.5 text-theme-xs font-medium {% if remark.tone == 'warning' %}bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400{% elif remark.tone == 'success' %}bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500{% elif remark.tone == 'primary' %}bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400{% elif remark.tone == 'danger' %}bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500{% else %}bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400{% endif %}">{{ remark.text }}</span>{% endfor %}</div>
+                            <div class="ar-gstat" data-item-status="{{ item.id }}">{% if item.event_off %}<span class="inline-flex items-center rounded-full px-2 py-0.5 text-theme-xs font-medium bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400">Event date needs updating</span>{% endif %}{% for remark in item.line_remarks %}<span class="inline-flex items-center rounded-full px-2 py-0.5 text-theme-xs font-medium {% if remark.tone == 'warning' %}bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400{% elif remark.tone == 'success' %}bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500{% elif remark.tone == 'primary' %}bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400{% elif remark.tone == 'danger' %}bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500{% else %}bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400{% endif %}">{{ remark.text }}</span>{% endfor %}</div>
                             <button type="button" class="ar-ib ar-more" :class="more ? 'is-on' : ''" @click="more = !more" :aria-expanded="more ? 'true' : 'false'" aria-controls="ar-more-{{ item.id }}"
                               title="Show or hide what you can do with this gown" aria-label="Actions for {{ item.gown_name }}">
                               <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
@@ -1437,8 +1444,9 @@
                               <div class="ar-fc"><span class="ar-fk">Rental price</span><span class="ar-fv">&#8369;{{ item.rental_price|floatformat:'-2g' }}</span></div>
                             </div>
                             {% endif %}
-                            {% if item.note_remarks or item.picked_up_on or item.late_fee_planned > 0 %}
+                            {% if item.note_remarks or item.picked_up_on or item.late_fee_planned > 0 or item.event_off %}
                             <div class="ar-facts" data-item-remarks="{{ item.id }}">
+                              {% if item.event_off %}<span class="ar-evnote">The event date ({{ item.effective_event_date|date:"M j" }}) is {% if item.effective_event_date < item.rental_date %}before the pick-up ({{ item.rental_date|date:"M j" }}){% else %}after the return ({{ item.return_date|date:"M j" }}){% endif %}. Set the new event date.</span>{% endif %}
                               {% if item.change_fee_planned > 0 %}<a class="ar-feeline" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Open this booking in Payments">Date change fee &#8369;{{ item.change_fee_planned|floatformat:'-2g' }} &middot; {{ item.change_days_planned }} day{{ item.change_days_planned|pluralize }} &times; &#8369;{{ r.late_fee_per_day }}{% if item.late_fee_kind == 'planned' %} if it comes back {{ item.return_date|date:"M j" }}{% elif item.late_fee_kind == 'back' and not item.overdue_days_planned %} (it came back {{ item.returned_on|date:"M j" }}){% else %}, return moved to {{ item.return_date|date:"M j" }}{% endif %} &middot; comes out of the security deposit &rsaquo;</a>{% endif %}{% if item.overdue_fee_planned > 0 %}<a class="ar-feeline ar-feeline--over" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Open this booking in Payments">Overdue fee &#8369;{{ item.overdue_fee_planned|floatformat:'-2g' }} &middot; {{ item.overdue_days_planned }} day{{ item.overdue_days_planned|pluralize }} &times; &#8369;{{ r.late_fee_per_day }}{% if item.late_fee_kind == 'back' %} (it came back {{ item.returned_on|date:"M j" }}){% else %} so far, growing each day it is out{% endif %} &middot; comes out of the security deposit &rsaquo;</a>{% endif %}
                               {% for remark in item.note_remarks %}<span class="inline-flex items-center rounded-full px-2 py-0.5 text-theme-xs font-medium {% if remark.tone == 'warning' %}bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400{% elif remark.tone == 'success' %}bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500{% elif remark.tone == 'primary' %}bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400{% elif remark.tone == 'danger' %}bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500{% else %}bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400{% endif %}">{{ remark.text }}</span>{% endfor %}
                               {% if item.picked_up_on %}<span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">Picked up {{ item.picked_up_on|date:"M j" }}</span>{% endif %}
@@ -1459,7 +1467,7 @@
                               {% endif %}
                               {% if not item.picked_up_on and item.stage == "Pick-up" %}
                               <button type="button" class="resv-change-date-btn ar-ib ar-lb" title="Change pick-up date" aria-label="Change the pick-up date of {{ item.gown_name }}"
-                                data-kind="pickup" data-item-id="{{ item.id }}"
+                                data-kind="pickup" data-item-id="{{ item.id }}" data-event-day="{{ item.effective_event_date|date:'Y-m-d' }}"
                                 data-orig-pickup="{{ item.scheduled_pickup|date:'Y-m-d' }}" data-orig-return="{{ item.scheduled_return|date:'Y-m-d' }}"
                                 data-rest="{% if item.has_rest %}1{% else %}0{% endif %}" data-rate="{{ r.late_fee_per_day }}"
                                 data-deposit-paid="{{ r.fee_deposit_paid|floatformat:'2u' }}" data-deposit="{{ r.fee_deposit_basis|floatformat:'2u' }}" data-fee-others="{{ item.fee_others|floatformat:'2u' }}"
@@ -1470,7 +1478,7 @@
                               {% endif %}
                               {% if not item.returned_on %}
                               <button type="button" class="resv-change-date-btn ar-ib ar-lb" title="Change return date" aria-label="Change the return date of {{ item.gown_name }}"
-                                data-kind="return" data-item-id="{{ item.id }}" data-out="{% if item.stage != 'Pick-up' %}1{% else %}0{% endif %}"
+                                data-kind="return" data-item-id="{{ item.id }}" data-out="{% if item.stage != 'Pick-up' %}1{% else %}0{% endif %}" data-event-day="{{ item.effective_event_date|date:'Y-m-d' }}"
                                 data-orig-pickup="{{ item.scheduled_pickup|date:'Y-m-d' }}" data-orig-return="{{ item.scheduled_return|date:'Y-m-d' }}"
                                 data-rest="{% if item.has_rest %}1{% else %}0{% endif %}" data-rate="{{ r.late_fee_per_day }}"
                                 data-deposit-paid="{{ r.fee_deposit_paid|floatformat:'2u' }}" data-deposit="{{ r.fee_deposit_basis|floatformat:'2u' }}" data-fee-others="{{ item.fee_others|floatformat:'2u' }}"
@@ -1478,6 +1486,13 @@
                                 data-original="{{ item.scheduled_return|date:'Y-m-d' }}"
                                 data-rental="{{ item.rental_date|date:'Y-m-d' }}"
                                 data-return="{{ item.return_date|date:'Y-m-d' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M10.5 14l2.5 2-2.5 2"/></svg>Change return date</button>
+                              {% endif %}
+                              {% if item.event_off %}
+                              <!-- The pick-up was moved past the event day (before the new event date was asked for): staff set it here. -->
+                              <button type="button" class="resv-change-date-btn ar-ib ar-lb ar-warn" title="Set new event date" aria-label="Set the new event date of {{ item.gown_name }}"
+                                data-kind="event" data-item-id="{{ item.id }}" data-event-day="{{ item.effective_event_date|date:'Y-m-d' }}"
+                                data-rate="{{ r.late_fee_per_day }}" data-rental="{{ item.rental_date|date:'Y-m-d' }}" data-return="{{ item.return_date|date:'Y-m-d' }}"
+                                data-orig-pickup="{{ item.scheduled_pickup|date:'Y-m-d' }}" data-orig-return="{{ item.scheduled_return|date:'Y-m-d' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M12 13.5v3M12 19h.01"/></svg>Set new event date</button>
                               {% endif %}
                               {% if r.has_account %}
                               <button type="button" class="resv-remind-btn ar-ib ar-lb"
@@ -1740,12 +1755,18 @@
     function placeRowPopover() {
       var popover = document.getElementById('row-popover');
       if (!rowPopoverAnchor || popover.style.display === 'none') return;
+      var margin = 8;
+      // Never under the top bar (it sits above this window): the window starts below it, and one taller than the room left scrolls inside itself.
+      var header = document.querySelector('header');
+      var ceiling = (header ? Math.max(0, header.getBoundingClientRect().bottom) : 0) + margin;
+      var content = document.getElementById('row-popover-content');
+      content.style.maxHeight = Math.max(160, window.innerHeight - ceiling - margin) + 'px';
+      content.style.overflowY = 'auto';
       var anchorRect = rowPopoverAnchor.getBoundingClientRect();
       var popRect = popover.getBoundingClientRect();
-      var margin = 8;
       var top = anchorRect.bottom + 6;
       if (top + popRect.height > window.innerHeight - margin) top = anchorRect.top - popRect.height - 6;
-      top = Math.max(margin, top);
+      top = Math.max(ceiling, Math.min(top, window.innerHeight - margin - popRect.height));
       var left = anchorRect.left;
       if (left + popRect.width > window.innerWidth - margin) left = window.innerWidth - popRect.width - margin;
       left = Math.max(margin, left);
@@ -1780,10 +1801,13 @@
     }
 
     // ---- The change calendar ------------------------------------------------------------------
-    // Two steps share one calendar.
+    // Three steps share one calendar.
     //   'pickup': the customer wants a different pick-up day -- EARLIER or LATER, any free day from today up to PICKUP_MAX_DAYS ahead. A day after the
-    //             current return date also needs a new return date, so the calendar goes on to the 'return' step and Save waits for it.
+    //             current return date also needs a new return date, so the calendar goes on to the 'return' step and Save waits for it. A day after the
+    //             event date also needs a new event date: the 'event' step comes next, and Save waits for it.
     //   'return': days after the current return date only (there is no early return), from the pick-up date on.
+    //   'event':  a day from the (new) pick-up to the (new) return -- after a pick-up moved past the event, or on its own ("Set new event date").
+    //             The event date never changes any fee.
     // A day is only clickable if the gown is free for the WHOLE stretch the booking would then cover -- the same overlap test the server runs
     // (_schedule_conflict) -- and, for a return, if the gown's REST days after it (while it still has its rest block) stay clear of a later booking.
     // Days that are taken are faded and say who has the gown. The server decides everything again; this only greys out what it would refuse.
@@ -1794,8 +1818,14 @@
     var calState = null;
     var CAL_COLORS = {
       pickup: { soft: 'background:#FEF0C7;color:#B54708;', strong: 'background:#F79009;color:#ffffff;' },
-      'return': { soft: 'background:#D1E9FF;color:#175CD3;', strong: 'background:#2E90FA;color:#ffffff;' }
+      'return': { soft: 'background:#D1E9FF;color:#175CD3;', strong: 'background:#2E90FA;color:#ffffff;' },
+      event: { soft: 'background:#D1FADF;color:#05603A;', strong: 'background:#039855;color:#ffffff;' }
     };
+
+    // A pick-up after the event date needs a new event date.
+    function needsEvent(state, pickup) { return !!pickup && !!state.curEvent && pickup > state.curEvent; }
+    function eventFrom(state) { return state.newPickup || state.curPickup; }
+    function eventTo(state) { return state.newReturn || state.curReturn; }
 
     function pesos(n) { return '₱' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }); }
 
@@ -1824,6 +1854,10 @@
 
     function dayInfo(state, iso) {
       var h;
+      if (state.kind === 'event') {
+        if (iso < eventFrom(state) || iso > eventTo(state) || iso === state.curEvent) return { ok: false, why: '' };
+        return { ok: true, why: '' };
+      }
       if (state.kind === 'pickup') {
         if (iso < TODAY) return { ok: false, why: 'Already passed' };
         if (iso === state.curPickup) return { ok: false, why: '' };
@@ -1848,6 +1882,7 @@
     }
 
     function rangeOf(state) {
+      if (state.kind === 'event') return [eventFrom(state), eventTo(state)];          // the days the event may be on
       if (!state.chosen) return null;
       if (state.kind === 'pickup') {
         // earlier: the days the booking now ALSO holds; later: the days it GIVES UP (free for other customers)
@@ -1880,12 +1915,17 @@
 
       var title = document.createElement('p');
       title.className = 'mb-1 text-theme-sm font-semibold text-gray-800 dark:text-white/90';
-      title.textContent = st.kind === 'pickup' ? 'Change pick-up date' : (st.newPickup ? 'Choose the return date' : 'Change return date');
+      title.textContent = st.kind === 'event' ? (st.eventFrom ? 'Choose the new event date' : 'Set new event date')
+        : st.kind === 'pickup' ? 'Change pick-up date' : (st.newPickup ? 'Choose the return date' : 'Change return date');
       root.appendChild(title);
       var sub = document.createElement('p');
       sub.className = 'mb-2 text-theme-xs text-gray-500 dark:text-gray-400';
-      if (st.kind === 'pickup') {
+      if (st.kind === 'event') {
+        sub.textContent = 'Pick-up ' + fmtShort(eventFrom(st)) + ' · Return ' + fmtShort(eventTo(st)) + '. The event is on ' + fmtShort(st.curEvent)
+          + ', outside those days: pick a day from the pick-up to the return.';
+      } else if (st.kind === 'pickup') {
         sub.textContent = 'Currently ' + fmtLong(st.curPickup) + (st.origPickup !== st.curPickup ? ' (originally ' + fmtShort(st.origPickup) + ')' : '')
+          + (st.curEvent ? ', event ' + fmtShort(st.curEvent) : '')
           + '. Pick any free day, earlier or later (up to ' + PICKUP_MAX_DAYS + ' days from today).';
       } else if (st.newPickup) {
         sub.textContent = 'New pick-up: ' + fmtLong(st.newPickup) + '. The return must be after the current return date (' + fmtShort(st.curReturn) + ').';
@@ -1925,7 +1965,7 @@
         var style = 'height:28px;border-radius:6px;font-size:0.8125rem;';
         var inRange = range && iso >= range[0] && iso <= range[1];
         var givesUp = st.kind === 'pickup' && st.chosen && st.chosen > st.curPickup;
-        var current = st.kind === 'pickup' ? st.curPickup : st.curReturn;
+        var current = st.kind === 'event' ? st.curEvent : (st.kind === 'pickup' ? st.curPickup : st.curReturn);
         if (iso === st.chosen) style += colors.strong;
         else if (st.kind === 'return' && st.newPickup && iso === st.newPickup) style += CAL_COLORS.pickup.strong;
         else if (inRange) style += givesUp ? 'background:rgba(152,162,179,.30);' : colors.soft;
@@ -1942,6 +1982,10 @@
           if (info.why) { style += 'text-decoration:line-through;cursor:not-allowed;'; cell.title = info.why; }
           else { style += 'cursor:default;'; }
         }
+        if (st.kind === 'event' && iso !== st.chosen) {          // the two ends of the rental: pick-up amber, return blue
+          if (iso === eventFrom(st)) style += 'box-shadow: inset 0 0 0 2px #F79009;';
+          else if (iso === eventTo(st)) style += 'box-shadow: inset 0 0 0 2px #2E90FA;';
+        }
         cell.style.cssText = style;
         if (iso === TODAY) cell.style.outline = '1px dashed #98A2B3';
         grid.appendChild(cell);
@@ -1950,11 +1994,13 @@
 
       var legend = document.createElement('p');
       legend.className = 'mt-2 text-theme-xs text-gray-400';
-      legend.textContent = 'Faded, crossed-out days are taken — hover one to see why.';
+      legend.textContent = st.kind === 'event' ? 'Orange ring: pick-up. Blue ring: return.' : 'Faded, crossed-out days are taken — hover one to see why.';
       root.appendChild(legend);
 
       var actions = document.createElement('div');
-      actions.className = 'mt-2 flex flex-wrap items-center gap-2';
+      actions.className = 'mt-2 flex flex-wrap items-center gap-2 bg-white dark:bg-gray-dark';
+      // The buttons stay in view at the bottom when the window has to scroll (a short screen).
+      actions.style.cssText = 'position:sticky;bottom:-0.75rem;margin-bottom:-0.75rem;padding:.35rem 0 .75rem;';
       function button(text, cls, style) {
         var el = document.createElement('button');
         el.type = 'button'; el.className = cls; el.textContent = text;
@@ -1963,22 +2009,53 @@
         return el;
       }
 
+      function feeSummary(returnDay) {
+        if (st.rate <= 0) return;
+        var fee = feeFor(st, returnDay);
+        var feeBox = document.createElement('div');
+        feeBox.className = 'mt-1.5 rounded-md px-2 py-1.5';
+        feeBox.style.cssText = CAL_COLORS.pickup.soft;
+        if (fee.days > 0) {
+          addLine(feeBox, 'Date change fee: ' + plural(fee.days) + ' × ' + pesos(st.rate) + ' = ' + pesos(fee.amount), true);
+          if (st.out && st.curReturn < TODAY) addLine(feeBox, 'This gown is overdue now. Moving the return turns those days into the date change fee.', false);
+          addLine(feeBox, (st.depositPaid > 0
+            ? 'It comes out of the security deposit (' + pesos(st.depositPaid) + ' paid).'
+            : 'It comes out of the security deposit (' + pesos(st.deposit) + ') once it is paid.')
+            + (fee.over > 0 ? ' That is ' + pesos(fee.over) + ' more than the deposit, so the customer pays the extra.' : ''), false);
+        } else {
+          addLine(feeBox, 'No date change fee: the return is not past the original return date.', true);
+        }
+        root.appendChild(feeBox);
+      }
+      var NEXT = 'rounded-md bg-brand-500 px-3 py-1 text-theme-xs font-medium text-white';
+      var SAVE = 'resv-cal-save rounded-md bg-success-500 px-3 py-1 text-theme-xs font-medium text-white';
+
       if (st.chosen) {
         var box = document.createElement('div');
         box.className = 'mt-2 rounded-md px-2 py-1.5';
         box.style.cssText = colors.soft;
-        if (st.kind === 'pickup') {
+        if (st.kind === 'event') {
+          if (st.newPickup) addLine(box, 'Pick-up moves to ' + fmtLong(st.newPickup), true);
+          if (st.newReturn) addLine(box, 'Return moves to ' + fmtLong(st.newReturn), true);
+          addLine(box, 'Event moves to ' + fmtLong(st.chosen), true);
+          addLine(box, 'The event date never changes any fee.', false);
+          root.appendChild(box);
+          if (st.newReturn) feeSummary(st.newReturn);
+          button('Save', SAVE);
+        } else if (st.kind === 'pickup') {
           var n = diffDays(st.origPickup, st.chosen);
           addLine(box, 'Pick-up moves to ' + fmtLong(st.chosen) + ' · ' + (n === 0 ? 'the day it was originally booked' : plural(Math.abs(n)) + (n > 0 ? ' earlier' : ' later') + ' than booked'), true);
           if (st.chosen < st.curPickup) addLine(box, "This only changes the customer's booked dates. The gown is still in the shop.", false);
           else if (st.chosen <= st.curReturn) addLine(box, 'The days from ' + fmtShort(st.curPickup) + ' to ' + fmtShort(shiftIso(st.chosen, -1)) + ' are free again for other customers.', false);
           else addLine(box, 'This is after the current return date (' + fmtShort(st.curReturn) + '), so the return date has to move too. Choose it next.', false);
+          if (needsEvent(st, st.chosen)) addLine(box, 'This is after the event date (' + fmtShort(st.curEvent) + '), so choose the new event date too.', false);
           if (st.rate > 0) addLine(box, 'Moving the pick-up adds no fee: the date change fee counts only the days after the original return date (' + fmtShort(st.origReturn) + ').', false);
           root.appendChild(box);
           if (st.chosen > st.curReturn) {
-            button('Choose the return date ›', 'resv-cal-next rounded-md bg-brand-500 px-3 py-1 text-theme-xs font-medium text-white');
+            button('Choose the return date ›', 'resv-cal-next ' + NEXT);
           } else {
-            button('Save', 'resv-cal-save rounded-md bg-success-500 px-3 py-1 text-theme-xs font-medium text-white');
+            if (needsEvent(st, st.chosen)) button('Choose the new event date ›', 'resv-cal-event-next ' + NEXT);
+            else button('Save', SAVE);
             button('Also change the return date', 'resv-cal-next rounded-md px-3 py-1 text-theme-xs font-medium text-gray-600 dark:text-gray-300', 'border:1px solid #D0D5DD;');
           }
         } else {
@@ -1986,31 +2063,17 @@
           if (st.newPickup) addLine(box, 'Pick-up moves to ' + fmtLong(st.newPickup), true);
           addLine(box, 'Return moves to ' + fmtLong(st.chosen) + ' · ' + (late > 0 ? plural(late) + ' after the original return date (' + fmtShort(st.origReturn) + ')' : 'not later than the original return date'), !st.newPickup);
           if (st.hasRest) addLine(box, 'The gown rests ' + fmtShort(shiftIso(st.chosen, 1)) + ' – ' + fmtShort(shiftIso(st.chosen, REST_DAYS)) + ' after the return. Customers cannot pick those days unless an admin releases them.', false);
+          if (needsEvent(st, st.newPickup)) addLine(box, 'The new pick-up is after the event date (' + fmtShort(st.curEvent) + '), so choose the new event date next.', false);
           root.appendChild(box);
-          if (st.rate > 0) {
-            var fee = feeFor(st, st.chosen);
-            var feeBox = document.createElement('div');
-            feeBox.className = 'mt-1.5 rounded-md px-2 py-1.5';
-            feeBox.style.cssText = CAL_COLORS.pickup.soft;
-            if (fee.days > 0) {
-              addLine(feeBox, 'Date change fee: ' + plural(fee.days) + ' × ' + pesos(st.rate) + ' = ' + pesos(fee.amount), true);
-              if (st.out && st.curReturn < TODAY) addLine(feeBox, 'This gown is overdue now. Moving the return turns those days into the date change fee.', false);
-              addLine(feeBox, (st.depositPaid > 0
-                ? 'It comes out of the security deposit (' + pesos(st.depositPaid) + ' paid).'
-                : 'It comes out of the security deposit (' + pesos(st.deposit) + ') once it is paid.')
-                + (fee.over > 0 ? ' That is ' + pesos(fee.over) + ' more than the deposit, so the customer pays the extra.' : ''), false);
-            } else {
-              addLine(feeBox, 'No date change fee: the return is not past the original return date.', true);
-            }
-            root.appendChild(feeBox);
-          }
-          button('Save', 'resv-cal-save rounded-md bg-success-500 px-3 py-1 text-theme-xs font-medium text-white');
+          feeSummary(st.chosen);
+          if (needsEvent(st, st.newPickup)) button('Choose the new event date ›', 'resv-cal-event-next ' + NEXT);
+          else button('Save', SAVE);
         }
-        if (st.kind === 'return' && st.newPickup) button('‹ Back', 'resv-cal-back text-theme-xs text-gray-500 dark:text-gray-400');
+        if (st.kind === 'return' && st.newPickup || st.kind === 'event' && st.eventFrom) button('‹ Back', 'resv-cal-back text-theme-xs text-gray-500 dark:text-gray-400');
         button('Cancel', 'resv-popover-cancel-btn text-theme-xs text-gray-400 dark:text-gray-400');
         root.appendChild(actions);
       } else {
-        if (st.kind === 'return' && st.newPickup) button('‹ Back', 'resv-cal-back text-theme-xs text-gray-500 dark:text-gray-400');
+        if (st.kind === 'return' && st.newPickup || st.kind === 'event' && st.eventFrom) button('‹ Back', 'resv-cal-back text-theme-xs text-gray-500 dark:text-gray-400');
         button('Cancel', 'resv-popover-cancel-btn text-theme-xs text-gray-400 dark:text-gray-400');
         root.appendChild(actions);
       }
@@ -2022,9 +2085,32 @@
       var st = calState;
       if (!st || !st.chosen) return;
       st.newPickup = st.chosen;
+      st.newReturn = null;
       st.kind = 'return';
       st.chosen = null;
       st.month = (st.newPickup > st.curReturn ? st.newPickup : shiftIso(st.curReturn, 1)).slice(0, 7);
+      renderCalendar();
+    }
+
+    // The new event date: after a pick-up (and maybe a return) that moved the pick-up past the event.
+    function goToEventStep() {
+      var st = calState;
+      if (!st || !st.chosen) return;
+      if (st.kind === 'pickup') { st.newPickup = st.chosen; st.newReturn = null; } else { st.newReturn = st.chosen; }
+      st.eventFrom = st.kind;
+      st.kind = 'event';
+      st.chosen = null;
+      st.month = eventFrom(st).slice(0, 7);
+      renderCalendar();
+    }
+
+    function backFromEventStep() {
+      var st = calState;
+      if (!st || !st.eventFrom) return;
+      if (st.eventFrom === 'return') { st.kind = 'return'; st.chosen = st.newReturn; st.newReturn = null; }
+      else { st.kind = 'pickup'; st.chosen = st.newPickup; st.newPickup = null; }
+      st.eventFrom = null;
+      st.month = (st.chosen || st.curPickup).slice(0, 7);
       renderCalendar();
     }
 
@@ -2033,6 +2119,7 @@
       if (!st) return;
       st.chosen = st.newPickup;
       st.newPickup = null;
+      st.newReturn = null;
       st.kind = 'pickup';
       st.month = (st.chosen || st.curPickup).slice(0, 7);
       renderCalendar();
@@ -2041,7 +2128,7 @@
     function openChangeCalendar(btn) {
       var d = btn.dataset;
       var kind = d.kind;
-      var start = kind === 'pickup' ? (d.rental > TODAY ? d.rental : TODAY) : shiftIso(d['return'], 1);
+      var start = kind === 'event' ? d.rental : kind === 'pickup' ? (d.rental > TODAY ? d.rental : TODAY) : shiftIso(d['return'], 1);
       calState = {
         kind: kind, itemId: d.itemId, out: d.out === '1',
         curPickup: d.rental, curReturn: d['return'], origPickup: d.origPickup || d.rental, origReturn: d.origReturn || d['return'],
@@ -2049,7 +2136,7 @@
         rate: parseInt(d.rate || '0', 10) || 0, depositPaid: parseFloat(d.depositPaid || '0') || 0, deposit: parseFloat(d.deposit || '0') || 0,
         feeOthers: parseFloat(d.feeOthers || '0') || 0,
         lastPickup: shiftIso(TODAY, PICKUP_MAX_DAYS), lastReturn: shiftIso(TODAY, RETURN_MAX_DAYS),
-        newPickup: null, chosen: null, month: start.slice(0, 7)
+        curEvent: d.eventDay || null, newPickup: null, newReturn: null, eventFrom: null, chosen: null, month: start.slice(0, 7)
       };
       openRowPopover(btn, '<div id="resv-cal" style="width: 300px;"></div>');
       renderCalendar();
@@ -2061,18 +2148,22 @@
       saveBtn.disabled = true;
       var body = {};
       if (st.kind === 'pickup') { body.pickup = st.chosen; }
-      else { if (st.newPickup) body.pickup = st.newPickup; body['return'] = st.chosen; }
-      var kind = st.kind, newPickup = st.newPickup, chosen = st.chosen;
-      var fee = kind === 'return' && st.rate > 0 ? feeFor(st, chosen) : null;
+      else if (st.kind === 'return') { if (st.newPickup) body.pickup = st.newPickup; body['return'] = st.chosen; }
+      else { if (st.newPickup) body.pickup = st.newPickup; if (st.newReturn) body['return'] = st.newReturn; body.event = st.chosen; }
+      var fee = body['return'] && st.rate > 0 ? feeFor(st, body['return']) : null;
       postJson('/admin-panel/api/reservation-items/' + st.itemId + '/change-dates/', body)
         .then(function () {
           closeRowPopover();
-          var text = kind === 'pickup'
-            ? 'The pick-up is now ' + fmtLong(chosen) + '.'
-            : (newPickup ? 'The pick-up is now ' + fmtLong(newPickup) + ' and the return is now ' + fmtLong(chosen) + '.' : 'The return is now ' + fmtLong(chosen) + '.');
+          var said = [];
+          if (body.pickup && body['return']) said.push('The pick-up is now ' + fmtLong(body.pickup) + ' and the return is now ' + fmtLong(body['return']) + '.');
+          else if (body.pickup) said.push('The pick-up is now ' + fmtLong(body.pickup) + '.');
+          else if (body['return']) said.push('The return is now ' + fmtLong(body['return']) + '.');
+          if (body.event) said.push('The event date is now ' + fmtLong(body.event) + '.');
+          var text = said.join(' ');
           if (fee && fee.days > 0) text += ' Date change fee: ' + plural(fee.days) + ' × ' + pesos(st.rate) + ' = ' + pesos(fee.amount) + ', taken from the security deposit.';
+          var changed = ['pickup', 'return', 'event'].filter(function (k) { return !!body[k]; });
           return adminAlert({
-            title: kind === 'pickup' ? 'Pick-up date changed' : (newPickup ? 'Dates changed' : 'Return date changed'),
+            title: changed.length > 1 ? 'Dates changed' : (body.event ? 'Event date changed' : (body.pickup ? 'Pick-up date changed' : 'Return date changed')),
             message: text + ' The Rental Schedule shows the new dates too.'
           });
         })
@@ -2105,8 +2196,11 @@
       var calNext = e.target.closest('.resv-cal-next');
       if (calNext && calState) { goToReturnStep(); return; }
 
+      var calEventNext = e.target.closest('.resv-cal-event-next');
+      if (calEventNext && calState) { goToEventStep(); return; }
+
       var calBack = e.target.closest('.resv-cal-back');
-      if (calBack && calState) { backToPickupStep(); return; }
+      if (calBack && calState) { if (calState.kind === 'event') { backFromEventStep(); } else { backToPickupStep(); } return; }
 
       var markReturnedBtn = e.target.closest('.resv-mark-returned-btn');
       if (markReturnedBtn) {

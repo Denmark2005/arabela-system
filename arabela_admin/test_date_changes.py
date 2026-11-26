@@ -3,12 +3,15 @@
 What the shop decided:
   * The pick-up can move EARLIER or LATER (today up to 60 days ahead); a pick-up after the current return date needs the new return date in the same request, and both
     are saved together or not at all. The return can only move later.
+  * The customer's event day stays as they chose it, except when it is no longer between the pick-up and the return: a pick-up moved past it comes with the new
+    event day (in the same request), and a booking already like that can be given one on its own.
   * The late fee (₱200 per gown per day) always counts the days after the ORIGINAL return date. Neither the pick-up nor the event date changes it, and early pick-up is free.
   * Never a double booking: the new days must be free of every other booking and block, and when the RETURN moves, the gown's rest days after it (5) must stay clear of a
     later booking; the gown's rest block moves with the return unless an admin released it, which is respected.
   * Active Reservations shows the fee: a chip on the booking, a labeled line in the gown, the cost in the date window, all linking to Payments.
 Day numbers below are offsets from today; in the shop's example the original booking is pick-up Nov 25 (day 10), event Nov 27 (day 12), return Nov 29 (day 14)."""
 import json
+import re
 from datetime import timedelta
 from decimal import Decimal
 
@@ -71,12 +74,14 @@ class DateBase(TestCase):
             )
         return item
 
-    def change(self, item, pickup=None, ret=None, client=None):
+    def change(self, item, pickup=None, ret=None, client=None, event=None):
         body = {}
         if pickup is not None:
             body["pickup"] = pickup.isoformat()
         if ret is not None:
             body["return"] = ret.isoformat()
+        if event is not None:
+            body["event"] = event.isoformat()
         return (client or self.client).post(reverse("arabela_admin:reservation_item_change_dates", args=[item.id]), data=json.dumps(body), content_type="application/json")
 
     def rest_block(self, item):
@@ -98,13 +103,15 @@ class FeeScenarioTests(DateBase):
         for pickup, ret, days in self.SCENARIOS:
             with self.subTest(pickup=pickup, ret=ret):
                 it = self.item(10, 14, event_date=self.day(12))
+                event = pickup if pickup > 12 else None                                    # past the event day: it moves too (to the new pick-up day here)
                 if (pickup, ret) != (10, 14):
-                    response = self.change(it, self.day(pickup) if pickup != 10 else None, self.day(ret) if ret != 14 else None)
+                    response = self.change(it, self.day(pickup) if pickup != 10 else None, self.day(ret) if ret != 14 else None,
+                                           event=self.day(event) if event else None)
                     self.assertEqual(response.status_code, 200, response.content)
                 it.refresh_from_db()
                 self.assertEqual(it.original_return_date or it.return_date, self.day(14))
-                self.assertEqual(ledger.planned_late_days(it, self.today), days)
-                self.assertEqual(it.effective_event_date, self.day(12))                    # the customer's own event day never moves
+                self.assertEqual(ledger.planned_late_days(it, self.today), days)           # the event day never changes the fee
+                self.assertEqual(it.effective_event_date, self.day(event or 12))           # otherwise the customer's own event day never moves
                 # the preview and the real fee agree: once it comes back on its planned return day, the Payments statement says the same
                 ReservationItem.objects.filter(pk=it.pk).update(stage=STAGE.RETURNED, returned_on=it.return_date)
                 it.refresh_from_db()
@@ -117,9 +124,9 @@ class FeeScenarioTests(DateBase):
         self.assertEqual(self.change(it, None, self.day(20)).status_code, 200)
         before = ledger.planned_late_days(ReservationItem.objects.get(pk=it.pk), self.today)
         self.assertEqual(before, 6)
-        for pickup in (12, 18, 9):
+        for pickup, event in ((12, None), (18, 18), (9, None)):
             with self.subTest(pickup=pickup):
-                self.assertEqual(self.change(it, self.day(pickup)).status_code, 200)
+                self.assertEqual(self.change(it, self.day(pickup), event=self.day(event) if event else None).status_code, 200)
                 self.assertEqual(ledger.planned_late_days(ReservationItem.objects.get(pk=it.pk), self.today), 6)
 
     def test_the_planned_fee_follows_the_gowns_stage(self):
@@ -156,13 +163,19 @@ class DateRuleTests(DateBase):
         self.assertIn("Choose the new return date too", refused.json()["error"])
         it.refresh_from_db()
         self.assertEqual((it.rental_date, it.return_date), (self.day(10), self.day(14)))
-        response = self.change(it, self.day(16), self.day(17))
+        no_event = self.change(it, self.day(16), self.day(17))
+        self.assertEqual(no_event.status_code, 400)
+        self.assertIn("Choose the new event date too", no_event.json()["error"])
+        it.refresh_from_db()
+        self.assertEqual((it.rental_date, it.return_date), (self.day(10), self.day(14)))
+        response = self.change(it, self.day(16), self.day(17), event=self.day(16))
         self.assertEqual(response.status_code, 200, response.content)
         body = response.json()
-        self.assertEqual((body["rental_date"], body["return_date"], body["days_early"], body["days_late"]), (self.day(16).isoformat(), self.day(17).isoformat(), -6, 3))
+        self.assertEqual((body["rental_date"], body["return_date"], body["event_date"], body["days_early"], body["days_late"]),
+                         (self.day(16).isoformat(), self.day(17).isoformat(), self.day(16).isoformat(), -6, 3))
         it.refresh_from_db()
         self.assertEqual((it.rental_date, it.return_date, it.original_rental_date, it.original_return_date), (self.day(16), self.day(17), self.day(10), self.day(14)))
-        self.assertEqual(it.event_date, self.day(12))                                          # frozen at what it was, not dragged along
+        self.assertEqual(it.event_date, self.day(16))
 
     def test_the_return_cannot_be_before_the_pick_up_and_a_refused_change_saves_nothing(self):
         it = self.item(10, 14)
@@ -180,9 +193,9 @@ class DateRuleTests(DateBase):
     def test_a_pick_up_change_freezes_the_event_date_so_it_cannot_drift(self):
         it = self.item(10, 14)                                                                  # event never saved: worked out from the dates (return - 2 = day 12)
         self.assertEqual(it.effective_event_date, self.day(12))
-        self.assertEqual(self.change(it, self.day(13)).status_code, 200)
+        self.assertEqual(self.change(it, self.day(11), self.day(20)).status_code, 200)
         it.refresh_from_db()
-        self.assertEqual(it.effective_event_date, self.day(12))                                  # it would have drifted to day 13 if it had stayed worked out
+        self.assertEqual(it.effective_event_date, self.day(12))                                  # it would have drifted to day 18 if it had stayed worked out
 
     def test_a_gown_that_is_out_cannot_change_its_pick_up_but_can_still_extend_its_return(self):
         out = self.item(-2, 3, stage=STAGE.RESERVED, picked_up_on=self.day(-2))
@@ -195,16 +208,26 @@ class DateRuleTests(DateBase):
 
     def test_every_change_is_written_to_the_booking_history_and_the_audit_log(self):
         it = self.item(10, 14)
-        self.assertEqual(self.change(it, self.day(16), self.day(17)).status_code, 200)
+        self.assertEqual(self.change(it, self.day(16), self.day(17), event=self.day(17)).status_code, 200)
         details = list(ReservationStatusEvent.objects.filter(reservation=it.reservation, item=it).order_by("id").values_list("detail", flat=True))
-        self.assertEqual(len(details), 2)
+        self.assertEqual(len(details), 3)
         self.assertIn("Pick-up moved back from", details[0])
         self.assertIn("6 days later than originally booked", details[0])
         self.assertIn("Return moved from", details[1])
+        self.assertEqual(details[2], f"Event date moved from {self.day(12):%b %d} to {self.day(17):%b %d, %Y} at the customer's request.")
         row = AuditLog.objects.get(action="item.change_dates")
         self.assertIn("changed the dates of", row.summary)
+        self.assertIn("event date from", row.summary)
         self.assertEqual(row.details["pick-up date"], [self.day(10).isoformat(), self.day(16).isoformat()])
         self.assertEqual(row.details["return date"], [self.day(14).isoformat(), self.day(17).isoformat()])
+        self.assertEqual(row.details["event date"], [self.day(12).isoformat(), self.day(17).isoformat()])
+
+    def test_a_change_that_leaves_the_event_alone_is_not_logged_as_an_event_change(self):
+        it = self.item(10, 14)
+        self.assertEqual(self.change(it, self.day(11)).status_code, 200)
+        row = AuditLog.objects.get(action="item.change_dates")
+        self.assertNotIn("event date", row.details)
+        self.assertNotIn("event date", row.summary)
 
     def test_only_signed_in_staff_can_change_dates_and_a_bad_request_is_refused(self):
         it = self.item(10, 14)
@@ -228,9 +251,7 @@ class DateRuleTests(DateBase):
         self.assertEqual(self.change(it, self.day(12)).status_code, 409)
 
     def test_the_calendar_markers_stay_inside_the_booking_when_the_pick_up_is_after_the_event_day(self):
-        it = self.item(10, 14, event_date=self.day(12))
-        self.assertEqual(self.change(it, self.day(16), self.day(17)).status_code, 200)
-        it.refresh_from_db()
+        it = self.item(16, 17, event_date=self.day(12))                                          # a booking saved before the event day moved with the pick-up
         self.assertEqual(it.effective_event_date, self.day(12))                                  # the Event column keeps the customer's day
         self.assertEqual(views_module._pickup_span(it), (self.day(16), self.day(16)))
         self.assertEqual(views_module._reserved_span(it), (self.day(16), self.day(16)))
@@ -243,7 +264,7 @@ class DoubleBookingTests(DateBase):
         gown = self.gown()
         it = self.item(10, 14, gown=gown)
         other = self.item(16, 18, gown=gown, name="Booked First")
-        response = self.change(it, self.day(15), self.day(17))                                    # pick-up later AND return later, into the other booking's days
+        response = self.change(it, self.day(15), self.day(17), event=self.day(15))                # pick-up later AND return later, into the other booking's days
         self.assertEqual(response.status_code, 409)
         self.assertIn("Booked First", response.json()["error"])
         self.assertIn(other.reservation.reference_code, response.json()["error"])
@@ -303,13 +324,112 @@ class DoubleBookingTests(DateBase):
         probe = self.item(40, 41, gown=gown, name="Probe")
         for window in ((11, 13), (15, 19)):
             self.assertIsNotNone(views_module._schedule_conflict(probe, self.day(window[0]), self.day(window[1])))     # held today (rental, then rest block)
-        self.assertEqual(self.change(it, self.day(20), self.day(22)).status_code, 200)
+        self.assertEqual(self.change(it, self.day(20), self.day(22), event=self.day(21)).status_code, 200)
         for window in ((11, 13), (15, 19)):
             self.assertIsNone(views_module._schedule_conflict(probe, self.day(window[0]), self.day(window[1])))        # free for other customers now
         self.assertIn("Date Customer", views_module._schedule_conflict(probe, self.day(21), self.day(21)) or "")        # the new rental days are held
         self.assertIn("blocked", views_module._schedule_conflict(probe, self.day(25), self.day(26)) or "")              # and so are the new rest days
         block = self.rest_block(it)
         self.assertEqual((block.start_date, block.end_date), (self.day(23), self.day(22 + COOLDOWN_DAYS)))
+
+
+# ---------------------------------------------------------------- the event day
+class EventDateTests(DateBase):
+    def events(self, item):
+        return list(ReservationStatusEvent.objects.filter(reservation=item.reservation, item=item).order_by("id").values_list("label", flat=True))
+
+    def test_a_pick_up_past_the_event_day_needs_the_new_event_day(self):
+        it = self.item(10, 14, event_date=self.day(12))
+        refused = self.change(it, self.day(13))
+        self.assertEqual(refused.status_code, 400)
+        self.assertEqual(refused.json()["error"],
+                         f"The new pick-up ({self.day(13):%b %d, %Y}) is after the event date ({self.day(12):%b %d, %Y}). Choose the new event date too.")
+        it.refresh_from_db()
+        self.assertEqual((it.rental_date, it.original_rental_date), (self.day(10), None))
+        self.assertEqual(self.events(it), [])
+
+    def test_a_pick_up_onto_the_event_day_needs_nothing_more(self):
+        it = self.item(10, 14, event_date=self.day(12))
+        self.assertEqual(self.change(it, self.day(12)).status_code, 200)
+        it.refresh_from_db()
+        self.assertEqual((it.rental_date, it.effective_event_date), (self.day(12), self.day(12)))
+
+    def test_the_new_event_day_must_be_between_the_pick_up_and_the_return(self):
+        it = self.item(10, 14, event_date=self.day(12))
+        for event in (12, 15):
+            with self.subTest(event=event):
+                refused = self.change(it, self.day(13), event=self.day(event))
+                self.assertEqual(refused.status_code, 400)
+                self.assertIn("The new event date must be between the pick-up", refused.json()["error"])
+        it.refresh_from_db()
+        self.assertEqual((it.rental_date, it.event_date), (self.day(10), self.day(12)))
+        response = self.change(it, self.day(13), event=self.day(14))
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["event_date"], self.day(14).isoformat())
+        it.refresh_from_db()
+        self.assertEqual((it.rental_date, it.event_date, it.return_date), (self.day(13), self.day(14), self.day(14)))
+        self.assertEqual(self.events(it), [f"{it.gown_name} pick-up date changed", f"{it.gown_name} event date changed"])
+
+    def test_the_new_event_day_follows_the_new_return_date(self):
+        it = self.item(10, 14, event_date=self.day(12))
+        self.assertEqual(self.change(it, self.day(16), self.day(18), event=self.day(19)).status_code, 400)
+        self.assertEqual(self.change(it, self.day(16), self.day(18), event=self.day(18)).status_code, 200)
+
+    def test_an_event_day_inside_the_rental_stays_as_it_is(self):
+        it = self.item(10, 14, event_date=self.day(12))
+        for body in ({"event": self.day(13)}, {"pickup": self.day(11), "event": self.day(13)}):
+            with self.subTest(body=sorted(body)):
+                refused = self.change(it, body.get("pickup"), event=body["event"])
+                self.assertEqual(refused.status_code, 400)
+                self.assertIn("already between the pick-up and the return", refused.json()["error"])
+        it.refresh_from_db()
+        self.assertEqual((it.rental_date, it.event_date), (self.day(10), self.day(12)))
+
+    def test_a_booking_already_like_that_can_be_given_a_new_event_day_on_its_own(self):
+        it = self.item(16, 18, event_date=self.day(12))                      # the pick-up was moved past the event day before it moved with it
+        fee_before = ledger.planned_late_days(it, self.today)
+        refused = self.change(it, event=self.day(19))
+        self.assertEqual(refused.status_code, 400)
+        response = self.change(it, event=self.day(17))
+        self.assertEqual(response.status_code, 200, response.content)
+        it.refresh_from_db()
+        self.assertEqual((it.rental_date, it.return_date, it.event_date), (self.day(16), self.day(18), self.day(17)))
+        self.assertEqual((it.original_rental_date, it.original_return_date), (None, None))             # nothing else was changed
+        self.assertEqual(ledger.planned_late_days(it, self.today), fee_before)
+        self.assertEqual(self.events(it), [f"{it.gown_name} event date changed"])
+        row = AuditLog.objects.get(action="item.change_dates")
+        self.assertEqual(row.details["event date"], [self.day(12).isoformat(), self.day(17).isoformat()])
+        self.assertEqual(self.change(it, event=self.day(18)).status_code, 400)                          # it is inside now, so it stays
+
+    def test_a_gown_that_is_out_can_be_given_its_new_event_day(self):
+        it = self.item(-3, 4, stage=STAGE.RESERVED, picked_up_on=self.day(-3), event_date=self.day(-5))
+        self.assertEqual(self.change(it, event=self.day(0)).status_code, 200)
+        it.refresh_from_db()
+        self.assertEqual(it.event_date, self.day(0))
+
+    def test_a_returned_or_cancelled_gown_keeps_its_event_day(self):
+        for stage in (STAGE.RETURNED, STAGE.CANCELLED):
+            with self.subTest(stage=stage):
+                it = self.item(16, 18, stage=stage, event_date=self.day(12))
+                self.assertIn(self.change(it, event=self.day(17)).status_code, (400, 409))
+                it.refresh_from_db()
+                self.assertEqual(it.event_date, self.day(12))
+
+    def test_the_pick_up_only_button_address_cannot_leave_the_event_behind(self):
+        it = self.item(10, 14, event_date=self.day(12))
+        response = self.client.post(reverse("arabela_admin:reservation_item_change_pickup", args=[it.id]),
+                                    data=json.dumps({"date": self.day(13).isoformat()}), content_type="application/json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Choose the new event date too", response.json()["error"])
+
+    def test_a_bad_event_date_is_refused(self):
+        it = self.item(16, 18, event_date=self.day(12))
+        for body in (json.dumps({"event": "soon"}), json.dumps({"event": 17}), json.dumps({"event": ""})):
+            with self.subTest(body=body):
+                response = self.client.post(reverse("arabela_admin:reservation_item_change_dates", args=[it.id]), data=body, content_type="application/json")
+                self.assertEqual(response.status_code, 400)
+        it.refresh_from_db()
+        self.assertEqual(it.event_date, self.day(12))
 
 
 # ---------------------------------------------------------------- what the page shows
@@ -394,6 +514,24 @@ class ActivePageTests(DateBase):
         self.assertEqual(sorted((h["kind"], h["itemId"]) for h in holds if h["kind"] == "booking"), [("booking", other.id)])
         self.assertTrue(any(h["kind"] == "block" and h["itemId"] is None for h in holds))                # the staff block, which needs no rest days
         self.assertFalse([h for h in holds if h["itemId"] == it.id])                                      # its own rest block is not handed to its own calendar
+
+    def test_an_event_day_outside_the_rental_is_flagged_with_its_own_button(self):
+        outside = self.item(16, 18, event_date=self.day(12))
+        inside = self.item(10, 14, event_date=self.day(12))
+        response, html = self.page()
+        self.assertTrue(self.booking(response, outside).event_off)
+        self.assertFalse(self.booking(response, inside).event_off)
+        self.assertIn(f'data-kind="event" data-item-id="{outside.id}" data-event-day="{self.day(12).isoformat()}"', re.sub(r"\s+", " ", html))
+        self.assertNotIn(f'data-kind="event" data-item-id="{inside.id}"', re.sub(r"\s+", " ", html))
+        self.assertEqual(html.count("Set new event date</button>"), 1)
+        self.assertEqual(html.count(">needs a new date</small>"), 1)
+        self.assertIn(f"The event date ({self.day(12):%b} {self.day(12).day}) is before the pick-up ({self.day(16):%b} {self.day(16).day}). Set the new event date.", html)
+        for item in (outside, inside):                                                     # every date button knows the event day the window checks against
+            self.assertRegex(re.sub(r"\s+", " ", html), rf'data-kind="pickup" data-item-id="{item.id}" data-event-day="{self.day(12).isoformat()}"')
+        self.assertEqual(self.change(outside, event=self.day(17)).status_code, 200)
+        _, html = self.page()
+        self.assertNotIn("Set new event date</button>", html)
+        self.assertNotIn(">needs a new date</small>", html)
 
     def test_a_gown_without_its_rest_block_says_so_to_the_window(self):
         self.item(10, 14, rest=False)

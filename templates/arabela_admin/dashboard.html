@@ -860,7 +860,7 @@
           </li>
           <!-- Menu Item Payments & Deposits -->
 
-          <!-- Menu Item Financial Report -->
+          <!-- Menu Item Records -->
           <li>
             <a
               href="#"
@@ -883,7 +883,7 @@
                 class="menu-item-text"
                 :class="sidebarToggle ? 'lg:hidden' : ''"
               >
-                Financial Report
+                Records
               </span>
 
               <svg
@@ -920,14 +920,14 @@
                     class="menu-dropdown-item group"
                     :class="page === 'reservation-records' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
-                    Reservation Records
+                    All Bookings
                   </a>
                 </li>
               </ul>
             </div>
             <!-- Dropdown Menu End -->
           </li>
-          <!-- Menu Item Financial Report -->
+          <!-- Menu Item Records -->
 
           <!-- Menu Item Profile -->
           <li>
@@ -1391,8 +1391,8 @@
                     <div class="db-fhead"><h2 class="db-ftitle">Bookings</h2></div>
                     <div class="db-figs db-figs--3">
                       <a href="{% url 'arabela_admin:active_reservations' %}" class="db-fig" title="View Active Reservations"><span class="db-fig-lbl">Active Rentals</span><span class="db-fig-num">{{ active_rentals }}</span></a>
-                      {# One per booking, counted in the month its first gown is picked up; opens Reservation Records filtered to exactly those bookings. #}
-                      <a href="{{ reservations_this_month_url }}" class="db-fig" title="Bookings picked up in {{ reservations_this_month_label }} - opens Reservation Records"><span class="db-fig-lbl"><span>Reservations This Month <span class="ov-tag">{{ reservations_this_month_label }}</span></span></span><span class="db-fig-num">{{ reservations_this_month }}</span></a>
+                      {# One per booking, counted in the month its first gown is picked up; opens All Bookings filtered to exactly those bookings. #}
+                      <a href="{{ reservations_this_month_url }}" class="db-fig" title="Bookings picked up in {{ reservations_this_month_label }} - opens All Bookings"><span class="db-fig-lbl"><span>Reservations This Month <span class="ov-tag">{{ reservations_this_month_label }}</span></span></span><span class="db-fig-num">{{ reservations_this_month }}</span></a>
                       <a href="{% url 'arabela_admin:clients' %}" class="db-fig" title="View Client List"><span class="db-fig-lbl">Registered Customers</span><span class="db-fig-num">{{ registered_customers }}</span></a>
                     </div>
                   </div>
@@ -1455,7 +1455,7 @@
                       <div class="ar-ref" data-label="Booking no."><b>{{ r.reference_code }}</b></div>
                       {# The amount the customer sent by GCash = the security deposit. A rare old booking that cannot be split shows its total instead, and says so. #}
                       <div class="qv-amt" data-label="Deposit paid" title="The security deposit the customer sent by GCash">{% with bd=r.payment_breakdown %}{% if bd %}{{ bd.headline }}{% else %}&#8369;{{ r.total_amount|floatformat:'-2g' }} <span class="qv-tot">total</span>{% endif %}{% endwith %}</div>
-                      {# The booking's first pick-up and last return (a multi-gown booking can differ per gown): the same window Active Reservations and Reservation Records show. #}
+                      {# The booking's first pick-up and last return (a multi-gown booking can differ per gown): the same window Active Reservations and All Bookings show. #}
                       <div class="qv-day qv-pick" data-label="Pick-up">{% if r.qv_pickup %}{{ r.qv_pickup|date:"M j, Y" }}{% else %}&mdash;{% endif %}</div>
                       <div class="qv-day qv-ret" data-label="Return">{% if r.qv_return %}{{ r.qv_return|date:"M j, Y" }}{% else %}&mdash;{% endif %}</div>
                       <div class="qv-date" data-label="Submitted" title="Sent {{ r.created_at|date:'M j, Y, g:i A' }}">{{ r.created_at|date:"M j" }}</div>

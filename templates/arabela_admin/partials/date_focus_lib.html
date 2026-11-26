@@ -4,7 +4,7 @@
 
   Every page that filters by date marks its rows with three attributes, each holding the dates (YYYY-MM-DD, space separated) of that row's gowns:
       data-d-pickup="2026-11-23 2026-11-24"   data-d-return="2026-11-27"   data-d-event="2026-11-25"
-  and calls arabelaDF.has(row, date, kind). A page that keeps its rows as data (Reservation Records) calls arabelaDF.hit(list, date) instead.
+  and calls arabelaDF.has(row, date, kind). A page that keeps its rows as data (All Bookings) calls arabelaDF.hit(list, date) instead.
   An empty or malformed date means "any date" (everything shows), so a half-typed date can never hide the whole list.
 {% endcomment %}
 <script>

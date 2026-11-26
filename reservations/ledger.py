@@ -52,6 +52,10 @@ STATE_LABELS = {
 CHANGE_FEE, OVERDUE_FEE = "change", "overdue"
 FEE_LABELS = {CHANGE_FEE: "Date change fee", OVERDUE_FEE: "Overdue fee"}
 
+# Where an approved booking's security deposit stands (deposit_stage): All Bookings and Rental History say it with these words, and the
+# Security Deposits page counts it the same way (arabela_admin.views._deposit_state).
+DEPOSIT_NOT_PAID, DEPOSIT_HELD, DEPOSIT_RETURN_DUE, DEPOSIT_RETURNED = "Not paid yet", "Held", "Return due", "Returned"
+
 
 def long_day(value):
     """'Nov 29, 2026': a day the way a receipt writes it, or '' when there is none."""
@@ -295,3 +299,36 @@ def statement(reservation, today=None):
         all_returned=all_returned, balance_core=balance_core, balance_due=balance_due,
         state=state, state_label=STATE_LABELS[state],
     )
+
+
+# ---------------------------------------------------------------- the security deposit, in words
+def deposit_stage(reservation, statement):
+    """Not paid yet / Held / Return due / Returned, from the booking's own money. "Returned" means nothing is left to hand back: it was handed back, or
+    the fees and deductions used it up (or staff marked it returned by hand before the Payments page existed)."""
+    if reservation.deposit_returned_at:
+        return DEPOSIT_RETURNED
+    if statement.deposit > 0 and statement.deposit_paid <= 0:
+        return DEPOSIT_NOT_PAID
+    if not statement.all_returned:
+        return DEPOSIT_HELD
+    return DEPOSIT_RETURN_DUE if statement.refund_available > 0 else DEPOSIT_RETURNED
+
+
+def deposit_returned_day(reservation, statement):
+    """The day a Returned deposit was returned: the day it was handed back, else the day the last gown came back (it was used up). None otherwise."""
+    if deposit_stage(reservation, statement) != DEPOSIT_RETURNED:
+        return None
+    if reservation.deposit_returned_at:
+        return timezone.localtime(reservation.deposit_returned_at).date()
+    back = [p.paid_at for p in reservation.payments.all()
+            if p.direction == Payment.Direction.OUT and p.purpose == Payment.Purpose.DEPOSIT_RETURN and not p.is_void]
+    return timezone.localtime(max(back)).date() if back else reservation.deposit_returned_on
+
+
+def is_settled(reservation, statement):
+    """Nothing is left to move on this booking: every gown back, nothing to pay and nothing to hand back."""
+    if reservation.status == Reservation.Status.CANCELLED or not statement.tracked or not statement.all_returned:
+        return False
+    if reservation.deposit_returned_at:
+        return True
+    return statement.balance_due <= 0 and statement.refund_available <= 0

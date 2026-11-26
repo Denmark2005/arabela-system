@@ -30,8 +30,8 @@ from accounts import customer_emails as ce
 from accounts.email_backends import AppsScriptRelayBackend, EmailRelayError
 from accounts.models import CustomerMessage, UserProfile
 from gowns.models import Gown, SiteSettings
-from reservations import reminders
-from reservations.models import Reservation, ReservationItem, ReservationStatusEvent
+from reservations import payments, reminders
+from reservations.models import Payment, Reservation, ReservationItem, ReservationStatusEvent
 
 User = get_user_model()
 
@@ -477,8 +477,9 @@ class CustomerEmailHookTests(TestCase):
         self.assertIn("Please contact the shop for details.", self._the_one_email().body)
 
     # ---- deposit settled ----------------------------------------------------------------------------------------------------
-    def test_the_deposit_email_comes_when_the_last_gown_is_back(self):
+    def test_the_deposit_email_comes_when_the_last_gown_is_back_and_nothing_is_left_to_move(self):
         reservation = self._reservation(status=Reservation.Status.CONFIRMED, items=2, stage=ReservationItem.Stage.RETURN)
+        Reservation.objects.filter(pk=reservation.pk).update(rental_subtotal=0, security_deposit=0, total_amount=0)
         first, second = reservation.items.order_by("id")
         with self.captureOnCommitCallbacks(execute=True):
             self._post("reservation_item_mark_returned", [first.id], {"condition": ReservationItem.ReturnCondition.GOOD})
@@ -488,6 +489,22 @@ class CustomerEmailHookTests(TestCase):
         email = self._the_one_email()
         self.assertEqual(email.subject, f"Your security deposit is settled - {reservation.reference_code}")
         self.assertIn("This reservation is complete", email.body)
+
+    def test_with_money_still_to_move_the_deposit_email_waits_and_the_receipt_is_the_one_email(self):
+        reservation = self._reservation(status=Reservation.Status.CONFIRMED, items=1, stage=ReservationItem.Stage.RETURN)
+        item = reservation.items.get()
+        with self.captureOnCommitCallbacks(execute=True):
+            self._post("reservation_item_mark_returned", [item.id], {"condition": ReservationItem.ReturnCondition.GOOD})
+        self.assertEqual(len(mail.outbox), 0, "every gown back, but the rental is unpaid and the deposit still to hand back")
+        self.assertFalse(ReservationStatusEvent.objects.filter(reservation=reservation, label=payments.SETTLED_EVENT).exists())
+        with self.captureOnCommitCallbacks(execute=True):
+            payments.record_payment(reservation_id=reservation.pk, purpose=Payment.Purpose.BALANCE, amount=Decimal("20000"),
+                                    method=Payment.Method.CASH, user=self.staff)
+        mail.outbox.clear()
+        with self.captureOnCommitCallbacks(execute=True):
+            receipt = payments.return_deposit(reservation_id=reservation.pk, amount=Decimal("2000"), method=Payment.Method.CASH, user=self.staff)
+        self.assertEqual(self._the_one_email().subject, f"Your security deposit was returned - receipt {receipt.receipt_number}")
+        self.assertEqual(ReservationStatusEvent.objects.filter(reservation=reservation, label=payments.SETTLED_EVENT).count(), 1)
 
     # ---- reminders -----------------------------------------------------------------------------------------------------------
     def test_the_reminder_sweep_emails_once_per_reminder(self):

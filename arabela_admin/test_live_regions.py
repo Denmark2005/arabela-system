@@ -108,6 +108,7 @@ ADMIN_PAGES = {
     "payment_verification": ["pv-list", "pv-verified-today"],
     "security_deposits": ["sd-list", "sd-filters", "sd-month"],
     "clients": ["cl-rows", "cl-filters"],
+    "rental_history": ["history-list"],
 }
 
 
@@ -179,6 +180,17 @@ class TheAdminPagesDrawTheirLivePartsTests(TestCase):
         first = re.search(r'<script id="reservation-records-data"[^>]*>(.*?)</script>', html, re.S).group(1)
         second = re.search(r'<script id="reservation-records-data"[^>]*>(.*?)</script>', self.page("reservation_records"), re.S).group(1)
         self.assertEqual(first, second)                    # the same JSON every time, so a quiet page is never "changed"
+
+    def test_rental_history_hands_its_fresh_counts_to_its_own_function(self):
+        html = self.page("rental_history")
+        marker = re.search(r'<span hidden data-live-data="history-records"[^>]*>', html)
+        self.assertIsNotNone(marker)
+        self.assertIn('data-live-source="#rental-records-data"', marker.group(0))
+        self.assertIn("window.ArabelaLiveData['history-records'] = function", html)
+        self.assertIn("state.rentalRecords = JSON.parse(text);", html)
+        first = re.search(r'<script id="rental-records-data"[^>]*>(.*?)</script>', html, re.S).group(1)
+        second = re.search(r'<script id="rental-records-data"[^>]*>(.*?)</script>', self.page("rental_history"), re.S).group(1)
+        self.assertEqual(first, second)
 
     def test_the_markers_change_no_layout(self):
         """Only attributes were added (plus display: contents wrappers where a section can start empty): no new classes, no new boxes."""

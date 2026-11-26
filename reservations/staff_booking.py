@@ -2,7 +2,7 @@
 gown search, the availability check) is arabela_admin/new_booking.py; this is everything that decides and saves.
 
 A recorded booking is an ordinary Reservation -- the same booking number series, the same gown lines, the same automatic rest
-days -- so Active Reservations, the Rental Schedule, Security Deposits, Reservation Records and the customer website's calendar
+days -- so Active Reservations, the Rental Schedule, Security Deposits, All Bookings and the customer website's calendar
 all treat it exactly like an online one. What is different:
   * the customer may have no website account (Reservation.customer is empty): the name and phone are the customer;
   * it says how it came in (Reservation.channel) and who recorded it (Reservation.recorded_by);

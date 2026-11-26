@@ -40,7 +40,7 @@ from accounts.roles import (
     parse_permissions, permission_message, staff_display_name,
 )
 from accounts.services import CANCELLATION_FLAG_THRESHOLD, clear_proof_block, record_rejected_proof
-from arabela_admin import audit_describe, dashboard_money, gown_inventory, gown_photo
+from arabela_admin import audit_describe, dashboard_money, gown_inventory, gown_photo, rental_history
 from gowns import availability, deposit, gcash_numbers
 from gowns.models import (
     COOLDOWN_DAYS,
@@ -126,7 +126,7 @@ def _permission_error(request, key):
 
 
 RECEIPTS_COMPLETE_MESSAGE = (
-    "This booking already has all its receipts. To fix a wrong photo, open the booking in Reservation Records, open the photo and use Replace."
+    "This booking already has all its receipts. To fix a wrong photo, open the booking in All Bookings, open the photo and use Replace."
 )
 RECEIPT_DELETE_REFUSED_MESSAGE = (
     "You can delete a receipt photo you attached in the last 15 minutes. After that, ask the owner to delete it "
@@ -204,7 +204,7 @@ def dashboard_view(request):
         .order_by("-created_at")[:5]
     )
     # The booking's first pick-up and last return, for the table's Pick-up / Return columns (the same window Active Reservations and
-    # Reservation Records show). Read from the items prefetched above, so it costs no query per row.
+    # All Bookings show). Read from the items prefetched above, so it costs no query per row.
     for booking in quick_verify_reservations:
         booking.qv_pickup, booking.qv_return = _reservation_window(list(booking.items.all()))
     _attach_duplicate_codes(quick_verify_reservations)
@@ -228,8 +228,8 @@ def dashboard_view(request):
 
     # Reservations This Month: one per BOOKING (not per gown), counted in the month its
     # FIRST gown is picked up (the same first pick-up _reservation_window gives
-    # Reservation Records), leaving out bookings that never became rentals. The tile
-    # links to Reservation Records' ?month= filter, which applies this exact rule to
+    # All Bookings), leaving out bookings that never became rentals. The tile
+    # links to All Bookings' ?month= filter, which applies this exact rule to
     # its own one-row-per-reservation list -- counting gowns here, or by any day of the
     # rental, would make the number on the tile disagree with the rows it opens.
     month_start = timezone.localdate().replace(day=1)
@@ -880,25 +880,18 @@ def payment_verification_view(request):
     )
 
 
-# Rental History: the circle each status gets (the page's CSS knows done / active / overdue / missed) and the one sentence that says what it means.
-_HISTORY_LOOK = {
-    "Completed": ("done", "The gown is back"),
-    "Ongoing": ("active", "Waiting for pick-up, or out with the customer and not overdue yet"),
-    "Overdue": ("overdue", "The gown is out with the customer and past its return date"),
-    "Not picked up": ("missed", "The dates passed and nobody picked the gown up"),
-}
-
-
 @_require_admin_staff
 def rental_history_view(request):
-    """Every gown that has gone out, one row per gown (ReservationItem), bucketed by
-    rental_date and excluding bookings that never became rentals.
+    """Every gown of every booking, one row per gown (ReservationItem), bucketed by
+    rental_date and excluding bookings that never became rentals (rejected, cancelled).
 
     Gowns the shop cancelled before pick-up are left out too: they never went out.
 
     Counts GOWNS, not bookings -- a three-gown reservation is three rows here but one
-    in Reservation Records' monthly breakdown and the dashboard's Reservations This
+    in All Bookings' monthly breakdown and the dashboard's Reservations This
     Month tile, so this page's month totals are expected to be higher than those.
+
+    What each row says (its status in words, the opened row's steps and facts) comes from arabela_admin/rental_history.py.
     """
     today = timezone.localdate()
     items = list(
@@ -907,28 +900,21 @@ def rental_history_view(request):
         )
         .exclude(stage=ReservationItem.Stage.CANCELLED)
         .select_related("reservation__customer__profile")
-        .prefetch_related(_receipts_prefetch("reservation__receipt_records"), "reservation__payments")
+        .prefetch_related(_receipts_prefetch("reservation__receipt_records"), "reservation__payments", "reservation__deductions", "reservation__items")
         .order_by("-rental_date", "-id")
     )
 
-    # Completed / Ongoing / Overdue are display-only labels -- they exist in neither
-    # Reservation.Status nor ReservationItem.Stage -- so they are derived once here
-    # rather than re-expressed as template conditionals in every place they appear
-    # (badge, modal payload, search haystack).
+    statements = {}          # one money statement per booking, however many of its gowns are listed
     for item in items:
-        # Overdue = the gown is OUT past its return date (the same rule as Active Reservations). A gown nobody ever picked up is not "overdue": once its
-        # dates have passed it is "Not picked up".
-        if item.stage == ReservationItem.Stage.RETURNED:
-            item.history_status = "Completed"
-        elif _is_late_and_out(item, today):
-            item.history_status = "Overdue"
-        elif item.stage == ReservationItem.Stage.PICKUP and item.return_date < today:
-            item.history_status = "Not picked up"
-        else:
-            item.history_status = "Ongoing"
-        item.history_kind, item.history_tip = _HISTORY_LOOK[item.history_status]
+        reservation = item.reservation
+        if reservation.pk not in statements:
+            statements[reservation.pk] = reservation_ledger.statement(reservation, today)
         item.late_days = _days_late(item, today)       # None = nothing to say, 0 = on time, N = N days overdue (so far, if it is still out)
-        item.has_receipt = reservation_payments.has_receipt(item.reservation)
+        item.has_receipt = reservation_payments.has_receipt(reservation)
+        item.view = rental_history.describe(item, today, item.late_days, statements[reservation.pk])
+        item.history_status = item.view["status"]
+        # The eye: an old payment or receipt photo when there is one, else the shop's own Payment Receipt, else no eye at all.
+        item.eye = "photo" if reservation.payment_proof_url or reservation.receipt_records.all() else ("receipt" if item.has_receipt else "")
 
     reservation_timeline.attach_to_items(items)
 
@@ -956,6 +942,8 @@ def rental_history_view(request):
             "page": "rental-history",
             "rental_items": items,
             "rental_records": rental_records,
+            "status_filters": [(status, rental_history.DOTS[rental_history.LOOK[status][0]], rental_history.LOOK[status][1])
+                               for status in rental_history.LOOK],
         },
     )
 
@@ -1236,7 +1224,7 @@ def receipt_delete_view(request, receipt_id):
     return JsonResponse({"success": True, "reference": reservation.reference_code, "undo": undo})
 
 
-# --- Reservation Records -------------------------------------------------------------
+# --- All Bookings -------------------------------------------------------------
 # One row per reservation, with everything a staff member needs to answer a customer's
 # question in one place: the rental dates, where the booking actually is, the deposit,
 # the customer's own payment proof, and the shop's manual receipts (upload/view/replace
@@ -1269,8 +1257,9 @@ def _reservation_progress(reservation, items, today):
     reservation.status alone can't say: nothing moves it past Confirmed once the gown
     goes out or comes back -- the gown's own stage tracks that -- so a finished rental
     would still read "Confirmed". Built from the same fields every other page reads;
-    "Completed"/"Overdue" follow Rental History's own rule (Returned stage, or an
-    unreturned gown past its return date)."""
+    "Completed" / "Overdue" / "Not picked up" follow Rental History's own rules (every
+    gown back; a gown OUT past its return date; a gown never collected once its return
+    date has passed)."""
     if reservation.status == Reservation.Status.PENDING:
         return "Pending approval"
     if reservation.status in _NON_RENTAL_STATUSES:
@@ -1284,22 +1273,34 @@ def _reservation_progress(reservation, items, today):
     returned = [i.stage == ReservationItem.Stage.RETURNED for i in items]
     if all(returned):
         return "Completed"
-    if any(
-        i.stage != ReservationItem.Stage.RETURNED
-        and (i.stage == ReservationItem.Stage.OVERDUE or i.return_date < today)
-        for i in items
-    ):
+    if any(_is_late_and_out(i, today) for i in items):
         return "Overdue"
-    if any(i.stage in (ReservationItem.Stage.RESERVED, ReservationItem.Stage.RETURN) for i in items):
+    if any(i.stage in _OUT_STAGES for i in items):
         return "With customer"
+    if any(_never_collected(i, today) for i in items):
+        return "Not picked up"
     if any(returned):
         return "Partly returned"
     return "Awaiting pickup"
 
 
+def _never_collected(item, today):
+    """Still waiting in the shop although the day it was due back has passed: nobody picked it up."""
+    return item.stage == ReservationItem.Stage.PICKUP and item.return_date < today
+
+
+def _record_stage(item, today):
+    """The stage All Bookings shows for one gown: Overdue when it is out past its return date, "Not picked up" when nobody ever collected it."""
+    if _never_collected(item, today):
+        return "Not picked up"
+    if _is_late_and_out(item, today):
+        return ReservationItem.Stage.OVERDUE
+    return _effective_stage(item, today)
+
+
 def _focus_dates(reservation, items):
     """{"datesPickup", "datesReturn", "datesEvent"}: the sorted ISO days a booking's live gowns are picked up (planned and actual), come back (due and actual)
-    and are worn. The "On this date" bar on Reservation Records filters with these; empty for a booking that never became a rental."""
+    and are worn. The "On this date" bar on All Bookings filters with these; empty for a booking that never became a rental."""
     out = {"datesPickup": set(), "datesReturn": set(), "datesEvent": set()}
     if reservation.status not in _NON_RENTAL_STATUSES:
         for i in items:
@@ -1313,17 +1314,26 @@ def _focus_dates(reservation, items):
     return {key: sorted(days) for key, days in out.items()}
 
 
-def _deposit_status(reservation):
-    """Where the P2,000 deposit stands. Only Confirmed-and-later bookings actually hold
-    one (the same set Security Deposits lists); Pending ones haven't been verified yet."""
+def _deposit_status(reservation, money):
+    """Where the booking's security deposit stands, read from its money (reservations/ledger.py, like Security Deposits): Not paid yet / Held / Return due /
+    Returned for an approved booking; a Pending one is still being checked; a cancelled one that was approved keeps what was paid."""
     if reservation.status in _SCHEDULED_STATUSES:
-        return "Returned" if reservation.deposit_is_returned else "Held"
+        return reservation_ledger.deposit_stage(reservation, money)
     if reservation.status == Reservation.Status.PENDING:
         return "Awaiting verification" if reservation.payment_proof_url else "Not paid"
     if reservation.status == Reservation.Status.CANCELLED:
         # Approved before it was cancelled = the payment was verified and the deposit is kept (not refunded).
-        return "Paid, not refunded" if reservation.reviewed_at else "Never verified"
+        if not reservation.reviewed_at:
+            return "Never verified"
+        return "Paid, not refunded" if money.deposit_paid > 0 else "Not paid yet"
     return "Not held"
+
+
+def _payment_words(reservation, money):
+    """The payment line of All Bookings' details window: what is still owed while anything is, else where the payment stands (Reservation.payment_state)."""
+    if money.tracked and not money.cancelled and money.balance_due > 0:
+        return f"Balance {_peso(money.balance_due)} to pay"
+    return reservation.payment_state
 
 
 def _peso(amount):
@@ -1374,9 +1384,10 @@ def reservation_records_view(request):
     for r in reservations:
         items = list(r.items.all())
         start, end = _reservation_window(items)
-        deposit_status = _deposit_status(r)
         booked = timezone.localtime(r.created_at)
         money = reservation_ledger.statement(r, today)         # what the booking still owes: worked out by the system (reservations/ledger.py)
+        deposit_status = _deposit_status(r, money)
+        returned_day = reservation_ledger.deposit_returned_day(r, money) if r.status in _SCHEDULED_STATUSES else None
         records.append({
             "id": r.id,
             "reference": r.reference_code,
@@ -1418,7 +1429,7 @@ def reservation_records_view(request):
                     "pickup": date_format(i.rental_date, "M j, Y"),
                     "event": date_format(i.effective_event_date, "M j, Y"),
                     "ret": date_format(i.return_date, "M j, Y"),
-                    "stage": i.stage,
+                    "stage": _record_stage(i, today),
                     "pickedUpOn": date_format(i.picked_up_on, "M j, Y") if i.picked_up_on else "",
                     "returnedOn": date_format(i.returned_on, "M j, Y") if i.returned_on else "",
                 }
@@ -1427,27 +1438,24 @@ def reservation_records_view(request):
             "subtotal": _peso(r.rental_subtotal),
             "deposit": _peso(r.security_deposit),
             "total": _peso(r.total_amount),
-            "paymentState": r.payment_state,
+            "paymentState": _payment_words(r, money),
             "paymentProofUrl": r.payment_proof_url,
             "depositStatus": deposit_status,
-            "depositReturnedOn": (
-                date_format(r.deposit_returned_on, "M j, Y")
-                if r.deposit_returned_on else ""
-            ),
-            # Wherever staff would actually act on this deposit's CURRENT state: Held/
-            # Returned bookings live on Security Deposits; a booking still Awaiting
+            "depositReturnedOn": date_format(returned_day, "M j, Y") if returned_day else "",
+            # Wherever staff would actually act on this deposit's CURRENT state: an approved
+            # booking's deposit lives on Security Deposits; a booking still Awaiting
             # verification isn't on that page at all yet (it only lists Confirmed-and-
             # later bookings) -- that one's payment proof is reviewed on Payment
             # Verification instead, which already reads this exact ?search= param.
             "depositLink": (
                 reverse("arabela_admin:security_deposits") + "?" + urlencode({"search": r.reference_code})
-                if deposit_status in ("Held", "Returned")
+                if r.status in _SCHEDULED_STATUSES
                 else reverse("arabela_admin:payment_verification") + "?" + urlencode({"search": r.reference_code})
                 if deposit_status in ("Awaiting verification", "Paid, not refunded")
                 else ""
             ),
             "depositLinkLabel": (
-                "Open in Security Deposits" if deposit_status in ("Held", "Returned")
+                "Open in Security Deposits" if r.status in _SCHEDULED_STATUSES
                 else "Open in Payment Verification" if deposit_status == "Awaiting verification"
                 else "See the payment in Payment Verification" if deposit_status == "Paid, not refunded"
                 else ""
@@ -1528,7 +1536,7 @@ def _gcash_reference_filter(digits):
 
 
 def receipt_reservation_search_view(request):
-    """Live lookup behind Reservation Records' "find the reservation" box: staff type
+    """Live lookup behind All Bookings' "find the reservation" box: staff type
     part of a customer's name, email, a reference code, or a gown, and pick the booking
     from the results -- instead of having to know its exact reference code by heart.
     Read-only; the upload itself still goes through receipt_upload_view unchanged."""
@@ -1626,6 +1634,8 @@ def active_reservations_view(request):
             item.note_remarks = [r for r in item.remarks if _is_change_note(r)]           # the notes about moved dates, inside its dots
             item.circle = _gown_circle(item, today)
             item.has_rest = item.id in rest_item_ids
+            # The event day outside the gown's own days (a pick-up moved past it): the row says so and offers "Set new event date".
+            item.event_off = item.stage not in ReservationItem.FINISHED_STAGES and not item.rental_date <= item.effective_event_date <= item.return_date
             # The fee for the dates as they stand (reservations/ledger.py): ₱ per day per gown, counted from the ORIGINAL return date up to the planned return (or up to
             # today when the gown is out and already past it), read as a date change fee (the days the return was moved) and an overdue fee (the days past the agreed
             # date). Display only; the Payments page keeps working out the real, so-far figure.
@@ -1674,6 +1684,7 @@ def active_reservations_view(request):
         # The table's own columns (display only): the first event day (and the last, when the gowns are for different days), the total rental price, and -- when the
         # gown that gives the first pick-up / last return was moved -- the day it was booked for, shown as "was ...".
         reservation.multi_gown = len(live_items) > 1
+        reservation.event_off = any(i.event_off for i in live_items)
         reservation.span_event_start = min((i.effective_event_date for i in dated), default=None)
         reservation.span_event_end = max((i.effective_event_date for i in dated), default=None)
         reservation.total_rental = sum((i.rental_price or Decimal("0") for i in dated), Decimal("0"))
@@ -1760,7 +1771,7 @@ def active_reservations_view(request):
     for reservation in reservations:
         reservation.cancel_request = waiting_requests.get(reservation.id)
 
-    # This page is for rentals that are still running. A booking whose every gown is back is finished: it lives on in Reservation Records and
+    # This page is for rentals that are still running. A booking whose every gown is back is finished: it lives on in All Bookings and
     # Rental History, so it leaves this list. Overdue ones go first (the most days overdue on top); the rest keep their order (the sort is stable).
     running = [r for r in reservations if not r.is_completed]
     running.sort(key=lambda r: (0, -r.overdue_days) if r.state == "overdue" else (1, 0))
@@ -3479,16 +3490,9 @@ def reservation_item_mark_returned_view(request, item_id):
             staff_only=True,
         )
 
-    # The security deposit follows the gowns: once the LAST gown on the booking is back it
-    # counts as settled (Reservation.deposit_returned_on), and the customer's timeline says so
-    # once. Neutral wording on purpose -- any deduction (late days, damage) is settled in person.
-    if (not item.reservation.items.exclude(stage__in=ReservationItem.FINISHED_STAGES).exists()
-            and not item.reservation.status_events.filter(label="Security deposit settled").exists()):
-        ReservationStatusEvent.record(
-            item.reservation, "Security deposit settled",
-            detail="Your security deposit has been settled. This reservation is complete.",
-            actor=ReservationStatusEvent.Actor.STAFF,
-        )
+    # Once the LAST gown on the booking is back AND nothing is left to hand back or to pay, the customer's timeline says the deposit is settled (and
+    # they are emailed). While money is still to move, that line waits for it (the Payments page writes it when it does).
+    reservation_payments.sync_settled(item.reservation_id)
 
     if item.gown_id:
         item.gown.condition = condition
@@ -3649,17 +3653,17 @@ PICKUP_MAX_DAYS_AHEAD = 60        # how far from today a pick-up can be moved
 RETURN_MAX_DAYS_AHEAD = 365       # a sanity limit for the return date (nobody keeps a gown longer than that)
 
 
-def _date_choices(request, pickup_key, return_key):
-    """({"pickup": date or None, "return": date or None}, None) from the JSON body of a date change, or (None, JsonResponse) when the body or a date is not valid.
-    A key that is missing or empty means "not changing that one"."""
+def _date_choices(request, pickup_key, return_key, event_key=None):
+    """({"pickup": date or None, "return": date or None, "event": date or None}, None) from the JSON body of a date change, or (None, JsonResponse) when
+    the body or a date is not valid. A key that is missing or empty means "not changing that one"."""
     try:
         data = json.loads(request.body or "{}")
     except (json.JSONDecodeError, UnicodeDecodeError):
         return None, JsonResponse({"error": "Invalid JSON"}, status=400)
     if not isinstance(data, dict):
         return None, JsonResponse({"error": "Invalid JSON"}, status=400)
-    chosen = {"pickup": None, "return": None}
-    for name, key in (("pickup", pickup_key), ("return", return_key)):
+    chosen = {"pickup": None, "return": None, "event": None}
+    for name, key in (("pickup", pickup_key), ("return", return_key), ("event", event_key)):
         raw = data.get(key) if key else None
         if raw in (None, ""):
             continue
@@ -3670,16 +3674,18 @@ def _date_choices(request, pickup_key, return_key):
     return chosen, None
 
 
-def _change_item_dates(request, item_id, want_pickup, want_return):
-    """The ONE place a gown's pick-up and/or return date is changed (the three views below call it). Everything is checked before anything is saved, and both dates
-    are saved together or not at all (the views run in one transaction, and the gown's row is locked first, so two staff members can never double-book it).
+def _change_item_dates(request, item_id, want_pickup, want_return, want_event=None):
+    """The ONE place a gown's pick-up, return and/or event date is changed (the three views below call it). Everything is checked before anything is saved, and the
+    dates are saved together or not at all (the views run in one transaction, and the gown's row is locked first, so two staff members can never double-book it).
 
     Pick-up (want_pickup): the gown must still be waiting for pick-up; any day from today up to PICKUP_MAX_DAYS_AHEAD days ahead, earlier OR later than before.
     A pick-up that ends up after the current return date needs a new return date in the same request.
     Return (want_return): later only (there is no early return), never a day that has passed.
     Never: a day another booking or a block holds this gown. When the RETURN moves, the gown's rest days after it must also stay clear of a later booking, and the
     gown's rest block (its cooldown) moves to sit right after the new return -- unless staff already released it, which is respected and never undone.
-    The fee is always counted from the ORIGINAL return date (reservations/ledger.py): a later return is a date change fee. The customer's event date is frozen, never moved."""
+    The fee is always counted from the ORIGINAL return date (reservations/ledger.py): a later return is a date change fee.
+    Event (want_event): the customer's event day stays as they chose it, except when it is no longer between the pick-up and the return: a pick-up moved
+    past it must come with the new event day, and a booking already like that can be given one on its own. The event day never changes any fee."""
     item, error = _load_open_item(request, item_id)
     if error:
         return error
@@ -3688,11 +3694,12 @@ def _change_item_dates(request, item_id, want_pickup, want_return):
     item.refresh_from_db(fields=["stage", "rental_date", "return_date", "original_rental_date", "original_return_date", "event_date", "overdue_date", "picked_up_on", "returned_on"])
     if item.stage in (ReservationItem.Stage.RETURNED, ReservationItem.Stage.CANCELLED):
         return JsonResponse({"error": "This gown just changed (it may have been returned or cancelled). Please refresh the page."}, status=409)
-    if want_pickup is None and want_return is None:
+    if want_pickup is None and want_return is None and want_event is None:
         return JsonResponse({"error": "Choose a new pick-up date or a new return date."}, status=400)
 
     today = timezone.localdate()
     old_pickup, old_return = item.rental_date, item.return_date
+    old_event = item.effective_event_date        # worked out from the dates as they are NOW, before anything moves
     if want_pickup is not None:
         if item.stage != ReservationItem.Stage.PICKUP:
             return JsonResponse({"error": "The gown has already been picked up, so its pick-up date can't change."}, status=400)
@@ -3722,7 +3729,19 @@ def _change_item_dates(request, item_id, want_pickup, want_return):
             }, status=400)
         return JsonResponse({"error": "The return date can't be before the pick-up date."}, status=400)
 
-    if item.gown_id:
+    if want_event is not None:
+        if final_pickup <= old_event <= final_return:
+            return JsonResponse({"error": f"The event date stays {old_event:%b %d, %Y}: it is already between the pick-up and the return."}, status=400)
+        if not final_pickup <= want_event <= final_return:
+            return JsonResponse({
+                "error": f"The new event date must be between the pick-up ({final_pickup:%b %d, %Y}) and the return ({final_return:%b %d, %Y}).",
+            }, status=400)
+    elif want_pickup is not None and final_pickup > old_event:
+        return JsonResponse({
+            "error": f"The new pick-up ({final_pickup:%b %d, %Y}) is after the event date ({old_event:%b %d, %Y}). Choose the new event date too.",
+        }, status=400)
+
+    if item.gown_id and (want_pickup is not None or want_return is not None):
         # Rest days only matter when the return moves, and only while the gown still HAS its rest block (staff may have released it on purpose).
         rest_days = COOLDOWN_DAYS if (want_return is not None and getattr(item, "auto_cooldown_block", None) is not None) else 0
         conflict = _schedule_conflict(item, final_pickup, final_return, rest_days=rest_days)
@@ -3732,7 +3751,9 @@ def _change_item_dates(request, item_id, want_pickup, want_return):
     fields = ["updated_at", "event_date"]
     # The event day is the customer's own and doesn't move with the dates -- but until it is saved it is *computed* from them, so freeze it first.
     if item.event_date is None:
-        item.event_date = item.effective_event_date
+        item.event_date = old_event
+    if want_event is not None:
+        item.event_date = want_event
     if want_pickup is not None:
         if item.original_rental_date is None:
             item.original_rental_date = old_pickup
@@ -3771,8 +3792,15 @@ def _change_item_dates(request, item_id, want_pickup, want_return):
             ),
             actor=ReservationStatusEvent.Actor.STAFF,
         )
+    if want_event is not None:
+        ReservationStatusEvent.record(
+            item.reservation, f"{item.gown_name} event date changed", item=item,
+            detail=f"Event date moved from {old_event:%b %d} to {want_event:%b %d, %Y} at the customer's request.",
+            actor=ReservationStatusEvent.Actor.STAFF,
+        )
     return JsonResponse({
         "success": True, "rental_date": final_pickup.isoformat(), "return_date": final_return.isoformat(), "days_early": days_early, "days_late": days_late,
+        "event_date": item.effective_event_date.isoformat(),
     })
 
 
@@ -3781,7 +3809,7 @@ def _change_item_dates(request, item_id, want_pickup, want_return):
 @transaction.atomic
 def reservation_item_change_pickup_view(request, item_id):
     """The customer wants a different pick-up day: earlier, or later (a customer who cannot come on the booked day). See _change_item_dates for every rule. A pick-up
-    later than the current return date needs the new return date too: send both to change-dates."""
+    later than the current return date or the event date needs those new dates too: send them all to change-dates."""
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
     chosen, error = _date_choices(request, "date", None)
@@ -3813,14 +3841,15 @@ def reservation_item_change_return_view(request, item_id):
 @audited('item.change_dates', 'Bookings', audit_describe.item_change_dates, before=audit_describe.before_item)
 @transaction.atomic
 def reservation_item_change_dates_view(request, item_id):
-    """Change the pick-up and/or the return date in ONE step -- {"pickup": "YYYY-MM-DD", "return": "YYYY-MM-DD"}, either one optional. What the Active Reservations
-    calendar sends: a pick-up moved past the current return date must come with its new return date, and both are saved together or not at all."""
+    """Change the pick-up, the return and/or the event date in ONE step -- {"pickup": "YYYY-MM-DD", "return": "YYYY-MM-DD", "event": "YYYY-MM-DD"}, each
+    optional. What the Active Reservations calendar sends: a pick-up moved past the current return date must come with its new return date, one moved
+    past the event date with its new event date, and everything is saved together or not at all."""
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
-    chosen, error = _date_choices(request, "pickup", "return")
+    chosen, error = _date_choices(request, "pickup", "return", "event")
     if error:
         return error
-    return _change_item_dates(request, item_id, chosen["pickup"], chosen["return"])
+    return _change_item_dates(request, item_id, chosen["pickup"], chosen["return"], chosen["event"])
 
 
 @require_http_methods(["POST"])

@@ -1,5 +1,5 @@
 """Cancelling a booking, or just some of its gowns: what the admin's "Cancel booking" and "Cancel gown" do, and how a cancelled
-booking is described on Reservation Records.
+booking is described on All Bookings.
 
 Only a gown nobody has picked up yet can be cancelled. Two ways:
   * the WHOLE booking (cancel_by_staff) -- only while no gown in it has gone out, like the customer's own Cancel;
@@ -278,15 +278,13 @@ def cancel_gowns_by_staff(reservation_id, item_ids, *, staff_name, reason_key, n
                     ),
                 )
 
-            # Every gown left is already back: the booking is finished, so the deposit counts as settled -- the same line
-            # (and the same single email) the last gown's Mark Returned writes.
+            # Every gown left is already back: the booking is finished. The deposit is "settled" only once nothing is left to hand back or to pay --
+            # the same line (and the same single email) the last gown's Mark Returned writes (reservations.payments.sync_settled).
             complete = all(item.stage == ReservationItem.Stage.RETURNED for item in remaining)
-            if complete and not reservation.status_events.filter(label=DEPOSIT_SETTLED_LABEL).exists():
-                ReservationStatusEvent.record(
-                    reservation, DEPOSIT_SETTLED_LABEL,
-                    detail="Your security deposit has been settled. This reservation is complete.",
-                    actor=ReservationStatusEvent.Actor.STAFF,
-                )
+            if complete:
+                from reservations import payments
+
+                payments.sync_settled(reservation.pk)
             result = GownCancelResult(reservation, chosen, booking_cancelled=False, booking_complete=complete)
 
     if result.booking_cancelled:

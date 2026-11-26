@@ -777,22 +777,38 @@ class SecurityDepositTests(TestCase):
         reservation, _ = self._reservation()
         self.assertIsNone(reservation.deposit_returned_on)
 
-    def test_the_customer_timeline_is_told_once_when_the_last_gown_comes_back(self):
+    def _hand_back(self, reservation):
+        """Hand back everything the system says is left of the deposit (what the Payments page does)."""
+        from reservations import ledger, payments
+        from reservations.models import Payment
+        left = ledger.statement(type(reservation).objects.get(pk=reservation.pk)).refund_available
+        return payments.return_deposit(reservation_id=reservation.pk, amount=left, method=Payment.Method.CASH, user=self.staff)
+
+    def test_the_customer_timeline_is_told_once_when_the_deposit_is_settled(self):
         reservation, (first, second) = self._reservation("Reserved", "Reserved")
         self._return(first)
         self.assertFalse(reservation.status_events.filter(label="Security deposit settled").exists())  # one still out
         self._return(second)
+        self.assertFalse(reservation.status_events.filter(label="Security deposit settled").exists())  # every gown back, the deposit still to hand back
+        self._hand_back(reservation)
         event = reservation.status_events.get(label="Security deposit settled")
         self.assertEqual(event.detail, "Your security deposit has been settled. This reservation is complete.")
         self.assertFalse(event.staff_only)
         self.assertEqual(reservation.status_events.filter(label="Security deposit settled").count(), 1)
 
+    def test_a_booking_with_nothing_left_to_move_is_settled_when_the_last_gown_comes_back(self):
+        reservation, (item,) = self._reservation("Reserved")
+        type(reservation).objects.filter(pk=reservation.pk).update(security_deposit=Decimal("0"), late_fee_per_day=0)
+        self._return(item)
+        self.assertEqual(reservation.status_events.filter(label="Security deposit settled").count(), 1)
+
     def test_a_needs_repair_return_still_settles_the_deposit(self):
         reservation, (item,) = self._reservation("Reserved")
         self._return(item, "Needs Repair")
-        self.assertTrue(reservation.status_events.filter(label="Security deposit settled").exists())
         reservation.refresh_from_db()
-        self.assertTrue(reservation.deposit_is_returned)
+        self.assertTrue(reservation.deposit_is_returned)          # every gown is back, so the deposit can be handed back
+        self._hand_back(reservation)
+        self.assertTrue(reservation.status_events.filter(label="Security deposit settled").exists())
 
     def test_the_page_has_no_button_no_total_and_no_waiting_text(self):
         self._reservation("Returned", name="Back Customer")
@@ -824,13 +840,18 @@ class SecurityDepositTests(TestCase):
         self.assertIn(f"Back {date.today():%b} {date.today().day}", due)
         self.assertNotIn("Completed", html)                                              # the second "Completed / Active" status said the same thing twice
 
-    def test_reservation_records_reports_the_automatic_status(self):
+    def test_all_bookings_follows_the_deposit_money(self):
         reservation, _ = self._reservation("Returned", name="Records Back")
-        html = self.client.get(reverse("arabela_admin:reservation_records")).content.decode()
-        match = re.search(r'<script id="reservation-records-data" type="application/json">(.*?)</script>', html, re.S)
-        row = {r["reference"]: r for r in json.loads(match.group(1))}[reservation.reference_code]
-        self.assertEqual(row["depositStatus"], "Returned")
-        self.assertTrue(row["depositReturnedOn"])
+
+        def row():
+            html = self.client.get(reverse("arabela_admin:reservation_records")).content.decode()
+            match = re.search(r'<script id="reservation-records-data" type="application/json">(.*?)</script>', html, re.S)
+            return {r["reference"]: r for r in json.loads(match.group(1))}[reservation.reference_code]
+
+        self.assertEqual((row()["depositStatus"], row()["depositReturnedOn"]), ("Return due", ""))        # every gown back, not handed back yet
+        self._hand_back(reservation)
+        self.assertEqual(row()["depositStatus"], "Returned")
+        self.assertTrue(row()["depositReturnedOn"])
 
     def test_the_old_still_held_notification_no_longer_exists(self):
         self._reservation("Returned", name="Notify Customer")
@@ -2038,12 +2059,22 @@ class StatusEventHookTests(TestCase):
         self.assertNotEqual(self.item.stage, "Returned")
         self.assertEqual(self.reservation.status_events.count(), 0)
 
-    def test_returning_the_last_gown_records_a_deposit_settled_event(self):
+    def test_returning_the_last_gown_records_a_deposit_settled_event_when_nothing_is_left_to_move(self):
+        Reservation.objects.filter(pk=self.reservation.pk).update(status=Reservation.Status.CONFIRMED, security_deposit=Decimal("0"))
         self.client.post(
             reverse("arabela_admin:reservation_item_mark_returned", args=[self.item.id]),
             data=json.dumps({"condition": "Good"}), content_type="application/json",
         )
         self.assertIn("Security deposit settled", self._labels())
+
+    def test_the_settled_event_waits_while_the_deposit_is_still_held(self):
+        Reservation.objects.filter(pk=self.reservation.pk).update(status=Reservation.Status.CONFIRMED)
+        self.client.post(
+            reverse("arabela_admin:reservation_item_mark_returned", args=[self.item.id]),
+            data=json.dumps({"condition": "Good"}), content_type="application/json",
+        )
+        self.assertIn("Hook Gown returned", self._labels())
+        self.assertNotIn("Security deposit settled", self._labels())
 
     def _confirm(self):
         self.reservation.status = Reservation.Status.CONFIRMED
@@ -3933,12 +3964,18 @@ class ScheduleActionsTests(TestCase):
         self.assertIn("Changed pick-up date by customer · 3 days early", self._remarks(item))
 
     def test_pickup_can_go_past_the_day_originally_booked_and_the_booking_remembers_what_was_booked(self):
-        item = self._item(10, 14)
+        item = self._item(10, 14)                                                   # the event day is day 12
         self._post("reservation_item_change_pickup", item, self.today + timedelta(days=2))
-        for days in (11, 12, 14):
+        for days in (11, 12):
             with self.subTest(days=days):
                 response = self._post("reservation_item_change_pickup", item, self.today + timedelta(days=days))
                 self.assertEqual(response.status_code, 200, response.content)
+        past_event = self._post("reservation_item_change_pickup", item, self.today + timedelta(days=14))
+        self.assertEqual(past_event.status_code, 400)                              # past the event day: it needs the new event day
+        self.assertIn("Choose the new event date too", past_event.json()["error"])
+        both = self.client.post(reverse("arabela_admin:reservation_item_change_dates", args=[item.id]), content_type="application/json",
+                                data=json.dumps({"pickup": (self.today + timedelta(days=14)).isoformat(), "event": (self.today + timedelta(days=14)).isoformat()}))
+        self.assertEqual(both.status_code, 200, both.content)
         item.refresh_from_db()
         self.assertEqual((item.rental_date, item.original_rental_date), (self.today + timedelta(days=14), self.today + timedelta(days=10)))
         self.assertIn("Pick-up moved 4 days later", self._remarks(item))

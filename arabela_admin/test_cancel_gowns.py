@@ -3,7 +3,7 @@ several gowns where only some were collected), one by one or all at once. The bo
 stop holding anything; the customer is told which gowns and why; and the last gown left cancels the whole booking.
 
 Also covers every page that has to treat a cancelled gown as "gone, not rented": availability, the Rental Schedule, Rental History,
-the bell, the delete guard, Reservation Records, the deposit, the buttons on Active Reservations, the old actions on a stale page,
+the bell, the delete guard, All Bookings, the deposit, the buttons on Active Reservations, the old actions on a stale page,
 and what the CUSTOMER sees on their own pages."""
 import json
 import re
@@ -23,8 +23,8 @@ from arabela_admin import views as admin_views
 from gowns import availability
 from gowns.models import Gown, GownUnavailability
 from gowns.views import _UNIT_ASSIGNED, _UNIT_UNAVAILABLE, _find_available_unit
-from reservations import cancellation
-from reservations.models import Reservation, ReservationItem, ReservationStatusEvent
+from reservations import cancellation, ledger, payments
+from reservations.models import Payment, Reservation, ReservationItem, ReservationStatusEvent
 
 PICKUP, OUT, RETURNED, CANCELLED = (
     ReservationItem.Stage.PICKUP, ReservationItem.Stage.RESERVED, ReservationItem.Stage.RETURNED, ReservationItem.Stage.CANCELLED,
@@ -48,6 +48,14 @@ class GownBase(Base):
         elif stage == OUT:
             extra = {"picked_up_on": self.today - timedelta(days=20)}
         ReservationItem.objects.filter(pk=item.pk).update(stage=stage, **extra)
+
+    def hand_back(self, reservation):
+        """Hand back everything the system says is left of the deposit (what the Payments page does)."""
+        left = ledger.statement(Reservation.objects.get(pk=reservation.pk)).refund_available
+        return payments.return_deposit(reservation_id=reservation.pk, amount=left, method=Payment.Method.CASH, user=self.staff)
+
+    def settled_lines(self, reservation):
+        return ReservationStatusEvent.objects.filter(reservation=reservation, label="Security deposit settled").count()
 
     def mixed(self, gowns=4):
         """A booking of `gowns` gowns, pick-up long past: the first came back, the second is still out, the rest never collected."""
@@ -270,8 +278,22 @@ class LastGownTests(GownBase):
         self.assertEqual((body["booking_cancelled"], body["booking_complete"]), (False, True))
         reservation.refresh_from_db()
         self.assertEqual(reservation.status, Reservation.Status.CONFIRMED)
-        self.assertEqual(ReservationStatusEvent.objects.filter(reservation=reservation, label="Security deposit settled").count(), 1)
-        self.assertIsNotNone(reservation.deposit_returned_on)
+        self.assertIsNotNone(reservation.deposit_returned_on)                  # every rented gown is back: the deposit can be handed back
+        self.assertEqual(self.settled_lines(reservation), 0)                   # ... but it is settled only once it has been
+        self.assertEqual([m.subject for m in mail.outbox], [f"A gown in your reservation {reservation.reference_code} was cancelled"])
+        with override_settings(**EMAILS_ON), self.captureOnCommitCallbacks(execute=True):
+            receipt = self.hand_back(reservation)
+        self.assertEqual(self.settled_lines(reservation), 1)
+        # the receipt for the money handed back is the one message about it: no separate "settled" email
+        self.assertEqual([m.subject for m in mail.outbox][1:], [f"Your security deposit was returned - receipt {receipt.receipt_number}"])
+
+    def test_with_nothing_left_to_move_the_cancel_itself_settles_the_deposit_and_says_so(self):
+        reservation, items = self.booking(gowns=3)
+        Reservation.objects.filter(pk=reservation.pk).update(security_deposit=0, late_fee_per_day=0)
+        self.mark(items[0], RETURNED)
+        with override_settings(**EMAILS_ON), self.captureOnCommitCallbacks(execute=True):
+            self.cancel_gowns(reservation, items[1:])
+        self.assertEqual(self.settled_lines(reservation), 1)
         self.assertEqual(sorted(m.subject for m in mail.outbox),
                          sorted([f"A gown in your reservation {reservation.reference_code} was cancelled",
                                  f"Your security deposit is settled - {reservation.reference_code}"]))
@@ -293,7 +315,9 @@ class LastGownTests(GownBase):
         self.assertEqual(response.status_code, 200, response.content)
         reservation.refresh_from_db()
         self.assertIsNotNone(reservation.deposit_returned_on)
-        self.assertEqual(ReservationStatusEvent.objects.filter(reservation=reservation, label="Security deposit settled").count(), 1)
+        self.assertEqual(self.settled_lines(reservation), 0)                   # 17 days overdue took part of the deposit; the rest is still to hand back
+        self.hand_back(reservation)
+        self.assertEqual(self.settled_lines(reservation), 1)
 
     def test_a_whole_booking_cancel_still_works_after_one_gown_was_cancelled_and_leaves_that_gown_alone(self):
         reservation, items = self.booking(gowns=3)
@@ -444,7 +468,7 @@ class CancelledGownIsGoneEverywhereTests(GownBase):
         self.assertEqual([i["stage"] for i in record["items"]], ["Cancelled", "Returned", "Returned"])
         self.assertEqual(record["progress"], "Completed")                            # every gown that was rented is back
         self.assertEqual(record["start"], (self.today - timedelta(days=10)).isoformat())   # not stretched back by the cancelled gown
-        self.assertEqual(record["depositStatus"], "Returned")
+        self.assertEqual(record["depositStatus"], "Return due")                      # not handed back yet
 
     def test_security_deposits_lists_it_as_cancelled(self):
         reservation, items = self.booking(gowns=2)

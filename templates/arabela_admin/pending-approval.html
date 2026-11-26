@@ -718,7 +718,7 @@
           </li>
           <!-- Menu Item Payments & Deposits -->
 
-          <!-- Menu Item Financial Report -->
+          <!-- Menu Item Records -->
           <li>
             <a
               href="#"
@@ -741,7 +741,7 @@
                 class="menu-item-text"
                 :class="sidebarToggle ? 'lg:hidden' : ''"
               >
-                Financial Report
+                Records
               </span>
 
               <svg
@@ -778,14 +778,14 @@
                     class="menu-dropdown-item group"
                     :class="page === 'reservation-records' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
-                    Reservation Records
+                    All Bookings
                   </a>
                 </li>
               </ul>
             </div>
             <!-- Dropdown Menu End -->
           </li>
-          <!-- Menu Item Financial Report -->
+          <!-- Menu Item Records -->
 
           <!-- Menu Item Profile -->
           <li>
@@ -1285,7 +1285,7 @@
                       {% if r.is_staff_recorded and not r.payment_proof_url %}
                       <!-- Recorded at the shop and not paid yet: there is no online proof to view. When the customer pays,
                            attach the shop's receipt (partials/attach_receipt.html), then Approve. Gone once the booking has all its receipts
-                           (the server refuses a further one; a wrong photo is replaced in Reservation Records). -->
+                           (the server refuses a further one; a wrong photo is replaced in All Bookings). -->
                       {% if not r.receipts_are_complete %}<button type="button" class="ar-open-btn" data-ref="{{ r.reference_code }}" data-customer="{{ r.display_customer_name }}">Attach receipt</button>{% endif %}
                       {% else %}
                       <!-- Opens the payment proof right here (partials/payment_proof_window.html), with Approve / Reject inside it too. -->
@@ -1464,7 +1464,7 @@
             // A booking recorded at the shop that was waiting for payment: approving means the customer has now paid.
             message: btn.dataset.walkin === '1'
               ? 'Approve only once the customer has paid at the shop. This confirms the booking.'
-                + (btn.dataset.receipts && btn.dataset.receipts !== '0' ? '' : ' No receipt is attached yet: use "Attach receipt" first, or attach it later in Reservation Records.')
+                + (btn.dataset.receipts && btn.dataset.receipts !== '0' ? '' : ' No receipt is attached yet: use "Attach receipt" first, or attach it later in All Bookings.')
               : 'This confirms the reservation and adds it to the Rental Schedule.',
             confirmText: 'Approve',
           });

@@ -313,7 +313,7 @@ class Reservation(models.Model):
         receipts that cover the security deposit ("Deposit" and the full one); a receipt nobody labelled says nothing
         either way for a walk-in (see receipts_cover_payment), so it is left out there -- an online booking's unlabelled
         receipt is the shop's full receipt, like every online one now. Oldest first, the order they were handed over.
-        "by" is the staff member who attached it ("Removed account" once that account is gone), as Reservation Records shows it;
+        "by" is the staff member who attached it ("Removed account" once that account is gone), as All Bookings shows it;
         the pages that call this load receipt_records with select_related("uploaded_by") so it costs no extra query per receipt."""
         staff_recorded = self.is_staff_recorded
         rows = []
@@ -859,8 +859,9 @@ class ReservationStatusEvent(models.Model):
         return f'{self.reservation.reference_code}: {self.label} @ {self.occurred_at}'
 
     @classmethod
-    def record(cls, reservation, label, *, item=None, detail='', actor=Actor.SYSTEM, staff_only=False):
-        """The one way events get written. Deliberately swallows its own errors: a
+    def record(cls, reservation, label, *, item=None, detail='', actor=Actor.SYSTEM, staff_only=False, quiet=False):
+        """The one way events get written. `quiet`: the customer was already told about this by another notice, so this line sends no email of its
+        own (accounts.customer_emails reads event.quiet; nothing is stored). Deliberately swallows its own errors: a
         timeline is a record OF the action, never a reason the action itself fails --
         an approval must still go through even if writing its history row somehow
         can't.
@@ -872,10 +873,10 @@ class ReservationStatusEvent(models.Model):
         the failure contained to this INSERT and leaves the caller's work intact."""
         try:
             with transaction.atomic():
-                return cls.objects.create(
-                    reservation=reservation, item=item, label=label,
-                    detail=(detail or '')[:300], actor=actor, staff_only=staff_only,
-                )
+                event = cls(reservation=reservation, item=item, label=label, detail=(detail or '')[:300], actor=actor, staff_only=staff_only)
+                event.quiet = quiet
+                event.save(force_insert=True)
+                return event
         except Exception:
             return None
 

@@ -22,53 +22,138 @@
     /* the status buttons (they are the legend and the filter) on the left, the count on the right */
     .rh-keyrow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; padding: 0 1.25rem .85rem; }
     .rh-keyrow .ar-count { min-height: 0; padding: 0; }
-    .rh-dot--missed { background: #f79009; }
-    /* customer | gown | rental dates | late | amount | eye | arrow. Every column is fixed or has a minimum, never "auto" (an auto column is sized per row and
+    .rh-dot--missed { background: #a15c07; }
+    .rh-dot--pending { background: #f79009; }
+    /* customer | gown | rental dates | status | amount | eye | arrow. Every column is fixed or has a minimum, never "auto" (an auto column is sized per row and
        the column titles would stop lining up). */
-    .ar-head.rh-grid, .ar-line.rh-grid { grid-template-columns: minmax(9rem, 1.6fr) minmax(9rem, 1.5fr) 11.5rem 6.5rem 6.5rem 2.75rem 2.25rem; }
-    .rh-cust, .rh-gown, .rh-dates, .rh-late { min-width: 0; }
+    .ar-head.rh-grid, .ar-line.rh-grid { grid-template-columns: minmax(8rem, 1.5fr) minmax(8rem, 1.4fr) 10.25rem minmax(10rem, 1fr) 5rem 2.5rem 2.25rem; }
+    /* the layouts below follow the list's own width, so they fit whatever the sidebar and the text size leave it (53rem is what the full row needs) */
+    .rh-cq { container-type: inline-size; container-name: rhlist; }
+    .rh-cust, .rh-gown, .rh-dates, .rh-state { min-width: 0; }
     .rh-gown { font-size: .875rem; color: #475467; overflow-wrap: anywhere; }
     .dark .rh-gown { color: #98a2b3; }
     .rh-dates { font-size: .875rem; color: #667085; }
     .dark .rh-dates { color: #98a2b3; }
     .rh-amt { font-size: .875rem; font-weight: 600; color: #344054; font-variant-numeric: tabular-nums; }
     .dark .rh-amt { color: #d0d5dd; }
-    .rh-chip { display: inline-flex; align-items: center; padding: .1rem .55rem; border-radius: 999px; font-size: 0.8125rem; font-weight: 500; white-space: nowrap; }
-    .rh-chip--ok { background: #ecfdf3; color: #027a48; }
-    .rh-chip--bad { background: #fef3f2; color: #b42318; }
-    .dark .rh-chip--ok { background: rgba(18,183,106,.16); color: #32d583; }
-    .dark .rh-chip--bad { background: rgba(240,68,56,.18); color: #fda29b; }
-    /* the opened row: the facts in words, then the timeline */
-    .rh-facts { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem 1.5rem; padding: .8rem 1.25rem .6rem; font-size: .8125rem; }
-    .rh-fact { display: inline-flex; align-items: center; gap: .45rem; min-width: 0; }
-    .rh-k { color: #667085; }
-    .rh-v { display: inline-flex; align-items: center; gap: .45rem; color: #344054; font-weight: 500; overflow-wrap: anywhere; }
-    .dark .rh-v { color: #d0d5dd; }
-    .rh-why { font-weight: 400; color: #667085; }
-    .dark .rh-why { color: #98a2b3; }
-    /* A small laptop: the dates and the amount drop to a second line under the rental (the column titles go: they no longer line up). */
-    @media (max-width: 1180px) {
+    /* The status in words: one colour per status, the same on the list and in the opened row, with a short line under it. */
+    .rh-state { display: flex; flex-direction: column; align-items: flex-start; gap: .2rem; }
+    .rh-chip { display: inline-flex; align-items: center; max-width: 100%; padding: .15rem .65rem; border-radius: 999px; font-size: .8125rem; font-weight: 700; line-height: 1.45; }
+    .rh-chip--pending { background: #fef0c7; color: #93370d; }
+    .rh-chip--waiting { background: #d1fadf; color: #05603a; }
+    .rh-chip--out { background: #d1e9ff; color: #175cd3; }
+    .rh-chip--overdue { background: #fee4e2; color: #b42318; }
+    .rh-chip--returned { background: #f2f4f7; color: #475467; }
+    .rh-chip--missed { background: #fbead1; color: #7a4504; }
+    .dark .rh-chip--pending { background: rgba(247,144,9,.18); color: #fec84b; }
+    .dark .rh-chip--waiting { background: rgba(18,183,106,.18); color: #6ce9a6; }
+    .dark .rh-chip--out { background: rgba(46,144,250,.2); color: #84caff; }
+    .dark .rh-chip--overdue { background: rgba(240,68,56,.2); color: #fda29b; }
+    .dark .rh-chip--returned { background: rgba(255,255,255,.08); color: #d0d5dd; }
+    .dark .rh-chip--missed { background: rgba(202,133,4,.2); color: #fac515; }
+    .rh-note { font-size: .8125rem; line-height: 1.35; color: #667085; }
+    .dark .rh-note { color: #98a2b3; }
+    .rh-note.is-warn, .rh-t--warn { color: #b54708; }
+    .rh-note.is-bad, .rh-t--bad { color: #b42318; }
+    .rh-note.is-ok, .rh-t--ok { color: #067647; }
+    .dark .rh-note.is-warn, .dark .rh-t--warn { color: #fdb022; }
+    .dark .rh-note.is-bad, .dark .rh-t--bad { color: #fda29b; }
+    .dark .rh-note.is-ok, .dark .rh-t--ok { color: #6ce9a6; }
+    .rh-noeye { display: block; width: 2rem; height: 2rem; }
+
+    /* The opened row: the status and its sentence, the three steps, the facts, the buttons, then (when asked) the history. */
+    .rh-open { padding: 1.1rem 1.25rem 1.3rem; }
+    .rh-top { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem .9rem; margin-bottom: 1.2rem; }
+    .rh-top .rh-chip { padding: .3rem .85rem; font-size: .875rem; }
+    .rh-headline { font-size: 1rem; font-weight: 600; color: #1d2939; }
+    .dark .rh-headline { color: rgba(255,255,255,.92); }
+    .rh-code { margin-left: auto; padding: .2rem .75rem; border-radius: 999px; background: #f2f4f7; color: #475467; font-size: .875rem; font-weight: 600; white-space: nowrap; }
+    .dark .rh-code { background: #1d2939; color: #d0d5dd; }
+    .rh-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 44rem; margin: 0 0 1.2rem; padding: 0; list-style: none; }
+    .rh-step { position: relative; display: flex; flex-direction: column; align-items: center; min-width: 0; padding: 0 .25rem; text-align: center; }
+    /* the line from the step before to this one: green once reached, red into a problem, grey while still to come */
+    .rh-step::before { content: ''; position: absolute; top: calc(1rem - 2px); right: 50%; width: 100%; height: 4px; border-radius: 4px; background: #e4e7ec; }
+    .rh-step:first-child::before { display: none; }
+    .dark .rh-step::before { background: #344054; }
+    .rh-step.rh-line--done::before { background: #12b76a; }
+    .rh-step.rh-line--bad::before { background: #f04438; }
+    .rh-mark { position: relative; z-index: 1; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; width: 2rem; height: 2rem; border: 3px solid #d0d5dd; border-radius: 999px; background: #fff; color: #fff; }
+    .dark .rh-mark { border-color: #475467; background: #101828; }
+    .rh-mark svg { width: 1.05rem; height: 1.05rem; }
+    .rh-step.is-done .rh-mark { border-color: #12b76a; background: #12b76a; }
+    .rh-step.is-now .rh-mark { border-color: #2e90fa; box-shadow: 0 0 0 5px rgba(46,144,250,.18); }
+    .rh-step.is-now .rh-mark::after { content: ''; width: .7rem; height: .7rem; border-radius: 999px; background: #2e90fa; }
+    .rh-step.is-bad .rh-mark { border-color: #f04438; background: #f04438; }
+    .rh-sname { margin-top: .5rem; font-size: .9375rem; font-weight: 600; color: #1d2939; }
+    .dark .rh-sname { color: rgba(255,255,255,.92); }
+    .rh-step.is-todo .rh-sname { color: #667085; }
+    .dark .rh-step.is-todo .rh-sname { color: #98a2b3; }
+    .rh-sdate { margin-top: .1rem; font-size: .9375rem; color: #344054; overflow-wrap: anywhere; }
+    .dark .rh-sdate { color: #d0d5dd; }
+    .rh-swas { margin-top: .1rem; font-size: .8125rem; font-weight: 600; color: #b54708; }
+    .dark .rh-swas { color: #fdb022; }
+    .rh-snote { margin-top: .1rem; font-size: .8125rem; font-weight: 600; color: #667085; }
+    .rh-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr)); gap: .95rem 1.5rem; margin: 0 0 1.1rem; padding: 1rem 1.1rem; border: 1px solid #e4e7ec; border-radius: .8rem; background: #fff; }
+    .dark .rh-facts { border-color: #1d2939; background: rgba(255,255,255,.02); }
+    .rh-fact { min-width: 0; }
+    .rh-fact dt { font-size: .8125rem; color: #667085; }
+    .dark .rh-fact dt { color: #98a2b3; }
+    .rh-fact dd { margin: .2rem 0 0; font-size: .9375rem; font-weight: 600; line-height: 1.45; color: #1d2939; overflow-wrap: anywhere; }
+    .dark .rh-fact dd { color: rgba(255,255,255,.92); }
+    .rh-fact dd span.rh-sub { display: block; font-size: .8125rem; font-weight: 600; }
+    .rh-fact dd a { color: #465fff; }
+    .dark .rh-fact dd a { color: #9bb0ff; }
+    .rh-fee--change { color: #b54708; }
+    .rh-fee--overdue { color: #b42318; }
+    .dark .rh-fee--change { color: #fdb022; }
+    .dark .rh-fee--overdue { color: #fda29b; }
+    .rh-actions { display: flex; flex-wrap: wrap; gap: .6rem; }
+    .rh-btn { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; min-height: 2.5rem; padding: .45rem 1.05rem; border: 1px solid #d0d5dd; border-radius: .65rem; background: #fff; color: #344054; font: inherit; font-size: .875rem; font-weight: 600; text-decoration: none; cursor: pointer; }
+    .rh-btn:hover { background: #f2f4f7; }
+    .rh-btn:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+    .rh-btn svg { width: 1.05rem; height: 1.05rem; flex: none; }
+    .dark .rh-btn { border-color: #344054; background: transparent; color: #d0d5dd; }
+    .dark .rh-btn:hover { background: rgba(255,255,255,.06); }
+    .rh-btn--main, .dark .rh-btn--main { border-color: #465fff; background: #465fff; color: #fff; }
+    .rh-btn--main:hover, .dark .rh-btn--main:hover { background: #3641f5; }
+    .rh-btn.is-on { border-color: #465fff; color: #3538cd; }
+    .dark .rh-btn.is-on { color: #c7d2fe; }
+    /* The history: the shared timeline at full length (no little scroll box) and in readable sizes. */
+    .rh-history { margin-top: 1rem; }
+    .rh-history .arb-tl-panel { max-height: none; overflow: visible; }
+    .rh-history .arb-tl-label { font-size: .9375rem; }
+    .rh-history .arb-tl-meta, .rh-history .arb-tl-detail { font-size: .875rem; }
+    .rh-history .arb-tl-meta { color: #667085; }
+    .rh-history .arb-tl-detail { color: #475467; }
+    .dark .rh-history .arb-tl-meta { color: #98a2b3; }
+    .dark .rh-history .arb-tl-detail { color: #d0d5dd; }
+    /* A narrow list (a small screen or bigger text): the dates and the amount drop to a second line (the column titles go: they no longer line up). */
+    @container rhlist (max-width: 53.99rem) {
       .ar-head.rh-grid { display: none; }
-      .ar-line.rh-grid { grid-template-columns: minmax(9rem, 1.4fr) minmax(8rem, 1.2fr) 8rem 2.75rem 2.25rem; grid-template-areas: "cust gown late eye chev" "dates dates amt amt amt"; row-gap: .5rem; }
+      .ar-line.rh-grid { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1.15fr) minmax(11rem, max-content) 2.75rem 2.25rem; grid-template-areas: "cust gown state eye chev" "dates dates amt amt amt"; row-gap: .5rem; }
       .ar-line.rh-grid > .rh-cust { grid-area: cust; }
       .ar-line.rh-grid > .rh-gown { grid-area: gown; }
-      .ar-line.rh-grid > .rh-late { grid-area: late; }
+      .ar-line.rh-grid > .rh-state { grid-area: state; }
       .ar-line.rh-grid > .rh-dates { grid-area: dates; }
       .ar-line.rh-grid > .rh-amt { grid-area: amt; }
-      .ar-line.rh-grid > .rh-eye { grid-area: eye; }
+      .ar-line.rh-grid > .rh-eye, .ar-line.rh-grid > .rh-noeye { grid-area: eye; }
       .ar-line.rh-grid > .ar-chev { grid-area: chev; }
     }
     /* A phone: one column, in the order staff read it. */
+    @container rhlist (max-width: 35rem) {
+      .ar-line.rh-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.75rem 2.25rem; grid-template-areas: "cust cust eye chev" "gown gown gown gown" "dates dates dates dates" "state state amt amt"; }
+    }
     @media (max-width: 760px) {
-      .ar-line.rh-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.75rem 2.25rem; grid-template-areas: "cust cust eye chev" "gown gown gown gown" "dates dates dates dates" "late late amt amt"; }
       .ar-search-input.rh-select { flex: 1 1 8rem; width: auto; }
       .rh-keyrow { padding: 0 1rem .75rem; }
-      .rh-facts { padding: .8rem 1rem .6rem; }
+      .rh-open { padding: 1rem 1rem 1.1rem; }
+      .rh-code { margin-left: 0; }
+      .rh-actions > .rh-btn { flex: 1 1 100%; }
     }
   </style>
 </head>
   <body
-    x-data="{ page: 'rental-history', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', statusFilter: 'All', dateFocus: '', dateKind: 'pickup', monthFilter: 'All', yearFilter: '', openProofModal: false, viewingRental: {}, openRows: [],
+    x-data="{ page: 'rental-history', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', statusFilter: 'All', dateFocus: '', dateKind: 'pickup', monthFilter: 'All', yearFilter: '', openProofModal: false, viewingRental: {}, openRows: [], openHistory: [],
       rentalRecords: [],
       matches(el) {
         return (this.statusFilter === 'All' || el.getAttribute('data-status') === this.statusFilter)
@@ -92,7 +177,9 @@
       // The days of the kind the date bar is set to (pick-up, return or event), for one gown.
       focusDays(r) { return this.dateKind === 'return' ? r.dReturn : (this.dateKind === 'event' ? r.dEvent : r.dPickup); },
       isRowOpen(id) { return this.openRows.includes(id); },
-      toggleRow(id) { this.openRows = this.isRowOpen(id) ? this.openRows.filter(x => x !== id) : this.openRows.concat([id]); }
+      toggleRow(id) { this.openRows = this.isRowOpen(id) ? this.openRows.filter(x => x !== id) : this.openRows.concat([id]); },
+      isHistoryOpen(id) { return this.openHistory.includes(id); },
+      toggleHistory(id) { this.openHistory = this.isHistoryOpen(id) ? this.openHistory.filter(x => x !== id) : this.openHistory.concat([id]); }
     }"
     x-init="
          darkMode = JSON.parse(localStorage.getItem('darkMode'));
@@ -109,6 +196,16 @@
     :class="{'dark bg-gray-900': darkMode === true}"
   >
     {% include "arabela_admin/partials/timeline_styles.html" %}
+    {# Live updates (static/arabela_admin/live-regions.js): the list is a live part, and the numbers on the status buttons are counted from the JSON at the bottom of the page. #}
+    <span hidden data-live-data="history-records" data-live-source="#rental-records-data" data-live-watch=".custom-scrollbar[data-arpg]"></span>
+    <script>
+      window.ArabelaLiveData = window.ArabelaLiveData || {};
+      window.ArabelaLiveData['history-records'] = function (text) {
+        var state = window.Alpine && window.Alpine.$data(document.body);
+        if (!state || !Array.isArray(state.rentalRecords)) { throw new Error('Rental History is not ready'); }
+        state.rentalRecords = JSON.parse(text);
+      };
+    </script>
     <!-- ===== Preloader Start ===== -->
     <script>try{if(JSON.parse(localStorage.getItem('darkMode'))===true)document.documentElement.classList.add('admin-dark-boot');}catch(e){}</script>
     <script>(function(){var h=document.documentElement,s='large';try{var v=localStorage.getItem('arabelaTextSize');if(v==='normal'||v==='xl'){s=v;}}catch(e){}h.setAttribute('data-text-size',s);})();</script>
@@ -721,7 +818,7 @@
           </li>
           <!-- Menu Item Payments & Deposits -->
 
-          <!-- Menu Item Financial Report -->
+          <!-- Menu Item Records -->
           <li>
             <a
               href="#"
@@ -744,7 +841,7 @@
                 class="menu-item-text"
                 :class="sidebarToggle ? 'lg:hidden' : ''"
               >
-                Financial Report
+                Records
               </span>
 
               <svg
@@ -781,14 +878,14 @@
                     class="menu-dropdown-item group"
                     :class="page === 'reservation-records' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
-                    Reservation Records
+                    All Bookings
                   </a>
                 </li>
               </ul>
             </div>
             <!-- Dropdown Menu End -->
           </li>
-          <!-- Menu Item Financial Report -->
+          <!-- Menu Item Records -->
 
           <!-- Menu Item Profile -->
           <li>
@@ -1223,22 +1320,21 @@
               <div class="rh-keyrow">
                 <div class="ar-filters" role="group" aria-label="Show rentals by status">
                   <button type="button" class="ar-filter" :class="statusFilter === 'All' ? 'is-on' : ''" :aria-pressed="statusFilter === 'All' ? 'true' : 'false'" @click="statusFilter = 'All'">All <span class="ar-n" x-text="countFor('All')">{{ rental_items|length }}</span></button>
-                  <button type="button" class="ar-filter" :class="statusFilter === 'Ongoing' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Ongoing' ? 'true' : 'false'" @click="statusFilter = 'Ongoing'" title="Waiting for pick-up, or out with the customer and not overdue yet"><span class="ar-dot ar-dot--active"></span>Ongoing <span class="ar-n" x-text="countFor('Ongoing')"></span></button>
-                  <button type="button" class="ar-filter" :class="statusFilter === 'Completed' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Completed' ? 'true' : 'false'" @click="statusFilter = 'Completed'" title="The gown is back"><span class="ar-dot ar-dot--done"></span>Completed <span class="ar-n" x-text="countFor('Completed')"></span></button>
-                  <button type="button" class="ar-filter ar-filter--hot" :class="statusFilter === 'Overdue' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Overdue' ? 'true' : 'false'" @click="statusFilter = 'Overdue'" title="The gown is out with the customer and past its return date"><span class="ar-dot ar-dot--overdue"></span>Overdue <span class="ar-n" x-text="countFor('Overdue')"></span></button>
-                  <button type="button" class="ar-filter" :class="statusFilter === 'Not picked up' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Not picked up' ? 'true' : 'false'" @click="statusFilter = 'Not picked up'" title="The dates passed and nobody picked the gown up"><span class="ar-dot rh-dot--missed"></span>Not picked up <span class="ar-n" x-text="countFor('Not picked up')"></span></button>
+                  {% for status, dot, tip in status_filters %}
+                  <button type="button" class="ar-filter{% if status == "Overdue" %} ar-filter--hot{% endif %}" :class="statusFilter === '{{ status }}' ? 'is-on' : ''" :aria-pressed="statusFilter === '{{ status }}' ? 'true' : 'false'" @click="statusFilter = '{{ status }}'" title="{{ tip }}"><span class="ar-dot {{ dot }}"></span>{{ status }} <span class="ar-n" x-text="countFor('{{ status }}')"></span></button>
+                  {% endfor %}
                 </div>
                 <div class="ar-count"><span id="ar-count" aria-live="polite"></span></div>
               </div>
 
               {% include "arabela_admin/partials/date_focus.html" %}
 
-              <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg=".ar-booking" data-arpg-noun="rentals" data-arpg-top="off" data-arpg-count="#ar-count">
+              <div class="custom-scrollbar overflow-y-auto rh-cq" style="max-height: 760px;" data-arpg=".ar-booking" data-arpg-noun="rentals" data-arpg-top="off" data-arpg-count="#ar-count" data-live-region="history-list">
                 <div class="ar-head rh-grid">
                   <span>Customer</span>
                   <span>Gown</span>
                   <span>Rental dates</span>
-                  <span>Overdue</span>
+                  <span>Status</span>
                   <span>Amount</span>
                   <span></span>
                   <span></span>
@@ -1247,53 +1343,81 @@
                 {% with r=item.reservation %}
                 <!-- One gown that went out: a closed line (status circle and name, the gown, the dates, how late, the amount, the proof icon) and, hidden until it is
                      opened, the facts in words and the timeline. -->
-                <div class="ar-booking" data-row-id="{{ item.id }}" data-status="{{ item.history_status }}" data-month="{{ item.rental_date|date:'M' }}" data-year="{{ item.rental_date|date:'Y' }}" data-d-pickup="{{ item.rental_date|date:'Y-m-d' }} {{ item.picked_up_on|date:'Y-m-d' }}" data-d-return="{{ item.return_date|date:'Y-m-d' }} {{ item.returned_on|date:'Y-m-d' }}" data-d-event="{{ item.effective_event_date|date:'Y-m-d' }}" data-search="{{ r.display_customer_name|lower }} {{ item.gown_name|lower }}" x-show="matches($el)">
-                  <!-- A click on the line opens it, except a click on the proof icon (it does not stop the click: other scripts on the page may listen for it). -->
+                <div class="ar-booking{% if item.view.kind == 'overdue' %} is-overdue{% endif %}" data-row-id="{{ item.id }}" data-status="{{ item.history_status }}" data-month="{{ item.rental_date|date:'M' }}" data-year="{{ item.rental_date|date:'Y' }}" data-d-pickup="{{ item.rental_date|date:'Y-m-d' }} {{ item.picked_up_on|date:'Y-m-d' }}" data-d-return="{{ item.return_date|date:'Y-m-d' }} {{ item.returned_on|date:'Y-m-d' }}" data-d-event="{{ item.effective_event_date|date:'Y-m-d' }}" data-search="{{ r.display_customer_name|lower }} {{ item.gown_name|lower }}" x-show="matches($el)">
+                  <!-- A click on the line opens it, except a click on the eye (it does not stop the click: other scripts on the page may listen for it). -->
                   <div class="ar-line rh-grid" :class="isRowOpen({{ item.id }}) ? 'is-open' : ''" @click="if (!$event.target.closest('.rh-eye')) { toggleRow({{ item.id }}) }">
                     <div class="rh-cust">
-                      <div class="ar-who"><span class="ar-dot {% if item.history_kind == 'missed' %}rh-dot--missed{% else %}ar-dot--{{ item.history_kind }}{% endif %}" role="img" aria-label="{{ item.history_status }}" title="{{ item.history_status }}: {{ item.history_tip }}"></span><span class="ar-name">{{ r.display_customer_name }}</span></div>
+                      <div class="ar-who"><span class="ar-dot {{ item.view.dot }}" role="img" aria-label="{{ item.view.status }}" title="{{ item.view.status }}: {{ item.view.tip }}"></span><span class="ar-name">{{ r.display_customer_name }}</span></div>
                     </div>
                     <div class="rh-gown">{{ item.gown_name }}</div>
                     <div class="rh-dates">{{ item.rental_date|date:"M j" }}{% if item.rental_date.year != item.return_date.year %}, {{ item.rental_date|date:"Y" }}{% endif %} &rarr; {{ item.return_date|date:"M j, Y" }}</div>
-                    <div class="rh-late">
-                      <!-- How many days overdue the gown was (or is, so far): counted from the return date agreed with the customer (moved days are the date change fee), like Active Reservations. -->
-                      {% if item.late_days is None %}
-                      <span class="ar-none">&mdash;</span>
-                      {% elif item.late_days == 0 %}
-                      <span class="rh-chip rh-chip--ok">On time</span>
-                      {% else %}
-                      <span class="rh-chip rh-chip--bad"{% if item.history_status == 'Overdue' %} title="Still not back, so this keeps growing"{% endif %}>{{ item.late_days }} day{{ item.late_days|pluralize }} overdue</span>
-                      {% endif %}
+                    <!-- Where the gown stands, in words, with a short line under it (the days overdue count from the return date agreed with the customer, like Active Reservations). -->
+                    <div class="rh-state">
+                      <span class="rh-chip rh-chip--{{ item.view.kind }}">{{ item.view.status }}</span>
+                      {% if item.view.note %}<span class="rh-note{% if item.view.tone %} is-{{ item.view.tone }}{% endif %}">{{ item.view.note }}</span>{% endif %}
                     </div>
                     <div class="rh-amt">&#8369;{{ item.rental_price|floatformat:'-2g' }}</div>
+                    {% if item.eye == "photo" %}
                     <button type="button"
                       @click="viewingRental = { name: '{{ r.display_customer_name|escapejs }}', gown: '{{ item.gown_name|escapejs }}', rentalDate: '{{ item.rental_date|date:"M j, Y"|escapejs }}', returnDate: '{{ item.return_date|date:"M j, Y"|escapejs }}', amount: '&#8369;{{ item.rental_price|floatformat:'-2g' }}', status: '{{ item.history_status|escapejs }}', reference: '{{ r.reference_code|escapejs }}', proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}') }; openProofModal = true"
-                      class="ar-ib rh-eye" title="View proof" aria-label="View proof of {{ r.display_customer_name }}, {{ item.gown_name }}">
+                      class="ar-ib rh-eye" title="View payment photo" aria-label="View the payment photo of {{ r.display_customer_name }}, {{ item.gown_name }}">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                     </button>
+                    {% elif item.eye == "receipt" %}
+                    <button type="button" @click="arabelaReceipt.open({{ r.id }})" class="ar-ib rh-eye" title="View receipt" aria-label="View the receipt of {{ r.display_customer_name }}, {{ item.gown_name }}">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
+                    {% else %}
+                    <span class="rh-noeye" aria-hidden="true"></span>
+                    {% endif %}
                     <button type="button" class="ar-chev" @click.stop="toggleRow({{ item.id }})" aria-expanded="false"
                       :aria-expanded="isRowOpen({{ item.id }}) ? 'true' : 'false'" aria-controls="rh-panel-{{ item.id }}"
-                      aria-label="Show or hide the details and timeline of {{ r.display_customer_name }}, {{ item.gown_name }}">
+                      aria-label="Show or hide the details of {{ r.display_customer_name }}, {{ item.gown_name }}">
                       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7.5l5 5 5-5" /></svg>
                     </button>
                   </div>
                   <div class="ar-panel" id="rh-panel-{{ item.id }}" x-show="isRowOpen({{ item.id }})" x-cloak>
-                    <div class="rh-facts">
-                      <span class="rh-fact"><span class="rh-k">Status</span><span class="rh-v"><span class="ar-dot {% if item.history_kind == 'missed' %}rh-dot--missed{% else %}ar-dot--{{ item.history_kind }}{% endif %}"></span>{{ item.history_status }}<span class="rh-why">&middot; {{ item.history_tip }}</span></span></span>
-                      {% if item.returned_on %}<span class="rh-fact"><span class="rh-k">Returned</span><span class="rh-v">{{ item.returned_on|date:"M j, Y" }}</span></span>{% endif %}
-                      <span class="rh-fact"><span class="rh-k">Booking</span><span class="rh-v ar-ref"><b>{{ r.reference_code }}</b></span></span>
-                      {% if item.has_receipt %}<span class="rh-fact"><span class="rh-k">Receipt</span><span class="rh-v"><button type="button" class="rcm-open" @click="arabelaReceipt.open({{ r.id }})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg> View &amp; print</button></span></span>{% endif %}
-                      {% if r.booked_as_name %}<span class="rh-fact"><span class="rh-k">Booked as</span><span class="rh-v">{{ r.booked_as_name }}</span></span>{% endif %}
-                    </div>
-                    <div class="ar-tl">
-                      {% include "arabela_admin/partials/timeline_rows.html" with timeline=item.timeline %}
+                    <div class="rh-open">
+                      <div class="rh-top">
+                        <span class="rh-chip rh-chip--{{ item.view.kind }}">{{ item.view.status }}</span>
+                        <span class="rh-headline">{{ item.view.headline }}</span>
+                        <span class="rh-code" title="Booking number">{{ r.reference_code }}</span>
+                      </div>
+                      <ol class="rh-steps" aria-label="Where this rental is">
+                        {% for step in item.view.steps %}
+                        <li class="rh-step is-{{ step.state }}{% if step.line %} rh-line--{{ step.line }}{% endif %}"{% if step.state == "now" or step.state == "bad" %} aria-current="step"{% endif %}>
+                          <span class="rh-mark" aria-hidden="true">{% if step.state == "done" %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>{% elif step.state == "bad" %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"><path d="M12 6v8M12 18h.01"/></svg>{% endif %}</span>
+                          <span class="rh-sname">{{ step.name }}</span>
+                          <span class="rh-sdate">{{ step.date }}</span>
+                          {% if step.was %}<span class="rh-swas">{{ step.was }}</span>{% endif %}
+                          {% if step.note %}<span class="rh-snote{% if step.tone %} rh-t--{{ step.tone }}{% endif %}">{{ step.note }}</span>{% endif %}
+                        </li>
+                        {% endfor %}
+                      </ol>
+                      <dl class="rh-facts">
+                        <div class="rh-fact"><dt>Event</dt><dd>{{ item.view.event.date }}{% if item.view.event.was %}<span class="rh-sub rh-t--warn">{{ item.view.event.was }}</span>{% endif %}{% if item.view.event.flag %}<span class="rh-sub rh-t--warn">{{ item.view.event.flag|capfirst }}: set the new date in Active Reservations</span>{% endif %}</dd></div>
+                        <div class="rh-fact"><dt>Rental price</dt><dd>&#8369;{{ item.rental_price|floatformat:'-2g' }}</dd></div>
+                        {% if item.view.fees %}<div class="rh-fact"><dt>Fees</dt><dd>{% for fee in item.view.fees %}<span class="rh-sub rh-fee--{{ fee.kind }}">{{ fee.label }} {{ fee.amount }}</span>{% endfor %}</dd></div>{% endif %}
+                        {% if item.view.payment %}<div class="rh-fact"><dt>Payment</dt><dd class="rh-t--{{ item.view.payment_tone }}">{{ item.view.payment }}</dd></div>{% endif %}
+                        {% if item.view.deposit %}<div class="rh-fact"><dt>Security deposit</dt><dd>{{ item.view.deposit }}</dd></div>{% endif %}
+                        {% if r.phone %}<div class="rh-fact"><dt>Cellphone</dt><dd><a href="tel:{{ r.phone|cut:' ' }}">{{ r.phone }}</a></dd></div>{% endif %}
+                        {% if r.booked_as_name %}<div class="rh-fact"><dt>Booked as</dt><dd>{{ r.booked_as_name }}</dd></div>{% endif %}
+                      </dl>
+                      <div class="rh-actions">
+                        <a class="rh-btn rh-btn--main" href="{{ item.view.link_url }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7M8 7h9v9"/></svg>{{ item.view.link_label }}</a>
+                        {% if item.has_receipt %}<button type="button" class="rh-btn" @click="arabelaReceipt.open({{ r.id }})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>Receipt</button>{% endif %}
+                        <button type="button" class="rh-btn" :class="isHistoryOpen({{ item.id }}) ? 'is-on' : ''" @click="toggleHistory({{ item.id }})" aria-expanded="false" :aria-expanded="isHistoryOpen({{ item.id }}) ? 'true' : 'false'" aria-controls="rh-history-{{ item.id }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><span x-text="isHistoryOpen({{ item.id }}) ? 'Hide history' : 'History'">History</span></button>
+                      </div>
+                      <div class="rh-history" id="rh-history-{{ item.id }}" x-show="isHistoryOpen({{ item.id }})" x-cloak>
+                        {% include "arabela_admin/partials/timeline_rows.html" with timeline=item.timeline %}
+                      </div>
                     </div>
                   </div>
                 </div>
                 {% endwith %}
                 {% empty %}
                 <div class="ar-empty">
-                  <p class="text-gray-500 text-theme-sm dark:text-gray-400">No rentals recorded yet. Approved bookings appear here once a gown goes out.</p>
+                  <p class="text-gray-500 text-theme-sm dark:text-gray-400">No rentals recorded yet. Bookings appear here as soon as they are made.</p>
                 </div>
                 {% endfor %}
                 <!-- Shown when rows exist but the current search, status, month or year hides them all. -->

@@ -8,14 +8,14 @@
       content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0"
     />
     <meta http-equiv="X-UA-Compatible" content="ie=edge" />
-    <title>Reservation Records | Arabela System Admin Panel</title>
+    <title>All Bookings | Arabela System Admin Panel</title>
     <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
   <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet">
   {% include "arabela_admin/partials/photo_viewer_styles.html" %}
     {% include "arabela_admin/partials/timeline_styles.html" %}
     {% include "arabela_admin/partials/ar_list_styles.html" %}
     <style>
-      /* Reservation Records -- page-scoped (rr-) styles for the few layout needs the
+      /* All Bookings -- page-scoped (rr-) styles for the few layout needs the
          precompiled admin CSS doesn't ship (it only has the classes the template pack
          itself used). Colours are the admin theme's own gray/brand values. */
       [x-cloak] { display: none !important; }
@@ -63,12 +63,13 @@
       .rr-keydots i { display: block; width: .5rem; height: .5rem; border-radius: 999px; }
       .ar-leg li > span:last-child { min-width: 0; }
 
-      /* The status circles. Every status has its own colour: no two of the eight are alike. The words are on hover and in the key. */
+      /* The status circles. Every status has its own colour: no two of the nine are alike. The words are on hover and in the key. */
       .rr-dot--pending { background: #f79009; }
       .rr-dot--pickup { background: #039855; }
       .rr-dot--out { background: #1570ef; }
       .rr-dot--partly { background: #7a5af8; }
       .rr-dot--overdue { background: #d92d20; }
+      .rr-dot--missed { background: #a15c07; }
       .rr-dot--done { background: #667085; }
       .rr-dot--rejected { background: #dd2590; }
       .rr-dot--cancelled { background: transparent; border: 2px solid #98a2b3; box-sizing: border-box; box-shadow: none; }
@@ -407,6 +408,7 @@
       .rrd-dot.is-late { background: #d92d20; }
       .rrd-dot.is-done { background: #667085; }
       .rrd-dot.is-void { background: transparent; box-shadow: inset 0 0 0 2px #98a2b3; }
+      .rrd-dot.is-missed { background: #a15c07; }
       .rrd-glist, .rrd-acc { border: 1px solid #e4e7ec; border-radius: 1rem; overflow: hidden; }
       .dark .rrd-glist, .dark .rrd-acc { border-color: #1f2a3d; }
       .rrd-gl + .rrd-gl { border-top: 1px solid #f2f4f7; }
@@ -497,7 +499,7 @@
       window.ArabelaLiveData = window.ArabelaLiveData || {};
       window.ArabelaLiveData.records = function (text, doc) {
         var state = window.Alpine && window.Alpine.$data(document.body);
-        if (!state || !Array.isArray(state.records)) { throw new Error('Reservation Records is not ready'); }
+        if (!state || !Array.isArray(state.records)) { throw new Error('All Bookings is not ready'); }
         var records = JSON.parse(text);
         // Each reservation's status history is drawn by the server into <template id="rr-timeline-N">: bring the new and the changed ones first.
         Array.prototype.forEach.call(doc.querySelectorAll('template[id^="rr-timeline-"]'), function (fresh) {
@@ -565,7 +567,7 @@
 
           records: JSON.parse(document.getElementById('reservation-records-data').textContent),
           ranges: JSON.parse(document.getElementById('reservation-records-ranges').textContent),
-          progressOptions: ['Pending approval', 'Awaiting pickup', 'With customer', 'Partly returned', 'Overdue', 'Completed', 'Rejected', 'Cancelled'],
+          progressOptions: ['Pending approval', 'Awaiting pickup', 'With customer', 'Partly returned', 'Overdue', 'Not picked up', 'Completed', 'Rejected', 'Cancelled'],
 
           search: '',
           // The "On this date" bar: one exact day and what it means (pick-up / return / event). Combines with every other filter.
@@ -717,11 +719,11 @@
             }
           },
 
-          // The colour of a booking's status circle, and its words for the hover. One colour for each of the eight (see progressOptions).
+          // The colour of a booking's status circle, and its words for the hover. One colour for each of the nine (see progressOptions).
           statusKind(progress) {
             return ({
               'Pending approval': 'pending', 'Awaiting pickup': 'pickup', 'With customer': 'out', 'Partly returned': 'partly',
-              'Overdue': 'overdue', 'Completed': 'done', 'Rejected': 'rejected', 'Cancelled': 'cancelled',
+              'Overdue': 'overdue', 'Not picked up': 'missed', 'Completed': 'done', 'Rejected': 'rejected', 'Cancelled': 'cancelled',
             })[progress] || 'other';
           },
           statusTip(progress) {
@@ -731,6 +733,7 @@
               'With customer': 'With customer: a gown is out with the customer',
               'Partly returned': 'Partly returned: some gowns are back, some are still out',
               'Overdue': 'Overdue: a gown is past its return date',
+              'Not picked up': 'Not picked up: the return date passed and nobody collected the gown',
               'Completed': 'Completed: every gown is back',
               'Rejected': 'Rejected: the payment was not accepted',
               'Cancelled': 'Cancelled: the booking was cancelled',
@@ -757,7 +760,7 @@
           // The Payment cell: what the booking still owes (worked out by the system, the same number the Payments page shows).
           receiptsText(r) {
             if (this.needsReceipt(r)) { return 'Balance \u20b1' + r.balanceDue; }
-            return (r.depositStatus === 'Held' || r.depositStatus === 'Returned') ? 'Paid' : '\u2014';
+            return (r.depositStatus === 'Held' || r.depositStatus === 'Return due' || r.depositStatus === 'Returned') ? 'Paid' : '\u2014';
           },
 
           getCsrfToken() {
@@ -805,7 +808,7 @@
           matches(r) {
             if (!this.inCustomerScope(r)) { return false; }
             if (this.statusFilter !== 'All' && r.progress !== this.statusFilter) { return false; }
-            if (this.receiptFilter === 'has' && (r.paymentIncomplete || !(r.depositStatus === 'Held' || r.depositStatus === 'Returned'))) { return false; }
+            if (this.receiptFilter === 'has' && (r.paymentIncomplete || !(r.depositStatus === 'Held' || r.depositStatus === 'Return due' || r.depositStatus === 'Returned'))) { return false; }
             if (this.receiptFilter === 'needs' && !this.needsReceipt(r)) { return false; }
             if (this.channelFilter !== 'All' && r.channel !== this.channelFilter) { return false; }
             if (!this.inRange(r, this.dateRange(this.dateFilter))) { return false; }
@@ -995,7 +998,8 @@
               case 'Completed': return 'bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500';
               case 'Overdue':
               case 'Rejected': return 'bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500';
-              case 'Pending approval': return 'bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400';
+              case 'Pending approval':
+              case 'Not picked up': return 'bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400';
               case 'With customer':
               case 'Partly returned': return 'bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400';
               case 'Awaiting pickup': return 'bg-blue-light-50 text-blue-light-500 dark:bg-blue-light-500/15 dark:text-blue-light-500';
@@ -1007,7 +1011,9 @@
             switch (status) {
               case 'Returned': return 'bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500';
               case 'Held':
+              case 'Return due':
               case 'Paid, not refunded': return 'bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400';
+              case 'Not paid yet': return 'bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500';
               case 'Awaiting verification': return 'bg-blue-light-50 text-blue-light-500 dark:bg-blue-light-500/15 dark:text-blue-light-500';
               default: return 'bg-gray-100 text-gray-700 dark:bg-white/5 dark:text-white/80';
             }
@@ -1074,17 +1080,17 @@
             return ({ 'Pick-up': 'Waiting for pick-up', 'Reserved': 'With customer', 'Return': 'With customer' })[stage] || stage;
           },
           stageTone(stage) {
-            return ({ 'Reserved': 'is-info', 'Return': 'is-info', 'Overdue': 'is-bad', 'Returned': 'is-ok', 'Cancelled': 'is-bad' })[stage] || 'is-neutral';
+            return ({ 'Reserved': 'is-info', 'Return': 'is-info', 'Overdue': 'is-bad', 'Not picked up': 'is-bad', 'Returned': 'is-ok', 'Cancelled': 'is-bad' })[stage] || 'is-neutral';
           },
 
           // The small circle before a gown, the same colours as the status circles on the list: waiting for pick-up = green, with the customer = blue,
           // late = red, back = grey, cancelled = an empty ring.
           stageDot(stage) {
-            return ({ 'Reserved': 'is-out', 'Return': 'is-out', 'Overdue': 'is-late', 'Returned': 'is-done', 'Cancelled': 'is-void' })[stage] || 'is-wait';
+            return ({ 'Reserved': 'is-out', 'Return': 'is-out', 'Overdue': 'is-late', 'Not picked up': 'is-missed', 'Returned': 'is-done', 'Cancelled': 'is-void' })[stage] || 'is-wait';
           },
           // "3 with customer, 1 back": how many gowns are in each state, in a fixed order (display only).
           gownSummary(record) {
-            const order = [['is-wait', 'waiting for pick-up'], ['is-out', 'with customer'], ['is-late', 'overdue'], ['is-done', 'back'], ['is-void', 'cancelled']];
+            const order = [['is-wait', 'waiting for pick-up'], ['is-out', 'with customer'], ['is-late', 'overdue'], ['is-missed', 'not picked up'], ['is-done', 'back'], ['is-void', 'cancelled']];
             const counts = {};
             ((record && record.items) || []).forEach(item => { const kind = this.stageDot(item.stage); counts[kind] = (counts[kind] || 0) + 1; });
             return order.filter(o => counts[o[0]]).map(o => ({ kind: o[0], text: counts[o[0]] + ' ' + o[1] }));
@@ -1951,7 +1957,7 @@
           </li>
           <!-- Menu Item Payments & Deposits -->
 
-          <!-- Menu Item Financial Report -->
+          <!-- Menu Item Records -->
           <li>
             <a
               href="#"
@@ -1974,7 +1980,7 @@
                 class="menu-item-text"
                 :class="sidebarToggle ? 'lg:hidden' : ''"
               >
-                Financial Report
+                Records
               </span>
 
               <svg
@@ -2011,14 +2017,14 @@
                     class="menu-dropdown-item group"
                     :class="page === 'reservation-records' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
-                    Reservation Records
+                    All Bookings
                   </a>
                 </li>
               </ul>
             </div>
             <!-- Dropdown Menu End -->
           </li>
-          <!-- Menu Item Financial Report -->
+          <!-- Menu Item Records -->
 
           <!-- Menu Item Profile -->
           <li>
@@ -2385,7 +2391,7 @@
         <main>
           <div class="mx-auto max-w-(--breakpoint-2xl) p-4 md:p-6">
             <!-- Breadcrumb Start -->
-            <div x-data="{ pageName: `Reservation Records`}">
+            <div x-data="{ pageName: `All Bookings`}">
               <div class="mb-4 flex flex-wrap items-center justify-end gap-3">
   <nav>
     <ol class="flex items-center gap-1.5">
@@ -2554,6 +2560,7 @@
                       <li><span class="ar-dot rr-dot--out"></span><span><b>With customer:</b> a gown is out with the customer.</span></li>
                       <li><span class="ar-dot rr-dot--partly"></span><span><b>Partly returned:</b> some gowns are back, some are still out.</span></li>
                       <li><span class="ar-dot rr-dot--overdue"></span><span><b>Overdue:</b> a gown is past its return date.</span></li>
+                      <li><span class="ar-dot rr-dot--missed"></span><span><b>Not picked up:</b> the return date passed and nobody collected the gown.</span></li>
                       <li><span class="ar-dot rr-dot--done"></span><span><b>Completed:</b> every gown is back.</span></li>
                       <li><span class="ar-dot rr-dot--rejected"></span><span><b>Rejected:</b> the payment was not accepted.</span></li>
                       <li><span class="ar-dot rr-dot--cancelled"></span><span><b>Cancelled:</b> the booking was cancelled (empty ring).</span></li>

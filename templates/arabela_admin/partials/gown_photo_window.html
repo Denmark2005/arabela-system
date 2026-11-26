@@ -1,5 +1,5 @@
 {% comment %}
-  The gown photo window: click a gown's NAME on Active Reservations, Reservation Records or Pending Approval and this opens with that gown's
+  The gown photo window: click a gown's NAME on Active Reservations, All Bookings or Pending Approval and this opens with that gown's
   picture. The look is the Gown Catalog's photo window (same white card, same close button, the photo whole and never cropped), but it is
   view-only: no "Replace Photo", no "View Full Image" (those stay in the Gown Catalog), and the title is the gown's name.
 
@@ -7,7 +7,7 @@
   stylesheet is a precompiled Tailwind build that holds only the template pack's own classes. Follows dark mode through the `.dark` class
   Alpine puts on <body>.
 
-  How a name opens it: put these on the name's element (the pages do; Reservation Records binds them with Alpine):
+  How a name opens it: put these on the name's element (the pages do; All Bookings binds them with Alpine):
       data-gpw-name="Wedding Gown 17"         the title (its presence is what marks the element)
       data-gpw-sub="White tag · WH-017 · Large"  the line under the title (optional)
       data-gpw-photo="https://..."            the picture ("" = no photo: the window says so)
@@ -18,7 +18,7 @@
   Safety: the picture address is used only when it is a normal web address (http / https) or a path on this site; the name and the line
   under it are put in as plain text, never as HTML; a picture that cannot be loaded says so.
   A click on a name is handled here and goes no further, so it never also opens or closes the booking row it sits in; and while the window
-  is open every click and the Escape key stay inside it, so the window it was opened from (Reservation Records' View window) stays open.
+  is open every click and the Escape key stay inside it, so the window it was opened from (All Bookings' View window) stays open.
 
   NOTE: must be {% comment %}, not {# #} -- Django's hash comment is single-line only.
 {% endcomment %}

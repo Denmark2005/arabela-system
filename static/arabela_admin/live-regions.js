@@ -9,7 +9,7 @@
  * Two kinds of parts
  *   - an HTML part:  data-live-region="name"   its children are replaced with the fresh ones (Alpine and the pager pick the new rows up),
  *   - a DATA part:   <script type="application/json" data-live-data="name" data-live-watch=".css-selector">  a page that draws its rows
- *     from a JSON array (Reservation Records) gives the fresh JSON to the function it registered in window.ArabelaLiveData[name];
+ *     from a JSON array (All Bookings) gives the fresh JSON to the function it registered in window.ArabelaLiveData[name];
  *     data-live-watch names the element(s) the person works in (pointer / typing / selection there hold the update).
  *
  * Optional attributes on a part

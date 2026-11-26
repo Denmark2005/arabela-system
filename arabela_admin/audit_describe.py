@@ -115,7 +115,7 @@ def before_item(request, kwargs):
     item = _item(kwargs.get("item_id"))
     if not item:
         return {}
-    return {"pickup": _date_text(item.rental_date), "return": _date_text(item.return_date), "stage": item.stage}
+    return {"pickup": _date_text(item.rental_date), "return": _date_text(item.return_date), "stage": item.stage, "event": _date_text(item.effective_event_date)}
 
 
 def item_pickup(ctx):
@@ -171,6 +171,11 @@ def item_change_dates(ctx):
     if before.get("return", "") != new_return:
         parts.append(f"return from {before.get('return', '')} to {new_return}")
         details["return date"] = [before.get("return", ""), new_return]
+    # The event day is only ever changed on purpose (a pick-up moved past it): compare the day staff saved, not one worked out from the other dates.
+    new_event = _date_text(item.event_date) if item and item.event_date else before.get("event", "")
+    if before.get("event", "") != new_event:
+        parts.append(f"event date from {before.get('event', '')} to {new_event}")
+        details["event date"] = [before.get("event", ""), new_event]
     return {"summary": f"changed the dates of {_item_text(item)}: " + (" and ".join(parts) or "no change"),
             "target": _booking_target(item.reservation if item else None), "details": details}
 

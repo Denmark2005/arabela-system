@@ -16,7 +16,7 @@
   <style>
     /* Payment Verification: the same look as Pending Approval and Security Deposits (partials/ar_list_styles.html). Its own container class is
        `pv-card`, not `ar-card`. */
-    /* The customer's name opens that booking in Reservation Records. */
+    /* The customer's name opens that booking in All Bookings. */
     .pv-customer-link { min-width: 0; text-decoration: none; color: inherit; cursor: pointer; border-radius: .4rem; }
     .pv-customer-link:hover .ar-name { text-decoration: underline; }
     .pv-customer-link:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
@@ -831,7 +831,7 @@
           </li>
           <!-- Menu Item Payments & Deposits -->
 
-          <!-- Menu Item Financial Report -->
+          <!-- Menu Item Records -->
           <li>
             <a
               href="#"
@@ -854,7 +854,7 @@
                 class="menu-item-text"
                 :class="sidebarToggle ? 'lg:hidden' : ''"
               >
-                Financial Report
+                Records
               </span>
 
               <svg
@@ -891,14 +891,14 @@
                     class="menu-dropdown-item group"
                     :class="page === 'reservation-records' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
-                    Reservation Records
+                    All Bookings
                   </a>
                 </li>
               </ul>
             </div>
             <!-- Dropdown Menu End -->
           </li>
-          <!-- Menu Item Financial Report -->
+          <!-- Menu Item Records -->
 
           <!-- Menu Item Profile -->
           <li>
@@ -1444,13 +1444,13 @@
                 <!-- One booking: a closed line (status circle + name, booking number, the payment, when it was submitted, the actions) and, hidden until it is
                      opened, who it was booked as, the amount breakdown and one short line per gown. -->
                 <div class="ar-booking" data-booking-id="{{ r.id }}" data-owner="{% if r.owner_check_open %}pending{% endif %}" data-status="{{ r.pv_status }}" data-year="{{ r.created_at|date:'Y' }}" data-month="{{ r.created_at|date:'M' }}" data-search="{{ r.display_customer_name|lower }} {{ r.reference_code|lower }}{% for gi in r.items.all %} {{ gi.gown_name|lower }}{% endfor %} {{ r.proof_search_text }}" x-show="matches($el)">
-                  <!-- A click on the line opens the booking, except a click on the name (it opens Reservation Records) or on an action. The actions do NOT stop the click. -->
+                  <!-- A click on the line opens the booking, except a click on the name (it opens All Bookings) or on an action. The actions do NOT stop the click. -->
                   <div class="ar-line pv-grid" :class="isBookingOpen({{ r.id }}) ? 'is-open' : ''" @click="if (!$event.target.closest('.pv-acts, a')) { toggleBooking({{ r.id }}) }">
                     <div class="pv-cust">
                       <div class="ar-who">
                         <span class="ar-dot pv-dot--{{ r.pv_status|lower }}" role="img" aria-label="{{ r.pv_status }}"
                           title="{% if r.pv_status == 'Pending' %}Pending: waiting for the payment to be checked{% elif r.pv_status == 'Verified' %}Verified: the payment was approved{% elif r.pv_status == 'Rejected' %}Rejected: the payment was not accepted{% else %}Cancelled: the booking was cancelled{% endif %}"></span>
-                        <a href="{% url 'arabela_admin:reservation_records' %}?search={{ r.reference_code|urlencode }}" class="pv-customer-link" title="Open {{ r.reference_code }} in Reservation Records" aria-label="Open {{ r.display_customer_name }}, {{ r.reference_code }}, in Reservation Records"><span class="ar-name">{{ r.display_customer_name }}</span></a>
+                        <a href="{% url 'arabela_admin:reservation_records' %}?search={{ r.reference_code|urlencode }}" class="pv-customer-link" title="Open {{ r.reference_code }} in All Bookings" aria-label="Open {{ r.display_customer_name }}, {{ r.reference_code }}, in All Bookings"><span class="ar-name">{{ r.display_customer_name }}</span></a>
                       </div>
                       <div class="ar-ref pv-sub">
                         <b>{{ r.reference_code }}</b>

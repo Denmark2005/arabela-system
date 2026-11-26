@@ -659,7 +659,7 @@ def on_status_event_saved(sender, instance, created, **kwargs):
     if kwargs.get("raw") or not created or not getattr(settings, "CUSTOMER_EMAILS_ENABLED", False):
         return
     kind = EVENT_KINDS.get(instance.label)
-    if kind is None or instance.staff_only or instance.item_id:
+    if kind is None or instance.staff_only or instance.item_id or getattr(instance, "quiet", False):
         return
     # A booking staff recorded for a walk-in with no website account has nobody to email (and no "skipped" line belongs in
     # the owner's email history for it either).

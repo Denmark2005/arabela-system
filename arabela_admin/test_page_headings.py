@@ -25,7 +25,7 @@ PAGES = {
     "pending-approval.html": (reverse("arabela_admin:pending_approval"), "Pending Approval", True),
     "profile.html": (reverse("arabela_admin:page", kwargs={"page": "profile"}), "Profile", False),
     "rental-history.html": (reverse("arabela_admin:rental_history"), "Rental History", False),
-    "reservation-records.html": (reverse("arabela_admin:reservation_records"), "Reservation Records", False),
+    "reservation-records.html": (reverse("arabela_admin:reservation_records"), "All Bookings", False),
     "security-deposits.html": (reverse("arabela_admin:security_deposits"), "Security Deposits", False),
     "staff-management.html": (reverse("arabela_admin:staff_management"), "Staff Management", False),
 }

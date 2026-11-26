@@ -559,6 +559,8 @@ class EverywhereElseTests(Base):
         self.assertEqual(response.status_code, 200, response.content)
         item.refresh_from_db()
         self.assertEqual(item.stage, ReservationItem.Stage.RETURNED)
+        self.assertFalse(reservation.status_events.filter(label="Security deposit settled").exists())       # the deposit is still to hand back
+        payments.return_deposit(reservation_id=reservation.pk, amount=reservation.security_deposit, method=Payment.Method.CASH, user=self.staff)
         self.assertTrue(reservation.status_events.filter(label="Security deposit settled").exists())
         self.assertFalse(CustomerMessage.objects.exists())
 

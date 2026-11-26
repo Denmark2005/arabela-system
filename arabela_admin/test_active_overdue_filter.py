@@ -1,12 +1,13 @@
 """Active Reservations is for rentals that are still running.
 
-  * a booking whose every gown is back is finished: it is not listed (it lives in Reservation Records and Rental History);
+  * a booking whose every gown is back is finished: it is not listed (it lives in All Bookings and Rental History);
   * every listed booking is Confirmed (waiting for the first pick-up), Active (a gown has gone out) or Overdue (a gown is past its return
     date), and the page's colour key is the filter for those three, with the counts;
   * late bookings come first, the most days late on top, and say how many days late they are;
   * "days overdue" is ONE rule (arabela_admin.views._days_late): counted from the return date agreed with the customer now (days a
     return was moved are the date change fee), the same number the gown's remarks print;
   * Rental History shows the same number for every gown, and calls a gown nobody picked up "Not picked up", not "Overdue";
+    its statuses are the words of Active Reservations ("Out with customer", "Returned", "Overdue");
   * all of it is the same for the owner, a Manager and a Staff account.
 """
 import json
@@ -222,8 +223,8 @@ class RentalHistoryDaysLate(Base):
 
     def test_every_gown_gets_the_right_status_and_days_late(self):
         expected = {
-            self.late_back.pk: ("Completed", 2), self.on_time.pk: ("Completed", 0), self.overdue.pk: ("Overdue", 5),
-            self.no_show.pk: ("Not picked up", None), self.ongoing.pk: ("Ongoing", None),
+            self.late_back.pk: ("Returned", 2), self.on_time.pk: ("Returned", 0), self.overdue.pk: ("Overdue", 5),
+            self.no_show.pk: ("Not picked up", None), self.ongoing.pk: ("Out with customer", None),
         }
         for pk, (status, late) in expected.items():
             with self.subTest(item=pk):
@@ -233,12 +234,16 @@ class RentalHistoryDaysLate(Base):
         self.assertIn("2 days overdue", self.html)
         self.assertIn("On time", self.html)
         self.assertIn("5 days overdue", self.html)
-        self.assertIn("Still not back, so this keeps growing", self.html)          # the hover on a gown that is still out: this number is "so far"
+        due = self.today - timedelta(days=5)
+        self.assertIn(f"5 days overdue · was due {self.weekday(due)}", self.html)      # the opened row of the gown still out
         self.assertIn("The gown is out with the customer and past its return date", self.html)
         self.assertIn("Not picked up", self.html)
-        self.assertIn("<span>Overdue</span>", self.html)                           # the column title
+        self.assertIn("<span>Status</span>", self.html)                            # the column title
         back = self.today - timedelta(days=6)
-        self.assertIn(f'<span class="rh-k">Returned</span><span class="rh-v">{back:%b} {back.day}, {back.year}</span>', self.html)
+        self.assertIn(f"Returned {self.weekday(back)} · 2 days overdue", self.html)
+
+    def weekday(self, day):
+        return f"{day:%a}, {day:%b} {day.day}" + ("" if day.year == self.today.year else f", {day.year}")
 
     def test_the_empty_message_is_a_block_not_a_table_row(self):
         self.assertNotIn("colspan=", self.html[self.html.index("<main>"):])         # the list is no longer a table

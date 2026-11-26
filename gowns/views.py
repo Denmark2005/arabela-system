@@ -1647,6 +1647,8 @@ def reservation_item_detail(request, item_id):
     live_photo = item.gown.photo_url if item.gown_id else ""
     saved_photo = live_photo or item.gown_photo_url
     gown_photo = sized(saved_photo, PAGE_WIDTH) if saved_photo else ""
+    # What the booking owes and has paid, its fees so far and its Payment Receipts (the system works them out: reservations/ledger.py).
+    money = ledger.statement(reservation)
     return render(
         request,
         'reservation_item_detail.html',
@@ -1667,8 +1669,9 @@ def reservation_item_detail(request, item_id):
             ),
             "reservation_items": reservation.items.select_related("gown").all(),
             "timeline": timeline.for_item(item),
-            # What the booking owes and has paid, its late fee so far and its Payment Receipts (the system works them out: reservations/ledger.py).
-            "money": ledger.statement(reservation),
+            "money": money,
+            # The day the security deposit was settled -- only once nothing is left to hand back or to pay.
+            "deposit_settled_on": ledger.deposit_returned_day(reservation, money) if ledger.is_settled(reservation, money) else None,
             "receipts": _customer_receipts(reservation),
         },
     )
