@@ -734,6 +734,26 @@ def receipt_send(ctx):
             "target": _booking_target(reservation)}
 
 
+def report_download(ctx):
+    """The Reservation Report downloaded from Rental History: which dates, which kind of file and the list filters that were on."""
+    from django.utils import timezone
+
+    from arabela_admin import rental_report
+
+    period = rental_report.read_period(ctx.request.GET, timezone.localdate())
+    filters = rental_report.read_filters(ctx.request.GET)
+    kind = rental_report.FILE_KINDS.get(ctx.kwargs.get("kind"), "a file")
+    details = {"dates": period.label, "dates by": period.kind_label}
+    gown_name = ""
+    if filters.gown:
+        name = filters.gown.split("|", 1)[-1]
+        gown_name = ReservationItem.objects.filter(gown_name__iexact=name).values_list("gown_name", flat=True).first() or ""
+    words = filters.words(gown_name)
+    if words:
+        details["list filters"] = "; ".join(words)
+    return {"summary": f"downloaded the Reservation Report ({period.label}) as {kind}", "details": details}
+
+
 def late_fee_setting(ctx):
     from gowns.models import SiteSettings
     new = SiteSettings.load().late_fee_per_day

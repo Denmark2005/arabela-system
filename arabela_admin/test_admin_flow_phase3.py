@@ -241,15 +241,14 @@ class DateBarWiringTests(Base):
         self.assertEqual(record["datesPickup"], [f"{self.today + timedelta(days=5):%Y-%m-%d}"])
         self.assertNotIn(f"{self.today + timedelta(days=44):%Y-%m-%d}", record["datesReturn"])
 
-    def test_rental_history_has_the_bar_and_each_gown_carries_its_days(self):
+    def test_rental_history_has_the_report_dates_instead_of_the_bar_and_each_gown_its_receipt(self):
         booking = make_booking(stage=S.RETURNED, pickup=-6, ret=-3, returned_on=-3)
         self.record(booking, P.FULL, "5500")
         response = self.client.get(reverse("arabela_admin:rental_history"))
-        row = response.context["rental_records"][0]
-        self.assertEqual(row["dReturn"], [f"{self.today - timedelta(days=3):%Y-%m-%d}"])
-        self.assertEqual(row["dPickup"], [f"{self.today - timedelta(days=6):%Y-%m-%d}"])
         html = response.content.decode()
-        self.assertIn('class="df-bar"', html)
+        self.assertNotIn('class="df-bar"', html)                                               # the report's own dates took its place
+        for words in ("All", "Today", "Last 7 days", "This month", "Custom dates", "Dates by"):
+            self.assertIn(words, html)
         self.assertIn(f"arabelaReceipt.open({booking.id})", html)                              # a gown with a receipt has its Receipt button
 
     def record(self, booking, purpose, amount):

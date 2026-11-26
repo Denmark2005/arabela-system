@@ -247,7 +247,7 @@ class RentalHistoryDaysLate(Base):
 
     def test_the_empty_message_is_a_block_not_a_table_row(self):
         self.assertNotIn("colspan=", self.html[self.html.index("<main>"):])         # the list is no longer a table
-        self.assertIn("No rental records found for this period", self.html)
+        self.assertIn("No rentals match these filters.", self.html)                   # shown when the search or a filter hides every line
 
     def test_the_same_number_as_active_reservations(self):
         page = self.client.get(ACTIVE_URL)

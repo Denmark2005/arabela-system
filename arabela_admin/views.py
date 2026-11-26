@@ -23,11 +23,11 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.formats import date_format
-from django.utils.http import urlencode
+from django.utils.http import content_disposition_header, urlencode
 from django.views.decorators.cache import never_cache
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.csrf import ensure_csrf_cookie
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_GET, require_http_methods
 import json
 import logging
 
@@ -40,7 +40,7 @@ from accounts.roles import (
     parse_permissions, permission_message, staff_display_name,
 )
 from accounts.services import CANCELLATION_FLAG_THRESHOLD, clear_proof_block, record_rejected_proof
-from arabela_admin import audit_describe, dashboard_money, gown_inventory, gown_photo, rental_history
+from arabela_admin import audit_describe, dashboard_money, gown_inventory, gown_photo, rental_history, rental_report
 from gowns import availability, deposit, design_details, gcash_numbers
 from gowns.models import (
     COOLDOWN_DAYS,
@@ -880,59 +880,98 @@ def payment_verification_view(request):
     )
 
 
-@_require_admin_staff
-def rental_history_view(request):
-    """Every gown of every booking, one row per gown (ReservationItem), bucketed by
-    rental_date and excluding bookings that never became rentals (rejected, cancelled).
-
-    Gowns the shop cancelled before pick-up are left out too: they never went out.
-
-    Counts GOWNS, not bookings -- a three-gown reservation is three rows here but one
-    in All Bookings' monthly breakdown and the dashboard's Reservations This
-    Month tile, so this page's month totals are expected to be higher than those.
-
-    What each row says (its status in words, the opened row's steps and facts) comes from arabela_admin/rental_history.py.
-    """
-    today = timezone.localdate()
+def _history_items(today):
+    """Every gown of every booking that became a rental, one line per gown (ReservationItem), newest first: rejected and cancelled bookings, and gowns
+    the shop cancelled before pick-up (they never went out), are left out. Each line carries its booking's money statement and what Rental History says
+    about it (arabela_admin/rental_history.py). The page, the report above it and its downloads all read these lines."""
     items = list(
         ReservationItem.objects.exclude(
             reservation__status__in=_NON_RENTAL_STATUSES
         )
         .exclude(stage=ReservationItem.Stage.CANCELLED)
-        .select_related("reservation__customer__profile")
+        .select_related("reservation__customer__profile", "gown")
         .prefetch_related(_receipts_prefetch("reservation__receipt_records"), "reservation__payments", "reservation__deductions", "reservation__items")
         .order_by("-rental_date", "-id")
     )
-
     statements = {}          # one money statement per booking, however many of its gowns are listed
     for item in items:
         reservation = item.reservation
         if reservation.pk not in statements:
             statements[reservation.pk] = reservation_ledger.statement(reservation, today)
+        item.statement = statements[reservation.pk]
         item.late_days = _days_late(item, today)       # None = nothing to say, 0 = on time, N = N days overdue (so far, if it is still out)
-        item.has_receipt = reservation_payments.has_receipt(reservation)
-        item.view = rental_history.describe(item, today, item.late_days, statements[reservation.pk])
+        item.view = rental_history.describe(item, today, item.late_days, item.statement)
         item.history_status = item.view["status"]
+    return items
+
+
+def _report_query(period_params, filters):
+    """The address parameters of the report: the dates, then only the list filters that are on."""
+    params = dict(period_params)
+    for key, value, default in (("status", filters.status, "All"), ("q", filters.q, ""), ("category", filters.category, ""),
+                                ("channel", filters.channel, ""), ("gown", filters.gown, "")):
+        if value != default:
+            params[key] = value
+    return urlencode(params)
+
+
+@_require_admin_staff
+def rental_history_view(request):
+    """Rental History and the Reservation Report: the dates (?period= and ?by=), the money boxes, the top rented gowns and categories
+    (arabela_admin/rental_report.py), then every gown of those dates, one line per gown.
+
+    Counts GOWNS, not bookings -- a three-gown reservation is three rows here but one
+    in All Bookings' monthly breakdown and the dashboard's Reservations This
+    Month tile, so this page's totals are expected to be higher than those.
+
+    What each row says (its status in words, the opened row's steps and facts) comes from arabela_admin/rental_history.py.
+    """
+    today = timezone.localdate()
+    period = rental_report.read_period(request.GET, today)
+    filters = rental_report.read_filters(request.GET)
+    items = _history_items(today)
+    report = rental_report.build(period, items, today=today, held=_deposit_totals(today))
+
+    shown = []
+    for line in report["listed"]:
+        item = line["item"]
+        reservation = item.reservation
+        item.report = line
+        item.has_receipt = reservation_payments.has_receipt(reservation)
         # The eye: an old payment or receipt photo when there is one, else the shop's own Payment Receipt, else no eye at all.
         item.eye = "photo" if reservation.payment_proof_url or reservation.receipt_records.all() else ("receipt" if item.has_receipt else "")
-
-    reservation_timeline.attach_to_items(items)
+        shown.append(item)
+    reservation_timeline.attach_to_items(shown)
 
     # Mirrors the visible rows so the number on each status button can count what is
     # actually on screen. `q` is the same lowercase haystack the row filter searches, so the
     # buttons and the list can never disagree about what matches.
     rental_records = [
-        {
-            "month": item.rental_date.strftime("%b"),
-            "year": item.rental_date.strftime("%Y"),
-            "status": item.history_status,
-            "q": f"{item.reservation.display_customer_name} {item.gown_name}".lower(),
-            # The days of this gown for the "On this date" bar, so the status numbers follow the date too.
-            "dPickup": sorted({d.isoformat() for d in (item.rental_date, item.picked_up_on) if d}),
-            "dReturn": sorted({d.isoformat() for d in (item.return_date, item.returned_on) if d}),
-            "dEvent": [item.effective_event_date.isoformat()] if item.effective_event_date else [],
-        }
-        for item in items
+        {"status": line["status"], "q": line["search"], "category": line["category"], "channel": line["channel"], "gown": line["gown_key"]}
+        for line in report["listed"]
+    ]
+    categories = {line["category"] for line in report["listed"]} | ({filters.category} if filters.category else set())
+    present = {line["channel"] for line in report["listed"]} | {Reservation.Channel.ONLINE, Reservation.Channel.WALK_IN, filters.channel}
+    channels = [(value, label) for value, label in Reservation.Channel.choices if value in present]
+
+    # What the two From / To boxes hold before anyone types: the dates on screen, else this month so far.
+    custom_from = period.typed_from if period.key == rental_report.CUSTOM else today.replace(day=1).isoformat()
+    custom_to = period.typed_to if period.key == rental_report.CUSTOM else today.isoformat()
+
+    def page_url(params):
+        return f"{reverse('arabela_admin:rental_history')}?{_report_query(params, filters)}"
+
+    period_links = []
+    for key, label in rental_report.PERIODS:
+        params = {"period": key, "by": period.kind}
+        if key == rental_report.CUSTOM:
+            params.update({"from": custom_from, "to": custom_to})
+        period_links.append({"key": key, "label": label, "url": page_url(params)})
+    kind_links = [{"key": key, "label": label, "url": page_url(dict(period.params(), by=key))} for key, label in rental_report.DATE_KINDS]
+    download_links = [
+        {"kind": kind, "label": label,
+         "url": f"{reverse('arabela_admin:rental_report_download', args=[kind])}?{_report_query(period.params(), filters)}"}
+        for kind, label in rental_report.FILE_KINDS.items()
     ]
 
     return render(
@@ -940,12 +979,69 @@ def rental_history_view(request):
         "arabela_admin/rental-history.html",
         {
             "page": "rental-history",
-            "rental_items": items,
+            "rental_items": shown,
             "rental_records": rental_records,
             "status_filters": [(status, rental_history.DOTS[rental_history.LOOK[status][0]], rental_history.LOOK[status][1])
                                for status in rental_history.LOOK],
+            "report": report,
+            "period": period,
+            "filters": filters,
+            "has_history": bool(items),
+            "categories": sorted(categories, key=str.casefold),
+            "channels": channels,
+            "period_links": period_links,
+            "kind_links": kind_links,
+            "download_links": download_links,
+            "custom_from": custom_from,
+            "custom_to": custom_to,
+            "can_download": _is_owner(request),          # the same check the download itself enforces
+            # What the page's script starts from: the filters in the address and the dates on screen.
+            "view_data": {
+                "status": filters.status, "q": filters.q, "category": filters.category, "channel": filters.channel, "gown": filters.gown,
+                "gownName": rental_report.gown_label(report, filters), "period": period.key, "by": period.kind,
+                "from": custom_from, "to": custom_to, "error": period.error, "page": reverse("arabela_admin:rental_history"),
+                "files": {kind: reverse("arabela_admin:rental_report_download", args=[kind]) for kind in rental_report.FILE_KINDS},
+            },
         },
     )
+
+
+@require_GET
+@never_cache
+@audited("report.download", "Bookings", audit_describe.report_download, sensitive=True)
+def rental_report_download_view(request, kind):
+    """The Reservation Report of the dates and list filters on screen, as a PDF or an Excel file. The shop owner only (it carries every customer's name and
+    every amount), and every download is written in the Audit Log."""
+    plain = "text/plain; charset=utf-8"
+    if not _is_admin_staff(request):
+        return redirect("arabela_admin:admin_login")
+    if not _is_owner(request):
+        return HttpResponse("Only the shop owner can download the reservation report.", status=403, content_type=plain)
+    if kind not in rental_report.FILE_KINDS:
+        return HttpResponse("There is no such report.", status=404, content_type=plain)
+    today = timezone.localdate()
+    period = rental_report.read_period(request.GET, today)
+    if period.error:
+        return HttpResponse(period.error, status=400, content_type=plain)
+    filters = rental_report.read_filters(request.GET)
+    report = rental_report.build(period, _history_items(today), today=today, held=_deposit_totals(today))
+    lines = rental_report.listed_for(report, filters)
+    filter_words = filters.words(rental_report.gown_label(report, filters))
+    printed = {"at": timezone.localtime(), "by": staff_display_name(request.user)}
+    # Imported here, not at the top: a computer that has not installed these two libraries yet still runs the rest of the panel.
+    if kind == "pdf":
+        from arabela_admin import rental_report_pdf
+
+        data, content_type, extension = rental_report_pdf.build_pdf(report, lines, filter_words, printed), "application/pdf", "pdf"
+    else:
+        from arabela_admin import rental_report_xlsx
+
+        data, extension = rental_report_xlsx.build_workbook(report, lines, filter_words, printed), "xlsx"
+        content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    response = HttpResponse(data, content_type=content_type)
+    response["Content-Disposition"] = content_disposition_header(True, f"Arabela Reservation Report {period.file_part}.{extension}")
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 def _deposit_gown_state(item):
@@ -973,10 +1069,16 @@ _DEPOSIT_KINDS = {"Held": "held", "Return due": "due", "Returned": "returned"}
 
 
 def _deposits_held(today):
-    """The Dashboard's "Security Deposits Held": the deposit money the shop is holding for its customers, by the SAME states as the Security Deposits page
-    (_deposit_state, over the same bookings): a Held booking (a gown is not back yet) counts what was paid less anything already handed back; a Return due
-    booking (every gown back) counts what is still to hand back -- the fees and deductions it keeps are the shop's, not held; a Returned one counts
-    nothing. Amounts are text ("24,000.00")."""
+    """The Dashboard's "Security Deposits Held" (see _deposit_totals), the amounts written as text ("24,000.00")."""
+    totals = _deposit_totals(today)
+    return {**totals, "held": f"{totals['held']:,.2f}", "due": f"{totals['due']:,.2f}"}
+
+
+def _deposit_totals(today):
+    """The deposit money the shop is holding for its customers, by the SAME states as the Security Deposits page (_deposit_state, over the same
+    bookings): a Held booking (a gown is not back yet) counts what was paid less anything already handed back; a Return due booking (every gown back)
+    counts what is still to hand back -- the fees and deductions it keeps are the shop's, not held; a Returned one counts nothing. Amounts are Decimals:
+    the Dashboard and Rental History's report both come from here."""
     held = due = Decimal("0")
     held_bookings = due_bookings = 0
     bookings = Reservation.objects.filter(status__in=_SCHEDULED_STATUSES).prefetch_related("items", _receipts_prefetch(), "payments", "deductions")
@@ -994,7 +1096,7 @@ def _deposits_held(today):
         if amount > 0:
             held += amount
             held_bookings += 1
-    return {"held": f"{held:,.2f}", "held_bookings": held_bookings, "due": f"{due:,.2f}", "due_bookings": due_bookings}
+    return {"held": held, "held_bookings": held_bookings, "due": due, "due_bookings": due_bookings}
 
 
 def _deposit_state(reservation, live_items, today):

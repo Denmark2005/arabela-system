@@ -1,7 +1,6 @@
 {% comment %}
   The "On this date" bar: pick ONE exact date (or step a day back / forward) and say what it means -- the day gowns are picked up, the day they come
-  back, or the event day. The page then shows only the gowns on that date. Used by Active Reservations, All Bookings, Rental History
-  and Security Deposits.
+  back, or the event day. The page then shows only the gowns on that date. Used by Active Reservations, All Bookings and Security Deposits.
 
   It needs the page's Alpine scope to have two values: dateFocus ('' or 'YYYY-MM-DD') and dateKind ('pickup' | 'return' | 'event'). The filtering itself
   is the page's own (see partials/date_focus_lib.html for the shared helper). Self-contained: its own CSS (class prefix df-), light and dark.

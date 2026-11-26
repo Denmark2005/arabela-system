@@ -147,63 +147,92 @@ CORE_PURPOSES = (Payment.Purpose.DEPOSIT, Payment.Purpose.FULL, Payment.Purpose.
 
 
 def _money_rows(reservation):
-    """The booking's payments as (direction, purpose, amount, paid_at), oldest first: the same rows ledger.statement adds up (the recorded payments that
-    are not voided; for an old booking that has none, the ones ledger.legacy_rows derives from what it carries)."""
+    """The booking's payments, oldest first: the same rows ledger.statement adds up (the recorded payments that are not voided; for an old booking that
+    has none, the ones ledger.legacy_rows derives from what it carries). Each is {"direction", "purpose", "amount", "paid_at", "method",
+    "payment" (the stored Payment, or None for an old one)}."""
     stored = sorted(reservation.payments.all(), key=lambda p: (p.paid_at, p.pk))
     if stored:
-        return [(p.direction, p.purpose, ledger.money(p.amount), p.paid_at) for p in stored if not p.is_void]
+        return [{"direction": p.direction, "purpose": p.purpose, "amount": ledger.money(p.amount), "paid_at": p.paid_at, "method": p.method, "payment": p}
+                for p in stored if not p.is_void]
     rows = ledger.legacy_rows(reservation)
-    return [(r["direction"], r["purpose"], ledger.money(r["amount"]), r["paid_at"]) for r in sorted(rows, key=lambda r: r["paid_at"])]
+    return [{"direction": r["direction"], "purpose": r["purpose"], "amount": ledger.money(r["amount"]), "paid_at": r["paid_at"], "method": r["method"], "payment": None}
+            for r in sorted(rows, key=lambda r: r["paid_at"])]
 
 
-def month_money(today):
-    """What the shop EARNED in the calendar month of `today`. The security deposits are never in it: a deposit is the customer's money and goes back to
-    them, until a fee or a deduction keeps part of it.
+def money_between(start=None, end=None, today=None):
+    """The money of every tracked booking between two days (both counted; None = no limit), by the day it was PAID. The Dashboard's month and the
+    Reservation Report both come from here, so they can never disagree. The security deposits are never income: a deposit is the customer's money and
+    goes back to them, until a fee or a deduction keeps part of it.
 
-      income     the gown-rental part of every payment received this month. A payment covers the deposit first and then the rental (the rule of the
-                 Payments page, reservations/ledger.py), so a "Paid in full" counts only its rental part and a deposit-only payment counts nothing.
-      bookings   how many bookings that income came from.
-      kept       the fees and deductions the shop kept this month: what they took out of the deposit of a booking whose last gown came back this month
-                 (only then are the fees final), plus an extra charge paid on top of a deposit this month.
+      income      the gown-rental part of every payment received. A payment covers the deposit first and then the rental (the rule of the Payments
+                  page, reservations/ledger.py), so a "Paid in full" counts only its rental part and a deposit-only payment counts nothing.
+      by_booking  {booking id: its income}, for the bookings that income came from.
+      kept        the fees and deductions the shop kept: what they took out of the deposit of a booking whose last gown came back in these days (only
+                  then are the fees final), plus an extra charge paid on top of a deposit in these days.
+      collected   the security-deposit part of the payments received.
+      returned    the deposit money handed back.
+      payments    every payment in these days, oldest first: {"reservation", "row" (see _money_rows), "day", "rental", "deposit", "extra", "other"}
+                  ("other" = money paid beyond what the booking asks, e.g. for a gown cancelled afterwards).
 
-    Only bookings whose money is tracked count (approved, running, finished, or cancelled after approval), like everywhere else. Amounts are text ("84,500.00")."""
-    first = today.replace(day=1)
-    following = (first + timedelta(days=32)).replace(day=1)
+    Only bookings whose money is tracked count (approved, running, finished, or cancelled after approval), like everywhere else. Amounts are Decimals."""
+    today = today or timezone.localdate()
 
-    def in_month(when):
-        return when is not None and first <= timezone.localtime(when).date() < following
+    def inside(day):
+        return day is not None and (start is None or day >= start) and (end is None or day <= end)
 
-    income = kept = ledger.ZERO
-    bookings = 0
+    zero = ledger.ZERO
+    income = kept = collected = returned = zero
+    by_booking, payments = {}, []
     candidates = (
         Reservation.objects.filter(status__in=LIVE_STATUSES + (Reservation.Status.CANCELLED,))
+        .select_related("customer__profile")
         .prefetch_related("items", "payments", "deductions", "receipt_records")
     )
     for reservation in candidates:
         if not ledger.counts_as_tracked(reservation):
             continue
         deposit_due, rental_due = ledger.money(reservation.security_deposit), ledger.rental_due(reservation)
-        received = earned = ledger.ZERO
-        for direction, purpose, amount, when in _money_rows(reservation):
-            if direction != Payment.Direction.IN:
-                continue
-            if purpose == Payment.Purpose.EXTRA:
-                if in_month(when):
+        received = earned = zero
+        for row in _money_rows(reservation):
+            day = timezone.localtime(row["paid_at"]).date()
+            amount = row["amount"]
+            parts = {"rental": zero, "deposit": zero, "extra": zero, "other": zero}
+            if row["direction"] != Payment.Direction.IN:
+                if inside(day):
+                    returned += amount
+            elif row["purpose"] == Payment.Purpose.EXTRA:
+                parts["extra"] = amount
+                if inside(day):
                     kept += amount
-                continue
-            if purpose not in CORE_PURPOSES:
-                continue
-            rental_before = min(max(received - deposit_due, ledger.ZERO), rental_due)
-            received += amount
-            rental_after = min(max(received - deposit_due, ledger.ZERO), rental_due)
-            if in_month(when):
-                earned += rental_after - rental_before
+            elif row["purpose"] in CORE_PURPOSES:
+                deposit_before = min(received, deposit_due)
+                rental_before = min(max(received - deposit_due, zero), rental_due)
+                received += amount
+                parts["deposit"] = min(received, deposit_due) - deposit_before
+                parts["rental"] = min(max(received - deposit_due, zero), rental_due) - rental_before
+                parts["other"] = amount - parts["deposit"] - parts["rental"]
+                if inside(day):
+                    earned += parts["rental"]
+                    collected += parts["deposit"]
+            else:
+                parts["other"] = amount
+            if inside(day):
+                payments.append({"reservation": reservation, "row": row, "day": day, **parts})
         if earned > 0:
             income += earned
-            bookings += 1
+            by_booking[reservation.pk] = earned
         statement = ledger.statement(reservation, today)
         if statement.all_returned and statement.deposit_used > 0:
             back = [i.returned_on for i in reservation.items.all() if i.stage == ReservationItem.Stage.RETURNED and i.returned_on]
-            if back and first <= max(back) < following:
+            if back and inside(max(back)):
                 kept += statement.deposit_used
-    return {"income": f"{income:,.2f}", "bookings": bookings, "kept": f"{kept:,.2f}"}
+    payments.sort(key=lambda p: (p["row"]["paid_at"], p["row"]["payment"].pk if p["row"]["payment"] is not None else 0, p["reservation"].pk))
+    return {"income": income, "by_booking": by_booking, "kept": kept, "collected": collected, "returned": returned, "payments": payments}
+
+
+def month_money(today):
+    """The Dashboard's Rental Income: money_between over the calendar month of `today`, as text ("84,500.00")."""
+    first = today.replace(day=1)
+    last = (first + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+    money = money_between(first, last, today)
+    return {"income": f"{money['income']:,.2f}", "bookings": len(money["by_booking"]), "kept": f"{money['kept']:,.2f}"}

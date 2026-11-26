@@ -108,7 +108,7 @@ ADMIN_PAGES = {
     "payment_verification": ["pv-list", "pv-verified-today"],
     "security_deposits": ["sd-list", "sd-filters", "sd-month"],
     "clients": ["cl-rows", "cl-filters"],
-    "rental_history": ["history-list"],
+    "rental_history": ["history-summary", "history-list"],
 }
 
 

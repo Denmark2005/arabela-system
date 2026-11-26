@@ -13,27 +13,139 @@
   <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet">
   {% include "arabela_admin/partials/ar_list_styles.html" %}
   <style>
-    /* Rental History: the same look as Security Deposits and Active Reservations (partials/ar_list_styles.html). Its own container class is `rh-card`. */
-    .rh-card { margin-bottom: 1.25rem; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; }
+    /* Rental History: the Reservation Report above (the dates, four money boxes, top gowns and categories), then the list in the same look as Security
+       Deposits and Active Reservations (partials/ar_list_styles.html). Its own container class is `rh-card`; the page is as wide as Active Reservations. */
+    .rh-wide { max-width: 2000px; }
+    .rh-card { margin-bottom: 1.25rem; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; scroll-margin-top: 6rem; }
     .dark .rh-card { background: rgba(255,255,255,.03); border-color: #1d2939; }
-    .ar-search-input.rh-select { flex: 0 0 9.5rem; width: 9.5rem; padding-left: .8rem; }
-    .rh-year-wrap { flex: none; width: 6.5rem; }
-    .rh-year-input { padding-left: .8rem; }
-    /* the status buttons (they are the legend and the filter) on the left, the count on the right */
+    .rh-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+    /* ---------------- the report: which dates ---------------- */
+    .rh-report { margin-bottom: 1.25rem; }
+    .rh-periods { display: flex; flex-wrap: wrap; gap: .5rem; }
+    .rh-period { display: inline-flex; align-items: center; min-height: 2.75rem; padding: .45rem 1.15rem; border: 1px solid #d0d5dd; border-radius: 999px; background: #fff; color: #344054; font-size: .9375rem; font-weight: 500; text-decoration: none; transition: background-color .15s, border-color .15s; }
+    .rh-period:hover { background: #f2f4f7; }
+    .dark .rh-period { border-color: #344054; background: rgba(255,255,255,.03); color: #d0d5dd; }
+    .dark .rh-period:hover { background: rgba(255,255,255,.07); }
+    .rh-period.is-on, .dark .rh-period.is-on { border-color: #465fff; background: #465fff; color: #fff; }
+    .rh-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1.5rem; margin-top: .85rem; }
+    .rh-by, .rh-dls { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .65rem; }
+    .rh-dls { margin-left: auto; }
+    .rh-lbl { font-size: .9375rem; font-weight: 500; color: #475467; }
+    .dark .rh-lbl { color: #98a2b3; }
+    .rh-seg { display: inline-flex; flex-wrap: wrap; gap: .25rem; padding: .25rem; border-radius: .75rem; background: #f2f4f7; }
+    .dark .rh-seg { background: rgba(255,255,255,.05); }
+    .rh-seg a { display: inline-flex; align-items: center; min-height: 2.25rem; padding: .3rem .95rem; border-radius: .55rem; color: #667085; font-size: .875rem; font-weight: 600; text-decoration: none; }
+    .rh-seg a.is-on { background: #fff; color: #1d2939; box-shadow: 0 1px 2px rgba(16,24,40,.1); }
+    .dark .rh-seg a { color: #98a2b3; }
+    .dark .rh-seg a.is-on { background: #1d2939; color: #f2f4f7; box-shadow: none; }
+    .rh-hint { font-size: .8125rem; color: #667085; }
+    .dark .rh-hint { color: #98a2b3; }
+    .rh-dates-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .75rem; margin-top: .85rem; }
+    .rh-field { display: flex; flex-direction: column; gap: .3rem; }
+    .rh-field label { font-size: .875rem; font-weight: 600; color: #475467; }
+    .dark .rh-field label { color: #98a2b3; }
+    .rh-field input { box-sizing: border-box; width: 12rem; height: 2.75rem; padding: .4rem .75rem; border: 1px solid #d0d5dd; border-radius: .65rem; background-color: #fff; color: #1d2939; font: inherit; font-size: .9375rem; }
+    .rh-field input:focus { outline: 2px solid #465fff; outline-offset: 1px; border-color: #465fff; }
+    .dark .rh-field input { background-color: #0c111d; border-color: #344054; color: #f2f4f7; }
+    .rh-dates-form .rh-btn { min-height: 2.75rem; }
+    .rh-err { flex-basis: 100%; margin: 0; padding: .65rem .9rem; border: 1px solid #fecdca; border-radius: .65rem; background: #fef3f2; color: #b42318; font-size: .9375rem; font-weight: 500; }
+    .dark .rh-err { border-color: rgba(240,68,56,.35); background: rgba(240,68,56,.1); color: #fda29b; }
+
+    /* ---------------- the report: four figures as big as the Dashboard's, then the top gowns and categories ---------------- */
+    .rh-sum { position: relative; z-index: 20; container-type: inline-size; container-name: rhsum; margin-bottom: 1.25rem; }
+    .rh-boxes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.25rem; }
+    .rh-box { display: flex; flex-direction: column; gap: .4rem; min-width: 0; padding: 1.35rem 1.5rem 1.4rem; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; }
+    .dark .rh-box { border-color: #1d2939; background: rgba(255,255,255,.03); }
+    .rh-box-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .7rem; }
+    .rh-box-head .ht-tip { margin-left: -.35rem; }
+    .rh-ic { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; border-radius: .75rem; background: #f2f4f7; color: #344054; }
+    .dark .rh-ic { background: #1d2939; color: rgba(255,255,255,.9); }
+    .rh-ic svg { display: block; width: 1.25rem; height: 1.25rem; fill: currentColor; }
+    .rh-box-title { margin: 0; font-size: 1.0625rem; font-weight: 600; color: #344054; }
+    .dark .rh-box-title { color: #d0d5dd; }
+    .rh-tag { max-width: 100%; padding: .05rem .55rem; border-radius: 999px; background: #f2f4f7; color: #667085; font-size: .8125rem; font-weight: 500; }
+    .dark .rh-tag { background: #1d2939; color: #98a2b3; }
+    .rh-num { margin: .45rem 0 0; font-size: 2.25rem; font-weight: 700; line-height: 1.15; letter-spacing: -.01em; font-variant-numeric: tabular-nums; color: #101828; overflow-wrap: anywhere; }
+    .rh-num--long { font-size: 1.875rem; }
+    .dark .rh-num { color: rgba(255,255,255,.95); }
+    .rh-box-sub { margin: 0; font-size: .9375rem; line-height: 1.4; color: #667085; }
+    .dark .rh-box-sub { color: #98a2b3; }
+    .rh-box-sub b { font-weight: 600; color: #344054; font-variant-numeric: tabular-nums; }
+    .dark .rh-box-sub b { color: #d0d5dd; }
+    .rh-box-sub .rh-due { font-weight: 600; color: #b54708; }
+    .dark .rh-box-sub .rh-due { color: #fdb022; }
+    .rh-counts { display: grid; gap: .25rem; margin: .1rem 0 0; padding: 0; list-style: none; }
+    .rh-counts li { display: flex; align-items: center; gap: .55rem; font-size: .9375rem; color: #475467; }
+    .dark .rh-counts li { color: #98a2b3; }
+    .rh-counts b { margin-left: auto; font-weight: 600; color: #1d2939; font-variant-numeric: tabular-nums; }
+    .dark .rh-counts b { color: #d0d5dd; }
+    .rh-panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 1.25rem; margin-top: 1.25rem; }
+    .rh-panel-card { min-width: 0; padding: 1.15rem 1.25rem 1rem; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; }
+    .dark .rh-panel-card { border-color: #1d2939; background: rgba(255,255,255,.03); }
+    .rh-panel-title { margin: 0; font-size: 1.0625rem; font-weight: 600; color: #1d2939; }
+    .dark .rh-panel-title { color: rgba(255,255,255,.9); }
+    .rh-panel-sub { margin: .15rem 0 0; font-size: .8125rem; color: #667085; }
+    .dark .rh-panel-sub { color: #98a2b3; }
+    .rh-rank { display: grid; gap: .25rem; margin: .65rem 0 0; padding: 0; list-style: none; }
+    .rh-rank-row { display: grid; grid-template-columns: 1.75rem minmax(0, 1fr) auto; align-items: center; column-gap: .75rem; row-gap: .35rem; width: 100%; padding: .55rem .6rem; border: 1px solid transparent; border-radius: .65rem; background: transparent; color: inherit; font: inherit; text-align: left; }
+    button.rh-rank-row { cursor: pointer; }
+    button.rh-rank-row:hover { background: rgba(152,162,179,.1); }
+    button.rh-rank-row:focus-visible { outline: 2px solid #465fff; outline-offset: 1px; }
+    button.rh-rank-row.is-on { border-color: #465fff; background: rgba(70,95,255,.07); }
+    .rh-rank-no { display: inline-flex; align-items: center; justify-content: center; width: 1.75rem; height: 1.75rem; border-radius: 999px; background: #f2f4f7; color: #344054; font-size: .875rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .dark .rh-rank-no { background: #1d2939; color: #d0d5dd; }
+    .rh-rank-who { display: block; min-width: 0; }
+    .rh-rank-name { display: block; font-size: .9375rem; font-weight: 600; color: #1d2939; overflow-wrap: anywhere; }
+    .dark .rh-rank-name { color: rgba(255,255,255,.9); }
+    .rh-rank-cat { display: block; font-size: .8125rem; color: #667085; }
+    .dark .rh-rank-cat { color: #98a2b3; }
+    .rh-rank-nums { display: block; text-align: right; font-size: .875rem; color: #667085; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .dark .rh-rank-nums { color: #98a2b3; }
+    .rh-rank-nums b { display: block; font-size: .9375rem; font-weight: 600; color: #1d2939; }
+    .dark .rh-rank-nums b { color: #d0d5dd; }
+    .rh-cats .rh-rank-row { grid-template-columns: minmax(0, 1fr) auto; }
+    .rh-bar { grid-column: 2 / -1; display: block; height: .375rem; overflow: hidden; border-radius: 999px; background: #f2f4f7; }
+    .rh-cats .rh-bar { grid-column: 1 / -1; }
+    .dark .rh-bar { background: #1d2939; }
+    .rh-bar > span { display: block; height: 100%; border-radius: 999px; background: #344054; }
+    .dark .rh-bar > span { background: #98a2b3; }
+    .rh-none { margin: .75rem 0 .25rem; font-size: .9375rem; color: #667085; }
+    .dark .rh-none { color: #98a2b3; }
+    /* the boxes follow the page's own width: four in a row, else two by two (the figures stay as big), else one under another */
+    @container rhsum (max-width: 71.99rem) { .rh-boxes { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rh-num--long { font-size: 2.25rem; } }
+    @container rhsum (max-width: 59.99rem) { .rh-panels { grid-template-columns: minmax(0, 1fr); } }
+    @container rhsum (max-width: 37.99rem) {
+      .rh-boxes { grid-template-columns: minmax(0, 1fr); }
+      .rh-box { padding: 1.1rem 1rem; }
+      .rh-num, .rh-num--long { font-size: 2rem; }
+      .rh-panel-card { padding: 1rem .75rem .85rem; }
+    }
+
+    /* ---------------- the list ---------------- */
+    .ar-search-input.rh-select { flex: 0 0 12rem; width: 12rem; padding-left: .8rem; }
+    .rh-gownchip { display: inline-flex; align-items: center; gap: .45rem; max-width: 100%; min-height: 2.5rem; padding: .35rem .85rem; border: 1px solid #465fff; border-radius: 999px; background: #eef4ff; color: #3538cd; font: inherit; font-size: .875rem; cursor: pointer; }
+    .rh-gownchip b { overflow-wrap: anywhere; }
+    .rh-gownchip:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+    .rh-gownchip .rh-x { font-size: 1.125rem; line-height: 1; }
+    .dark .rh-gownchip { background: rgba(70,95,255,.18); color: #c7d2fe; }
+    /* the status buttons (they are the legend and a filter) on the left, the count on the right */
     .rh-keyrow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; padding: 0 1.25rem .85rem; }
     .rh-keyrow .ar-count { min-height: 0; padding: 0; }
     .rh-dot--missed { background: #a15c07; }
     .rh-dot--pending { background: #f79009; }
-    /* customer | gown | rental dates | status | amount | eye | arrow. Every column is fixed or has a minimum, never "auto" (an auto column is sized per row and
-       the column titles would stop lining up). */
-    .ar-head.rh-grid, .ar-line.rh-grid { grid-template-columns: minmax(8rem, 1.5fr) minmax(8rem, 1.4fr) 10.25rem minmax(10rem, 1fr) 5rem 2.5rem 2.25rem; }
-    /* the layouts below follow the list's own width, so they fit whatever the sidebar and the text size leave it (53rem is what the full row needs) */
+    /* customer | booking no. | gown | pick-up | return | status | price | eye | arrow. Every column is fixed or has a minimum, never "auto" (an auto column
+       is sized per row and the column titles would stop lining up). */
+    .ar-head.rh-grid, .ar-line.rh-grid { grid-template-columns: minmax(9rem, 1.5fr) 8.25rem minmax(9rem, 1.4fr) 6.75rem 6.75rem minmax(10rem, 1fr) 5.5rem 2.5rem 2.25rem; }
+    /* the layouts below follow the list's own width, so they fit whatever the sidebar and the text size leave it (69rem is what the full row needs) */
     .rh-cq { container-type: inline-size; container-name: rhlist; }
-    .rh-cust, .rh-gown, .rh-dates, .rh-state { min-width: 0; }
+    .rh-cust, .rh-ref, .rh-gown, .rh-day, .rh-state { min-width: 0; }
+    .rh-ref { font-size: .875rem; color: #475467; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .dark .rh-ref { color: #98a2b3; }
     .rh-gown { font-size: .875rem; color: #475467; overflow-wrap: anywhere; }
     .dark .rh-gown { color: #98a2b3; }
-    .rh-dates { font-size: .875rem; color: #667085; }
-    .dark .rh-dates { color: #98a2b3; }
+    .rh-day { font-size: .875rem; color: #667085; font-variant-numeric: tabular-nums; }
+    .dark .rh-day { color: #98a2b3; }
     .rh-amt { font-size: .875rem; font-weight: 600; color: #344054; font-variant-numeric: tabular-nums; }
     .dark .rh-amt { color: #d0d5dd; }
     /* The status in words: one colour per status, the same on the list and in the opened row, with a short line under it. */
@@ -60,6 +172,7 @@
     .dark .rh-note.is-bad, .dark .rh-t--bad { color: #fda29b; }
     .dark .rh-note.is-ok, .dark .rh-t--ok { color: #6ce9a6; }
     .rh-noeye { display: block; width: 2rem; height: 2rem; }
+    .rh-empty-btn { margin-top: .85rem; }
 
     /* The opened row: the status and its sentence, the three steps, the facts, the buttons, then (when asked) the history. */
     .rh-open { padding: 1.1rem 1.25rem 1.3rem; }
@@ -110,7 +223,7 @@
     .rh-actions { display: flex; flex-wrap: wrap; gap: .6rem; }
     .rh-btn { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; min-height: 2.5rem; padding: .45rem 1.05rem; border: 1px solid #d0d5dd; border-radius: .65rem; background: #fff; color: #344054; font: inherit; font-size: .875rem; font-weight: 600; text-decoration: none; cursor: pointer; }
     .rh-btn:hover { background: #f2f4f7; }
-    .rh-btn:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+    .rh-btn:focus-visible, .rh-period:focus-visible, .rh-seg a:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
     .rh-btn svg { width: 1.05rem; height: 1.05rem; flex: none; }
     .dark .rh-btn { border-color: #344054; background: transparent; color: #d0d5dd; }
     .dark .rh-btn:hover { background: rgba(255,255,255,.06); }
@@ -118,6 +231,7 @@
     .rh-btn--main:hover, .dark .rh-btn--main:hover { background: #3641f5; }
     .rh-btn.is-on { border-color: #465fff; color: #3538cd; }
     .dark .rh-btn.is-on { color: #c7d2fe; }
+    .rh-dl { min-height: 2.75rem; padding: .45rem 1.15rem; font-size: .9375rem; }
     /* The history: the shared timeline at full length (no little scroll box) and in readable sizes. */
     .rh-history { margin-top: 1rem; }
     .rh-history .arb-tl-panel { max-height: none; overflow: visible; }
@@ -127,76 +241,143 @@
     .rh-history .arb-tl-detail { color: #475467; }
     .dark .rh-history .arb-tl-meta { color: #98a2b3; }
     .dark .rh-history .arb-tl-detail { color: #d0d5dd; }
-    /* A narrow list (a small screen or bigger text): the dates and the amount drop to a second line (the column titles go: they no longer line up). */
-    @container rhlist (max-width: 53.99rem) {
+    /* A narrower list (a laptop, a small screen or bigger text): the column titles go and each line becomes two rows. */
+    @container rhlist (max-width: 68.99rem) {
       .ar-head.rh-grid { display: none; }
-      .ar-line.rh-grid { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1.15fr) minmax(11rem, max-content) 2.75rem 2.25rem; grid-template-areas: "cust gown state eye chev" "dates dates amt amt amt"; row-gap: .5rem; }
+      .ar-line.rh-grid { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1fr) minmax(10.5rem, max-content) 2.75rem 2.25rem; grid-template-areas: "cust gown gown state eye chev" "ref pick pick ret amt amt"; row-gap: .5rem; }
       .ar-line.rh-grid > .rh-cust { grid-area: cust; }
+      .ar-line.rh-grid > .rh-ref { grid-area: ref; }
       .ar-line.rh-grid > .rh-gown { grid-area: gown; }
+      .ar-line.rh-grid > .rh-pick { grid-area: pick; }
+      .ar-line.rh-grid > .rh-ret { grid-area: ret; }
       .ar-line.rh-grid > .rh-state { grid-area: state; }
-      .ar-line.rh-grid > .rh-dates { grid-area: dates; }
-      .ar-line.rh-grid > .rh-amt { grid-area: amt; }
+      .ar-line.rh-grid > .rh-amt { grid-area: amt; justify-self: end; }
       .ar-line.rh-grid > .rh-eye, .ar-line.rh-grid > .rh-noeye { grid-area: eye; }
       .ar-line.rh-grid > .ar-chev { grid-area: chev; }
+      .ar-line.rh-grid > .rh-day::before { content: attr(data-label) " "; color: #98a2b3; }
     }
     /* A phone: one column, in the order staff read it. */
-    @container rhlist (max-width: 35rem) {
-      .ar-line.rh-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.75rem 2.25rem; grid-template-areas: "cust cust eye chev" "gown gown gown gown" "dates dates dates dates" "state state amt amt"; }
+    @container rhlist (max-width: 39.99rem) {
+      .ar-line.rh-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.75rem 2.25rem; grid-template-areas: "cust cust eye chev" "ref ref amt amt" "gown gown gown gown" "pick pick pick pick" "ret ret ret ret" "state state state state"; }
+      .ar-line.rh-grid > .rh-ret { margin-top: -.3rem; }
     }
     @media (max-width: 760px) {
-      .ar-search-input.rh-select { flex: 1 1 8rem; width: auto; }
+      .ar-search-input.rh-select { flex: 1 1 10rem; width: auto; }
       .rh-keyrow { padding: 0 1rem .75rem; }
       .rh-open { padding: 1rem 1rem 1.1rem; }
       .rh-code { margin-left: 0; }
       .rh-actions > .rh-btn { flex: 1 1 100%; }
+      .rh-dls { margin-left: 0; width: 100%; }
+      .rh-dls > .rh-dl { flex: 1 1 7rem; }
+      .rh-field { flex: 1 1 9rem; }
+      .rh-field input { width: 100%; }
+      .rh-dates-form > .rh-btn { flex: 1 1 100%; }
     }
   </style>
+  {# Rental History's page state (Alpine). Defined before Alpine starts; Alpine calls init(). The list filters narrow the list only; other dates open the page again with them (the server works the report out). #}
+  <script>
+    window.arabelaRentalHistory = function () {
+      return {
+        page: 'rental-history', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false,
+        search: '', statusFilter: 'All', categoryFilter: '', channelFilter: '', gownFilter: '', gownName: '',
+        period: 'all', dateKind: 'pickup', shownFrom: '', shownTo: '', dateFrom: '', dateTo: '', dateError: '', pageUrl: '', files: {},
+        openProofModal: false, viewingRental: {}, openRows: [], openHistory: [], rentalRecords: [],
+        init() {
+          this.darkMode = JSON.parse(localStorage.getItem('darkMode'));
+          this.$watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)));
+          const read = (id, fallback) => { const el = document.getElementById(id); try { return el ? JSON.parse(el.textContent) : fallback; } catch (e) { return fallback; } };
+          this.rentalRecords = read('rental-records-data', []);
+          const view = read('rh-view-data', {});
+          this.search = view.q || '';
+          this.statusFilter = view.status || 'All';
+          this.categoryFilter = view.category || '';
+          this.channelFilter = view.channel || '';
+          this.gownFilter = view.gown || '';
+          this.gownName = view.gownName || (view.gown || '').split('|').slice(1).join('|');
+          this.period = view.period || 'all';
+          this.dateKind = view.by || 'pickup';
+          this.shownFrom = this.dateFrom = view.from || '';
+          this.shownTo = this.dateTo = view.to || '';
+          this.dateError = view.error || '';
+          this.pageUrl = view.page || window.location.pathname;
+          this.files = view.files || {};
+          ['search', 'statusFilter', 'categoryFilter', 'channelFilter', 'gownFilter'].forEach(key => this.$watch(key, () => this.syncAddress()));
+        },
+        words() { return String(this.search || '').trim().toLowerCase(); },
+        // What every list line (and every record behind the numbers on the buttons) is checked against; the status is checked on its own.
+        fits(search, category, channel, gown) {
+          const q = this.words();
+          return (this.categoryFilter === '' || category === this.categoryFilter)
+            && (this.channelFilter === '' || channel === this.channelFilter)
+            && (this.gownFilter === '' || gown === this.gownFilter)
+            && (q === '' || String(search || '').indexOf(q) !== -1);
+        },
+        matches(el) {
+          return (this.statusFilter === 'All' || el.getAttribute('data-status') === this.statusFilter)
+            && this.fits(el.getAttribute('data-search'), el.getAttribute('data-category'), el.getAttribute('data-channel'), el.getAttribute('data-gown'));
+        },
+        matchCount() { return Array.from(document.querySelectorAll('.ar-booking[data-row-id]')).filter(el => this.matches(el)).length; },
+        // The number on each status button: how many rentals of that kind match the other filters (so the buttons add up to the count line).
+        countFor(status) {
+          return this.rentalRecords.filter(r => (status === 'All' || r.status === status) && this.fits(r.q, r.category, r.channel, r.gown)).length;
+        },
+        clearFilters() { this.search = ''; this.statusFilter = 'All'; this.categoryFilter = ''; this.channelFilter = ''; this.clearGown(); },
+        clearGown() { this.gownFilter = ''; this.gownName = ''; },
+        // A tap on a top rented gown lists that gown's rentals (a second tap shows every gown again).
+        chooseGown(key, name) {
+          if (this.gownFilter === key) { this.clearGown(); return; }
+          this.clearFilters();
+          this.gownFilter = key;
+          this.gownName = name;
+          this.$nextTick(() => { const list = document.getElementById('rh-list'); if (list) { list.scrollIntoView({ behavior: 'smooth', block: 'start' }); } });
+        },
+        addFilters(params) {
+          if (this.statusFilter !== 'All') { params.set('status', this.statusFilter); }
+          if (this.words() !== '') { params.set('q', String(this.search).trim()); }
+          if (this.categoryFilter !== '') { params.set('category', this.categoryFilter); }
+          if (this.channelFilter !== '') { params.set('channel', this.channelFilter); }
+          if (this.gownFilter !== '') { params.set('gown', this.gownFilter); }
+        },
+        reportParams(period, by, from, to) {
+          const params = new URLSearchParams();
+          params.set('period', period);
+          params.set('by', by);
+          if (period === 'custom') { params.set('from', from); params.set('to', to); }
+          this.addFilters(params);
+          return params.toString();
+        },
+        periodUrl(key) { return this.pageUrl + '?' + this.reportParams(key, this.dateKind, this.dateFrom, this.dateTo); },
+        byUrl(by) { return this.pageUrl + '?' + this.reportParams(this.period, by, this.shownFrom, this.shownTo); },
+        // A download is of the dates ON SCREEN (not of From / To boxes still being changed) and the list filters as they are.
+        fileUrl(kind) { return this.files[kind] + '?' + this.reportParams(this.period, this.dateKind, this.shownFrom, this.shownTo); },
+        showCustom() {
+          if (!this.dateFrom || !this.dateTo) { this.dateError = 'Pick a From date and a To date.'; return; }
+          if (this.dateTo < this.dateFrom) { this.dateError = "The To date can't be before the From date."; return; }
+          window.location.assign(this.periodUrl('custom'));
+        },
+        // The filters are kept in the address, so a reload (or a link) shows the same list.
+        syncAddress() {
+          const params = new URLSearchParams(window.location.search);
+          ['status', 'q', 'category', 'channel', 'gown'].forEach(key => params.delete(key));
+          this.addFilters(params);
+          const query = params.toString();
+          // Some browsers refuse this after very fast typing: the list still filters, only the address waits.
+          try { history.replaceState(history.state, '', window.location.pathname + (query ? '?' + query : '') + window.location.hash); } catch (e) { /* see above */ }
+        },
+        isRowOpen(id) { return this.openRows.includes(id); },
+        toggleRow(id) { this.openRows = this.isRowOpen(id) ? this.openRows.filter(x => x !== id) : this.openRows.concat([id]); },
+        isHistoryOpen(id) { return this.openHistory.includes(id); },
+        toggleHistory(id) { this.openHistory = this.isHistoryOpen(id) ? this.openHistory.filter(x => x !== id) : this.openHistory.concat([id]); }
+      };
+    };
+  </script>
 </head>
   <body
-    x-data="{ page: 'rental-history', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', statusFilter: 'All', dateFocus: '', dateKind: 'pickup', monthFilter: 'All', yearFilter: '', openProofModal: false, viewingRental: {}, openRows: [], openHistory: [],
-      rentalRecords: [],
-      matches(el) {
-        return (this.statusFilter === 'All' || el.getAttribute('data-status') === this.statusFilter)
-          && (this.monthFilter === 'All' || el.getAttribute('data-month') === this.monthFilter)
-          && (this.yearFilter === '' || el.getAttribute('data-year') === this.yearFilter)
-          && arabelaDF.has(el, this.dateFocus, this.dateKind)
-          && (this.search === '' || (el.getAttribute('data-search') || '').indexOf(String(this.search).toLowerCase()) !== -1);
-      },
-      matchCount() { return Array.from(document.querySelectorAll('.ar-booking[data-row-id]')).filter(el => this.matches(el)).length; },
-      // The number on each status button: how many rentals of that kind match the search, month and year (so the buttons add up to the count line).
-      countFor(status) {
-        const q = String(this.search).toLowerCase();
-        return this.rentalRecords.filter(r =>
-          (status === 'All' || r.status === status)
-          && (this.monthFilter === 'All' || r.month === this.monthFilter)
-          && (this.yearFilter === '' || r.year === this.yearFilter)
-          && arabelaDF.hit(this.focusDays(r), this.dateFocus)
-          && (q === '' || r.q.includes(q))
-        ).length;
-      },
-      // The days of the kind the date bar is set to (pick-up, return or event), for one gown.
-      focusDays(r) { return this.dateKind === 'return' ? r.dReturn : (this.dateKind === 'event' ? r.dEvent : r.dPickup); },
-      isRowOpen(id) { return this.openRows.includes(id); },
-      toggleRow(id) { this.openRows = this.isRowOpen(id) ? this.openRows.filter(x => x !== id) : this.openRows.concat([id]); },
-      isHistoryOpen(id) { return this.openHistory.includes(id); },
-      toggleHistory(id) { this.openHistory = this.isHistoryOpen(id) ? this.openHistory.filter(x => x !== id) : this.openHistory.concat([id]); }
-    }"
-    x-init="
-         darkMode = JSON.parse(localStorage.getItem('darkMode'));
-         $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)));
-         const recordsEl = document.getElementById('rental-records-data');
-         if (recordsEl) { try { rentalRecords = JSON.parse(recordsEl.textContent || '[]'); } catch (e) { rentalRecords = []; } }
-         const params = new URLSearchParams(window.location.search);
-         const presetMonth = params.get('month');
-         if (presetMonth) { monthFilter = presetMonth; }
-         const presetYear = params.get('year');
-         if (presetYear) { yearFilter = presetYear; }
-         const presetDate = arabelaDF.clean(params.get('date'));
-         if (presetDate) { dateFocus = presetDate; dateKind = arabelaDF.kind(params.get('kind')); }"
+    x-data="arabelaRentalHistory()"
     :class="{'dark bg-gray-900': darkMode === true}"
   >
     {% include "arabela_admin/partials/timeline_styles.html" %}
-    {# Live updates (static/arabela_admin/live-regions.js): the list is a live part, and the numbers on the status buttons are counted from the JSON at the bottom of the page. #}
+    {# Live updates (static/arabela_admin/live-regions.js): the report's figures and the list are live parts, and the numbers on the status buttons are counted from the JSON at the bottom of the page. #}
     <span hidden data-live-data="history-records" data-live-source="#rental-records-data" data-live-watch=".custom-scrollbar[data-arpg]"></span>
     <script>
       window.ArabelaLiveData = window.ArabelaLiveData || {};
@@ -1250,7 +1431,7 @@
 
         <!-- ===== Main Content Start ===== -->
         <main>
-          <div class="mx-auto max-w-(--breakpoint-2xl) p-4 md:p-6">
+          <div class="mx-auto rh-wide p-4 md:p-6">
             <!-- Breadcrumb Start -->
             <div x-data="{ pageName: `Rental History`}">
               <div class="mb-4 flex flex-wrap items-center justify-end gap-3">
@@ -1289,33 +1470,118 @@
 </div>
 </div>
             <!-- Breadcrumb End -->
-            <!-- ONE box, the same look as Security Deposits and Active Reservations: the search, the month and the year, the status buttons (they are the
-                 legend too, and the number on each one is the count) with the "Showing 1-15 of 50 rentals" line (it replaces the old big number tile), then
-                 one short line per gown. The proof is an eye icon; the timeline is inside the opened row. The page's own name is not repeated here. -->
-            <div class="rh-card">
+            <!-- The Reservation Report: which dates (and by which day of a rental), the download buttons (the owner only), four figures, the top rented gowns
+                 and the categories. Then ONE box, the same look as Security Deposits and Active Reservations: the search and the list filters, the status
+                 buttons (they are the legend too, and the number on each one is the count) with the "Showing 1-15 of 50 rentals" line, then one short line
+                 per gown. The page's own name is not repeated here. -->
+            <section class="rh-report" aria-label="Reservation report dates">
+              <nav class="rh-periods" aria-label="Which dates">
+                {% for choice in period_links %}
+                <a class="rh-period{% if choice.key == period.key %} is-on{% endif %}" href="{{ choice.url }}" :href="periodUrl('{{ choice.key }}')"{% if choice.key == period.key %} aria-current="true"{% endif %}>{{ choice.label }}</a>
+                {% endfor %}
+              </nav>
+              <div class="rh-controls">
+                <div class="rh-by">
+                  <span class="rh-lbl" id="rh-by-label">Dates by</span>
+                  <div class="rh-seg" role="group" aria-labelledby="rh-by-label">
+                    {% for choice in kind_links %}<a href="{{ choice.url }}" :href="byUrl('{{ choice.key }}')"{% if choice.key == period.kind %} class="is-on" aria-current="true"{% endif %}>{{ choice.label }}</a>{% endfor %}
+                  </div>
+                  {% if period.key == "all" %}<span class="rh-hint">Used when you pick dates.</span>{% endif %}
+                </div>
+                {% if can_download and not period.error %}
+                <div class="rh-dls" role="group" aria-label="Download this report">
+                  <span class="rh-lbl">Download report:</span>
+                  {% for file in download_links %}
+                  <a class="rh-btn rh-dl" href="{{ file.url }}" :href="fileUrl('{{ file.kind }}')" title="Download this report as {{ file.label }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>{{ file.label }}</a>
+                  {% endfor %}
+                </div>
+                {% endif %}
+              </div>
+              {% if period.key == "custom" %}
+              <form class="rh-dates-form" method="get" action="{% url 'arabela_admin:rental_history' %}" @submit.prevent="showCustom()" novalidate>
+                <input type="hidden" name="period" value="custom">
+                <input type="hidden" name="by" value="{{ period.kind }}">
+                <div class="rh-field"><label for="rh-from">From</label><input type="date" id="rh-from" name="from" value="{{ custom_from }}" x-model="dateFrom" @input="dateError = ''"></div>
+                <div class="rh-field"><label for="rh-to">To</label><input type="date" id="rh-to" name="to" value="{{ custom_to }}" x-model="dateTo" @input="dateError = ''"></div>
+                <button type="submit" class="rh-btn rh-btn--main">Show</button>
+                <p class="rh-err" role="alert" x-show="dateError" x-text="dateError"{% if not period.error %} x-cloak{% endif %}>{{ period.error }}</p>
+              </form>
+              {% endif %}
+            </section>
+
+            <div class="rh-sum" data-live-region="history-summary" data-live-hold=".rh-sum details[open]">
+              {% if period.error %}
+              <div class="rh-box"><p class="rh-box-sub">Pick a From date and a To date above, then press Show, to see the report.</p></div>
+              {% else %}
+              <div class="rh-boxes">
+                <section class="rh-box">
+                  <div class="rh-box-head"><span class="rh-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M19 14V6c0-1.1-.9-2-2-2H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zm-9-1c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm13-6v11c0 1.1-.9 2-2 2H4v-2h17V7h2z"/></svg></span><h2 class="rh-box-title">Rental Income</h2><details class="ht-tip"><summary aria-label="About Rental Income" title="About Rental Income">?</summary><div class="ht-tip-pop"><p>The gown rental money paid in these dates, counted on the day it was paid (the same rule as the Dashboard).</p><p>Security deposits are never income. What the shop kept from them for fees or damage is shown below it.</p><p>The rentals below are chosen by their {{ period.kind_label|lower }} day, so their prices can add up to a different amount.</p></div></details><span class="rh-tag">{{ period.tag }}</span></div>
+                  <p class="rh-num{% if report.text.income|length > 10 %} rh-num--long{% endif %}">&#8369;{{ report.text.income }}</p>
+                  <p class="rh-box-sub">{% if report.income_bookings %}from {{ report.income_bookings }} booking{{ report.income_bookings|pluralize }}{% else %}No rental money paid in these dates{% endif %} &middot; deposits not included</p>
+                  <p class="rh-box-sub">Fees &amp; deductions kept: <b>&#8369;{{ report.text.kept }}</b></p>
+                </section>
+                <section class="rh-box">
+                  <div class="rh-box-head"><span class="rh-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg></span><h2 class="rh-box-title">Deposits Held</h2><details class="ht-tip"><summary aria-label="About Deposits Held" title="About Deposits Held">?</summary><div class="ht-tip-pop"><p>The security deposits belong to the customers. The big number is what the shop holds today (the same as Security Deposits).</p><p>Collected and returned are the deposit money that came in or went back in these dates.</p></div></details><span class="rh-tag">Now</span></div>
+                  <p class="rh-num{% if report.text.held|length > 10 %} rh-num--long{% endif %}">&#8369;{{ report.text.held }}</p>
+                  <p class="rh-box-sub">{% if report.held.held_bookings %}held now for {{ report.held.held_bookings }} booking{{ report.held.held_bookings|pluralize }}{% else %}No deposit is held right now{% endif %}{% if report.held.due_bookings %} &middot; <span class="rh-due">&#8369;{{ report.text.due }} to hand back now</span>{% endif %}</p>
+                  <p class="rh-box-sub">Collected in these dates: <b>&#8369;{{ report.text.collected }}</b></p>
+                  <p class="rh-box-sub">Returned in these dates: <b>&#8369;{{ report.text.returned }}</b></p>
+                </section>
+                <section class="rh-box">
+                  <div class="rh-box-head"><span class="rh-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zm-8.47-2.5-3.54-3.54 1.42-1.41 2.12 2.12 4.24-4.24 1.42 1.41-5.66 5.66z"/></svg></span><h2 class="rh-box-title">Rentals</h2><details class="ht-tip"><summary aria-label="About Rentals" title="About Rentals">?</summary><div class="ht-tip-pop"><p>One count for each gown: a booking with 3 gowns counts 3.</p><p>Cancelled gowns are counted here but are not in the list.</p></div></details><span class="rh-tag">{{ period.tag }}</span></div>
+                  <p class="rh-num">{{ report.rentals }}</p>
+                  <p class="rh-box-sub">gown{{ report.rentals|pluralize }}{% if period.key == "all" %} on record{% else %}, by {{ period.kind_label|lower }} day{% endif %}</p>
+                  {% if report.by_status %}<ul class="rh-counts">{% for entry in report.by_status %}<li><span class="ar-dot {{ entry.dot }}" aria-hidden="true"></span>{{ entry.status }}<b>{{ entry.count }}</b></li>{% endfor %}</ul>{% endif %}
+                  <p class="rh-box-sub">Cancelled (not listed): <b>{{ report.cancelled }}</b></p>
+                </section>
+                <section class="rh-box">
+                  <div class="rh-box-head"><span class="rh-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.25 12.9-.75 1.23L11 13.4V7h1.5v5.55z"/></svg></span><h2 class="rh-box-title">Still to Collect</h2><details class="ht-tip"><summary aria-label="About Still to Collect" title="About Still to Collect">?</summary><div class="ht-tip-pop"><p>The balance not paid yet on the bookings in these dates: rental, deposit and any extra owed.</p><p>A request still waiting for approval is not counted.</p></div></details><span class="rh-tag">{{ period.tag }}</span></div>
+                  <p class="rh-num{% if report.text.owing|length > 10 %} rh-num--long{% endif %}">&#8369;{{ report.text.owing }}</p>
+                  <p class="rh-box-sub">{% if report.owing_bookings %}from {{ report.owing_bookings }} booking{{ report.owing_bookings|pluralize }} in these dates{% else %}Nothing left to collect{% endif %}</p>
+                </section>
+              </div>
+              <div class="rh-panels">
+                <section class="rh-panel-card">
+                  <h2 class="rh-panel-title">Top rented gowns</h2>
+                  {% if report.top %}
+                  <p class="rh-panel-sub">Tap a gown to list its rentals.</p>
+                  <ol class="rh-rank">
+                    {% for gown in report.top %}
+                    <li><button type="button" class="rh-rank-row" data-key="{{ gown.key }}" data-name="{{ gown.name }}" :class="gownFilter === $el.dataset.key ? 'is-on' : ''" :aria-pressed="gownFilter === $el.dataset.key ? 'true' : 'false'" @click="chooseGown($el.dataset.key, $el.dataset.name)"><span class="rh-rank-no">{{ forloop.counter }}</span><span class="rh-rank-who"><span class="rh-rank-name">{{ gown.name }}</span><span class="rh-rank-cat">{{ gown.category }}</span></span><span class="rh-rank-nums"><b>{{ gown.times }} time{{ gown.times|pluralize }}</b>&#8369;{{ gown.amount_text }}</span><span class="rh-bar" aria-hidden="true"><span style="width: {{ gown.share }}%"></span></span></button></li>
+                    {% endfor %}
+                  </ol>
+                  {% else %}<p class="rh-none">No gown was rented in these dates.</p>{% endif %}
+                </section>
+                <section class="rh-panel-card">
+                  <h2 class="rh-panel-title">Rentals by category</h2>
+                  {% if report.categories %}
+                  <p class="rh-panel-sub">Gowns rented and what they rented for.</p>
+                  <ul class="rh-rank rh-cats">
+                    {% for category in report.categories %}
+                    <li><div class="rh-rank-row"><span class="rh-rank-who"><span class="rh-rank-name">{{ category.name }}</span></span><span class="rh-rank-nums"><b>{{ category.times }} gown{{ category.times|pluralize }}</b>&#8369;{{ category.amount_text }}</span><span class="rh-bar" aria-hidden="true"><span style="width: {{ category.share }}%"></span></span></div></li>
+                    {% endfor %}
+                  </ul>
+                  {% else %}<p class="rh-none">No gown was rented in these dates.</p>{% endif %}
+                </section>
+              </div>
+              {% endif %}
+            </div>
+
+            <div class="rh-card" id="rh-list">
               <div class="ar-toolbar">
                 <div class="ar-search">
                   <svg class="ar-search-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                  <input type="text" class="ar-search-input" x-model="search" placeholder="Search by customer or gown..." aria-label="Search rental history">
+                  <input type="text" class="ar-search-input" x-model="search" placeholder="Search by customer, gown or booking no..." aria-label="Search rental history" maxlength="100">
                 </div>
-                <select x-model="monthFilter" class="ar-search-input rh-select" aria-label="Show one month only">
-                  <option value="All">All months</option>
-                  <option value="Jan">January</option>
-                  <option value="Feb">February</option>
-                  <option value="Mar">March</option>
-                  <option value="Apr">April</option>
-                  <option value="May">May</option>
-                  <option value="Jun">June</option>
-                  <option value="Jul">July</option>
-                  <option value="Aug">August</option>
-                  <option value="Sep">September</option>
-                  <option value="Oct">October</option>
-                  <option value="Nov">November</option>
-                  <option value="Dec">December</option>
+                <select x-model="categoryFilter" class="ar-search-input rh-select" aria-label="Show one category only">
+                  <option value="">All categories</option>
+                  {% for category in categories %}<option value="{{ category }}">{{ category }}</option>{% endfor %}
                 </select>
-                <div class="rh-year-wrap">
-                  <input type="text" inputmode="numeric" class="ar-search-input rh-year-input" x-model="yearFilter" @input="yearFilter = yearFilter.replace(/[^0-9]/g, '').slice(0, 4)" maxlength="4" placeholder="Year" aria-label="Show one year only, for example 2026" title="Show one year only, for example 2026">
-                </div>
+                <select x-model="channelFilter" class="ar-search-input rh-select" aria-label="Online or walk-in bookings">
+                  <option value="">Online and walk-in</option>
+                  {% for value, label in channels %}<option value="{{ value }}">{{ label }} only</option>{% endfor %}
+                </select>
+                <button type="button" class="rh-gownchip" x-show="gownFilter !== ''" x-cloak @click="clearGown()" title="Show every gown again"><span>Gown: <b x-text="gownName"></b></span><span class="rh-x" aria-hidden="true">&times;</span><span class="rh-sr">(remove)</span></button>
               </div>
               <div class="rh-keyrow">
                 <div class="ar-filters" role="group" aria-label="Show rentals by status">
@@ -1327,30 +1593,32 @@
                 <div class="ar-count"><span id="ar-count" aria-live="polite"></span></div>
               </div>
 
-              {% include "arabela_admin/partials/date_focus.html" %}
-
               <div class="custom-scrollbar overflow-y-auto rh-cq" style="max-height: 760px;" data-arpg=".ar-booking" data-arpg-noun="rentals" data-arpg-top="off" data-arpg-count="#ar-count" data-live-region="history-list">
                 <div class="ar-head rh-grid">
                   <span>Customer</span>
+                  <span>Booking no.</span>
                   <span>Gown</span>
-                  <span>Rental dates</span>
+                  <span>Pick-up</span>
+                  <span>Return</span>
                   <span>Status</span>
-                  <span>Amount</span>
+                  <span>Price</span>
                   <span></span>
                   <span></span>
                 </div>
                 {% for item in rental_items %}
                 {% with r=item.reservation %}
-                <!-- One gown that went out: a closed line (status circle and name, the gown, the dates, how late, the amount, the proof icon) and, hidden until it is
-                     opened, the facts in words and the timeline. -->
-                <div class="ar-booking{% if item.view.kind == 'overdue' %} is-overdue{% endif %}" data-row-id="{{ item.id }}" data-status="{{ item.history_status }}" data-month="{{ item.rental_date|date:'M' }}" data-year="{{ item.rental_date|date:'Y' }}" data-d-pickup="{{ item.rental_date|date:'Y-m-d' }} {{ item.picked_up_on|date:'Y-m-d' }}" data-d-return="{{ item.return_date|date:'Y-m-d' }} {{ item.returned_on|date:'Y-m-d' }}" data-d-event="{{ item.effective_event_date|date:'Y-m-d' }}" data-search="{{ r.display_customer_name|lower }} {{ item.gown_name|lower }}" x-show="matches($el)">
+                <!-- One gown that went out (or is booked to): a closed line (status circle and name, the booking number, the gown, the dates, how late, the price,
+                     the proof icon) and, hidden until it is opened, the facts in words and the timeline. -->
+                <div class="ar-booking{% if item.view.kind == 'overdue' %} is-overdue{% endif %}" data-row-id="{{ item.id }}" data-status="{{ item.history_status }}" data-search="{{ item.report.search }}" data-category="{{ item.report.category }}" data-channel="{{ item.report.channel }}" data-gown="{{ item.report.gown_key }}" x-show="matches($el)">
                   <!-- A click on the line opens it, except a click on the eye (it does not stop the click: other scripts on the page may listen for it). -->
                   <div class="ar-line rh-grid" :class="isRowOpen({{ item.id }}) ? 'is-open' : ''" @click="if (!$event.target.closest('.rh-eye')) { toggleRow({{ item.id }}) }">
                     <div class="rh-cust">
                       <div class="ar-who"><span class="ar-dot {{ item.view.dot }}" role="img" aria-label="{{ item.view.status }}" title="{{ item.view.status }}: {{ item.view.tip }}"></span><span class="ar-name">{{ r.display_customer_name }}</span></div>
                     </div>
+                    <div class="rh-ref">{{ r.reference_code }}</div>
                     <div class="rh-gown">{{ item.gown_name }}</div>
-                    <div class="rh-dates">{{ item.rental_date|date:"M j" }}{% if item.rental_date.year != item.return_date.year %}, {{ item.rental_date|date:"Y" }}{% endif %} &rarr; {{ item.return_date|date:"M j, Y" }}</div>
+                    <div class="rh-day rh-pick" data-label="Pick-up">{{ item.report.pickup|date:"M j, Y" }}</div>
+                    <div class="rh-day rh-ret" data-label="Return">{{ item.report.return|date:"M j, Y" }}</div>
                     <!-- Where the gown stands, in words, with a short line under it (the days overdue count from the return date agreed with the customer, like Active Reservations). -->
                     <div class="rh-state">
                       <span class="rh-chip rh-chip--{{ item.view.kind }}">{{ item.view.status }}</span>
@@ -1417,13 +1685,14 @@
                 {% endwith %}
                 {% empty %}
                 <div class="ar-empty">
-                  <p class="text-gray-500 text-theme-sm dark:text-gray-400">No rentals recorded yet. Bookings appear here as soon as they are made.</p>
+                  <p class="text-gray-500 text-theme-sm dark:text-gray-400">{% if period.error %}Fix the dates above to see the rentals.{% elif has_history %}No rentals in this period.{% else %}No rentals recorded yet. Bookings appear here as soon as they are made.{% endif %}</p>
                 </div>
                 {% endfor %}
-                <!-- Shown when rows exist but the current search, status, month or year hides them all. -->
+                <!-- Shown when rows exist but the search, status, category, channel or chosen gown hides them all. -->
                 {% if rental_items %}
                 <div class="ar-empty" x-show="matchCount() === 0" x-cloak>
-                  <p class="text-gray-500 text-theme-sm dark:text-gray-400" x-text="dateFocus ? 'No gown has that date. Try another date, or press Any date.' : 'No rental records found for this period.'">No rental records found for this period.</p>
+                  <p class="text-gray-500 text-theme-sm dark:text-gray-400">No rentals match these filters.</p>
+                  <button type="button" class="rh-btn rh-empty-btn" @click="clearFilters()">Clear filters</button>
                 </div>
                 {% endif %}
               </div>
@@ -1505,9 +1774,10 @@
     </div>
     <!-- ===== Page Wrapper End ===== -->
 
-    <!-- One {month, year, status, q} per row, so the number on each status button counts exactly what the list shows. Read by x-init; bundle.js (and
-         therefore Alpine) is deferred, so this is already in the DOM by the time x-init runs. -->
+    <!-- One {status, q, category, channel, gown} per row, so the number on each status button counts exactly what the list shows; then what the page's
+         script starts from. Read by init(); bundle.js (and therefore Alpine) is deferred, so both are already in the DOM by then. -->
     {{ rental_records|json_script:"rental-records-data" }}
+    {{ view_data|json_script:"rh-view-data" }}
 
   <script defer src="{% static 'arabela_admin/bundle.js' %}?v={{ admin_asset_version }}"></script>
   <script defer src="{% static 'arabela_admin/global-search.js' %}"></script>

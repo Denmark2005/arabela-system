@@ -1,7 +1,8 @@
-"""Rental History: ONE card (the Security Deposits / Active Reservations look) with the search, the month and the year, a button per status (they are
-the legend too, and the number on each is the count), the "Showing 1-15 of 50 rentals" line, then one line per gown: the status in words with a
-short line under it, the amount, an eye only when there is something to show, and an opened row with the status sentence, three steps
-(Booked, Pick-up, Return), the facts, the buttons and the history.
+"""Rental History's list: ONE card (the Security Deposits / Active Reservations look) with the search and the list filters, a button per status
+(they are the legend too, and the number on each is the count), the "Showing 1-15 of 50 rentals" line, then one line per gown: the booking number,
+the dates, the status in words with a short line under it, the price, an eye only when there is something to show, and an opened row with the status
+sentence, three steps (Booked, Pick-up, Return), the facts, the buttons and the history. The report above the list has its own tests
+(test_rental_report).
 
 What is checked here: the status each gown gets (words, colour, steps) in the same wording Active Reservations uses, the money and event facts,
 where the buttons lead, the eye, that the page updates itself, that every hook the page's scripts need is still there (the photo window, the
@@ -149,7 +150,7 @@ class StatusTests(HistoryBase):
         self.assertEqual([r["status"] for r in records], [i.history_status for i in response.context["rental_items"]])
         self.assertEqual(sorted(r["status"] for r in records), sorted(rental_history.LOOK))
         for record in records:
-            self.assertEqual(set(record), {"month", "year", "status", "q", "dPickup", "dReturn", "dEvent"})        # (the three lists of days are for the "On this date" bar)
+            self.assertEqual(set(record), {"status", "q", "category", "channel", "gown"})          # what the list filters read
 
 
 class StepTests(HistoryBase):
@@ -352,13 +353,13 @@ class OneCardTests(HistoryBase):
         self.assertNotIn(">Ongoing<", html)
         self.assertNotIn(">Completed<", html)
 
-    def test_it_is_one_card_with_the_search_the_month_the_year_the_buttons_and_the_count(self):
+    def test_it_is_one_card_with_the_search_the_list_filters_the_buttons_and_the_count(self):
         self.back()
         _, html = self.page()
         main = html[html.index("<main>"):]
         self.assertEqual(main.count('class="rh-card"'), 1)
         self.assertEqual(main.count('class="ar-toolbar"'), 1)
-        for piece in ('placeholder="Search by customer or gown..."', 'x-model="monthFilter"', 'x-model="yearFilter"', 'id="ar-count"',
+        for piece in ('placeholder="Search by customer, gown or booking no..."', 'x-model="categoryFilter"', 'x-model="channelFilter"', 'id="ar-count"',
                       'data-arpg=".ar-booking"', 'data-arpg-noun="rentals"', 'data-arpg-count="#ar-count"'):
             self.assertEqual(main.count(piece), 1, piece)
         self.assertEqual(html.count('data-arpg='), 1)                               # the pager opts in exactly once
@@ -390,30 +391,34 @@ class OneCardTests(HistoryBase):
         _, html = self.page()
         self.assertIn("No rentals recorded yet", html)
         self.assertNotIn('data-row-id="', html)
-        self.assertNotIn("No rental records found for this period", html)            # that one only exists when rows exist
+        self.assertNotIn("No rentals match these filters", html)                     # that one only exists when rows exist
 
 
 class ClosedLineTests(HistoryBase):
-    def test_the_line_shows_the_name_the_gown_the_dates_and_the_amount_and_not_the_booking_number(self):
+    def test_the_line_shows_the_name_the_booking_number_the_gown_the_dates_and_the_price(self):
         reservation, item = self.one("Lorna Reyes", 2, 6, P)
         _, html = self.page()
         line = self.words(self.closed(html, item))
-        for piece in ("Lorna Reyes", item.gown_name, "&#8369;3,000", "Waiting for pick-up", "Pick-up in 2 days"):
-            self.assertIn(piece, line)
         start, end = self.offset(2), self.offset(6)
-        self.assertIn(f"{start:%b} {start.day}", line)
-        self.assertIn("&rarr;", line)
-        self.assertIn(f"{end:%b} {end.day}, {end.year}", line)
-        self.assertNotIn(reservation.reference_code, line)                          # the booking number lives in the opened row
+        for piece in ("Lorna Reyes", reservation.reference_code, item.gown_name, "&#8369;3,000", "Waiting for pick-up", "Pick-up in 2 days",
+                      f"{start:%b} {start.day}, {start.year}", f"{end:%b} {end.day}, {end.year}"):
+            self.assertIn(piece, line)
 
-    def test_the_year_is_written_once_unless_the_rental_crosses_new_year(self):
-        _, same = self.one("Same Year", 2, 6, P)
+    def test_the_dates_are_the_days_the_gown_really_went_out_and_came_back(self):
+        _, item = self.one("Real Days", -9, -4, RET, picked_up_on=self.offset(-8), returned_on=self.offset(-3))
+        _, html = self.page()
+        block = self.closed(html, item)
+        out, back = self.offset(-8), self.offset(-3)
+        self.assertIn(f'data-label="Pick-up">{out:%b} {out.day}, {out.year}</div>', block)
+        self.assertIn(f'data-label="Return">{back:%b} {back.day}, {back.year}</div>', block)
+
+    def test_a_rental_that_crosses_new_year_writes_both_years(self):
         _, cross = self.one("Cross Year", 2, 6, P)
         ReservationItem.objects.filter(id=cross.id).update(rental_date=date(2025, 12, 29), return_date=date(2026, 1, 2))
-        ReservationItem.objects.filter(id=same.id).update(rental_date=date(2026, 3, 3), return_date=date(2026, 3, 7))
         _, html = self.page()
-        self.assertIn("Mar 3 → Mar 7, 2026", re.sub(r"\s+", " ", self.closed(html, same)).replace("&rarr;", "→"))
-        self.assertIn("Dec 29, 2025 → Jan 2, 2026", re.sub(r"\s+", " ", self.closed(html, cross)).replace("&rarr;", "→"))
+        words = self.words(self.closed(html, cross))
+        self.assertIn("Dec 29, 2025", words)
+        self.assertIn("Jan 2, 2026", words)
 
     def test_an_overdue_line_is_marked_and_the_others_are_not(self):
         items = self.every_kind()
@@ -454,11 +459,11 @@ class OpenedRowTests(HistoryBase):
         reservation, item = self.one("Filter Me", 2, 6, P)
         _, html = self.page()
         block = self.row_html(html, item)
-        start = self.offset(2)
         self.assertIn('data-status="Waiting for pick-up"', block)
-        self.assertIn('data-month="%s"' % start.strftime("%b"), block)
-        self.assertIn('data-year="%d"' % start.year, block)
-        self.assertIn('data-search="filter me %s"' % item.gown_name.lower(), block)
+        self.assertIn('data-search="filter me %s %s"' % (item.gown_name.lower(), reservation.reference_code.lower()), block)
+        self.assertIn('data-category="Wedding Gown"', block)
+        self.assertIn('data-channel="Online"', block)
+        self.assertIn('data-gown="Wedding Gown|%s"' % item.gown_name.casefold(), block)
         self.assertIn('x-show="matches($el)"', block)
 
 
@@ -485,11 +490,13 @@ class StaticTemplateTests(SimpleTestCase):
         self.source = TEMPLATE.read_text(encoding="utf8")
 
     def test_the_page_state_has_the_filters_and_no_leftovers(self):
-        for piece in ("statusFilter: 'All'", "monthFilter: 'All'", "yearFilter: ''", "openRows: []", "openHistory: []", "matches(el)", "matchCount()",
-                      "countFor(status)", "isRowOpen(id)", "toggleRow(id)", "isHistoryOpen(id)", "toggleHistory(id)", "presetMonth", "presetYear",
-                      "rental-records-data"):
+        for piece in ("statusFilter: 'All'", "categoryFilter: ''", "channelFilter: ''", "gownFilter: ''", "openRows: []", "openHistory: []", "matches(el)",
+                      "matchCount()", "countFor(status)", "isRowOpen(id)", "toggleRow(id)", "isHistoryOpen(id)", "toggleHistory(id)", "rental-records-data",
+                      "rh-view-data", 'x-data="arabelaRentalHistory()"'):
             self.assertIn(piece, self.source, piece)
-        for gone in ("filtering", "filterTimeout", "openTimeline", "totalRentals", "Total Rentals", "history_kind", "history_tip", "rh-late", "View proof"):
+        # the month, year and "On this date" boxes were replaced by the report's own dates
+        for gone in ("filtering", "filterTimeout", "openTimeline", "totalRentals", "Total Rentals", "history_kind", "history_tip", "rh-late", "View proof",
+                     "monthFilter", "yearFilter", "dateFocus", "date_focus.html", "presetMonth"):
             self.assertNotIn(gone, self.source, gone)
 
     def test_the_history_is_shown_at_full_length_in_readable_sizes(self):
