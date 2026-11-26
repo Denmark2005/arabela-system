@@ -1,0 +1,23 @@
+{% comment %}
+  One picture slot of Add / Edit Gown (gown-catalog.html): view = front / side / back, name = Front / Side / Back. Click or drop a file to add it,
+  see it as the customer page will crop it (3:4), replace it, or take a side / back picture away. The page's own methods do the work.
+{% endcomment %}
+<div class="gc-slot" :class="slotImage('{{ view }}') ? 'has-photo' : ''" @dragover.prevent="$el.classList.add('is-over')" @dragleave="$el.classList.remove('is-over')" @drop.prevent="$el.classList.remove('is-over'); pickGownPhoto('{{ view }}', $event.dataTransfer.files[0])">
+  <input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" x-ref="photo{{ name }}" @change="{% if view == 'front' %}onGownPhotoChosen($event.target.files[0]){% else %}pickGownPhoto('{{ view }}', $event.target.files[0]){% endif %}; $event.target.value = ''" />
+  <button type="button" class="gc-slot-box" @click="$refs.photo{{ name }}.click()" :aria-label="(slotImage('{{ view }}') ? 'Replace the ' : 'Add the ') + '{{ name|lower }} photo'" aria-label="Add the {{ name|lower }} photo">
+    <template x-if="slotImage('{{ view }}')"><img :src="slotImage('{{ view }}')" alt="{{ name }} photo preview" /></template>
+    <template x-if="!slotImage('{{ view }}')">
+      <span class="gc-slot-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V5"/><path d="M7 10l5-5 5 5"/><path d="M5 19h14"/></svg>
+        <span x-text="{% if view == 'front' %}'Add photo'{% else %}photoRemoved.{{ view }} ? 'Will be removed' : 'Add photo'{% endif %}">Add photo</span>
+      </span>
+    </template>
+  </button>
+  <p class="gc-slot-name">{{ name }}{% if view != 'front' %} <span>(optional)</span>{% endif %}</p>
+  <div class="gc-slot-acts">
+    <button type="button" class="gc-slot-btn" x-show="slotImage('{{ view }}')" x-cloak @click="$refs.photo{{ name }}.click()">Replace</button>
+    <button type="button" class="gc-slot-btn" x-show="photoPicks.{{ view }}{% if view != 'front' %} || (photoSaved.{{ view }} && !photoRemoved.{{ view }}){% endif %}" x-cloak @click="clearGownPhoto('{{ view }}')" x-text="photoPicks.{{ view }} ? 'Undo' : 'Remove'">Remove</button>
+    {% if view != 'front' %}<button type="button" class="gc-slot-btn" x-show="photoRemoved.{{ view }}" x-cloak @click="photoRemoved.{{ view }} = false">Keep it</button>{% endif %}
+    <a class="gc-slot-btn" x-show="photoPreviews.{{ view }}" x-cloak :href="photoPreviews.{{ view }}" target="_blank" rel="noopener">View full</a>
+  </div>
+</div>

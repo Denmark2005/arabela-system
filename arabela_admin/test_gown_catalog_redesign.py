@@ -319,7 +319,7 @@ class HintTests(CatalogBase):
                 self.assertNotIn(sentence, shown)
                 self.assertIn(sentence, tips_text(html))
         self.assertIn('<details class="ht-tip" x-show="!isEditMode" x-cloak>', html)               # the naming "?" only while adding
-        self.assertIn("To change the photo, click the gown's thumbnail in the list.", html)
+        self.assertIn("Side and Back let customers turn the gown on its page", tips_text(html))        # what the three photo slots are for
         self.assertIn("Keeps the name. One listing with a quantity", html)                          # the choice descriptions stay, shorter (they sit inside buttons)
         self.assertNotIn("Portrait photo works best (3:4) --", html)
 

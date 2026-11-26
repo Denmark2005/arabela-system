@@ -412,6 +412,22 @@
     .product-live-save { transition: none; }
     .product-live-save-spinner { animation: none; }
   }
+  /* ---- Front / Side / Back (a gown with side or back photos): the big picture fits the screen with the small ones under it. All the views are drawn to
+     the same size (gowns/view_fit.py), so changing view only fades and slides, never jumps. ---- */
+  .pv-stage { width: max(min(100%, 22rem), min(100%, calc((100vh - 17rem) * 0.75))); margin-inline: auto; touch-action: pan-y; }
+  .pv-stage .pv-view { position: absolute; inset: 0; opacity: 0; transform: translateX(var(--pv-from, 4%)); transition: opacity 0.35s ease, transform 0.45s cubic-bezier(0.22, 0.8, 0.24, 1); }
+  .pv-stage .pv-view.is-shown { opacity: 1; transform: none; }
+  .pv-thumbs { display: flex; justify-content: center; gap: clamp(0.75rem, 1.4vw, 1.5rem); }
+  .pv-thumb { width: clamp(5.5rem, 8vw, 8rem); aspect-ratio: 1; flex: 0 1 auto; min-width: 0; overflow: hidden; padding: 0; border: 2px solid #ece9e8; border-radius: 0.6rem; background: #ffffff; cursor: pointer; transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease; }
+  .pv-thumb img { display: block; width: 100%; height: 100%; object-fit: contain; }
+  .pv-zoom .pv-thumb img { transform: scale(1.28); }      /* a suit photo has a wide white edge: draw its jacket closer */
+  .pv-thumb:hover { border-color: #a8a3a1; transform: translateY(-2px); box-shadow: 0 6px 16px rgba(27, 28, 28, 0.08); }
+  .pv-thumb.is-on { border-color: #1b1c1c; }
+  .pv-thumb:focus-visible { outline: 2px solid #1b1c1c; outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) {
+    .pv-stage .pv-view, .pv-thumb { transition: none; }
+    .pv-thumb:hover { transform: none; }
+  }
 </style>
 {% endblock %}
 
@@ -421,14 +437,26 @@
 <div class="max-w-[1440px] mx-auto px-8 grid grid-cols-1 lg:grid-cols-12 gap-12">
   <!-- Gallery Section -->
   <div class="lg:col-span-7 flex flex-col gap-4">
-    <div class="relative overflow-hidden bg-white aspect-[3/4] border-none shadow-none">
-      <img id="product-main-image" alt="{{ product.title }}" class="w-full h-full object-cover" src="{{ product.image }}" />
+    <div {% if product.views %}id="product-stage" {% endif %}class="relative overflow-hidden bg-white aspect-[3/4] border-none shadow-none{% if product.views %} pv-stage{% endif %}">
+      <img id="product-main-image" alt="{{ product.title }}" class="w-full h-full object-cover{% if product.views %} pv-view is-shown{% endif %}" src="{{ product.image }}" />
+      {% for view in product.views %}{% if not forloop.first %}
+      <img class="w-full h-full object-cover pv-view" src="{{ view.image }}" alt="{{ product.title }}, {{ view.label|lower }} view" aria-hidden="true" fetchpriority="low" />
+      {% endif %}{% endfor %}
       {% if product.availability %}
       <div class="absolute top-8 left-0 py-2 px-4 bg-secondary-container text-on-secondary-container rounded-r-full font-label text-[0.625rem] tracking-widest uppercase font-bold">
         {{ product.availability }}
       </div>
       {% endif %}
     </div>
+    {% if product.views %}
+    <div class="pv-thumbs{% if product.zoom_views %} pv-zoom{% endif %}" role="group" aria-label="Choose a view of {{ product.title }}">
+      {% for view in product.views %}
+      <button type="button" class="pv-thumb{% if forloop.first %} is-on{% endif %}" data-view-button="{{ view.key }}" aria-pressed="{% if forloop.first %}true{% else %}false{% endif %}" aria-label="{{ view.label }} view" title="{{ view.label }}">
+        <img src="{{ view.thumb }}" alt="" />
+      </button>
+      {% endfor %}
+    </div>
+    {% endif %}
   </div>
 
   <!-- Booking & Info Section -->
@@ -802,6 +830,61 @@
 {% endblock %}
 
 {% block extra_scripts %}
+{% if product.views %}
+<script>
+  // Front / Side / Back: a tap on a small picture (or a swipe on the big one, or the arrow keys) fades and slides to that view.
+  (function () {
+    const stage = document.getElementById('product-stage');
+    const views = stage ? Array.from(stage.querySelectorAll('.pv-view')) : [];
+    const buttons = Array.from(document.querySelectorAll('[data-view-button]'));
+    if (views.length < 2 || buttons.length !== views.length) { return; }
+    let current = 0;
+    function show(next) {
+      next = Math.max(0, Math.min(views.length - 1, next));
+      if (next === current) { return; }
+      const way = next > current ? 1 : -1;
+      const incoming = views[next];
+      const outgoing = views[current];
+      // The new view starts on its own side (right for a later one, left for an earlier one), then glides in as the old one glides out.
+      incoming.style.transition = 'none';
+      incoming.style.setProperty('--pv-from', (way * 4) + '%');
+      void incoming.offsetWidth;
+      incoming.style.transition = '';
+      outgoing.style.setProperty('--pv-from', (-way * 4) + '%');
+      outgoing.classList.remove('is-shown');
+      outgoing.setAttribute('aria-hidden', 'true');
+      incoming.classList.add('is-shown');
+      incoming.removeAttribute('aria-hidden');
+      buttons.forEach((button, i) => {
+        button.classList.toggle('is-on', i === next);
+        button.setAttribute('aria-pressed', i === next ? 'true' : 'false');
+      });
+      current = next;
+    }
+    buttons.forEach((button, i) => {
+      button.addEventListener('click', () => show(i));
+      button.addEventListener('keydown', (event) => {
+        if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') { return; }
+        event.preventDefault();
+        show(i + (event.key === 'ArrowRight' ? 1 : -1));
+        buttons[current].focus();
+      });
+    });
+    // Phones: swipe the big picture sideways (up and down still scrolls the page).
+    let start = null;
+    stage.addEventListener('touchstart', (event) => {
+      start = event.touches.length === 1 ? { x: event.touches[0].clientX, y: event.touches[0].clientY } : null;
+    }, { passive: true });
+    stage.addEventListener('touchend', (event) => {
+      if (!start) { return; }
+      const dx = event.changedTouches[0].clientX - start.x;
+      const dy = event.changedTouches[0].clientY - start.y;
+      start = null;
+      if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.4) { show(current + (dx < 0 ? 1 : -1)); }
+    }, { passive: true });
+  })();
+</script>
+{% endif %}
 {% if size_guide %}<script src="{% static 'js/size-guide.js' %}?v={{ site_asset_version }}" defer></script>{% endif %}
 <script>
   (function () {

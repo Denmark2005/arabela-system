@@ -47,7 +47,7 @@ from gowns.models import (
     COOLDOWN_DAYS, EXTRA_SMALL_CATEGORY, SIZE_CODES, Gown, GownUnavailability, group_gowns_by_name, pick_representative_gown, size_codes_of,
 )
 from gowns import availability, deposit, design_details, late_fee, proof_image, receipt_check, receipt_tries, reservation_limits, typed_payment
-from gowns.photos import GRID_WIDTH, PAGE_WIDTH, sized
+from gowns.photos import GRID_WIDTH, PAGE_WIDTH, THUMB_WIDTH, sized
 from gowns.size_guides import size_guide_for
 from reservations import gateway, identity, ledger, reminders, timeline
 from reservations.models import Payment, ProofRejection, Reservation, ReservationItem, ReservationStatusEvent
@@ -753,6 +753,15 @@ def _related_gowns(category_label: str, current_slug: str, limit: int = 4) -> li
     return suggestions
 
 
+def _product_views(front, side, back):
+    """The product page's pictures in order (Front, Side, Back), each as the big picture and its small one. Empty unless there is a front and at
+    least one other view: a gown with only a front photo looks as it always did."""
+    if not front or not (side or back):
+        return []
+    return [{"key": key, "label": label, "image": sized(url, PAGE_WIDTH), "thumb": sized(url, THUMB_WIDTH)}
+            for key, label, url in (("front", "Front", front), ("side", "Side", side), ("back", "Back", back)) if url]
+
+
 def product_detail(request, collection: str, slug: str):
     col = collection.strip().lower()
     category = _category_by_key(col)
@@ -823,12 +832,17 @@ def product_detail(request, collection: str, slug: str):
         }
     size_choices = _size_choices(size_options, real_gown.category)
     fabric, description = design_details.text_of(siblings)             # what staff wrote in Gown Catalog, shared by every size
+    photos = design_details.photos_of(siblings)                        # the design's front, side and back
+    front = display_unit.photo_url or photos["photo_url"]
     product = {
         "title": display_unit.name,
         "fabric": fabric,
         "description": description,
         "price": f"₱{display_unit.rental_price:,.0f}",
-        "image": sized(display_unit.photo_url, PAGE_WIDTH) or _FALLBACK_IMG,
+        "image": sized(front, PAGE_WIDTH) or _FALLBACK_IMG,
+        # Front, Side, Back (the thumbnails under the big photo) -- only when there is a side or back photo besides the front.
+        "views": _product_views(front, photos["side_photo_url"], photos["back_photo_url"]),
+        "zoom_views": real_gown.category == Gown.Category.SUIT,          # a whole dress fills its photo and must never be cropped
         # No label while the gown can be booked now; otherwise the real date (or "Fully booked for now") -- see booking_badge.
         "availability": "Currently Unavailable" if is_out_of_stock else badge["text"],
         "collection": real_gown.category,

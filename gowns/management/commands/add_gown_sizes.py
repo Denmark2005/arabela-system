@@ -217,7 +217,8 @@ class Command(BaseCommand):
             units.append(Gown(
                 gown_id=gown_id, slug=slug, name=template.name, category=category, color_name=template.color_name, color_code=template.color_code,
                 size=size, design_variant=template.design_variant, rental_price=template.rental_price, condition=Gown.Condition.GOOD,
-                status=Gown.Status.AVAILABLE, photo_url=template.photo_url, fabric=template.fabric, description=template.description))
+                status=Gown.Status.AVAILABLE, photo_url=template.photo_url, side_photo_url=template.side_photo_url, back_photo_url=template.back_photo_url,
+                fabric=template.fabric, description=template.description))
         self.say(f"  saving {len(units)} gowns ...")
         Gown.objects.bulk_create(units, batch_size=100)
         return units

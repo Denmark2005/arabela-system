@@ -244,11 +244,12 @@ def receipt_delete(ctx):
 # gowns
 # ---------------------------------------------------------------------------------------------------------------------------------
 _GOWN_FIELDS = ("name", "category", "color_name", "size", "design_variant", "rental_price", "condition", "status", "notes", "fabric", "description")
+_GOWN_PHOTOS = (("photo_url", "front photo"), ("side_photo_url", "side photo"), ("back_photo_url", "back photo"))
 
 
 def before_gown(request, kwargs):
     gown = _gown(kwargs.get("gown_id"))
-    return {field: str(getattr(gown, field)) for field in _GOWN_FIELDS} if gown else {}
+    return {field: str(getattr(gown, field)) for field in _GOWN_FIELDS + tuple(f for f, _ in _GOWN_PHOTOS)} if gown else {}
 
 
 def gown_create(ctx):
@@ -267,6 +268,15 @@ def gown_update(ctx):
                 changes[field] = [old, new]
     units = ctx.data.get("design_units") or 0
     shared = f" (its fabric and description are shared by all {units} gowns with this name)" if units > 1 and ("fabric" in changes or "description" in changes) else ""
+    new_photos = []
+    if gown and ctx.before:
+        for field, label in _GOWN_PHOTOS:
+            old, new = ctx.before.get(field, ""), str(getattr(gown, field))
+            if old != new:
+                changes[label] = ["a photo" if old else "none", ("a new photo" if old else "added") if new else "removed"]
+                new_photos.append(label)
+    if units > 1 and new_photos:
+        shared += f" (photos are shared by all {units} gowns with this name)"
     return {"summary": f"edited {_gown_text(gown)}{shared}", "target": ("gown", gown.pk if gown else "", gown.gown_id if gown else ""),
             "details": changes}
 
@@ -321,7 +331,12 @@ def gown_bulk(ctx):
 
 def gown_photo(ctx):
     gown = _gown(ctx.kwargs.get("gown_id"))
-    return {"summary": f"changed the photo of {_gown_text(gown)}", "target": ("gown", gown.pk if gown else "", gown.gown_id if gown else "")}
+    view = str(ctx.body.get("view") or "front")
+    what = {"side": "the side photo", "back": "the back photo"}.get(view, "the photo")
+    verb = "removed" if str(ctx.body.get("remove") or "") == "1" else "changed"
+    units = ctx.data.get("design_units") or 0
+    shared = f" (all {units} gowns with this name)" if units > 1 else ""
+    return {"summary": f"{verb} {what} of {_gown_text(gown)}{shared}", "target": ("gown", gown.pk if gown else "", gown.gown_id if gown else "")}
 
 
 def gown_block_create(ctx):

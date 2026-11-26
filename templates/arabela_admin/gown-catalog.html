@@ -138,6 +138,70 @@
     .gc-win-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem 1rem; }
     .gc-win-text { margin-top: 1rem; overflow-wrap: anywhere; }       /* the fabric, description and notes under the facts (the admin styles have no mt-4) */
     @media (max-width: 520px) { .gc-win-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+    /* ---- Add / Edit Gown: one wide box (photos left, details right) so it fits a laptop screen without a long scroll; stacked on small screens. ---- */
+    .gc-add { max-width: 70rem; max-height: calc(100vh - 2.5rem); padding: 1.5rem 1.5rem 1.25rem; }
+    .gc-add-head { padding-right: 3.5rem; }
+    .gc-add-head h4 { margin-bottom: .15rem; }
+    .gc-add-sub { margin-bottom: 1rem; }
+    .gc-add-slug { margin-bottom: -.25rem; }
+    .gc-add-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 1.5rem; align-items: start; }
+    .gc-add-col { display: flex; flex-direction: column; gap: .85rem; min-width: 0; }
+    .gc-add-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .85rem 1rem; align-items: start; }
+    .gc-add-three { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: .85rem 1rem; align-items: start; }      /* Status is hidden while editing */
+    .gc-add-wide { margin-top: .85rem; }
+    .gc-add-foot { margin-top: 1.1rem; }
+    .gc-add-hint { margin-top: .4rem; font-size: .8125rem; color: #667085; }
+    .dark .gc-add-hint { color: #98a2b3; }
+    .gc-slots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }
+    .gc-slot { display: flex; flex-direction: column; align-items: center; min-width: 0; text-align: center; }
+    .gc-slot-box { position: relative; display: flex; align-items: center; justify-content: center; width: 100%; aspect-ratio: 3 / 4; padding: 0; overflow: hidden; border: 2px dashed #d0d5dd; border-radius: .75rem; background: #f9fafb; cursor: pointer; transition: border-color .15s, background-color .15s; }
+    .gc-slot-box:hover, .gc-slot.is-over .gc-slot-box { border-color: #465fff; }
+    .gc-slot-box:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+    .gc-slot.has-photo .gc-slot-box { border-style: solid; background: #fff; }
+    .gc-slot-box img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .dark .gc-slot-box { border-color: #344054; background: #101828; }
+    .dark .gc-slot.has-photo .gc-slot-box { background: #fff; }
+    .gc-slot-empty { display: flex; flex-direction: column; align-items: center; gap: .4rem; padding: 0 .5rem; font-size: .8125rem; font-weight: 500; color: #667085; }
+    .gc-slot-empty svg { width: 1.5rem; height: 1.5rem; }
+    .dark .gc-slot-empty { color: #98a2b3; }
+    .gc-slot-name { margin-top: .4rem; font-size: .875rem; font-weight: 600; color: #344054; }
+    .gc-slot-name span { font-weight: 400; color: #667085; }
+    .dark .gc-slot-name { color: #d0d5dd; }
+    .dark .gc-slot-name span { color: #98a2b3; }
+    .gc-slot-acts { display: flex; flex-wrap: wrap; justify-content: center; gap: .35rem; margin-top: .35rem; }
+    .gc-slot-btn { display: inline-block; padding: .15rem .6rem; border: 1px solid #d0d5dd; border-radius: .5rem; background: transparent; font: inherit; font-size: .8125rem; color: #344054; text-decoration: none; cursor: pointer; }
+    .gc-slot-btn:hover { border-color: #465fff; color: #465fff; }
+    .dark .gc-slot-btn { border-color: #344054; color: #d0d5dd; }
+    @media (max-width: 1023px) { .gc-add { max-width: 44rem; } .gc-add-grid { grid-template-columns: minmax(0, 1fr); } .gc-add-grid > .gc-add-col:last-child { order: -1; } }      /* one column: the name first */
+    @media (min-width: 1024px) and (max-height: 1000px) { .gc-add-sub { margin-bottom: .75rem; } }
+    /* Short laptop screens (1366x768, or 1920x1080 at 125% / 150%): tighter spacing so the whole box shows without scrolling. */
+    @media (min-width: 1024px) and (max-height: 820px) {
+      .gc-add { padding: 1rem 1.5rem .9rem; }
+      .gc-add-sub { margin-bottom: .6rem; }
+      .gc-add-col { gap: .65rem; }
+      .gc-add-two, .gc-add-three { gap: .65rem 1rem; }
+      .gc-add textarea { height: 4rem; }
+      .gc-add-foot { margin-top: .75rem; }
+    }
+    @media (min-width: 1024px) and (max-height: 720px) {
+      .gc-slot-box { width: min(100%, 8.25rem); }
+      .gc-add textarea { height: 3.25rem; }
+    }
+    @media (max-width: 520px) { .gc-add { padding: 1rem; } .gc-add-two { grid-template-columns: minmax(0, 1fr); } .gc-add-three { grid-auto-flow: row; } .gc-slots { gap: .5rem; } .gc-slot-name span { display: block; } }
+
+    /* the photo window's Front / Side / Back, and the View window's small pictures */
+    .gc-views { display: flex; flex-wrap: wrap; justify-content: center; gap: .5rem; margin-bottom: .85rem; }
+    .gc-view-tab { min-width: 5.5rem; padding: .4rem .9rem; border: 1px solid #d0d5dd; border-radius: 999px; background: transparent; font: inherit; font-size: .875rem; font-weight: 600; color: #475467; cursor: pointer; }
+    .gc-view-tab.is-on { border-color: #465fff; background: #465fff; color: #fff; }
+    .gc-view-tab:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+    .dark .gc-view-tab { border-color: #344054; color: #d0d5dd; }
+    .dark .gc-view-tab.is-on { border-color: #465fff; color: #fff; }
+    .gc-win-photos { display: flex; flex-wrap: wrap; gap: .75rem; margin-bottom: 1.25rem; }
+    .gc-win-photo { width: 6rem; text-align: center; font-size: .8125rem; color: #667085; text-decoration: none; }
+    .gc-win-photo img { display: block; width: 6rem; height: 8rem; margin-bottom: .3rem; border: 1px solid #e4e7ec; border-radius: .6rem; background: #fff; object-fit: cover; }
+    .dark .gc-win-photo { color: #98a2b3; }
+    .dark .gc-win-photo img { border-color: #1d2939; }
     /* A small laptop: the category column goes (it is in the dropdown and in the ID) and its sort with it. */
     @media (max-width: 1180px) {
       .ar-head.gc-grid, .ar-line.gc-grid { grid-template-columns: 1.75rem minmax(12rem, 1fr) 6rem 5.25rem 2.25rem; }
@@ -189,7 +253,9 @@
       // {name, code}. Empty until x-init runs; the dropdown simply renders nothing
       // for the instant before that, same as gownsMin below.
       colorPresets: [],
-      newGownPhotoFile: null, newGownPhotoPreview: '',
+      // The front, side and back pictures of Add / Edit Gown: the files just chosen, their previews, the ones the gown has now, and removals.
+      photoPicks: { front: null, side: null, back: null }, photoPreviews: { front: '', side: '', back: '' },
+      photoSaved: { front: '', side: '', back: '' }, photoRemoved: { side: false, back: false }, photoView: 'front',
       isGownImageModal: false, viewingGownImage: {},
       isViewModal: false, viewingGown: {},
       photoUpdateError: '', photoUpdateBusy: false,
@@ -211,11 +277,11 @@
         }
         return cookieValue;
       },
-      gownToast(message) {
+      gownToast(message, showFor) {
         this.gownToastMessage = message;
         this.showGownToast = true;
         clearTimeout(this.gownToastTimeout);
-        this.gownToastTimeout = setTimeout(() => this.showGownToast = false, 2500);
+        this.gownToastTimeout = setTimeout(() => this.showGownToast = false, showFor || 2500);
       },
       resetAddGownForm() {
         this.isEditMode = false; this.editingGownId = null; this.editingGownSlug = '';
@@ -223,8 +289,47 @@
         this.newGownSize = 'Medium'; this.newGownDesignVariant = ''; this.newGownPrice = ''; this.newGownStatus = 'Available';
         this.newGownCondition = 'Good'; this.newGownNotes = '';
         this.newGownFabric = ''; this.newGownDescription = ''; this.editingDesignSizes = 1;
-        this.newGownPhotoFile = null; this.newGownPhotoPreview = ''; this.addGownError = '';
+        this.resetGownPhotos(); this.addGownError = '';
         this.nameAutofilled = false; this.nameConflict = null;
+      },
+      // ---- the Front / Side / Back pictures ----
+      resetGownPhotos() {
+        ['front', 'side', 'back'].forEach((view) => { if (this.photoPreviews[view]) { URL.revokeObjectURL(this.photoPreviews[view]); } });
+        this.photoPicks = { front: null, side: null, back: null }; this.photoPreviews = { front: '', side: '', back: '' };
+        this.photoSaved = { front: '', side: '', back: '' }; this.photoRemoved = { side: false, back: false };
+      },
+      photoName(view) { return { front: 'Gown photo', side: 'Side photo', back: 'Back photo' }[view]; },
+      // What a slot shows: the file just chosen, else the gown's own picture (nothing once it is marked for removal).
+      slotImage(view) { return this.photoPreviews[view] || (this.photoRemoved[view] ? '' : this.photoSaved[view]); },
+      pickGownPhoto(view, file) {
+        if (!file) return;
+        const label = this.photoName(view);
+        if (file.size > 5 * 1024 * 1024) {
+          this.addGownError = label + ' must be 5MB or smaller.';
+          return;
+        }
+        // Kept as an in-memory copy, not the phone's own file: a photo picked on Android can change
+        // before Save and make the upload fail silently (static/js/picked-file.js).
+        window.arabelaReadPickedFile(file).then((copy) => {
+          if (!/^image\/(jpeg|png|webp)$/.test(copy.type)) {
+            this.addGownError = label + ' must be a JPG, PNG, or WEBP image.';
+            return;
+          }
+          this.addGownError = '';
+          if (this.photoPreviews[view]) { URL.revokeObjectURL(this.photoPreviews[view]); }
+          this.photoPicks[view] = copy;
+          this.photoPreviews[view] = URL.createObjectURL(copy);
+          if (view !== 'front') { this.photoRemoved[view] = false; }
+        }, (err) => { this.addGownError = err.message; });
+      },
+      // A just-chosen file is put back; otherwise a saved side or back picture is marked to be taken away on Save.
+      clearGownPhoto(view) {
+        if (this.photoPicks[view]) {
+          URL.revokeObjectURL(this.photoPreviews[view]);
+          this.photoPicks[view] = null; this.photoPreviews[view] = '';
+        } else if (view !== 'front' && this.photoSaved[view]) {
+          this.photoRemoved[view] = true;
+        }
       },
       // Reverse-maps an existing gown's saved name/code back onto one of the preset
       // dropdown options when opening Edit, so the dropdown shows the right selection
@@ -288,14 +393,15 @@
         }
         return '';
       },
-      // The fabric, description and size count of a gown's row, kept on the row itself (data-*) so any text is safe to read back.
+      // The fabric, description, size count and photos of a gown's row, kept on the row itself (data-*) so any text is safe to read back.
       rowDetails(el) {
         const row = el.closest('[data-gown-row]');
-        return { fabric: (row && row.dataset.fabric) || '', description: (row && row.dataset.description) || '', designSizes: Number((row && row.dataset.sizes) || 1) };
+        const data = (row && row.dataset) || {};
+        return { fabric: data.fabric || '', description: data.description || '', designSizes: Number(data.sizes || 1),
+          photoUrl: data.photo || '', sidePhotoUrl: data.side || '', backPhotoUrl: data.back || '' };
       },
       // Opens the same Add Gown modal, pre-filled for editing an existing row. Status
-      // and Photo are intentionally left out of this data -- editing doesn't touch
-      // either of them, they keep using their own existing dedicated actions.
+      // is intentionally left out of this data -- it keeps its own dedicated action.
       openEditGownModal(gown) {
         this.resetAddGownForm();
         this.isEditMode = true;
@@ -315,6 +421,7 @@
         this.newGownFabric = gown.fabric || '';
         this.newGownDescription = gown.description || '';
         this.editingDesignSizes = gown.designSizes || 1;
+        this.photoSaved = { front: gown.photoUrl || '', side: gown.sidePhotoUrl || '', back: gown.backPhotoUrl || '' };
         this.addGownError = '';
         this.isAddGownModal = true;
       },
@@ -349,22 +456,7 @@
         }
       },
       onGownPhotoChosen(file) {
-        if (!file) return;
-        if (file.size > 5 * 1024 * 1024) {
-          this.addGownError = 'Gown photo must be 5MB or smaller.';
-          return;
-        }
-        // Kept as an in-memory copy, not the phone's own file: a photo picked on Android can change
-        // before Save and make the upload fail silently (static/js/picked-file.js).
-        window.arabelaReadPickedFile(file).then((copy) => {
-          if (!/^image\/(jpeg|png|webp)$/.test(copy.type)) {
-            this.addGownError = 'Gown photo must be a JPG, PNG, or WEBP image.';
-            return;
-          }
-          this.addGownError = '';
-          this.newGownPhotoFile = copy;
-          this.newGownPhotoPreview = URL.createObjectURL(copy);
-        }, (err) => { this.addGownError = err.message; });
+        this.pickGownPhoto('front', file);
       },
       // `nameChoice` is only ever passed by the two buttons of the 'name already exists'
       // prompt ('same' = another unit of that gown, 'different' = a different gown that
@@ -414,16 +506,17 @@
         form.append('fabric', this.newGownFabric.trim());
         form.append('description', this.newGownDescription.trim());
 
-        // Editing never touches Status or Photo -- both already have their own
-        // dedicated, working actions (Change Status, and the click-to-replace photo
-        // thumbnail), so they're deliberately left out of this request in edit mode.
+        // Editing never touches Status -- it has its own dedicated action (Change Status),
+        // so it is deliberately left out of this request in edit mode.
         const isEdit = this.isEditMode;
         const url = isEdit ? (this.gownApiBase + this.editingGownId + '/update/') : this.gownApiBase;
         if (!isEdit) {
           form.append('status', this.newGownStatus);
-          if (this.newGownPhotoFile) form.append('photo', this.newGownPhotoFile);
           if (nameChoice === 'same' || nameChoice === 'different') form.append('name_choice', nameChoice);
         }
+        const fields = { front: 'photo', side: 'side_photo', back: 'back_photo' };
+        Object.keys(fields).forEach((view) => { if (this.photoPicks[view]) form.append(fields[view], this.photoPicks[view]); });
+        if (isEdit) { ['side', 'back'].forEach((view) => { if (this.photoRemoved[view]) form.append('remove_' + view, '1'); }); }
 
         this.addGownBusy = true;
         fetch(url, {
@@ -445,15 +538,24 @@
           this.isAddGownModal = false;
           this.resetAddGownForm();
           const renamed = !isEdit && data.gown.name !== typedName;
-          this.gownToast((isEdit ? 'Saved changes: ' : 'Gown added: ') + data.gown.gown_id + (renamed ? ' (named ' + data.gown.name + ')' : ''));
-          setTimeout(() => window.location.reload(), renamed ? 1800 : 900);
+          const notes = (data.notes || []).join(' ');          // how each side / back picture was matched to the front
+          const wait = notes.indexOf('as it is') !== -1 ? 6000 : (notes ? 2800 : (renamed ? 1800 : 900));
+          this.gownToast((isEdit ? 'Saved changes: ' : 'Gown added: ') + data.gown.gown_id + (renamed ? ' (named ' + data.gown.name + ')' : '') + (notes ? '. ' + notes : ''), wait);
+          setTimeout(() => window.location.reload(), wait);
         })
         .catch(() => { this.addGownBusy = false; this.addGownError = 'Network error. Please try again.'; });
       },
+      // The photo window: which picture is showing, and its replace / remove. Every size of the gown gets the same picture.
+      showPhotoView(view) {
+        this.photoView = view; this.photoUpdateError = '';
+        this.viewingGownImage.photoUrl = (this.viewingGownImage.photos && this.viewingGownImage.photos[view]) || '';
+      },
       updateGownPhoto(file) {
         if (!file) return;
+        const view = this.photoView;
+        const label = this.photoName(view);
         if (file.size > 5 * 1024 * 1024) {
-          this.photoUpdateError = 'Gown photo must be 5MB or smaller.';
+          this.photoUpdateError = label + ' must be 5MB or smaller.';
           return;
         }
         this.photoUpdateError = '';
@@ -462,29 +564,47 @@
         window.arabelaReadPickedFile(file)
         .then((copy) => {
           if (!/^image\/(jpeg|png|webp)$/.test(copy.type)) {
-            const typeErr = new Error('Gown photo must be a JPG, PNG, or WEBP image.');
+            const typeErr = new Error(label + ' must be a JPG, PNG, or WEBP image.');
             typeErr.code = 'unreadable_photo';
             throw typeErr;
           }
           const form = new FormData();
+          form.append('view', view);
           form.append('photo', copy);
-          return fetch(this.gownApiBase + this.viewingGownImage.id + '/photo/', {
-            method: 'POST',
-            headers: { 'X-CSRFToken': this.getCsrfToken() },
-            body: form,
-          });
+          return this.sendGownPhoto(form);
         })
-        .then(r => r.json().then(data => ({ ok: r.ok, data })))
-        .then(({ ok, data }) => {
-          this.photoUpdateBusy = false;
-          if (!ok) { this.photoUpdateError = data.error || 'Could not update photo.'; return; }
-          this.gownToast('Photo updated for ' + this.viewingGownImage.gownId);
-          setTimeout(() => window.location.reload(), 700);
-        })
+        .then(({ ok, data }) => this.afterGownPhoto(ok, data, label + ' updated for '))
         .catch((err) => {
           this.photoUpdateBusy = false;
           this.photoUpdateError = (err && err.code === 'unreadable_photo') ? err.message : 'Network error. Please try again.';
         });
+      },
+      removeGownPhoto() {
+        const view = this.photoView;
+        if (view === 'front' || this.photoUpdateBusy) return;
+        const label = this.photoName(view);
+        adminConfirm({ title: 'Remove the ' + label.toLowerCase() + '?', message: 'Every size of this gown loses it. You can add a new one afterwards.', confirmText: 'Remove', danger: true }).then((yes) => {
+          if (!yes) return;
+          this.photoUpdateError = ''; this.photoUpdateBusy = true;
+          const form = new FormData();
+          form.append('view', view);
+          form.append('remove', '1');
+          this.sendGownPhoto(form)
+            .then(({ ok, data }) => this.afterGownPhoto(ok, data, label + ' removed from '))
+            .catch(() => { this.photoUpdateBusy = false; this.photoUpdateError = 'Network error. Please try again.'; });
+        });
+      },
+      sendGownPhoto(form) {
+        return fetch(this.gownApiBase + this.viewingGownImage.id + '/photo/', { method: 'POST', headers: { 'X-CSRFToken': this.getCsrfToken() }, body: form })
+          .then(r => r.json().then(data => ({ ok: r.ok, data })));
+      },
+      afterGownPhoto(ok, data, done) {
+        this.photoUpdateBusy = false;
+        if (!ok) { this.photoUpdateError = data.error || 'Could not update photo.'; return; }
+        const notes = (data.notes || []).join(' ');
+        const wait = notes.indexOf('as it is') !== -1 ? 6000 : (notes ? 2200 : 700);
+        this.gownToast(done + this.viewingGownImage.gownId + (notes ? '. ' + notes : ''), wait);
+        setTimeout(() => window.location.reload(), wait);
       },
       changeGownStatus(newStatus) {
         fetch(this.gownApiBase + this.viewingGown.id + '/status/', {
@@ -2105,7 +2225,7 @@
                   {% for row in blocked_gowns_today %}
                   <button
                     type="button"
-                    @click="viewingGown = { id: {{ row.gown.id }}, gownId: '{{ row.gown.gown_id|escapejs }}', name: '{{ row.gown.name|escapejs }}', category: '{{ row.gown.category|escapejs }}', colorName: '{{ row.gown.color_name|escapejs }}', colorCode: '{{ row.gown.color_code|escapejs }}', size: '{{ row.gown.size|escapejs }}', designVariant: '{{ row.gown.design_variant|escapejs }}', price: '{{ row.gown.rental_price }}', condition: '{{ row.gown.condition|escapejs }}', status: '{{ row.gown.status|escapejs }}', notes: '{{ row.gown.notes|escapejs }}', slug: '{{ row.gown.slug|escapejs }}' }; openGownBlockForm(); isViewModal = true; showBlockedGownsList = false"
+                    @click="viewingGown = { id: {{ row.gown.id }}, gownId: '{{ row.gown.gown_id|escapejs }}', name: '{{ row.gown.name|escapejs }}', category: '{{ row.gown.category|escapejs }}', colorName: '{{ row.gown.color_name|escapejs }}', colorCode: '{{ row.gown.color_code|escapejs }}', size: '{{ row.gown.size|escapejs }}', designVariant: '{{ row.gown.design_variant|escapejs }}', price: '{{ row.gown.rental_price }}', condition: '{{ row.gown.condition|escapejs }}', status: '{{ row.gown.status|escapejs }}', notes: '{{ row.gown.notes|escapejs }}', slug: '{{ row.gown.slug|escapejs }}', photoUrl: '{{ row.gown.photo_url|escapejs }}', sidePhotoUrl: '{{ row.gown.side_photo_url|escapejs }}', backPhotoUrl: '{{ row.gown.back_photo_url|escapejs }}' }; openGownBlockForm(); isViewModal = true; showBlockedGownsList = false"
                     class="flex w-full items-center justify-between gap-3 py-3 text-left transition hover:bg-gray-50 dark:hover:bg-white/[0.03]"
                   >
                     <div>
@@ -2410,7 +2530,7 @@
                 {% for gown in gowns %}
                 <!-- One gown: a closed line (tick box, photo, status circle + ID + name, category and size, price, the eye and the pencil) and, hidden until it
                      is opened, its tag, details, physical check and who holds it. A click on the line opens it, except on the tick box, the photo and the two buttons. -->
-                <div class="ar-booking gc-row" data-gown-row data-sort-gown="{{ gown.category|lower }}-{{ gown.tag_number }}-{{ gown.gown_id|lower }}" data-sort-category="{{ gown.category|lower }}" data-sort-price="{{ gown.rental_price }}" data-fabric="{{ gown.fabric }}" data-description="{{ gown.description }}" data-sizes="{{ gown.design_sizes }}" x-show="gownMatchesFilters('{{ gown.category|escapejs }}', '{{ gown.status|escapejs }}', '{{ gown.search_hay|escapejs }}', {{ gown.days_since_check|default_if_none:'null' }})" :class="search !== '' && '{{ gown.gown_id|lower|escapejs }}' === search.toLowerCase() ? 'is-highlight' : ''">
+                <div class="ar-booking gc-row" data-gown-row data-sort-gown="{{ gown.category|lower }}-{{ gown.tag_number }}-{{ gown.gown_id|lower }}" data-sort-category="{{ gown.category|lower }}" data-sort-price="{{ gown.rental_price }}" data-fabric="{{ gown.fabric }}" data-description="{{ gown.description }}" data-sizes="{{ gown.design_sizes }}" data-photo="{{ gown.photo_url }}" data-side="{{ gown.side_photo_url }}" data-back="{{ gown.back_photo_url }}" x-show="gownMatchesFilters('{{ gown.category|escapejs }}', '{{ gown.status|escapejs }}', '{{ gown.search_hay|escapejs }}', {{ gown.days_since_check|default_if_none:'null' }})" :class="search !== '' && '{{ gown.gown_id|lower|escapejs }}' === search.toLowerCase() ? 'is-highlight' : ''">
                   <div class="ar-line gc-grid" :class="isGownOpen({{ gown.id }}) ? 'is-open' : ''" @click="if (!$event.target.closest('.gc-pick, .gc-photo, .gc-acts, a')) { toggleGown({{ gown.id }}) }">
                     <span class="gc-pick">
                       <input type="checkbox" class="admin-bulk-check" value="{{ gown.id }}" x-model.number="selectedGownIds" aria-label="Select {{ gown.gown_id }}" />
@@ -2418,7 +2538,7 @@
                     <div class="gc-gown">
                       <button
                         type="button"
-                        @click="photoUpdateError = ''; viewingGownImage = { id: {{ gown.id }}, gownId: '{{ gown.gown_id|escapejs }}', details: '{{ gown.category|escapejs }} &middot; {{ gown.color_name|escapejs }} &middot; {{ gown.size|escapejs }}', photoUrl: '{{ gown.photo_url|escapejs }}' }; isGownImageModal = true"
+                        @click="photoUpdateError = ''; photoView = 'front'; viewingGownImage = { id: {{ gown.id }}, gownId: '{{ gown.gown_id|escapejs }}', details: '{{ gown.category|escapejs }} &middot; {{ gown.color_name|escapejs }} &middot; {{ gown.size|escapejs }}', photoUrl: '{{ gown.photo_url|escapejs }}', photos: { front: '{{ gown.photo_url|escapejs }}', side: '{{ gown.side_photo_url|escapejs }}', back: '{{ gown.back_photo_url|escapejs }}' } }; isGownImageModal = true"
                         title="View or replace gown photo"
                         class="gc-photo flex h-10 w-10 flex-none items-center justify-center overflow-hidden rounded-lg bg-gray-100 text-gray-500 dark:text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:bg-gray-800 dark:hover:bg-white/[0.05] dark:hover:text-gray-300"
                       >
@@ -2498,7 +2618,7 @@
               </div>
             </div>
 
-<!-- Add Gown Modal (placeholder for adding new gowns to the catalog) -->
+<!-- Add Gown Modal (also Edit Gown): one wide box, the Front / Side / Back photos on the left and the gown's details on the right; one column, name first, on small screens -->
 <div
   x-show="isAddGownModal"
   x-cloak
@@ -2509,7 +2629,7 @@
   ></div>
   <div
     @click.outside="isAddGownModal = false"
-    class="no-scrollbar relative w-full max-w-[700px] overflow-y-auto rounded-3xl bg-white p-4 dark:bg-gray-900 lg:p-11"
+    class="gc-add no-scrollbar relative w-full overflow-y-auto rounded-3xl bg-white dark:bg-gray-900"
   >
     <button
       @click="isAddGownModal = false"
@@ -2519,188 +2639,30 @@
         <path fill-rule="evenodd" clip-rule="evenodd" d="M6.04289 16.5418C5.65237 16.9323 5.65237 17.5655 6.04289 17.956C6.43342 18.3465 7.06658 18.3465 7.45711 17.956L11.9987 13.4144L16.5408 17.9565C16.9313 18.347 17.5645 18.347 17.955 17.9565C18.3455 17.566 18.3455 16.9328 17.955 16.5423L13.4129 12.0002L17.955 7.45808C18.3455 7.06756 18.3455 6.43439 17.955 6.04387C17.5645 5.65335 16.9313 5.65335 16.5408 6.04387L11.9987 10.586L7.45711 6.04439C7.06658 5.65386 6.43342 5.65386 6.04289 6.04439C5.65237 6.43491 5.65237 7.06808 6.04289 7.4586L10.5845 12.0002L6.04289 16.5418Z" fill=""/>
       </svg>
     </button>
-    <div class="px-2 pr-14">
+    <div class="gc-add-head">
       <h4 class="mb-2 text-2xl font-semibold text-gray-800 dark:text-white/90" x-text="isEditMode ? 'Edit Gown' : 'Add Gown'">
       </h4>
-      <p class="mb-6 text-sm text-gray-500 dark:text-gray-400 lg:mb-7" x-text="isEditMode ? 'Update this gown\'s details in the catalog inventory.' : 'Add a new gown to the catalog inventory.'">
+      <p class="gc-add-sub text-sm text-gray-500 dark:text-gray-400" x-text="isEditMode ? 'Update this gown\'s details in the catalog inventory.' : 'Add a new gown to the catalog inventory.'">
       </p>
     </div>
-    <!-- Gown ID and product slug never change through this form (see gown_update_view's
-         docstring) -- shown read-only here so staff can find a gown's ID or its
-         customer-facing link without leaving the panel. -->
-    <div class="px-2" x-show="isEditMode" x-cloak>
+    <div class="gc-add-slug" x-show="isEditMode" x-cloak>
       <div class="mb-5 flex items-center rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-500 dark:border-gray-700 dark:bg-white/[0.03] dark:text-gray-400">
         <span>Product slug: <span class="font-medium text-gray-700 dark:text-gray-300" x-text="editingGownSlug"></span></span><details class="ht-tip"><summary aria-label="About the gown ID and product link" title="About the gown ID and product link">?</summary><div class="ht-tip-pop">Gown ID and product link are permanent and can't be changed here.</div></details>
       </div>
     </div>
     <form class="flex flex-col" @submit.prevent="addGown()">
-      <div class="px-2">
-        <div class="grid grid-cols-1 gap-x-6 gap-y-5 lg:grid-cols-2">
-          <div class="col-span-2">
-            <div class="mb-1.5 flex items-center"><label class="block text-sm font-medium text-gray-700 dark:text-gray-400">Gown Name</label><details class="ht-tip" x-show="!isEditMode" x-cloak><summary aria-label="About naming a gown" title="About naming a gown">?</summary><div class="ht-tip-pop">Name a gown by its color. It fills in from the Color you pick below: only type your own if you need to.</div></details></div>
-            <input
-              type="text"
-              x-model="newGownName"
-              @input="nameAutofilled = false; nameConflict = null"
-              maxlength="150"
-              placeholder="e.g. White"
-              class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-            />
+      <div class="gc-add-grid">
+        <div class="gc-add-col">
+          <div>
+            <div class="mb-1.5 flex items-center"><label class="block text-sm font-medium text-gray-700 dark:text-gray-400">Photos <span class="text-gray-500 dark:text-gray-400">(optional)</span></label><details class="ht-tip"><summary aria-label="About the gown photos" title="About the gown photos">?</summary><div class="ht-tip-pop">Front is the main picture; Side and Back let customers turn the gown on its page, and are matched to the front's size on a white background. A portrait photo (3:4) works best; other shapes are cropped to fit on the customer site. Every size of the same gown shares these photos. You can add them later.</div></details></div>
+            <div class="gc-slots">
+              {% include "arabela_admin/partials/gown_photo_slot.html" with view="front" name="Front" %}
+              {% include "arabela_admin/partials/gown_photo_slot.html" with view="side" name="Side" %}
+              {% include "arabela_admin/partials/gown_photo_slot.html" with view="back" name="Back" %}
+            </div>
+            <p class="gc-add-hint" x-show="isEditMode && editingDesignSizes > 1" x-cloak x-text="'Photos are shared by all ' + editingDesignSizes + ' gowns with this name (every size).'"></p>
           </div>
-
-          <div class="col-span-2 lg:col-span-1">
-            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Category</label>
-            <select x-model="newGownCategory" @change="nameConflict = null; if ($event.target.value !== 'Kids Gown' && newGownSize === 'Extra Small') newGownSize = 'Medium'" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
-              {% for row in category_rows %}
-              <option value="{{ row.key }}">{{ row.label }}</option>
-              {% endfor %}
-            </select>
-            <!-- Read-only: this category's tag color (set by the owner in Tag Colors). Follows
-                 whatever category is picked, so staff know which tag to put on this gown. -->
-            <p class="mt-1.5 flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
-              <span class="admin-tag-dot" :style="'background-color:' + tagFor(newGownCategory).hex"></span>
-              <span>Use a <span class="font-semibold text-gray-700 dark:text-white/90" x-text="tagFor(newGownCategory).color"></span> tag for this category</span>
-            </p>
-          </div>
-
-          <div class="col-span-2 lg:col-span-1">
-            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Size</label>
-            <select x-model="newGownSize" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
-              {# Extra Small is for Kids Gown only: hidden (and disabled, for browsers that ignore `hidden` on an option) for every other category. The server refuses it for them too. #}
-              <option value="Extra Small" :hidden="newGownCategory !== 'Kids Gown'" :disabled="newGownCategory !== 'Kids Gown'">Extra Small (XS) - Kids Gown only</option>
-              <option value="Small">Small</option>
-              <option value="Medium">Medium</option>
-              <option value="Large">Large</option>
-              <option value="Extra Large">Extra Large</option>
-              <option value="Extra Extra Large">Extra Extra Large (XXL)</option>
-              <option value="Free Size">Free Size</option>
-            </select>
-          </div>
-
-          <div class="col-span-2 lg:col-span-1">
-            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Color</label>
-            <!-- One dropdown fills BOTH Color Name and Color Code together (see
-                 onColorChoiceChanged()) so a color can never end up with a code that
-                 doesn't match it, or two different colors sharing the same code.
-                 "Other" reveals the manual fields below for anything not on this list. -->
-            <select x-model="newGownColorChoice" @change="onColorChoiceChanged()" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
-              <option value="">Select a color</option>
-              <template x-for="p in colorPresets" :key="p.code">
-                <option :value="p.name + '|' + p.code" x-text="p.name + ' (' + p.code + ')'"></option>
-              </template>
-              <option value="OTHER">Other (type it in)</option>
-            </select>
-          </div>
-
-          <!-- Fallback for a color not on the list above. Hidden unless "Other" is
-               picked -- onColorChoiceChanged() clears both fields whenever the
-               dropdown changes, so nothing stale carries over from a previous pick. -->
-          <div class="col-span-2 lg:col-span-1" x-show="newGownColorChoice === 'OTHER'" x-cloak>
-            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Color Name</label>
-            <input
-              type="text"
-              x-model="newGownColorName"
-              @input="syncNameFromColor()"
-              maxlength="40"
-              placeholder="e.g. Dusty Rose"
-              class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-            />
-            <!-- Live suggestion for a brand new color name -- only while Color Code is
-                 still empty, so it never overwrites something staff already typed
-                 themselves. Works for ANY name (not just the 36 presets): the same
-                 first-two-letters / distinctive-letter / first-letter-per-word logic a
-                 person would use by hand, checked against every code already in use. -->
-            <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400"
-               x-show="newGownColorName.trim() && !newGownColorCode.trim() && suggestColorCode(newGownColorName, isEditMode ? editingGownId : null)"
-               x-cloak>
-              Suggested code:
-              <button type="button"
-                class="font-semibold text-brand-500 hover:text-brand-600 dark:text-brand-400"
-                @click="newGownColorCode = suggestColorCode(newGownColorName, isEditMode ? editingGownId : null)"
-                x-text="suggestColorCode(newGownColorName, isEditMode ? editingGownId : null)"></button>
-              <span class="text-gray-500 dark:text-gray-400">&mdash; click to use it</span>
-            </p>
-          </div>
-
-          <div class="col-span-2 lg:col-span-1" x-show="newGownColorChoice === 'OTHER'" x-cloak>
-            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Color Code</label>
-            <input
-              type="text"
-              x-model="newGownColorCode"
-              maxlength="2"
-              placeholder="e.g. DR"
-              class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm uppercase text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-            />
-            <!-- Live warning the instant a typed code already means a different color --
-                 checked against the 36 presets AND every real gown in the catalog
-                 (colorCodeConflict), so this is the exact bug that happened once
-                 already (Blue saved with Blush's code) now caught before Save is even
-                 clicked. This is a convenience, not the actual guarantee -- the server
-                 enforces the same rule regardless of what this warning shows. -->
-            <p class="mt-1.5 text-xs font-medium text-error-600 dark:text-error-500"
-               x-show="newGownColorCode.trim() && newGownColorName.trim() && colorCodeConflict(newGownColorCode, newGownColorName, isEditMode ? editingGownId : null)"
-               x-cloak
-               x-text="(() => { const c = colorCodeConflict(newGownColorCode, newGownColorName, isEditMode ? editingGownId : null); return c ? ('“' + newGownColorCode.trim().toUpperCase() + '” already means ' + c.name + '. Choose a different code.') : ''; })()">
-            </p>
-          </div>
-
-          <div class="col-span-2 lg:col-span-1">
-            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Design Variant <span class="text-gray-500 dark:text-gray-400">(optional)</span></label>
-            <input
-              type="text"
-              x-model="newGownDesignVariant"
-              maxlength="60"
-              placeholder="e.g. Mermaid"
-              class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-            />
-          </div>
-
-          <div class="col-span-2 lg:col-span-1">
-            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Rental Price</label>
-            <input
-              type="text"
-              x-model="newGownPrice"
-              maxlength="10"
-              inputmode="decimal"
-              placeholder="e.g. 3,500"
-              class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-            />
-          </div>
-
-          <!-- Status has its own dedicated Change Status action already, so editing
-               doesn't duplicate it -- only shown when adding a brand-new gown. -->
-          <div class="col-span-2 lg:col-span-1" x-show="!isEditMode" x-cloak>
-            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Status</label>
-            <select x-model="newGownStatus" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
-              <option value="Available">Available</option>
-              <option value="Out-of-Stock">Out-of-Stock</option>
-            </select>
-          </div>
-
-          <div class="col-span-2 lg:col-span-1">
-            <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Condition</label>
-            <select x-model="newGownCondition" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
-              <option value="New">New</option>
-              <option value="Good">Good</option>
-              <option value="Fair">Fair</option>
-              <option value="Needs Repair">Needs Repair</option>
-            </select>
-          </div>
-
-          <!-- What customers read on the gown's page. Every size of the same design shares it (gowns/design_details.py). -->
-          <div class="col-span-2">
-            <div class="mb-1.5 flex items-center"><label for="gc-fabric" class="block text-sm font-medium text-gray-700 dark:text-gray-400">Fabric <span class="text-gray-500 dark:text-gray-400">(optional)</span></label><details class="ht-tip"><summary aria-label="About the fabric and description" title="About the fabric and description">?</summary><div class="ht-tip-pop">Customers see the fabric and description on the gown's page. Every size of the same gown shares them, so changing them here changes all its sizes.</div></details></div>
-            <input
-              id="gc-fabric"
-              type="text"
-              x-model="newGownFabric"
-              maxlength="200"
-              placeholder="e.g. Layered tulle with beaded details"
-              class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-            />
-          </div>
-
-          <div class="col-span-2">
+          <div>
             <label for="gc-description" class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Description <span class="text-gray-500 dark:text-gray-400">(optional)</span></label>
             <textarea
               id="gc-description"
@@ -2712,8 +2674,7 @@
             ></textarea>
             <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400" x-show="isEditMode && editingDesignSizes > 1" x-cloak x-text="'Shared by all ' + editingDesignSizes + ' gowns with this name (every size).'"></p>
           </div>
-
-          <div class="col-span-2">
+          <div>
             <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Notes <span class="text-gray-500 dark:text-gray-400">(optional, only staff see this)</span></label>
             <textarea
               x-model="newGownNotes"
@@ -2723,91 +2684,193 @@
               class="dark:bg-dark-900 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
             ></textarea>
           </div>
-
-          <div class="col-span-2" x-show="addGownError" x-cloak>
-            <p class="rounded-lg bg-error-50 px-4 py-2.5 text-sm text-error-700 dark:bg-error-500/15 dark:text-error-500" x-text="addGownError"></p>
+        </div>
+        <div class="gc-add-col">
+          <div>
+            <div class="mb-1.5 flex items-center"><label class="block text-sm font-medium text-gray-700 dark:text-gray-400">Gown Name</label><details class="ht-tip" x-show="!isEditMode" x-cloak><summary aria-label="About naming a gown" title="About naming a gown">?</summary><div class="ht-tip-pop">Name a gown by its color. It fills in from the Color you pick below: only type your own if you need to.</div></details></div>
+            <input
+              type="text"
+              x-model="newGownName"
+              @input="nameAutofilled = false; nameConflict = null"
+              maxlength="150"
+              placeholder="e.g. White"
+              class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
+            />
           </div>
-
-          <!-- The name is already used in this category. Not an error -- nothing was saved yet,
-               and only the person adding the gown knows which of these it is. On the customer
-               site every gown that shares a name shows as ONE product with a quantity, so:
-               'same gown' = another size/unit of it (right), 'different gown' = it would
-               vanish into the other's listing, so it gets its own numbered name (White (2)). -->
-          <div class="col-span-2" x-show="nameConflict" x-cloak>
-            <div class="rounded-xl border border-warning-500 bg-warning-50 p-4 dark:border-warning-500/30 dark:bg-warning-500/15">
-              <p class="text-sm font-semibold text-warning-700 dark:text-warning-400">
-                A gown named &ldquo;<span x-text="nameConflict && nameConflict.name"></span>&rdquo; already exists in this category
-                (<span x-text="nameConflict && nameConflict.count"></span>).
+          <div class="gc-add-two">
+            <div>
+              <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Category</label>
+              <select x-model="newGownCategory" @change="nameConflict = null; if ($event.target.value !== 'Kids Gown' && newGownSize === 'Extra Small') newGownSize = 'Medium'" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
+                {% for row in category_rows %}
+                <option value="{{ row.key }}">{{ row.label }}</option>
+                {% endfor %}
+              </select>
+              <!-- Read-only: this category's tag color (set by the owner in Tag Colors). Follows
+                   whatever category is picked, so staff know which tag to put on this gown. -->
+              <p class="mt-1.5 flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                <span class="admin-tag-dot" :style="'background-color:' + tagFor(newGownCategory).hex"></span>
+                <span>Use a <span class="font-semibold text-gray-700 dark:text-white/90" x-text="tagFor(newGownCategory).color"></span> tag for this category</span>
               </p>
-              <p class="mt-1 text-xs text-gray-600 dark:text-gray-300" x-show="nameConflict && nameConflict.existing && nameConflict.existing.length">
-                Already there:
-                <span x-text="nameConflict && nameConflict.existing ? nameConflict.existing.map(e => e.gown_id + ' (' + e.size + ')').join(', ') : ''"></span><span x-show="nameConflict && nameConflict.count > nameConflict.existing.length"> and more</span>.
-              </p>
-              <p class="mt-3 text-sm font-medium text-gray-800 dark:text-white/90">Is the gown you're adding&hellip;</p>
-              <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <button type="button" @click="addGown('same')" :disabled="addGownBusy" class="rounded-lg border border-gray-300 bg-white px-3 py-3 text-left text-sm shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-white/[0.03]">
-                  <span class="block font-medium text-gray-800 dark:text-white/90">The same gown &mdash; another unit or size</span>
-                  <span class="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">Keeps the name. One listing with a quantity (like &ldquo;3 available&rdquo;), with the same fabric and description: what you typed goes to every size, empty boxes keep its own.</span>
-                </button>
-                <button type="button" @click="addGown('different')" :disabled="addGownBusy" class="rounded-lg border border-gray-300 bg-white px-3 py-3 text-left text-sm shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-white/[0.03]">
-                  <span class="block font-medium text-gray-800 dark:text-white/90">A different gown</span>
-                  <span class="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">Gets its own number (like &ldquo;<span x-text="nameConflict && nameConflict.name"></span> (2)&rdquo;) and its own listing.</span>
-                </button>
-              </div>
+            </div>
+            <div>
+              <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Size</label>
+              <select x-model="newGownSize" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
+                {# Extra Small is for Kids Gown only: hidden (and disabled, for browsers that ignore `hidden` on an option) for every other category. The server refuses it for them too. #}
+                <option value="Extra Small" :hidden="newGownCategory !== 'Kids Gown'" :disabled="newGownCategory !== 'Kids Gown'">Extra Small (XS) - Kids Gown only</option>
+                <option value="Small">Small</option>
+                <option value="Medium">Medium</option>
+                <option value="Large">Large</option>
+                <option value="Extra Large">Extra Large</option>
+                <option value="Extra Extra Large">Extra Extra Large (XXL)</option>
+                <option value="Free Size">Free Size</option>
+              </select>
             </div>
           </div>
-
-          <!-- Photo already has its own working click-the-thumbnail replace flow in the
-               catalog table, so editing doesn't duplicate it -- only shown when adding. -->
-          <div class="col-span-2" x-show="isEditMode" x-cloak>
-            <p class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-xs text-gray-500 dark:border-gray-700 dark:bg-white/[0.03] dark:text-gray-400">To change the photo, click the gown's thumbnail in the list.</p>
-          </div>
-
-          <div class="col-span-2" x-show="!isEditMode" x-cloak>
-            <div class="mb-1.5 flex items-center"><label class="block text-sm font-medium text-gray-700 dark:text-gray-400">Gown Photo <span class="text-gray-500 dark:text-gray-400">(optional)</span></label><details class="ht-tip"><summary aria-label="About the gown photo" title="About the gown photo">?</summary><div class="ht-tip-pop">You can add the photo later if you don't have one yet. A portrait photo (3:4) works best; other shapes are cropped to fit on the customer site.</div></details></div>
-            <input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" x-ref="newGownPhotoInput" @change="onGownPhotoChosen($event.target.files[0]); $event.target.value = ''" />
-            <div
-              class="dropzone hover:border-brand-500! dark:hover:border-brand-500! rounded-xl border border-dashed! border-gray-300! bg-gray-50 p-6 dark:border-gray-700! dark:bg-gray-900 cursor-pointer"
-              @click="$refs.newGownPhotoInput.click()"
-              @dragover.prevent
-              @drop.prevent="onGownPhotoChosen($event.dataTransfer.files[0])"
-            >
-              <template x-if="newGownPhotoPreview">
-                <div class="mb-3 flex justify-center">
-                  <img :src="newGownPhotoPreview" alt="Photo preview" class="h-20 w-20 rounded-lg object-cover" />
-                </div>
-              </template>
-              <template x-if="!newGownPhotoPreview">
-                <div class="mb-4 flex justify-center">
-                  <div class="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-400">
-                    <svg class="fill-current" width="22" height="21" viewBox="0 0 29 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path fill-rule="evenodd" clip-rule="evenodd" d="M14.5019 3.91699C14.2852 3.91699 14.0899 4.00891 13.953 4.15589L8.57363 9.53186C8.28065 9.82466 8.2805 10.2995 8.5733 10.5925C8.8661 10.8855 9.34097 10.8857 9.63396 10.5929L13.7519 6.47752V18.667C13.7519 19.0812 14.0877 19.417 14.5019 19.417C14.9161 19.417 15.2519 19.0812 15.2519 18.667V6.48234L19.3653 10.5929C19.6583 10.8857 20.1332 10.8855 20.426 10.5925C20.7188 10.2995 20.7186 9.82463 20.4256 9.53184L15.0838 4.19378C14.9463 4.02488 14.7367 3.91699 14.5019 3.91699ZM5.91626 18.667C5.91626 18.2528 5.58047 17.917 5.16626 17.917C4.75205 17.917 4.41626 18.2528 4.41626 18.667V21.8337C4.41626 23.0763 5.42362 24.0837 6.66626 24.0837H22.3339C23.5766 24.0837 24.5839 23.0763 24.5839 21.8337V18.667C24.5839 18.2528 24.2482 17.917 23.8339 17.917C23.4197 17.917 23.0839 18.2528 23.0839 18.667V21.8337C23.0839 22.2479 22.7482 22.5837 22.3339 22.5837H6.66626C6.25205 22.5837 5.91626 22.2479 5.91626 21.8337V18.667Z" fill=""/>
-                    </svg>
-                  </div>
-                </div>
-              </template>
-              <p class="text-center text-sm font-medium text-gray-700 dark:text-gray-400" x-text="newGownPhotoFile ? newGownPhotoFile.name : 'Drag and drop a photo here or browse'"></p>
+          <div class="gc-add-two">
+            <div>
+              <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Color</label>
+              <!-- One dropdown fills BOTH Color Name and Color Code together (see
+                   onColorChoiceChanged()) so a color can never end up with a code that
+                   doesn't match it, or two different colors sharing the same code.
+                   "Other" reveals the manual fields below for anything not on this list. -->
+              <select x-model="newGownColorChoice" @change="onColorChoiceChanged()" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
+                <option value="">Select a color</option>
+                <template x-for="p in colorPresets" :key="p.code">
+                  <option :value="p.name + '|' + p.code" x-text="p.name + ' (' + p.code + ')'"></option>
+                </template>
+                <option value="OTHER">Other (type it in)</option>
+              </select>
             </div>
-            <!-- Same "View Full Image" link as the Gown Photo modal (existing gowns) --
-                 here it opens the chosen file itself, straight from the browser, since
-                 nothing has been uploaded yet at Add-Gown time. Placed outside the
-                 dropzone (not inside it) so clicking it can never also open the file
-                 picker underneath. -->
-            <a
-              x-show="newGownPhotoPreview"
-              :href="newGownPhotoPreview"
-              target="_blank"
-              rel="noopener"
-              class="mt-3 inline-flex items-center gap-1.5 text-theme-xs font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400"
-            >
-              <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
-              View Full Image
-            </a>
+            <div>
+              <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Design Variant <span class="text-gray-500 dark:text-gray-400">(optional)</span></label>
+              <input
+                type="text"
+                x-model="newGownDesignVariant"
+                maxlength="60"
+                placeholder="e.g. Mermaid"
+                class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
+              />
+            </div>
+          </div>
+          <div class="gc-add-two" x-show="newGownColorChoice === 'OTHER'" x-cloak>
+            <div x-show="newGownColorChoice === 'OTHER'" x-cloak>
+              <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Color Name</label>
+              <input
+                type="text"
+                x-model="newGownColorName"
+                @input="syncNameFromColor()"
+                maxlength="40"
+                placeholder="e.g. Dusty Rose"
+                class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
+              />
+              <!-- Live suggestion for a brand new color name -- only while Color Code is
+                   still empty, so it never overwrites something staff already typed
+                   themselves. Works for ANY name (not just the 36 presets): the same
+                   first-two-letters / distinctive-letter / first-letter-per-word logic a
+                   person would use by hand, checked against every code already in use. -->
+              <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400"
+                 x-show="newGownColorName.trim() && !newGownColorCode.trim() && suggestColorCode(newGownColorName, isEditMode ? editingGownId : null)"
+                 x-cloak>
+                Suggested code:
+                <button type="button"
+                  class="font-semibold text-brand-500 hover:text-brand-600 dark:text-brand-400"
+                  @click="newGownColorCode = suggestColorCode(newGownColorName, isEditMode ? editingGownId : null)"
+                  x-text="suggestColorCode(newGownColorName, isEditMode ? editingGownId : null)"></button>
+                <span class="text-gray-500 dark:text-gray-400">&mdash; click to use it</span>
+              </p>
+            </div>
+            <div x-show="newGownColorChoice === 'OTHER'" x-cloak>
+              <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Color Code</label>
+              <input
+                type="text"
+                x-model="newGownColorCode"
+                maxlength="2"
+                placeholder="e.g. DR"
+                class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm uppercase text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
+              />
+              <!-- Live warning the instant a typed code already means a different color --
+                   checked against the 36 presets AND every real gown in the catalog
+                   (colorCodeConflict), so this is the exact bug that happened once
+                   already (Blue saved with Blush's code) now caught before Save is even
+                   clicked. This is a convenience, not the actual guarantee -- the server
+                   enforces the same rule regardless of what this warning shows. -->
+              <p class="mt-1.5 text-xs font-medium text-error-600 dark:text-error-500"
+                 x-show="newGownColorCode.trim() && newGownColorName.trim() && colorCodeConflict(newGownColorCode, newGownColorName, isEditMode ? editingGownId : null)"
+                 x-cloak
+                 x-text="(() => { const c = colorCodeConflict(newGownColorCode, newGownColorName, isEditMode ? editingGownId : null); return c ? ('“' + newGownColorCode.trim().toUpperCase() + '” already means ' + c.name + '. Choose a different code.') : ''; })()">
+              </p>
+            </div>
+          </div>
+          <div class="gc-add-three">
+            <div>
+              <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Rental Price</label>
+              <input
+                type="text"
+                x-model="newGownPrice"
+                maxlength="10"
+                inputmode="decimal"
+                placeholder="e.g. 3,500"
+                class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
+              />
+            </div>
+            <div x-show="!isEditMode" x-cloak>
+              <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Status</label>
+              <select x-model="newGownStatus" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
+                <option value="Available">Available</option>
+                <option value="Out-of-Stock">Out-of-Stock</option>
+              </select>
+            </div>
+            <div>
+              <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Condition</label>
+              <select x-model="newGownCondition" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
+                <option value="New">New</option>
+                <option value="Good">Good</option>
+                <option value="Fair">Fair</option>
+                <option value="Needs Repair">Needs Repair</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <div class="mb-1.5 flex items-center"><label for="gc-fabric" class="block text-sm font-medium text-gray-700 dark:text-gray-400">Fabric <span class="text-gray-500 dark:text-gray-400">(optional)</span></label><details class="ht-tip"><summary aria-label="About the fabric and description" title="About the fabric and description">?</summary><div class="ht-tip-pop">Customers see the fabric and description on the gown's page. Every size of the same gown shares them, so changing them here changes all its sizes.</div></details></div>
+            <input
+              id="gc-fabric"
+              type="text"
+              x-model="newGownFabric"
+              maxlength="200"
+              placeholder="e.g. Layered tulle with beaded details"
+              class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
+            />
+          </div>
+        </div>
+      </div>
+      <div class="gc-add-wide" x-show="addGownError" x-cloak>
+        <p class="rounded-lg bg-error-50 px-4 py-2.5 text-sm text-error-700 dark:bg-error-500/15 dark:text-error-500" x-text="addGownError"></p>
+      </div>
+      <div class="gc-add-wide" x-show="nameConflict" x-cloak>
+        <div class="rounded-xl border border-warning-500 bg-warning-50 p-4 dark:border-warning-500/30 dark:bg-warning-500/15">
+          <p class="text-sm font-semibold text-warning-700 dark:text-warning-400">
+            A gown named &ldquo;<span x-text="nameConflict && nameConflict.name"></span>&rdquo; already exists in this category
+            (<span x-text="nameConflict && nameConflict.count"></span>).
+          </p>
+          <p class="mt-1 text-xs text-gray-600 dark:text-gray-300" x-show="nameConflict && nameConflict.existing && nameConflict.existing.length">
+            Already there:
+            <span x-text="nameConflict && nameConflict.existing ? nameConflict.existing.map(e => e.gown_id + ' (' + e.size + ')').join(', ') : ''"></span><span x-show="nameConflict && nameConflict.count > nameConflict.existing.length"> and more</span>.
+          </p>
+          <p class="mt-3 text-sm font-medium text-gray-800 dark:text-white/90">Is the gown you're adding&hellip;</p>
+          <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <button type="button" @click="addGown('same')" :disabled="addGownBusy" class="rounded-lg border border-gray-300 bg-white px-3 py-3 text-left text-sm shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-white/[0.03]">
+              <span class="block font-medium text-gray-800 dark:text-white/90">The same gown &mdash; another unit or size</span>
+              <span class="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">Keeps the name. One listing with a quantity (like &ldquo;3 available&rdquo;), with the same fabric, description and photos: what you typed or added goes to every size, empty ones keep its own.</span>
+            </button>
+            <button type="button" @click="addGown('different')" :disabled="addGownBusy" class="rounded-lg border border-gray-300 bg-white px-3 py-3 text-left text-sm shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-white/[0.03]">
+              <span class="block font-medium text-gray-800 dark:text-white/90">A different gown</span>
+              <span class="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">Gets its own number (like &ldquo;<span x-text="nameConflict && nameConflict.name"></span> (2)&rdquo;) and its own listing.</span>
+            </button>
           </div>
         </div>
       </div>
 
-      <div class="flex items-center gap-3 px-2 mt-6 lg:justify-end">
+      <div class="gc-add-foot flex items-center gap-3 lg:justify-end">
         <button
           @click="isAddGownModal = false"
           type="button"
@@ -2837,7 +2900,7 @@
     class="modal-close-btn admin-backdrop fixed inset-0 h-full w-full"
   ></div>
   <div
-    @click.outside="isGownImageModal = false"
+    @click.outside="if (!$event.target.closest('#adm-dialog')) isGownImageModal = false"
     class="no-scrollbar relative w-full max-w-[700px] overflow-y-auto rounded-3xl bg-white p-4 dark:bg-gray-900 lg:p-8"
   >
     <button
@@ -2854,6 +2917,12 @@
       <p class="mb-6 text-sm text-gray-500 dark:text-gray-400" x-text="viewingGownImage.gownId + ' &middot; ' + viewingGownImage.details"></p>
     </div>
     <div class="px-2">
+      <!-- Which picture: the front, or the side / back the product page can switch to. Every size of the gown shares them. -->
+      <div class="gc-views" role="group" aria-label="Which photo">
+        <button type="button" class="gc-view-tab" :class="photoView === 'front' ? 'is-on' : ''" :aria-pressed="photoView === 'front' ? 'true' : 'false'" @click="showPhotoView('front')">Front</button>
+        <button type="button" class="gc-view-tab" :class="photoView === 'side' ? 'is-on' : ''" :aria-pressed="photoView === 'side' ? 'true' : 'false'" @click="showPhotoView('side')">Side</button>
+        <button type="button" class="gc-view-tab" :class="photoView === 'back' ? 'is-on' : ''" :aria-pressed="photoView === 'back' ? 'true' : 'false'" @click="showPhotoView('back')">Back</button>
+      </div>
       <!-- Full photo, never cropped: object-contain + natural aspect ratio instead of
            the old fixed-height object-cover box, which sliced a whole gown down to a
            thin horizontal strip for any tall portrait photo (most gown photos are
@@ -2887,8 +2956,12 @@
         <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
         View Full Image
       </a>
+      <div class="mb-3" x-show="photoView !== 'front' && viewingGownImage.photoUrl" x-cloak>
+        <button type="button" class="gc-slot-btn" :disabled="photoUpdateBusy" @click="removeGownPhoto()">Remove this photo</button>
+      </div>
       <p x-show="photoUpdateError" x-cloak class="mb-3 rounded-lg bg-error-50 px-4 py-2.5 text-sm text-error-700 dark:bg-error-500/15 dark:text-error-500" x-text="photoUpdateError"></p>
-      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Replace Photo</label>
+      <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400" x-text="viewingGownImage.photoUrl ? 'Replace Photo' : 'Add Photo'">Replace Photo</label>
+      <p class="mb-1.5 text-xs text-gray-500 dark:text-gray-400">Every size of this gown shares its photos. Side and back are matched to the front.</p>
       <input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" x-ref="replacePhotoInput" @change="updateGownPhoto($event.target.files[0]); $event.target.value = ''" />
       <div
         class="dropzone hover:border-brand-500! dark:hover:border-brand-500! rounded-xl border border-dashed! border-gray-300! bg-gray-50 p-6 dark:border-gray-700! dark:bg-gray-900 cursor-pointer"
@@ -2941,6 +3014,12 @@
       </p>
     </div>
     <div class="px-2">
+      <!-- The gown's pictures; each opens at full size. -->
+      <div class="gc-win-photos" x-show="viewingGown.photoUrl || viewingGown.sidePhotoUrl || viewingGown.backPhotoUrl">
+        <template x-for="photo in [['Front', viewingGown.photoUrl], ['Side', viewingGown.sidePhotoUrl], ['Back', viewingGown.backPhotoUrl]].filter(p => p[1])" :key="photo[0]">
+          <a class="gc-win-photo" :href="photo[1]" target="_blank" rel="noopener" :title="'Open the ' + photo[0].toLowerCase() + ' photo'"><img :src="photo[1]" :alt="photo[0] + ' photo'" loading="lazy" /><span x-text="photo[0]"></span></a>
+        </template>
+      </div>
       <div class="gc-win-facts">
         <div>
           <p class="text-xs text-gray-500 dark:text-gray-400">Category</p>

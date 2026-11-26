@@ -41,7 +41,8 @@ from accounts.roles import (
 )
 from accounts.services import CANCELLATION_FLAG_THRESHOLD, clear_proof_block, record_rejected_proof
 from arabela_admin import audit_describe, dashboard_money, gown_inventory, gown_photo, rental_history, rental_report
-from gowns import availability, deposit, design_details, gcash_numbers
+from gowns import availability, deposit, design_details, gcash_numbers, view_fit
+from gowns import photos as gown_photos
 from gowns.models import (
     COOLDOWN_DAYS,
     EXTRA_SMALL_CATEGORY,
@@ -2599,19 +2600,19 @@ GOWN_PHOTO_ALLOWED_CONTENT_TYPES = ('image/jpeg', 'image/png', 'image/webp')
 GOWN_PHOTO_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 
 
-def _validate_gown_photo(photo_file) -> str:
+def _validate_gown_photo(photo_file, label="Gown photo") -> str:
     """Return '' when the upload is acceptable (including "no file" -- a photo is
-    optional at creation time), else the message to show staff."""
+    optional at creation time), else the message to show staff (naming which picture)."""
     if not photo_file:
         return ""
     name = (getattr(photo_file, "name", "") or "").lower()
     if not name.endswith(GOWN_PHOTO_ALLOWED_EXTENSIONS):
-        return "Gown photo must be a JPG, PNG, or WEBP image."
+        return f"{label} must be a JPG, PNG, or WEBP image."
     content_type = (getattr(photo_file, "content_type", "") or "").lower()
     if content_type and content_type not in GOWN_PHOTO_ALLOWED_CONTENT_TYPES:
-        return "Gown photo must be a JPG, PNG, or WEBP image."
+        return f"{label} must be a JPG, PNG, or WEBP image."
     if photo_file.size > GOWN_PHOTO_MAX_BYTES:
-        return "Gown photo must be 5MB or smaller."
+        return f"{label} must be 5MB or smaller."
     return ""
 
 
@@ -2619,10 +2620,103 @@ def _save_gown_photo(photo_file) -> str:
     """Store the upload under a collision-proof name and return its public URL.
     Uses the storage backend's own .url() rather than MEDIA_URL + path so this
     keeps working whether files land on local disk or on Cloudinary."""
+    stem, extension = os.path.splitext(os.path.basename(photo_file.name))
     saved_path = default_storage.save(
-        f"gown_photos/{uuid.uuid4().hex}_{photo_file.name}", photo_file
+        f"gown_photos/{uuid.uuid4().hex}_{stem[:60]}{extension}", photo_file         # a very long name must not overflow the address column
     )
     return default_storage.url(saved_path)
+
+
+# The three pictures of a gown design: the upload's field in Add / Edit Gown, the model field, and what staff call it.
+GOWN_PHOTO_VIEWS = {
+    "front": ("photo", "photo_url", "Gown photo"),
+    "side": ("side_photo", "side_photo_url", "Side photo"),
+    "back": ("back_photo", "back_photo_url", "Back photo"),
+}
+
+
+class GownPhotoUploadError(Exception):
+    """A picture couldn't be stored just now; the message names which one."""
+
+
+def _gown_photo_files(files):
+    """({view: upload} of the pictures sent with Add / Edit Gown, "") -- or ({}, the first problem with one of them)."""
+    chosen = {}
+    for view, (field, _, label) in GOWN_PHOTO_VIEWS.items():
+        upload = files.get(field)
+        error = _validate_gown_photo(upload, label)
+        if error:
+            return {}, error
+        if upload:
+            chosen[view] = upload
+    return chosen, ""
+
+
+def _match_to_front(upload, front_bytes, front_known, label):
+    """(the file to store, a note for staff): a side or back upload redrawn to the front's size, height and white background (gowns/view_fit.py),
+    or the upload as it came when that isn't possible."""
+    if not front_bytes:
+        why = "the front photo couldn't be read just now" if front_known else "there is no front photo to match it to"
+        return upload, f"{label} saved as it is: {why}."
+    data = upload.read()
+    upload.seek(0)
+    try:
+        fitted = view_fit.fit_to_front(data, front_bytes)
+    except view_fit.CannotFit as reason:
+        return upload, f"{label} saved as it is: {reason}."
+    except Exception:       # noqa: BLE001 - an unforeseen picture problem must never lose the upload
+        logging.getLogger(__name__).exception("A %s could not be matched to the front", label.lower())
+        return upload, f"{label} saved as it is: it couldn't be matched to the front just now."
+    return ContentFile(fitted, name=os.path.splitext(upload.name)[0] + ".jpg"), f"{label} matched to the front."
+
+
+def _rematch_to_front(url, front_bytes, label):
+    """(a new file, a note) -- the stored side or back picture redrawn to a front photo that is being replaced -- or (None, why it stays)."""
+    data = gown_photos.read(url)
+    if not data:
+        return None, f"{label} kept as it is: it couldn't be read just now."
+    fitted, note = _match_to_front(ContentFile(data, name=f"{label.split()[0].lower()}.jpg"), front_bytes, True, label)
+    if not note.endswith("matched to the front."):
+        return None, note.replace("saved as it is", "kept as it is")
+    return fitted, f"{label} matched to the new front."
+
+
+def _store_gown_photos(chosen, front_url, rematch=None):
+    """Stores the chosen pictures ({view: upload}). Side and back are first matched to the front: the one uploaded along with them, else the
+    design's stored front (front_url). When the front itself is being replaced, the side and back the design already has (rematch =
+    {view: address}) are matched to the new one. Returns ({model field: address}, notes for staff); raises GownPhotoUploadError."""
+    stored, notes = {}, []
+    front_bytes = None
+    if "front" in chosen:
+        front_bytes = chosen["front"].read()
+        chosen["front"].seek(0)
+        front_url = front_url or "uploaded"
+    for view in ("front", "side", "back"):
+        upload = chosen.get(view)
+        _, model_field, label = GOWN_PHOTO_VIEWS[view]
+        if upload is None:
+            old = (rematch or {}).get(view)
+            if view == "front" or "front" not in chosen or not old:
+                continue
+            upload, note = _rematch_to_front(old, front_bytes, label)
+            notes.append(note)
+            if upload is None:
+                continue
+        elif view != "front":
+            if front_bytes is None:
+                front_bytes = gown_photos.read(front_url) or b""
+            upload, note = _match_to_front(upload, front_bytes, bool(front_url), label)
+            notes.append(note)
+        try:
+            stored[model_field] = _save_gown_photo(upload)
+        except Exception as problem:       # noqa: BLE001 - storage trouble of any kind
+            raise GownPhotoUploadError(f"The {label.lower()} couldn't be uploaded just now. Please try again.") from problem
+    return stored, notes
+
+
+def _side_and_back_of(photos, without=()):
+    """{view: address} of a design's side and back pictures (design_details.photos_of), leaving out the views named in `without`."""
+    return {view: photos[GOWN_PHOTO_VIEWS[view][1]] for view in ("side", "back") if view not in without}
 
 
 # Same allow-list as gown photos and (in gowns.views) customer payment-proof uploads --
@@ -2900,8 +2994,7 @@ def gown_create_view(request):
     if price_error:
         return JsonResponse({"error": price_error}, status=400)
 
-    photo_file = request.FILES.get("photo")
-    photo_error = _validate_gown_photo(photo_file)
+    chosen_photos, photo_error = _gown_photo_files(request.FILES)
     if photo_error:
         return JsonResponse({"error": photo_error}, status=400)
 
@@ -2932,17 +3025,13 @@ def gown_create_view(request):
         if name_choice == "different":
             name = _next_free_gown_name(category, name)
 
-    # Photo first: nothing is in the DB yet, so a storage failure here is a clean
+    # Photos first: nothing is in the DB yet, so a storage failure here is a clean
     # "try again" with zero cleanup rather than a half-created gown.
-    photo_url = ""
-    if photo_file:
-        try:
-            photo_url = _save_gown_photo(photo_file)
-        except Exception:
-            return JsonResponse(
-                {"error": "The gown photo couldn't be uploaded just now. Please try again."},
-                status=502,
-            )
+    design_photos = design_details.photos_of(design_details.units_of(category, name))
+    try:
+        stored_photos, photo_notes = _store_gown_photos(chosen_photos, design_photos["photo_url"], rematch=_side_and_back_of(design_photos))
+    except GownPhotoUploadError as problem:
+        return JsonResponse({"error": str(problem)}, status=502)
 
     # Neither gown_id nor slug can collide from a genuine race anymore:
     # next_tracking_number() and Gown._generate_unique_slug() (via GownSequence /
@@ -2961,8 +3050,10 @@ def gown_create_view(request):
         gown_id = f"{category}-{color_code}-{tracking_number:03d}"
         try:
             with transaction.atomic():
-                # Another size of a design: what was left empty takes the design's text; what was typed goes to every size.
-                design_fabric, design_description = design_details.text_of(design_details.units_of(category, name))
+                # Another size of a design: what was left empty takes the design's text and photos; what was typed or uploaded goes to every size.
+                design_units = list(design_details.units_of(category, name))
+                design_fabric, design_description = design_details.text_of(design_units)
+                photo_values = {**design_details.photos_of(design_units), **stored_photos}
                 gown = Gown.objects.create(
                     gown_id=gown_id,
                     name=name,
@@ -2977,9 +3068,10 @@ def gown_create_view(request):
                     fabric=fabric or design_fabric,
                     description=description or design_description,
                     status=status,
-                    photo_url=photo_url,
+                    **photo_values,
                 )
                 design_details.share(category, name, gown.fabric, gown.description)
+                design_details.share_photos(category, name, stored_photos)
         except IntegrityError:
             gown = None
             continue
@@ -3010,7 +3102,10 @@ def gown_create_view(request):
             "rental_price": str(gown.rental_price),
             "status": gown.status,
             "photo_url": gown.photo_url,
+            "side_photo_url": gown.side_photo_url,
+            "back_photo_url": gown.back_photo_url,
         },
+        "notes": photo_notes,
     })
 
 
@@ -3025,8 +3120,9 @@ def gown_update_view(request, gown_id):
       * slug -- the stable, permanent identity a customer's product link (and the
         booking-matching fix in gowns.views._find_available_unit) depends on. Letting
         this regenerate on a name edit would silently break bookmarked product links.
-    Status and photo already have their own dedicated actions (gown_status_update_view,
-    gown_photo_update_view) and are intentionally not duplicated here."""
+    Status has its own dedicated action (gown_status_update_view). Photos can be added,
+    replaced or removed here or in the photo window (gown_photo_update_view); either way
+    they go to every size of the design."""
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
     try:
@@ -3061,6 +3157,11 @@ def gown_update_view(request, gown_id):
     if condition not in Gown.Condition.values:
         condition = gown.condition
 
+    chosen_photos, photo_error = _gown_photo_files(request.FILES)
+    if photo_error:
+        return JsonResponse({"error": photo_error}, status=400)
+    removed_views = [view for view in ("side", "back") if request.POST.get(f"remove_{view}") == "1" and view not in chosen_photos]
+
     # Moved into another design (renamed or re-categorised onto gowns that already exist): the text that was left as it was, or emptied,
     # follows the design it joins -- another dress's words must never overwrite that design's. Text typed now goes to all of them.
     others = list(design_details.units_of(category, name, exclude_pk=gown.pk))
@@ -3071,6 +3172,33 @@ def gown_update_view(request, gown_id):
             fabric = design_fabric
         if description in ("", gown.description):
             description = design_description
+
+    # Photos belong to the design like the text: what is uploaded or removed here goes to every size, and a gown joining another design takes
+    # that design's photos (its side and back too, even when it has none). Stored before anything is saved, so a storage failure leaves the
+    # gown exactly as it was.
+    photos_before = {field: getattr(gown, field) for field in design_details.PHOTO_FIELDS}
+    their_photos = design_details.photos_of(others)
+    front_for_matching = (their_photos["photo_url"] if moved else "") or gown.photo_url or their_photos["photo_url"]
+    if moved and others:
+        design_photos = their_photos
+        removed_views = []          # the Remove buttons were pressed on the old design's pictures, never on the ones of the design it joins
+    elif moved:
+        design_photos = photos_before
+    else:
+        design_photos = design_details.photos_of(design_details.units_of(gown.category, gown.name))
+    try:
+        stored_photos, photo_notes = _store_gown_photos(chosen_photos, front_for_matching,
+                                                        rematch=_side_and_back_of(design_photos, without=removed_views))
+    except GownPhotoUploadError as problem:
+        return JsonResponse({"error": str(problem)}, status=502)
+    photo_changes = {**stored_photos, **{GOWN_PHOTO_VIEWS[view][1]: "" for view in removed_views}}
+    if moved and their_photos["photo_url"]:
+        joined_photos = their_photos                    # another dress's side or back must never show on this design
+    else:
+        joined_photos = {field: url for field, url in their_photos.items() if url} if moved else {}
+    for field, url in {**joined_photos, **photo_changes}.items():
+        setattr(gown, field, url)
+    changed_photo_fields = [field for field in design_details.PHOTO_FIELDS if getattr(gown, field) != photos_before[field]]
 
     gown.name = name
     gown.category = category
@@ -3090,12 +3218,13 @@ def gown_update_view(request, gown_id):
         with transaction.atomic():
             gown.save(update_fields=[
                 "name", "category", "color_name", "color_code", "size",
-                "design_variant", "rental_price", "condition", "notes", "fabric", "description", "updated_at",
+                "design_variant", "rental_price", "condition", "notes", "fabric", "description", *changed_photo_fields, "updated_at",
             ])
             if moved or "fabric" in request.POST or "description" in request.POST:
                 design_units = design_details.share(category, name, fabric, description)
             else:
                 design_units = design_details.units_of(category, name).count()
+            design_details.share_photos(category, name, photo_changes)
     except DataError:
         return JsonResponse(
             {"error": "Some of those values are out of range. Please shorten the "
@@ -3122,17 +3251,20 @@ def gown_update_view(request, gown_id):
             "description": gown.description,
             "status": gown.status,
             "photo_url": gown.photo_url,
+            "side_photo_url": gown.side_photo_url,
+            "back_photo_url": gown.back_photo_url,
         },
-        "design_units": design_units,              # how many sizes/units share this fabric and description
+        "design_units": design_units,              # how many sizes/units share this fabric, description and photos
+        "notes": photo_notes,
     })
 
 
 @require_http_methods(["POST"])
 @audited('gown.photo', 'Gowns', audit_describe.gown_photo)
 def gown_photo_update_view(request, gown_id):
-    """Lets staff attach/replace a photo on a gown that already exists -- without this,
-    a gown created with no photo (or a bad one) could never get a real customer-facing
-    photo once it's listed on the live site."""
+    """The photo window: add or replace a gown's front, side or back photo (view = front / side / back, front when not said), or take a side or
+    back photo away (remove = 1). Every size of the design gets the same picture; a side or back is matched to the front first, and a new
+    front gets the design's side and back matched to it."""
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
     try:
@@ -3140,22 +3272,35 @@ def gown_photo_update_view(request, gown_id):
     except Gown.DoesNotExist:
         return JsonResponse({"error": "Gown not found"}, status=404)
 
-    photo_file = request.FILES.get("photo")
-    error = _validate_gown_photo(photo_file)
-    if error:
-        return JsonResponse({"error": error}, status=400)
-    if not photo_file:
-        return JsonResponse({"error": "Please choose a photo to upload."}, status=400)
-
-    try:
-        gown.photo_url = _save_gown_photo(photo_file)
-    except Exception:
-        return JsonResponse(
-            {"error": "The gown photo couldn't be uploaded just now. Please try again."},
-            status=502,
-        )
-    gown.save(update_fields=["photo_url", "updated_at"])
-    return JsonResponse({"success": True, "photo_url": gown.photo_url})
+    view = (request.POST.get("view") or "front").strip()
+    if view not in GOWN_PHOTO_VIEWS:
+        return JsonResponse({"error": "Choose the Front, Side or Back photo."}, status=400)
+    _, model_field, label = GOWN_PHOTO_VIEWS[view]
+    removing = request.POST.get("remove") == "1"
+    notes = []
+    if removing:
+        if view == "front":
+            return JsonResponse({"error": "The front photo can be replaced, not removed."}, status=400)
+        changes = {model_field: ""}
+    else:
+        photo_file = request.FILES.get("photo")
+        error = _validate_gown_photo(photo_file, label)
+        if error:
+            return JsonResponse({"error": error}, status=400)
+        if not photo_file:
+            return JsonResponse({"error": "Please choose a photo to upload."}, status=400)
+        design_photos = design_details.photos_of(design_details.units_of(gown.category, gown.name))
+        try:
+            changes, notes = _store_gown_photos({view: photo_file}, gown.photo_url or design_photos["photo_url"],
+                                                rematch=_side_and_back_of(design_photos))
+        except GownPhotoUploadError as problem:
+            return JsonResponse({"error": str(problem)}, status=502)
+    design_units = design_details.share_photos(gown.category, gown.name, changes)
+    gown.refresh_from_db(fields=list(design_details.PHOTO_FIELDS))
+    return JsonResponse({
+        "success": True, "view": view, "removed": removing, "design_units": design_units, "notes": notes,
+        "photo_url": gown.photo_url, "side_photo_url": gown.side_photo_url, "back_photo_url": gown.back_photo_url,
+    })
 
 
 def _parse_iso_date(raw):

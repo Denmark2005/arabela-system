@@ -141,6 +141,10 @@ class Gown(models.Model):
     condition = models.CharField(max_length=20, choices=Condition.choices, default=Condition.GOOD)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.AVAILABLE)
     photo_url = models.URLField(blank=True)
+    # The side and back views: the product page shows Front / Side / Back when it has them. Like fabric and description they belong to the design
+    # (gowns/design_details.py shares them), and an upload is matched to the front first (gowns/view_fit.py). db_default: a deploy in progress.
+    side_photo_url = models.URLField(max_length=500, blank=True, default='', db_default='')
+    back_photo_url = models.URLField(max_length=500, blank=True, default='', db_default='')
     is_verified = models.BooleanField(default=False)
     last_returned_at = models.DateField(null=True, blank=True)
     notes = models.TextField(blank=True)                        # private: only staff see these
