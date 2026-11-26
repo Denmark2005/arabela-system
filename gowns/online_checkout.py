@@ -426,6 +426,9 @@ def _create_booking(attempt):
     if attempt.source == PaymentAttempt.Source.WALKIN:
         from gowns import walkin_payment                    # a walk-in customer paid on their phone from the shop's QR code
         return walkin_payment.create_booking(attempt)
+    if attempt.source == PaymentAttempt.Source.SHOP:
+        from gowns import counter_payment                   # what an existing booking owes, paid on the customer's phone (Payments page)
+        return counter_payment.record(attempt)
     payload = attempt.payload or {}
     user = attempt.customer
     if user is None:
@@ -518,21 +521,26 @@ def refund_attempt(attempt_id, reason):
         attempt.note = (reason or "")[:300]
         attempt.save(update_fields=["status", "refund_status", "refund_amount", "note"])
     how = gateway.CHANNEL_LABELS.get(attempt.channel, "account")
+    shop = attempt.source == PaymentAttempt.Source.SHOP          # a payment on an existing booking, made at the counter: tell that booking's customer
+    code = (attempt.payload or {}).get("code") or "your booking"
+    who = attempt.reservation.customer if shop and attempt.reservation_id else attempt.customer
     try:
         refund = gateway.create_refund(payment_id=attempt.provider_payment_id, amount=attempt.paid_amount,
-                                       note=f"Booking not possible: {reason}"[:255])
+                                       note=(f"Payment not needed: {reason}" if shop else f"Booking not possible: {reason}")[:255])
     except gateway.GatewayError as exc:
         logger.error("The refund for attempt %s was refused: %s", attempt.pk, exc)
         PaymentAttempt.objects.filter(pk=attempt.pk).update(
             status=PaymentAttempt.Status.FLAGGED, refund_status="failed", note=f"{(reason or '')[:150]} | Refund not sent: {str(exc)[:120]}", finished_at=timezone.now())
+        opening = f"We could not accept your payment for {code}: {reason}" if shop else f"We could not reserve your gown ({reason})."
         payments.notify_user(
-            attempt.customer, f"We could not reserve your gown ({reason}). Your payment of {peso(attempt.paid_amount)} will be sent back to you: "
-                              "the shop has been told and will contact you.", subject="We need to send your payment back", heading="We could not reserve your gown")
+            who, f"{opening} Your payment of {peso(attempt.paid_amount)} will be sent back to you: the shop has been told and will contact you.",
+            subject="We need to send your payment back", heading="We could not accept your payment" if shop else "We could not reserve your gown")
         return PaymentAttempt.objects.get(pk=attempt.pk)
     PaymentAttempt.objects.filter(pk=attempt.pk).update(refund_id=refund.id, refund_status=refund.status or "pending", finished_at=timezone.now())
+    opening = f"We could not accept your payment for {code}: {reason}" if shop else f"We could not reserve your gown: {reason}"
     payments.notify_user(
-        attempt.customer,
-        f"We could not reserve your gown: {reason} Your payment of {peso(attempt.paid_amount)} is being sent back to your {how}, usually within a day.",
+        who,
+        f"{opening} Your payment of {peso(attempt.paid_amount)} is being sent back to your {how}, usually within a day.",
         subject=f"Your payment of PHP {money(attempt.paid_amount):,.2f} is being sent back", heading="We are sending your payment back")
     return PaymentAttempt.objects.get(pk=attempt.pk)
 

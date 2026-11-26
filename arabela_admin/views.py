@@ -3517,7 +3517,28 @@ def reservation_item_mark_returned_view(request, item_id):
         "success": True, "stage": item.stage,
         "returned_on": item.returned_on.isoformat(),
         "return_condition": item.return_condition,
+        "money": _after_return_money(item.reservation_id),
     })
+
+
+def _after_return_money(reservation_id):
+    """Where the booking's money stands right after a gown is checked in, for the pop-up's next step: whether every gown is back, what of the deposit is to be
+    handed back (in Payments), what the customer still owes, and whether a deposit was paid at all. None for a booking whose payments aren't tracked."""
+    try:
+        booking = Reservation.objects.prefetch_related("items", "payments", "deductions", "receipt_records").get(pk=reservation_id)
+        statement = reservation_ledger.statement(booking)
+    except Exception:                                       # noqa: BLE001 -- the gown IS checked in; the pop-up then just says that
+        logging.getLogger(__name__).exception("The money after a return could not be worked out for reservation %s", reservation_id)
+        return None
+    if not statement.tracked or statement.cancelled:
+        return None
+    return {
+        "allReturned": statement.all_returned,
+        "toHandBack": f"{statement.refund_available:,.2f}" if statement.refund_available > 0 else "",
+        "stillOwed": f"{statement.balance_due:,.2f}" if statement.balance_due > 0 else "",
+        "depositPaid": statement.deposit_paid > 0,
+        "paymentsUrl": reverse("arabela_admin:payments") + "?" + urlencode({"open": reservation_id}),
+    }
 
 
 @require_http_methods(["POST"])

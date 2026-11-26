@@ -61,10 +61,15 @@ def payment_return(request, token):
 
 @never_cache
 def walkin_pay_done(request, token):
-    """Where a walk-in customer's phone lands after the payment page (paid, closed or cancelled). It says nothing about the payment -- the shop's own screen
-    shows that -- so it needs no sign-in and shows no details."""
-    get_object_or_404(PaymentAttempt, token=token, source=PaymentAttempt.Source.WALKIN)
-    return render(request, "walkin_pay_done.html", {})
+    """Where a customer's phone lands after a payment page opened at the shop (a walk-in booking, or money an existing booking owes): paid, closed or
+    cancelled. It says nothing about the payment -- the shop's own screen shows that -- so it needs no sign-in and shows no details. It does ask the payment
+    service once, so a payment is saved even when no staff screen is watching."""
+    attempt = get_object_or_404(PaymentAttempt, token=token, source__in=(PaymentAttempt.Source.WALKIN, PaymentAttempt.Source.SHOP))
+    try:
+        online_checkout.confirm_attempt(attempt.pk, source="poll")
+    except Exception:                                       # noqa: BLE001 -- the page must show; the webhook, the sweep or the staff screen try again
+        logger.exception("The payment of attempt %s could not be checked from the Thank-you page", attempt.pk)
+    return render(request, "walkin_pay_done.html", {"existing": attempt.source == PaymentAttempt.Source.SHOP})
 
 
 @login_required(login_url="accounts:login")

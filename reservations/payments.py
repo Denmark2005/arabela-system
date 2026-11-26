@@ -443,6 +443,36 @@ def record_approval_payment(reservation_id, user=None, now=None):
 
 
 # ---------------------------------------------------------------- a payment received
+def check_amount(statement, purpose, amount):
+    """Raises PaymentError unless a payment of `amount` for `purpose` is what the booking can take right now (the same rules at the counter and online)."""
+    if amount <= 0:
+        raise PaymentError("Please type the amount received.")
+    if purpose == Payment.Purpose.DEPOSIT:
+        if statement.deposit_unpaid <= 0:
+            raise PaymentError("The deposit is already paid. Refresh the page.", status=409)
+        if amount != statement.deposit_unpaid:
+            raise PaymentError(f"The deposit is received exactly: {peso(statement.deposit_unpaid)}. A part of the deposit can't be received.")
+    elif purpose == Payment.Purpose.FULL:
+        if statement.deposit_unpaid <= 0:
+            raise PaymentError("The deposit is already paid, so \"Paid in full\" is no longer a choice. Record the balance instead.", status=409)
+        if amount != statement.balance_core:
+            raise PaymentError(f"Paid in full is exactly {peso(statement.balance_core)} (the rental and the deposit).")
+    elif purpose == Payment.Purpose.BALANCE:
+        if statement.deposit_unpaid > 0:
+            raise PaymentError(f"The deposit ({peso(statement.deposit_unpaid)}) has to be paid first.")
+        if statement.rental_unpaid <= 0:
+            raise PaymentError("The rental is already paid. Refresh the page.", status=409)
+        if amount > statement.rental_unpaid:
+            raise PaymentError(f"Only {peso(statement.rental_unpaid)} is left to pay. You can't receive more than that.")
+    elif purpose == Payment.Purpose.EXTRA:
+        if statement.extra_owed <= 0:
+            raise PaymentError("Nothing extra is owed on this booking.", status=409)
+        if amount > statement.extra_owed:
+            raise PaymentError(f"Only {peso(statement.extra_owed)} is owed. You can't receive more than that.")
+    else:
+        raise PaymentError("Choose what this payment is for. If this page has been open for a while, refresh it.")
+
+
 def record_payment(*, reservation_id, purpose, amount, method, reference="", note="", user=None, request_id="", now=None):
     """Save a payment received at the shop. Returns the Payment (an earlier one when `request_id` was already used)."""
     now = now or timezone.now()
@@ -464,31 +494,7 @@ def record_payment(*, reservation_id, purpose, amount, method, reference="", not
             raise PaymentError(f"This booking is {reservation.status.lower()}, so it can't take a payment.", status=409)
         ensure_rows(reservation)
         before = ledger.statement(_fresh(reservation.pk))
-
-        if purpose == Payment.Purpose.DEPOSIT:
-            if before.deposit_unpaid <= 0:
-                raise PaymentError("The deposit is already paid. Refresh the page.", status=409)
-            if amount != before.deposit_unpaid:
-                raise PaymentError(f"The deposit is received exactly: {peso(before.deposit_unpaid)}. A part of the deposit can't be received.")
-        elif purpose == Payment.Purpose.FULL:
-            if before.deposit_unpaid <= 0:
-                raise PaymentError("The deposit is already paid, so \"Paid in full\" is no longer a choice. Record the balance instead.", status=409)
-            if amount != before.balance_core:
-                raise PaymentError(f"Paid in full is exactly {peso(before.balance_core)} (the rental and the deposit).")
-        elif purpose == Payment.Purpose.BALANCE:
-            if before.deposit_unpaid > 0:
-                raise PaymentError(f"The deposit ({peso(before.deposit_unpaid)}) has to be paid first.")
-            if before.rental_unpaid <= 0:
-                raise PaymentError("The rental is already paid. Refresh the page.", status=409)
-            if amount > before.rental_unpaid:
-                raise PaymentError(f"Only {peso(before.rental_unpaid)} is left to pay. You can't receive more than that.")
-        elif purpose == Payment.Purpose.EXTRA:
-            if before.extra_owed <= 0:
-                raise PaymentError("Nothing extra is owed on this booking.", status=409)
-            if amount > before.extra_owed:
-                raise PaymentError(f"Only {peso(before.extra_owed)} is owed. You can't receive more than that.")
-        else:
-            raise PaymentError("Choose what this payment is for. If this page has been open for a while, refresh it.")
+        check_amount(before, purpose, amount)
 
         if digits:
             used = _reference_in_use(digits, reservation)
@@ -574,6 +580,48 @@ def record_online_payment(*, reservation, purpose, amount, channel, provider_ref
     return payment
 
 
+# ---------------------------------------------------------------- an existing booking paid online from the shop's QR code
+def record_online_booking_payment(*, reservation, purpose, amount, channel, provider_ref, paid_at=None, livemode=False, request_id="", note="",
+                                  served_by_user=None):
+    """Record the payment a customer made on the online payment page for a booking that ALREADY exists (the Payments page's "Pay online" QR code:
+    gowns/counter_payment.py). The same rules as a payment received at the shop (check_amount), its own numbered receipt, the customer told and the history
+    written. Call it inside a transaction with the booking row locked; it raises PaymentError (nothing written) when the booking can no longer take this
+    money. Returns the Payment (an earlier one when `request_id` was already used)."""
+    request_id = (request_id or "")[:40] or None
+    if request_id:
+        earlier = Payment.objects.filter(request_id=request_id).first()
+        if earlier is not None:
+            return earlier
+    amount = money(amount)
+    if not ledger.counts_as_tracked(reservation) or reservation.status == Reservation.Status.CANCELLED:
+        raise PaymentError(f"This booking is {reservation.status.lower()}, so it can't take a payment.", status=409)
+    ensure_rows(reservation)
+    before = ledger.statement(_fresh(reservation.pk))
+    check_amount(before, purpose, amount)
+    served_by = staff_display_name(served_by_user) if served_by_user is not None else ONLINE_SERVED_BY
+    method = online_method(channel)
+    how = Payment.Method(method).label
+    words = f"Paid online on {gateway.label()}'s checkout ({how})." + ("" if livemode else " TEST PAYMENT: no real money moved.")
+    note = _clean_note(note)
+    now = timezone.now()
+    payment = Payment.objects.create(
+        reservation=reservation, direction=Payment.Direction.IN, purpose=purpose, method=method, amount=amount, reference="", paid_at=paid_at or now,
+        recorded_by=served_by_user if getattr(served_by_user, "pk", None) else None, recorded_by_name=served_by,
+        note=(f"{words} {note}" if note else words)[:REASON_MAX], request_id=request_id, provider=gateway.name(), provider_ref=(provider_ref or "")[:60],
+        receipt_number=ReceiptSequence.next_number(timezone.localtime(now).year),
+    )
+    after = ledger.statement(_fresh(reservation.pk))
+    payment.snapshot = _snapshot(reservation, payment, before, after, served_by=served_by)
+    payment.save(update_fields=["snapshot"])
+    ReservationStatusEvent.record(
+        reservation, PAYMENT_EVENT, detail=f"{peso(amount)} received ({payment.get_purpose_display()}, {how}). Receipt {payment.receipt_number}.",
+        actor=ReservationStatusEvent.Actor.SYSTEM,
+    )
+    _notify(reservation, payment, _notice_text(payment), subject=_subject(payment), heading=_heading(payment))
+    sync_settled(reservation.pk, quiet=True, actor=ReservationStatusEvent.Actor.SYSTEM)
+    return payment
+
+
 # ---------------------------------------------------------------- the deposit handed back
 def return_deposit(*, reservation_id, amount, method, reference="", note="", user=None, request_id="", now=None):
     """Record the security deposit handed back to the customer (Cash, or GCash sent from the shop's own GCash app)."""
@@ -639,18 +687,23 @@ def _online_payments(reservation, direction):
     return [p for p in reservation.payments.all() if p.provider in gateway.PROVIDERS and p.direction == direction and not p.is_void]
 
 
+def _deposit_sources(reservation):
+    """The online payments that covered the security deposit ("Deposit" or "Paid in full"): the only money that can be sent back online."""
+    return [p for p in _online_payments(reservation, Payment.Direction.IN)
+            if p.provider_ref and p.purpose in (Payment.Purpose.DEPOSIT, Payment.Purpose.FULL)]
+
+
 def _online_refund_source(reservation, amount, now):
     """The online payment a refund of `amount` would be made against -> (Payment, "") or (None, why not). PayMongo sends money back only for a
     payment made through it, inside the time limit of the way it was paid, never more than that payment came to, and (Maya) a PART of a payment
     only from the day after it was paid."""
-    sources = [p for p in _online_payments(reservation, Payment.Direction.IN)
-               if p.provider_ref and p.purpose in (Payment.Purpose.DEPOSIT, Payment.Purpose.FULL)]
+    sources = _deposit_sources(reservation)
     if not sources:
         return None, f"This booking was not paid on {gateway.label()}, so the deposit is handed back at the shop."
     source = sources[0]
     days = gateway.refund_days().get(source.method)
     if days is None:
-        return None, f"{gateway.label()} cannot send this kind of payment back automatically."
+        return None, f"{gateway.label()} cannot send this kind of payment back automatically, so hand it back in cash."
     if now - source.paid_at > timedelta(days=days):
         return None, f"It was paid more than {days} days ago, which is too long for {gateway.label()} to send it back."
     already = sum((money(p.amount) for p in _online_payments(reservation, Payment.Direction.OUT)), Decimal("0"))
@@ -662,17 +715,21 @@ def _online_refund_source(reservation, amount, now):
 
 
 def online_refund_choice(reservation, statement, now=None):
-    """What the Return-the-deposit form should offer for this booking: {"offered": False} when it was not paid on PayMongo (or automatic refunds are
-    off), else {"offered": True, "available": bool, "label": "GCash", "reason": why not}. The server checks it again when the form is sent."""
+    """What the Return-the-deposit form should offer for this booking: {"offered", "available", "label", "reason"}. Money only ever goes back online to a
+    DEPOSIT that was paid online; "offered" is False when there is none (or online refunds are off) and "reason" says why it is cash. The server checks
+    it all again when the form is sent."""
+    def cash(reason):
+        return {"offered": False, "available": False, "label": "", "reason": reason}
+
     if not gateway.auto_refund() or not gateway.enabled():
-        return {"offered": False}
-    online = _online_payments(reservation, Payment.Direction.IN)
-    if not online:
-        return {"offered": False}
+        return cash("Online refunds are switched off, so the deposit is handed back in cash.")
+    sources = _deposit_sources(reservation)
+    if not sources:
+        return cash("The deposit was not paid online, so it is handed back in cash. Money can only be sent back online to a payment that was made online.")
     now = now or timezone.now()
-    amount = statement.refund_available if statement.refund_available > 0 else money(online[0].amount)
+    amount = statement.refund_available if statement.refund_available > 0 else money(sources[0].amount)
     source, reason = _online_refund_source(reservation, amount, now)
-    label = Payment.Method(online[0].method).label.replace(" (online payment)", "")
+    label = Payment.Method(sources[0].method).label.replace(" (online payment)", "")
     return {"offered": True, "available": source is not None, "label": label, "reason": reason}
 
 
@@ -698,7 +755,7 @@ def return_deposit_online(*, reservation_id, amount, note="", user=None, request
     has a row but no PayMongo refund (the server stopped halfway) is refused until a person checks PayMongo's dashboard -- PayMongo has no way to
     say "this request was already made", so asking twice could send the money twice."""
     if not gateway.auto_refund() or not gateway.enabled():
-        raise PaymentError("Automatic refunds are not switched on. Hand the deposit back in cash or from the shop's GCash.", status=409)
+        raise PaymentError("Automatic refunds are not switched on. Hand the deposit back in cash.", status=409)
     now = now or timezone.now()
     request_id = (request_id or "")[:40] or None
     amount = money(amount)
@@ -744,7 +801,7 @@ def return_deposit_online(*, reservation_id, amount, note="", user=None, request
     except gateway.GatewayError as exc:
         _void_quietly(payment.pk, f"{gateway.label()} would not send the refund: {str(exc)[:120]}")
         raise PaymentError(f"{gateway.label()} would not send the refund just now ({str(exc)[:120]}). Nothing was sent or recorded. Try again, or hand the deposit back "
-                           "in cash or from the shop's GCash.", status=502)
+                           "in cash.", status=502)
 
     with transaction.atomic():
         Payment.objects.filter(pk=payment.pk).update(provider_ref=refund.id[:60])

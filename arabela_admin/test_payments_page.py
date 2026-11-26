@@ -207,11 +207,17 @@ class RecordingTests(Base):
         self.assertEqual(self.post("payment_record", {"purpose": "Deposit", "amount": "2000", "method": "Cash"}, pk=999999).status_code, 404)
         self.assertEqual(Payment.objects.count(), 0)
 
-    def test_a_gcash_payment_keeps_the_reference_and_prints_it_grouped(self):
+    def test_a_typed_gcash_payment_is_refused_and_an_old_one_still_shows_its_reference_grouped(self):
         booking = make_booking()
-        data = self.as_user(self.staff).post("payment_record", {"purpose": "Paid in full", "amount": "5500", "method": "GCash", "reference": "5046-933-479702"}, pk=booking.pk).json()
-        self.assertEqual((data["payment"]["method"], data["payment"]["reference"]), ("GCash", "5046 933 479702"))
-        self.assertEqual(data["detail"]["s"]["state"], "paid")
+        refused = self.as_user(self.staff).post("payment_record", {"purpose": "Paid in full", "amount": "5500", "method": "GCash", "reference": "5046-933-479702"}, pk=booking.pk)
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn("Cash or Pay online", refused.json()["error"])
+        self.assertEqual(Payment.objects.count(), 0)
+        # A GCash payment recorded before typed GCash entry was removed.
+        self.record(booking, P.FULL, "5500", method=M.GCASH, reference="5046-933-479702")
+        data = self.client.get(reverse("arabela_admin:payment_detail", args=[booking.pk])).json()
+        self.assertEqual((data["payments"][0]["method"], data["payments"][0]["reference"]), ("GCash", "5046 933 479702"))
+        self.assertEqual(data["s"]["state"], "paid")
 
     def test_handing_the_deposit_back(self):
         booking = make_booking(stage=ReservationItem.Stage.RETURNED, ret=-6, returned_on=-3)

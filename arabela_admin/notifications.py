@@ -405,12 +405,13 @@ def build_items(user):
     # until someone sends it back or marks it handled on the Payments page's Online payments tab.
     for attempt in PaymentAttempt.objects.filter(PaymentAttempt.attention_filter()).order_by("-created_at")[:10]:
         refund_failed = attempt.status == PaymentAttempt.Status.REFUNDED
+        unmade = "paid online but the payment is not recorded yet:" if attempt.source == PaymentAttempt.Source.SHOP else "paid online but has no booking yet:"
         items.append(_item(
             key=f"online:{attempt.id}",
             kind="payment",
             level="warning",
             actor=attempt.customer_name or "A customer",
-            text=("has an online payment whose refund did not go through:" if refund_failed else "paid online but has no booking yet:"),
+            text=("has an online payment whose refund did not go through:" if refund_failed else unmade),
             subject=f"₱{attempt.paid_amount or attempt.amount:,.2f}",
             module="Payments",
             url=reverse("arabela_admin:payment_online") + "?show=attention",

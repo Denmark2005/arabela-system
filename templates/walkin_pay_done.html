@@ -21,7 +21,7 @@
   <main>
     <div class="tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
     <h1>Thank you.</h1>
-    <p>You can close this page now. The shop will confirm your booking and give you your receipt.</p>
+    <p>You can close this page now. {% if existing %}The shop will give you your receipt.{% else %}The shop will confirm your booking and give you your receipt.{% endif %}</p>
     <p>If you did not finish paying, nothing was charged. Please tell the shop.</p>
     <div class="brand">Arabela Gown Rental</div>
   </main>

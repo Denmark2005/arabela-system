@@ -39,16 +39,18 @@ class AutomaticRefundTests(Base):
         cash = helpers.Reservation.objects.create(customer=self.ana, customer_name="Cash Customer", status="Confirmed", channel="Walk-in",
                                                   rental_subtotal=Decimal("3500"), security_deposit=Decimal("2000"), total_amount=Decimal("5500"), reviewed_at=timezone.now())
         payments.record_payment(reservation_id=cash.pk, purpose="Deposit", amount=Decimal("2000"), method="Cash", user=self.owner)
-        self.assertEqual(payments.online_refund_choice(cash, ledger.statement(cash)), {"offered": False})
+        cash_choice = payments.online_refund_choice(cash, ledger.statement(cash))
+        self.assertEqual((cash_choice["offered"], cash_choice["available"]), (False, False))
+        self.assertIn("not paid online", cash_choice["reason"])
 
     def test_it_is_not_offered_when_automatic_refunds_are_switched_off_or_there_is_no_key(self):
         booking = self.returned_booking()
         with override_settings(PAYMONGO_AUTO_REFUND=False):
-            self.assertEqual(payments.online_refund_choice(booking, ledger.statement(booking)), {"offered": False})
+            self.assertFalse(payments.online_refund_choice(booking, ledger.statement(booking))["offered"])
             with self.assertRaises(payments.PaymentError):
                 self.refund(booking, "2000")
         with override_settings(PAYMONGO_SECRET_KEY=""):
-            self.assertEqual(payments.online_refund_choice(booking, ledger.statement(booking)), {"offered": False})
+            self.assertIn("switched off", payments.online_refund_choice(booking, ledger.statement(booking))["reason"])
         self.assertEqual(self.fake.refunds, {})
 
     def test_the_deposit_goes_back_with_a_receipt_a_refund_a_message_and_a_timeline_line(self):

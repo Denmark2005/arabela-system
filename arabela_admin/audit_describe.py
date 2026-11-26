@@ -76,6 +76,20 @@ def booking_pay_cancel(ctx):
     return {"summary": "closed a walk-in online payment page", "details": _keep(ctx.data, "state")}
 
 
+def payment_pay_start(ctx):
+    reservation = _reservation(ctx.kwargs.get("pk"))
+    amount = ctx.data.get("amount") or ""
+    return {"summary": f"showed a payment QR code{f' for \u20b1{amount}' if amount else ''} on {_booking_text(reservation)}",
+            "target": _booking_target(reservation), "details": _keep(ctx.data, "amount", "purposeLabel")}
+
+
+def payment_pay_cancel(ctx):
+    from reservations.models import PaymentAttempt
+    attempt = PaymentAttempt.objects.select_related("reservation__customer__profile").filter(token=ctx.kwargs.get("token")).first()
+    reservation = attempt.reservation if attempt else None
+    return {"summary": f"closed a payment QR code on {_booking_text(reservation)}", "target": _booking_target(reservation), "details": _keep(ctx.data, "state")}
+
+
 def booking_approve(ctx):
     reservation = _reservation(ctx.kwargs.get("pk"))
     return {"summary": f"approved {_booking_text(reservation)}", "target": _booking_target(reservation)}

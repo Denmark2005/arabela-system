@@ -154,6 +154,23 @@
     .pm-hint { margin: 0; font-size: 0.8125rem; color: #667085; }
     .pm-err { margin: 0; padding: .55rem .8rem; border-radius: .6rem; background: #fef3f2; color: #b42318; font-size: .8125rem; }
     .dark .pm-err { background: rgba(240,68,56,.14); color: #fda29b; }
+    .pm-lblrow { display: flex; align-items: center; margin-bottom: .25rem; }
+    .pm-lbl { font-size: 0.8125rem; font-weight: 500; color: #475467; }
+    .dark .pm-lbl { color: #98a2b3; }
+    .pm-warn { color: #b54708; font-weight: 600; }
+    .dark .pm-warn { color: #fdb022; }
+    /* "Pay online": the QR code beside the amount, the timer and the two buttons (one column on a narrow screen) */
+    .pm-qr-body { display: grid; gap: 1rem; justify-items: center; }
+    @media (min-width: 560px) { .pm-qr-body { grid-template-columns: auto minmax(0, 1fr); align-items: center; justify-items: start; gap: 1.25rem; } }
+    .pm-qr-img { display: block; width: 13rem; max-width: 100%; height: auto; box-sizing: border-box; padding: .45rem; border: 1px solid #e4e7ec; border-radius: .75rem; background: #fff; image-rendering: pixelated; }
+    .pm-qr-side { display: grid; gap: .55rem; min-width: 0; justify-items: start; }
+    .pm-qr-title { margin: 0; font-size: .95rem; font-weight: 600; color: #1d2939; }
+    .dark .pm-qr-title { color: #f2f4f7; }
+    .pm-qr-amountrow { display: flex; align-items: center; }
+    .pm-qr-amount { margin: 0; font-size: 1.75rem; font-weight: 700; color: #1d2939; font-variant-numeric: tabular-nums; }
+    .dark .pm-qr-amount { color: #fff; }
+    .pm-qr-clock { display: inline-block; margin: 0; padding: .2rem .6rem; border-radius: 999px; background: #f2f4f7; color: #344054; font-size: .8125rem; font-variant-numeric: tabular-nums; }
+    .dark .pm-qr-clock { background: rgba(255,255,255,.08); color: #d0d5dd; }
     .pm-ok { padding: .75rem .9rem; border-radius: .8rem; background: #ecfdf3; color: #067647; font-size: .875rem; }
     .dark .pm-ok { background: rgba(18,183,106,.14); color: #32d583; }
     .pm-ok .pm-btns { margin-top: .5rem; }
@@ -1338,7 +1355,7 @@
                   {% for a in attempts %}
                     <tr data-attempt-id="{{ a.id }}"{% if a.attention %} class="is-hot"{% endif %}>
                       <td>{{ a.created_at|date:"M j, Y" }}<div class="pm-legacy">{{ a.created_at|date:"g:i A" }}</div></td>
-                      <td>{{ a.who }}{% if a.source == "walkin" %}<div class="pm-legacy">At the shop{% if a.staff_label %} &middot; {{ a.staff_label }}{% endif %}</div>{% endif %}</td>
+                      <td>{{ a.who }}{% if a.source != "online" %}<div class="pm-legacy">At the shop{% if a.staff_label %} &middot; {{ a.staff_label }}{% endif %}</div>{% endif %}</td>
                       <td>{{ a.kind_label }}</td>
                       <td class="r">&#8369;{{ a.amount|floatformat:"2g" }}</td>
                       <td>{{ a.channel_label }}</td>
@@ -1545,7 +1562,34 @@
                       </div>
                     </template>
 
-                    <div class="pm-form" x-show="d.choices.kind !== 'none'">
+                    <!-- "Pay online": the customer scans this and pays on their phone; the window only shows what the server reads back from {{ payment_provider }}. -->
+                    <template x-if="pay">
+                      <div class="pm-form" role="status" aria-live="polite" id="pm-qr">
+                        <p class="pm-sec" style="margin: 0;">Pay online</p>
+                        <div class="pm-qr-body">
+                          <img class="pm-qr-img" x-show="pay.state === 'waiting' && pay.qr" :src="pay.qr || ''" alt="QR code of the payment page">
+                          <div class="pm-qr-side">
+                            <p class="pm-qr-title" x-show="payTitle()" x-text="payTitle()"></p>
+                            <div class="pm-qr-amountrow" x-show="pay.amount">
+                              <p class="pm-qr-amount" x-text="peso(pay.amount)"></p>
+                              <details class="ht-tip" x-show="pay.state === 'waiting'"><summary aria-label="About paying by QR code" title="About paying by QR code">?</summary><div class="ht-tip-pop">The customer scans this code with their phone and pays with GCash, Maya or QR Ph. This updates by itself, and the receipt is made once they pay. You can close this window: opening the booking again shows the code.</div></details>
+                            </div>
+                            <p class="pm-hint" x-show="paySub()" x-text="paySub()"></p>
+                            <p class="pm-qr-clock" x-show="pay.state === 'waiting'" x-text="'The payment page closes in ' + payClock()"></p>
+                            <p class="pm-err" x-show="payError" x-text="payError"></p>
+                            <div class="pm-btns">
+                              <a class="pm-b" x-show="pay.state === 'waiting' && pay.checkoutUrl" :href="pay.checkoutUrl" target="_blank" rel="noopener">Open the payment page on this screen</a>
+                              <button type="button" class="pm-b" x-show="pay.state === 'waiting'" :disabled="payBusy" @click="cancelPay()">Cancel payment</button>
+                              <button type="button" class="pm-b pm-b--main" x-show="pay.state === 'ended' || pay.state === 'refunded'" @click="payDone()">OK</button>
+                              <a class="pm-b pm-b--main" x-show="pay.state === 'flagged'" href="{% url 'arabela_admin:payment_online' %}">Open Online payments</a>
+                              <button type="button" class="pm-b" x-show="pay.state === 'flagged'" @click="payDone()">OK</button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </template>
+
+                    <div class="pm-form" x-show="d && d.choices.kind !== 'none' && !pay">
                       <p class="pm-sec" style="margin: 0;">Record a payment received</p>
                       <template x-if="d.choices.kind === 'deposit'">
                         <div>
@@ -1559,16 +1603,17 @@
                       </template>
                       <p class="pm-hint" x-show="d.choices.kind === 'balance'">Rental balance: up to <b x-text="peso(fmt(d.choices.max))"></b>. It can be paid in parts. <button type="button" class="pm-b pm-b--small" @click="rec.amount = d.choices.max">Pay the full balance</button></p>
                       <p class="pm-hint" x-show="d.choices.kind === 'extra'">The fees and deductions are more than the deposit. Still owed: up to <b x-text="peso(fmt(d.choices.max))"></b>. <button type="button" class="pm-b pm-b--small" @click="rec.amount = d.choices.max">Receive all of it</button></p>
-                      <div><label for="pm-rec-amount">Amount received (pesos)</label><input id="pm-rec-amount" type="text" inputmode="decimal" class="pm-in" x-model="rec.amount" placeholder="0.00" autocomplete="off"></div>
-                      <div><label>Paid by</label>
-                        <div class="pm-radios" role="radiogroup" aria-label="How it was paid">
-                          <label :class="rec.method === 'Cash' ? 'is-on' : ''"><input type="radio" name="pm-rec-method" value="Cash" x-model="rec.method" style="accent-color: #465fff;"> Cash</label>
-                          <label :class="rec.method === 'GCash' ? 'is-on' : ''"><input type="radio" name="pm-rec-method" value="GCash" x-model="rec.method" style="accent-color: #465fff;"> GCash</label>
+                      <div><label for="pm-rec-amount" x-text="rec.method === 'Online' ? 'Amount to pay (pesos)' : 'Amount received (pesos)'">Amount received (pesos)</label><input id="pm-rec-amount" type="text" inputmode="decimal" class="pm-in" x-model="rec.amount" placeholder="0.00" autocomplete="off"></div>
+                      <div>
+                        <div class="pm-lblrow"><span class="pm-lbl">Paid by</span><details class="ht-tip"><summary aria-label="About the ways to pay" title="About the ways to pay">?</summary><div class="ht-tip-pop"><p><b>Cash:</b> type what the customer handed over, then Record payment.</p>{% if online_enabled %}<p><b>Pay online:</b> press Show payment QR. The customer scans it with their phone and pays with GCash, Maya or QR Ph; the payment and its receipt are saved by themselves.</p>{% endif %}</div></details></div>
+                        <div class="pm-radios" role="radiogroup" aria-label="How it is paid">
+                          <label :class="rec.method === 'Cash' ? 'is-on' : ''"><input type="radio" name="pm-rec-method" value="Cash" x-model="rec.method" @change="formError = ''" style="accent-color: #465fff;"> Cash</label>
+                          {% if online_enabled %}<label :class="rec.method === 'Online' ? 'is-on' : ''"><input type="radio" name="pm-rec-method" value="Online" x-model="rec.method" @change="formError = ''" style="accent-color: #465fff;"> Pay online</label>{% endif %}
                         </div></div>
-                      <div x-show="rec.method === 'GCash'"><label for="pm-rec-ref">GCash reference number (13 digits, from the customer's GCash screen)</label><input id="pm-rec-ref" type="text" inputmode="numeric" class="pm-in" x-model="rec.reference" maxlength="24" placeholder="5046 933 479702" autocomplete="off"></div>
+                      {% if online_enabled %}<p class="pm-hint pm-warn" x-show="rec.method === 'Online' && Number(String(rec.amount).replace(/,/g, '')) > {{ online_max }}">At most &#8369;{{ online_max|floatformat:"0g" }} can be paid online at once. Pay it in parts, or take cash.</p>{% endif %}
                       <div><label for="pm-rec-note">Note (optional)</label><input id="pm-rec-note" type="text" class="pm-in" x-model="rec.note" maxlength="200"></div>
                       <p class="pm-err" x-show="formError && formWhere === 'rec'" x-text="formError"></p>
-                      <div class="pm-btns"><button type="button" class="pm-b pm-b--main" @click="record()" :disabled="busy" x-text="busy && formWhere === 'rec' ? 'Saving...' : 'Record payment'"></button></div>
+                      <div class="pm-btns"><button type="button" class="pm-b pm-b--main" @click="record()" :disabled="busy" x-text="busy && formWhere === 'rec' ? (rec.method === 'Online' ? 'Opening...' : 'Saving...') : (rec.method === 'Online' ? 'Show payment QR' : 'Record payment')"></button></div>
                     </div>
 
                     <div class="pm-form" x-show="d.canReturn">
@@ -1588,15 +1633,13 @@
                       <p class="pm-hint" x-show="d.s.late_fee === '0.00' && d.s.deductions_total === '0.00'">No fees and no deductions: the whole deposit goes back.</p>
                       <p class="pm-hint">Every gown is back. No more than the amount above can be handed back.</p>
                       <div><label for="pm-ret-amount">Amount handed back (pesos)</label><input id="pm-ret-amount" type="text" inputmode="decimal" class="pm-in" x-model="ret.amount" autocomplete="off"></div>
-                      <div><label>Handed back by</label>
-                        <div class="pm-radios" role="radiogroup" aria-label="How it was handed back">
-                          <label :class="ret.method === 'Cash' ? 'is-on' : ''"><input type="radio" name="pm-ret-method" value="Cash" x-model="ret.method" style="accent-color: #465fff;"> Cash</label>
-                          <label :class="ret.method === 'GCash' ? 'is-on' : ''"><input type="radio" name="pm-ret-method" value="GCash" x-model="ret.method" style="accent-color: #465fff;"> GCash (sent from the shop's GCash app)</label>
-                          <label x-show="d.onlineRefund && d.onlineRefund.offered && d.onlineRefund.available" :class="ret.method === 'PayMongo' ? 'is-on' : ''"><input type="radio" name="pm-ret-method" value="PayMongo" x-model="ret.method" style="accent-color: #465fff;"> <span x-text="'Automatically to the customer ' + (d.onlineRefund ? d.onlineRefund.label : '') + ' account (through {{ payment_provider }})'"></span></label>
+                      <div>
+                        <div class="pm-lblrow"><span class="pm-lbl">Handed back by</span><details class="ht-tip"><summary aria-label="About handing the deposit back" title="About handing the deposit back">?</summary><div class="ht-tip-pop"><p><b>Cash:</b> hand over the money, then Record deposit return.</p><p x-show="d.onlineRefund && d.onlineRefund.available"><b>Pay online:</b> {{ payment_provider }} sends it back to the <span x-text="d.onlineRefund ? d.onlineRefund.label : ''"></span> account the customer paid with, usually within a day. It cannot be undone.</p><p x-show="d.onlineRefund && !d.onlineRefund.available"><b>Why only cash:</b> <span x-text="d.onlineRefund ? d.onlineRefund.reason : ''"></span></p></div></details></div>
+                        <div class="pm-radios" role="radiogroup" aria-label="How it is handed back">
+                          <label :class="ret.method === 'Cash' ? 'is-on' : ''"><input type="radio" name="pm-ret-method" value="Cash" x-model="ret.method" @change="formError = ''" style="accent-color: #465fff;"> Cash</label>
+                          <label x-show="d.onlineRefund && d.onlineRefund.available" :class="ret.method === 'PayMongo' ? 'is-on' : ''"><input type="radio" name="pm-ret-method" value="PayMongo" x-model="ret.method" @change="formError = ''" style="accent-color: #465fff;"> <span x-text="'Pay online (back to their ' + (d.onlineRefund ? d.onlineRefund.label : '') + ')'">Pay online</span></label>
                         </div></div>
-                      <p class="pm-hint" x-show="ret.method === 'PayMongo'">The money goes back to the account the customer paid with, usually within a day. It is sent as soon as you press the button and cannot be undone.</p>
-                      <p class="pm-hint" x-show="d.onlineRefund && d.onlineRefund.offered && !d.onlineRefund.available" x-text="'It cannot be sent back automatically: ' + (d.onlineRefund ? d.onlineRefund.reason : '')"></p>
-                      <div x-show="ret.method === 'GCash'"><label for="pm-ret-ref">GCash reference number of the transfer you sent (13 digits)</label><input id="pm-ret-ref" type="text" inputmode="numeric" class="pm-in" x-model="ret.reference" maxlength="24" autocomplete="off"></div>
+                      <p class="pm-hint" x-show="ret.method === 'PayMongo'">It is sent as soon as you press the button and cannot be undone.</p>
                       <div><label for="pm-ret-note">Note (optional)</label><input id="pm-ret-note" type="text" class="pm-in" x-model="ret.note" maxlength="200"></div>
                       <p class="pm-err" x-show="formError && formWhere === 'ret'" x-text="formError"></p>
                       <div class="pm-btns"><button type="button" class="pm-b pm-b--main" @click="giveBack()" :disabled="busy" x-text="busy && formWhere === 'ret' ? 'Saving...' : (ret.method === 'PayMongo' ? (retNumber() > 0 ? 'Send ' + retShown() + ' back' : 'Send deposit back') : 'Record deposit return')"></button></div>
@@ -1646,6 +1689,7 @@
       var RECORD = '{% url "arabela_admin:payment_record" 999999 %}';
       var RETURN = '{% url "arabela_admin:deposit_return" 999999 %}';
       var DEDUCT = '{% url "arabela_admin:deduction_add" 999999 %}';
+      var PAY_START = '{% url "arabela_admin:payment_pay_start" 999999 %}';
       var VOID_PAYMENT = '{% url "arabela_admin:payment_void" 999999 %}';
       var VOID_DEDUCTION = '{% url "arabela_admin:deduction_void" 999999 %}';
       var SEND = '{% url "arabela_admin:payment_send" 999999 %}';
@@ -1655,8 +1699,10 @@
         search: '', statusFilter: 'All',
         openId: 0, d: null, loading: false, loadError: '', changed: false, last: null,
         busy: false, formError: '', formWhere: '', voiding: null,
-        rec: { purpose: '', amount: '', method: 'Cash', reference: '', note: '', rid: '' },
-        ret: { amount: '', method: 'Cash', reference: '', note: '', rid: '' },
+        rec: { purpose: '', amount: '', method: 'Cash', note: '', rid: '' },
+        ret: { amount: '', method: 'Cash', note: '', rid: '' },
+        // "Pay online": the open QR code of the booking in the window (what the server last said about it) and its clock.
+        pay: null, payError: '', payBusy: false, payLeft: 0, payEndsAt: 0, payTicks: 0, payTimer: null, payAsking: false,
         ded: { amount: '', reason: '', rid: '' },
 
         peso: function (v) { return '₱' + v; },
@@ -1678,7 +1724,7 @@
           if (method === 'POST') { options.headers['Content-Type'] = 'application/json'; options.body = JSON.stringify(body || {}); }
           return fetch(url, options).then(function (res) {
             return res.json().catch(function () { return {}; }).then(function (data) {
-              if (!res.ok || data.error) { throw new Error(data.error || 'That did not work. Please try again.'); }
+              if (!res.ok || data.error) { var problem = new Error(data.error || 'That did not work. Please try again.'); problem.refresh = !!data.refresh; throw problem; }
               return data;
             });
           });
@@ -1686,6 +1732,7 @@
 
         open: function (id) {
           this.openId = id; this.d = null; this.loadError = ''; this.last = null; this.voiding = null; this.formError = ''; this.loading = true;
+          this.paySet(null);
           var self = this;
           this.api(this.url(DETAIL, id), 'GET').then(function (data) { self.show(data); self.loading = false; })
             .catch(function (e) { self.loading = false; self.loadError = e.message; });
@@ -1693,17 +1740,20 @@
         show: function (data) {
           this.d = data;
           var c = data.choices || { kind: 'none' };
-          this.rec = { purpose: '', amount: '', method: 'Cash', reference: '', note: '', rid: pmUid() };
+          this.rec = { purpose: '', amount: '', method: 'Cash', note: '', rid: pmUid() };
           if (c.kind === 'deposit') { this.rec.purpose = c.options[0].purpose; this.rec.amount = c.options[0].amount; }
           else if (c.kind === 'balance') { this.rec.purpose = 'Balance'; }
           else if (c.kind === 'extra') { this.rec.purpose = 'Extra'; }
-          this.ret = { amount: data.canReturn ? data.peso.refund_available.replace(/,/g, '') : '', method: (data.onlineRefund && data.onlineRefund.available) ? 'PayMongo' : 'Cash', reference: '', note: '', rid: pmUid() };
+          this.ret = { amount: data.canReturn ? data.peso.refund_available.replace(/,/g, '') : '', method: (data.onlineRefund && data.onlineRefund.available) ? 'PayMongo' : 'Cash', note: '', rid: pmUid() };
           this.ded = { amount: '', reason: '', rid: pmUid() };
           this.formError = ''; this.voiding = null;
+          // Only the window's own load carries the QR code: the answers to the other actions leave the one on screen as it is.
+          if (Object.prototype.hasOwnProperty.call(data, 'pay')) { this.paySet(data.pay); }
         },
         close: function () {
           var wasOpen = !!this.openId;
-          this.openId = 0; this.d = null;
+          this.openId = 0; this.d = null;          // (before the QR code is cleared: the window's own parts go away first, so nothing reads the empty booking)
+          this.paySet(null);
           if (wasOpen && this.changed) { window.location.href = window.location.pathname; }
         },
 
@@ -1717,18 +1767,122 @@
             var shown = typeof message === 'function' ? message(data) : message;
             self.show(data.detail);
             self.last = { message: shown, printUrl: printUrl, paymentId: data.payment && data.payment.id ? data.payment.id : 0 };
-          }).catch(function (e) { self.busy = false; self.formError = e.message; });
+          }).catch(function (e) {
+            self.busy = false; self.formError = e.message;
+            if (e.refresh && self.d) { self.reload(function () { self.formError = e.message; self.formWhere = where; }); }
+          });
+        },
+        // The booking's numbers again (and its QR code, when one is open).
+        reload: function (then) {
+          var self = this, id = this.d ? this.d.id : this.openId;
+          if (!id) { return; }
+          this.api(this.url(DETAIL, id), 'GET').then(function (data) {
+            if (self.openId !== id) { return; }
+            self.show(data); self.changed = true; if (then) { then(); }
+          }).catch(function (e) { self.formError = e.message; });
         },
         record: function () {
+          if (this.rec.method === 'Online') { this.startPay(); return; }
           this.run('rec', this.url(RECORD, this.d.id), {
-            purpose: this.rec.purpose, amount: this.rec.amount, method: this.rec.method, reference: this.rec.reference, note: this.rec.note, request_id: this.rec.rid
+            purpose: this.rec.purpose, amount: this.rec.amount, method: this.rec.method, note: this.rec.note, request_id: this.rec.rid
           }, function (data) { return 'Payment recorded. Receipt ' + data.payment.receiptNumber + ' is ready to print.'; });
         },
+        // ---- "Pay online" (gowns/counter_payment.py) ----
+        startPay: function () {
+          if (this.busy) { return; }
+          this.busy = true; this.formError = ''; this.formWhere = 'rec';
+          var self = this, id = this.d.id;
+          this.api(this.url(PAY_START, id), 'POST', { purpose: this.rec.purpose, amount: this.rec.amount, note: this.rec.note, request_id: this.rec.rid })
+            .then(function (data) {
+              self.busy = false;
+              if (self.openId !== id) { return; }
+              self.rec.rid = pmUid(); self.last = null;
+              if (data.detail) { self.show(data.detail); }
+              self.paySet(data);
+            })
+            .catch(function (e) { self.busy = false; self.formError = e.message; });
+        },
+        paySet: function (data) {
+          this.payStop();
+          this.payError = ''; this.payBusy = false;
+          if (!data) { this.pay = null; return; }
+          this.pay = {};
+          this.payApply(data);
+        },
+        // Takes the server's latest picture of the payment: keeps asking while it is open, stops when it has ended one way or another.
+        payApply: function (data) {
+          if (data.state === 'recorded') { this.payRecorded(data); return; }
+          var self = this;
+          this.pay = Object.assign({}, this.pay || {}, data);
+          if (data.state === 'waiting') { this.payEndsAt = Date.now() + (Number(data.secondsLeft) || 0) * 1000; this.payLeft = Number(data.secondsLeft) || 0; }
+          if (data.state === 'waiting' || data.state === 'confirming') {
+            if (!this.payTimer) { this.payTimer = window.setInterval(function () { self.payTick(); }, 1000); }
+          } else {
+            this.payStop();
+            this.changed = true;
+          }
+        },
+        payRecorded: function (data) {
+          this.payStop();
+          this.pay = null; this.changed = true;
+          if (data.detail) { this.show(data.detail); }
+          this.last = { message: 'Payment received: ' + this.peso(data.amount) + ' with ' + data.paidWith + '. Receipt ' + data.receiptNumber + ' is ready to print.' + (data.test ? ' (A test payment: no real money moved.)' : ''),
+            printUrl: data.paymentId ? 'receipt' : '', paymentId: data.paymentId };
+        },
+        payStop: function () { if (this.payTimer) { window.clearInterval(this.payTimer); this.payTimer = null; } this.payAsking = false; },
+        payTick: function () {
+          if (!this.pay) { this.payStop(); return; }
+          if (this.pay.state === 'waiting') { this.payLeft = Math.max(0, Math.round((this.payEndsAt - Date.now()) / 1000)); }
+          this.payTicks += 1;
+          if (this.payTicks % 3 === 0 || this.payLeft === 0) { this.payPoll(); }
+        },
+        payPoll: function () {
+          if (this.payAsking || !this.pay || !this.pay.statusUrl) { return; }
+          this.payAsking = true;
+          var self = this, token = this.pay.token;
+          this.api(this.pay.statusUrl, 'GET')
+            .then(function (data) { self.payAsking = false; if (self.pay && self.pay.token === token) { self.payError = ''; self.payApply(data); } })
+            .catch(function () { self.payAsking = false; /* a dropped connection is not a failed payment: keep asking */ });
+        },
+        payClock: function () { var s = this.payLeft; return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); },
+        payTitle: function () {
+          var st = this.pay && this.pay.state;
+          if (st === 'confirming') { return 'Payment received. Saving it...'; }
+          if (st === 'ended') { return 'The payment page was closed'; }
+          if (st === 'refunded') { return 'This payment was not needed'; }
+          if (st === 'flagged') { return 'The payment needs a look'; }
+          return '';
+        },
+        paySub: function () {
+          var p = this.pay || {}, st = p.state;
+          if (st === 'confirming') { return 'The money arrived. The receipt is being made, one moment.'; }
+          if (st === 'ended') { return 'Nothing was charged and nothing was recorded.'; }
+          if (st === 'refunded') { return (p.message ? p.message + ' ' : '') + 'The ' + this.peso(p.amount) + ' is being sent back to the account the customer paid with' + (p.refundFailed ? ', but that did not go through: please open Online payments.' : '.'); }
+          if (st === 'flagged') { return 'The payment arrived, but it could not be saved by itself. Open Online payments to sort it out. The customer is not charged twice.'; }
+          return '';
+        },
+        cancelPay: function () {
+          if (this.payBusy || !this.pay || !this.pay.cancelUrl) { return; }
+          var self = this, url = this.pay.cancelUrl, token = this.pay.token;
+          adminConfirm({ title: 'Cancel this payment?', message: 'The QR code stops working. Nothing is charged and nothing is recorded.', confirmText: 'Cancel payment', cancelText: 'Keep waiting', danger: true })
+            .then(function (ok) {
+              if (!ok || !self.pay || self.pay.token !== token) { return; }
+              self.payBusy = true; self.payError = '';
+              self.api(url, 'POST', {}).then(function (data) {
+                self.payBusy = false;
+                if (!self.pay || self.pay.token !== token) { return; }
+                if (data.state === 'waiting') { self.payError = 'It could not be closed just now. Please try again.'; return; }
+                self.payApply(data);
+              }).catch(function (e) { self.payBusy = false; self.payError = e.message; });
+            });
+        },
+        // The QR code is over (closed, sent back, or in Online payments): back to the booking's own forms with its latest numbers.
+        payDone: function () { this.paySet(null); this.reload(); },
         giveBack: function () {
           var self = this;
           var send = function () {
             self.run('ret', self.url(RETURN, self.d.id), {
-              amount: self.ret.amount, method: self.ret.method, reference: self.ret.reference, note: self.ret.note, request_id: self.ret.rid
+              amount: self.ret.amount, method: self.ret.method, note: self.ret.note, request_id: self.ret.rid
             }, function (data) { return 'Deposit return recorded. Receipt ' + data.payment.receiptNumber + ' is ready to print.'; });
           };
           if (this.ret.method !== 'PayMongo') { send(); return; }
@@ -1773,7 +1927,8 @@
         },
         init: function () {
           var self = this;
-          window.addEventListener('keydown', function (e) { if (e.key === 'Escape' && self.openId) { self.close(); } });
+          // (a confirm pop-up on top handles its own Escape and marks it handled)
+          window.addEventListener('keydown', function (e) { if (e.key === 'Escape' && self.openId && !e.defaultPrevented) { self.close(); } });
           if (OPEN_ID && /^[0-9]+$/.test(OPEN_ID)) { this.open(Number(OPEN_ID)); }
         }
       };

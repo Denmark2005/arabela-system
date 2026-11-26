@@ -86,7 +86,7 @@ def start(*, request, staff, staff_name, is_owner, name, phone, address, city, p
     """Opens the payment page for a walk-in form. Returns what the screen needs (see `answer`); raises staff_booking.BookingError when the form cannot
     be paid for (nothing has been saved)."""
     if not gateway.enabled():
-        raise staff_booking.BookingError("Online payment is not available right now. Take cash, or a GCash reference, instead.", 503)
+        raise staff_booking.BookingError("Online payment is not available right now. Take cash instead.", 503)
     if not rate_limit.allowed(f"walkinpay:{staff.pk}", *START_LIMIT):
         raise staff_booking.BookingError("That was a lot of QR codes in a short time. Please wait a minute and try again.", 429)
     staff_booking.check_payment(payment=payment, lines=lines)

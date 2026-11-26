@@ -403,7 +403,8 @@ def booking_pay_cancel_view(request, token):
 @require_http_methods(["POST"])
 @audited("booking.create", "Bookings", audit_describe.booking_create)
 def booking_create_view(request):
-    """Save the booking and the payment taken for it (the form's fields, `lines` as JSON, and the payment: choice, method, GCash number, amount)."""
+    """Save the booking and the cash taken for it (the form's fields, `lines` as JSON, and the payment: choice, method "Cash", amount). An online payment goes
+    through booking_pay_start_view instead."""
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
     post = request.POST
@@ -425,7 +426,7 @@ def booking_create_view(request):
         # The customer's valid ID (reservations/identity.py): a verified check made for this customer's number, or a verified website account. The owner can switch the rule off.
         id_check = identity.walkin_requirement(account=account, phone=phone, token=(post.get("id_check") or "").strip())
         payment = (post.get("payment") or "").strip()      # "full" or "deposit": check_payment refuses anything else
-        method = (post.get("method") or "").strip()         # Cash or GCash: reservations/payments.py refuses anything else
+        method = (post.get("method") or "").strip()         # Cash: reservations/staff_booking.py refuses anything else
         reference = (post.get("reference") or "").strip()
         amount = typed_payment.parse_amount(post.get("amount") or "")
         if amount is None:

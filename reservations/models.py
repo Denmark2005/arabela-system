@@ -1231,10 +1231,14 @@ class PaymentAttempt(models.Model):
     class Purpose(models.TextChoices):
         DEPOSIT = 'deposit', 'Deposit only'
         FULL = 'full', 'Paid in full'
+        BALANCE = 'balance', 'Rental balance'             # only for source "shop": a booking that already exists
+        EXTRA = 'extra', 'Extra charge'                   # fees or deductions beyond the deposit, on a booking that already exists
 
     class Source(models.TextChoices):
         ONLINE = 'online', 'Online checkout'              # the customer, on their own account (gowns/online_checkout.py start_payment)
         WALKIN = 'walkin', 'Walk-in at the shop'          # staff, in New Booking: the customer pays on their phone from a QR code (gowns/walkin_payment.py)
+        SHOP = 'shop', 'Existing booking at the shop'     # staff, in Payments: the customer pays what an existing booking owes from a QR code
+                                                          # (gowns/counter_payment.py); `reservation` is set from the start
 
     token = models.CharField(max_length=43, unique=True)          # the secret the success and cancel addresses carry (never PayMongo's own query)
     customer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='payment_attempts')

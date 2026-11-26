@@ -9,7 +9,7 @@ all treat it exactly like an online one. What is different:
   * staff pick the exact physical gown the customer chose (online, the system picks a free one of the design itself);
   * payment is taken at the shop, and a walk-in always pays something: "Paid in full" (rental + deposit) or "Deposit only". Either
     one confirms the booking at once. The payment is RECORDED here, in the same transaction as the booking (reservations/payments.py): how
-    it was paid (Cash or GCash with its reference number), the amount the staff member confirmed, and a numbered Payment Receipt that
+    it was paid (Cash here; an online payment comes from the QR code), the amount the staff member confirmed, and a numbered Payment Receipt that
     prints right away. A deposit-only booking shows its rental balance in the Payments page, where the rest is recorded later. There are no
     receipt photos any more.
 """
@@ -253,8 +253,8 @@ def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, a
                    lines, payment, method, reference, amount, note, request_id="", now=None, city="", postal_code="", online_attempt=None, identity_check=None):
     """Save the booking AND the payment taken for it. Everything is checked again inside one transaction with the gowns locked, so neither
     another staff member nor an online customer can take the same gown in between: either the whole booking (with its receipt) is saved,
-    or nothing. `method` is Cash or GCash (with its 13-digit `reference`), `amount` is what the staff member confirmed was received (it must
-    be exactly what the choice asks for). Returns the new Reservation, with the Payment on `reservation.first_payment`.
+    or nothing. `method` is Cash for a counter payment, `amount` is what the staff member confirmed was received (it must be exactly what the choice
+    asks for). Returns the new Reservation, with the Payment on `reservation.first_payment`.
 
     `online_attempt`: the customer paid on their phone from the shop's QR code (gowns/walkin_payment.py). The booking is made exactly the same
     way, but the payment recorded with it is that online payment (method, amount and reference come from the PaymentAttempt, not from staff typing).
@@ -266,6 +266,8 @@ def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, a
         raise BookingError("Only walk-in bookings can be recorded here. Bookings from the website come in by themselves.")
     note = re.sub(r"\s+", " ", note or "").strip()[:NOTE_MAX]
     check_payment(payment=payment, lines=lines)
+    if online_attempt is None and method != Payment.Method.CASH:
+        raise BookingError("Choose Cash or Pay online. If this page has been open for a while, refresh it.")
     if notebook_number:
         taken = notebook_number_owner(notebook_number)
         if taken:

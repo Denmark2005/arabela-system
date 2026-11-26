@@ -2273,18 +2273,36 @@
         });
     }
 
+    // What comes next for the deposit after a gown is checked in: {text, payments} -- `payments` is the booking's Payments address when there is money to hand
+    // back or still to collect. Nothing is sent back by itself: staff check the gown first (and may take an amount off the deposit).
+    function afterReturnStep(money) {
+      if (!money) { return { text: '', payments: '' }; }
+      var owes = money.stillOwed ? ' The customer still owes ₱' + money.stillOwed + '.' : '';
+      var owing = money.stillOwed ? money.paymentsUrl : '';
+      if (!money.allReturned) { return { text: 'The security deposit stays held until every gown is back.', payments: '' }; }
+      if (money.toHandBack) { return { text: 'Next: hand back the ₱' + money.toHandBack + ' security deposit in Payments.' + owes, payments: money.paymentsUrl }; }
+      if (money.depositPaid) { return { text: 'Nothing to hand back: the fees and deductions used up the deposit.' + owes, payments: owing }; }
+      if (money.stillOwed) { return { text: 'No deposit was paid, so there is nothing to hand back.' + owes, payments: owing }; }
+      return { text: '', payments: '' };
+    }
+
     function markReturned(itemId, condition, popoverButtons) {
       popoverButtons.forEach(function (b) { b.disabled = true; });
       postJson('/admin-panel/api/reservation-items/' + itemId + '/mark-returned/', { condition: condition })
-        .then(function () {
+        .then(function (data) {
           closeRowPopover();
-          return adminAlert({
-            title: 'Marked as returned',
-            message: (condition === 'Needs Repair'
-              ? "It's off the website until it's set back to Available in Gown Catalog."
-              : "It's back on the website and can be booked again.")
-              + ' The security deposit now shows as returned in Security Deposits.'
-          });
+          var said = condition === 'Needs Repair'
+            ? "It's off the website until it's set back to Available in Gown Catalog."
+            : "It's back on the website and can be booked again.";
+          var step = afterReturnStep(data && data.money);
+          var message = step.text ? said + '\n\n' + step.text : said;
+          if (!step.payments) { return adminAlert({ title: 'Marked as returned', message: message }); }
+          return adminConfirm({ title: 'Marked as returned', message: message, confirmText: 'Open Payments', cancelText: 'Later' })
+            .then(function (open) {
+              if (!open) { return; }
+              window.location.href = step.payments;
+              return new Promise(function () {});          // the page is leaving: no reload underneath it
+            });
         })
         .then(function () { window.location.reload(); })
         .catch(function (err) {

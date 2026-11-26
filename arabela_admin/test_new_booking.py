@@ -344,12 +344,11 @@ class RecordBookingTests(Base):
             ("an old Not paid yet", dict(lines=[self.line(gown)], payment="0"), "Deposit only"),
             ("a made-up choice", dict(lines=[self.line(gown)], payment="half"), "Deposit only"),
             ("taken now with only the deposit", dict(lines=[self.line(gown, takes_now=True)], payment="deposit"), "once the rental is paid"),
-            ("no payment method", dict(lines=[self.line(gown)], method=""), "Cash or GCash"),
-            ("an unknown method", dict(lines=[self.line(gown)], method="Cheque"), "Cash or GCash"),
+            ("no payment method", dict(lines=[self.line(gown)], method=""), "Cash or Pay online"),
+            ("an unknown method", dict(lines=[self.line(gown)], method="Cheque"), "Cash or Pay online"),
             ("paid in full with the wrong amount", dict(lines=[self.line(gown)], amount="4000"), "exactly"),
             ("half the deposit", dict(lines=[self.line(gown)], payment="deposit", amount="1000"), "received exactly"),
-            ("GCash with no reference number", dict(lines=[self.line(gown)], method="GCash"), "13"),
-            ("GCash with a short reference number", dict(lines=[self.line(gown)], method="GCash", reference="12345"), "13 digits"),
+            ("typed GCash, which was removed", dict(lines=[self.line(gown)], method="GCash", reference="5046933479702"), "Cash or Pay online"),
             ("an amount that is not a number", dict(lines=[self.line(gown)], amount="abc"), "amount"),
         ]
         for label, kwargs, words in cases:
@@ -411,20 +410,14 @@ class RecordBookingTests(Base):
         self.assertEqual((reservation.phone, reservation.channel, reservation.notebook_number),
                          ("09177654321", Reservation.Channel.WALK_IN, "0457"))
 
-    def test_a_notebook_number_and_a_gcash_reference_can_be_used_only_once(self):
+    def test_a_notebook_number_can_be_used_only_once(self):
         first = self.post_booking([self.line(make_gown(30))], notebook="A-12")
         self.assertEqual(first.status_code, 200, first.content)
+        before = (Reservation.objects.count(), Payment.objects.count())
         again = self.post_booking([self.line(make_gown(31))], notebook="a-12")
         self.assertEqual(again.status_code, 409)
         self.assertIn(first.json()["reference_code"], again.json()["error"])
-        paid = self.post_booking([self.line(make_gown(32))], method="GCash", reference="5046 933 479702")
-        self.assertEqual(paid.status_code, 200, paid.content)
-        self.assertEqual(Payment.objects.get(reservation__reference_code=paid.json()["reference_code"]).reference, "5046933479702")
-        before = (Reservation.objects.count(), Payment.objects.count())
-        reused = self.post_booking([self.line(make_gown(33))], method="GCash", reference="5046933479702")
-        self.assertEqual(reused.status_code, 409)
-        self.assertIn("already recorded on " + paid.json()["reference_code"], reused.json()["error"])
-        self.assertEqual((Reservation.objects.count(), Payment.objects.count()), before)          # the refused payment undid the whole booking
+        self.assertEqual((Reservation.objects.count(), Payment.objects.count()), before)          # nothing of the refused try is kept
 
     def test_a_double_click_with_the_same_request_saves_one_booking_and_one_receipt(self):
         gown = make_gown(34 + 60)
@@ -973,10 +966,11 @@ class PaymentChoiceAndReceiptLabelTests(Base):
         self.assertIn("Deposit only</label>", html)
         for gone in ("Not paid yet", "This receipt is for", "Rental only", "payment_method", "receipt_1", "Attach the photo", "nbReceiptFile", "pickReceipt"):
             self.assertNotIn(gone, html, gone)
-        for here in ('name="nb-method" value="Cash"', 'name="nb-method" value="GCash"', "Cash</label>", "GCash</label>", "Amount received (pesos)",
-                     "GCash reference number", "form.append('method', this.method)", "form.append('amount', this.amountText)",
-                     "form.append('request_id', this.requestId)", "Print receipt"):
+        for here in ('name="nb-method" value="Cash"', "Cash</label>", "Amount received (pesos)", "form.append('method', this.method)",
+                     "form.append('amount', this.amountText)", "form.append('request_id', this.requestId)", "Print receipt"):
             self.assertIn(here, html, here)
+        for typed in ('value="GCash"', "GCash reference number", "form.append('reference'"):      # typed GCash entry was removed
+            self.assertNotIn(typed, html, typed)
         self.assertIn("form.append('payment', this.payment)", html)
         self.assertEqual(html.count("name=\"nb-payment\""), 2)
 
