@@ -117,7 +117,7 @@ class RenderedPagesTests(TestCase):
         "rental_history": (reverse("arabela_admin:rental_history"), 1),
         "payment_verification": (reverse("arabela_admin:payment_verification"), 1),
         "security_deposits": (reverse("arabela_admin:security_deposits"), 1),
-        "gown_board": (reverse("arabela_admin:gown_board"), 1),
+        "gown_monitoring": (reverse("arabela_admin:gown_monitoring"), 1),
         "clients": (reverse("arabela_admin:clients"), 1),
         "staff_management": (reverse("arabela_admin:staff_management"), 1),
         "profile": (reverse("arabela_admin:page", kwargs={"page": "profile"}), 2),

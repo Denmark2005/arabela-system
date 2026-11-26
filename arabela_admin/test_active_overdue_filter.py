@@ -260,8 +260,8 @@ class SidebarLinkToRentalHistory(Base):
                 html = self.client.get(reverse(f"arabela_admin:{name}")).content.decode()
                 nav = re.search(r"<nav x-data=\"\{selected: \$persist\('Dashboard'\)\}\".*?</nav>", html, re.S).group(0)
                 hrefs = re.findall(r'<a\s+href="([^"]+)"\s+class="menu-dropdown-item', nav)
-                book = hrefs[hrefs.index(reverse("arabela_admin:new_booking")):][:6]
-                self.assertEqual([book[0], book[2], book[3], book[4], book[5]],
-                                 [reverse("arabela_admin:new_booking"), reverse("arabela_admin:gown_board"), ACTIVE_URL, HISTORY_URL, reverse("arabela_admin:pending_approval")])
+                book = hrefs[hrefs.index(reverse("arabela_admin:new_booking")):][:5]
+                self.assertEqual([book[0], book[2], book[3], book[4]],
+                                 [reverse("arabela_admin:new_booking"), ACTIVE_URL, HISTORY_URL, reverse("arabela_admin:pending_approval")])
                 self.assertIn(book[1], (reverse("arabela_admin:rental_schedule"), reverse("arabela_admin:calendar")))     # (some pages link the calendar's other address)
                 self.assertIn("page === 'active' || page === 'rental-history' || page === 'pending'", html)

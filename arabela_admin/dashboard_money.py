@@ -122,7 +122,7 @@ def alerts(shop_today):
     out = []
     late = shop_today.get("late_gowns") or 0
     if late:
-        out.append({"text": f"{late} gown{'s are' if late != 1 else ' is'} late coming back", "url": reverse("arabela_admin:gown_board") + "#gb-overdue"})
+        out.append({"text": f"{late} gown{'s are' if late != 1 else ' is'} late coming back", "url": reverse("arabela_admin:gown_monitoring") + "?tab=return"})
     owing = shop_today.get("pickups_owing") or 0
     if owing:
         out.append({"text": f"{owing} pick-up{'s' if owing != 1 else ''} in the next {PICKUP_DAYS} days still {'have' if owing != 1 else 'has'} a balance",

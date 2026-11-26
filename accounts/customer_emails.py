@@ -57,6 +57,7 @@ OVERDUE = "overdue"
 ACCOUNT_FLAGGED = "account_flagged"
 ACCOUNT_UNFLAGGED = "account_unflagged"
 PAYMENT_NOTICE = "payment_notice"      # a payment received, a deposit handed back, a deduction, a voided receipt (reservations/payments.py)
+GOWN_READY = "gown_ready"              # staff marked a gown ready for pick-up on Gown Monitoring (arabela_admin/monitoring.py)
 
 KIND_LABELS = {
     RECEIVED: "We received your reservation",
@@ -70,6 +71,7 @@ KIND_LABELS = {
     ACCOUNT_FLAGGED: "Account flagged",
     ACCOUNT_UNFLAGGED: "Account unflagged",
     PAYMENT_NOTICE: "Payment received / deposit returned / receipt",
+    GOWN_READY: "Gown ready for pick-up",
 }
 
 # The label each timeline entry is written with (arabela_admin/views.py, gowns/views.py). If a label is ever
@@ -311,6 +313,13 @@ def _content(kind, data, shop):
             content["highlight"] = {"label": "Receipt no.", "value": data["receipt_number"]}
         if data.get("receipt_path"):
             content.update(button_label="View my receipt", button_path=data["receipt_path"])
+    elif kind == GOWN_READY:
+        content.update(
+            subject=f"Your gown is ready for pick-up - {code}" if code else "Your gown is ready for pick-up",
+            heading="Your gown is ready",
+            preheader=(data.get("text") or "")[:110],
+            paragraphs=_paragraphs(data.get("text")),
+        )
     else:
         raise ValueError(f"Unknown email kind: {kind!r}")
     return content
@@ -723,6 +732,8 @@ def sample_data(kind):
         ACCOUNT_UNFLAGGED: "Your account is no longer flagged.",
         PAYMENT_NOTICE: "Payment received ₱2,000.00 for RSV-2026-0054 (Deposit, Cash). Receipt PR-2026-000123. "
                         "Balance still to pay at the shop: ₱3,500.00.",
+        GOWN_READY: "Good news! Wedding Gown 17 is ready for pick-up at Arabela on Tuesday, October 13, 2026 (1:00 PM to 5:00 PM only). "
+                    "Reference: RSV-2026-0054.",
     }.get(kind, "")
     if kind == PAYMENT_NOTICE:
         data.update(subject="Payment received PHP 2,000.00 - receipt PR-2026-000123", heading="We received your payment",

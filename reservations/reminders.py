@@ -134,7 +134,7 @@ def _body_for(kind, item, today):
     if kind == PICKUP_TODAY:
         return (
             f"Reminder: your rental of {gown} starts today, "
-            f"{item.rental_date:%B %d, %Y}. Your gown is ready for pick-up at Arabela until 5:00 PM today. "
+            f"{item.rental_date:%B %d, %Y}. Please pick up your gown at Arabela today, until 5:00 PM. "
             f"Reference: {code}."
         )
     if kind == RETURN_TOMORROW:
@@ -196,7 +196,7 @@ def _group_body_for(kind, items, today):
     if kind == PICKUP_TODAY:
         return (
             f"Reminder: your rental of {gowns} starts today, "
-            f"{first.rental_date:%B %d, %Y}. Your gowns are ready for pick-up at Arabela until 5:00 PM today. "
+            f"{first.rental_date:%B %d, %Y}. Please pick up your gowns at Arabela today, until 5:00 PM. "
             f"Reference: {code}."
         )
     if kind == RETURN_TOMORROW:

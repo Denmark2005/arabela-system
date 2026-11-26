@@ -139,6 +139,18 @@ def item_reminder(ctx):
     return {"summary": f"sent a reminder about {_item_text(item)}", "target": _booking_target(item.reservation if item else None)}
 
 
+def item_ready(ctx):
+    item = _item(ctx.kwargs.get("item_id"))
+    return {"summary": f"marked {_item_text(item)} ready for pick-up", "target": _booking_target(item.reservation if item else None),
+            "details": {"pick-up date": _date_text(item.rental_date) if item else "", "customer told": "yes" if ctx.data.get("told") else "no"}}
+
+
+def item_unready(ctx):
+    item = _item(ctx.kwargs.get("item_id"))
+    return {"summary": f"took back the ready mark on {_item_text(item)}", "target": _booking_target(item.reservation if item else None),
+            "details": {"pick-up date": _date_text(item.rental_date) if item else ""}}
+
+
 def item_change_pickup(ctx):
     item = _item(ctx.kwargs.get("item_id"))
     old = ctx.before.get("pickup", "")

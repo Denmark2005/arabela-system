@@ -21,7 +21,7 @@ FLOOR_REM = 0.8125                   # 13px, before the dial: nothing readable i
 
 class EveryAdminPageTests(TestCase):
     PAGES = ("dashboard", "active_reservations", "new_booking", "gown_catalog", "reservation_records", "payments", "id_checks", "pending_approval", "payment_verification",
-             "security_deposits", "clients", "rental_history", "gown_board", "rental_schedule", "staff_management", "audit_log", "categories")
+             "security_deposits", "clients", "rental_history", "gown_monitoring", "rental_schedule", "staff_management", "audit_log", "categories")
 
     @classmethod
     def setUpTestData(cls):

@@ -556,7 +556,7 @@ class CustomerSideTests(GownBase):
 
     def test_a_sibling_gowns_page_is_not_cancelled(self):
         html = self.detail(self.items[0]).content.decode()
-        self.assertIn("Ready for Pick-up", html)
+        self.assertIn("Awaiting Pick-up", html)              # "Ready for Pick-up" is said only once staff mark the gown ready (Gown Monitoring)
         self.assertNotIn("Gown Cancelled", html)
         self.assertNotIn("Arabela cancelled this gown", html)
 

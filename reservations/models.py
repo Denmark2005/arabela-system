@@ -714,6 +714,13 @@ class ReservationItem(models.Model):
     return_condition = models.CharField(
         max_length=20, choices=ReturnCondition.choices, blank=True
     )
+    # "Ready" on Gown Monitoring (arabela_admin/monitoring.py): staff prepared this gown for its pick-up. It only counts while the pick-up day is still the
+    # day it was prepared for (ready_for), so moving the pick-up date makes it "To prepare" again by itself. ready_told_for remembers the pick-up day the
+    # customer was already told about, so taking the mark back and pressing Ready again never sends the same news twice.
+    ready_at = models.DateTimeField(null=True, blank=True)
+    ready_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    ready_for = models.DateField(null=True, blank=True)
+    ready_told_for = models.DateField(null=True, blank=True)
     # Bumped on every save (creation + every staff stage/date edit) -- lets the
     # customer's "new activity" badge tell freshly-changed items apart from ones
     # they've already seen, without a separate read/unread table.
@@ -744,6 +751,11 @@ class ReservationItem(models.Model):
         Mirrors effective_event_date's shape: returned_on is the ground truth once
         the gown is physically back; until then return_date is the plan."""
         return self.returned_on or self.return_date
+
+    @property
+    def is_ready_for_pickup(self):
+        """Staff marked this gown ready for the pick-up it is still waiting for (the shop's pages and the customer's own page ask this one question)."""
+        return self.stage == self.Stage.PICKUP and self.ready_at is not None and self.ready_for == self.rental_date
 
     @property
     def can_customer_cancel(self):

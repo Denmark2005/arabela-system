@@ -8,104 +8,158 @@
       content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0"
     />
     <meta http-equiv="X-UA-Compatible" content="ie=edge" />
-    <title>Gown Board | Arabela System Admin Panel</title>
+    <title>Gown Monitoring | Arabela System Admin Panel</title>
     <link rel="icon" type="image/svg+xml" href="{% static 'arabela_admin/images/logo/favicon-arabela.svg' %}" />
   <link href="{% static 'arabela_admin/style.css' %}" rel="stylesheet">
-  {% include "arabela_admin/partials/photo_viewer_styles.html" %}
-  {% include "arabela_admin/partials/ar_list_styles.html" %}
   <style>
-    /* Gown Board: one exact day, what to get ready and what comes back. Namespaced gb-; the same look as the other admin lists (white card, 1rem corners,
-       pill chips, light and dark). */
-    .gb-card { margin-bottom: 1.25rem; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; }
-    .dark .gb-card { background: rgba(255,255,255,.03); border-color: #1d2939; }
-    .gb-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem .75rem; padding: 1rem 1.25rem .75rem; }
-    .gb-arrow { display: inline-flex; align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; border: 1px solid #d0d5dd; border-radius: .6rem; color: #475467;
-      font-size: 1.25rem; line-height: 1; text-decoration: none; }
-    .gb-arrow:hover { background: rgba(152,162,179,.12); }
-    .gb-arrow:focus-visible, .gb-quick:focus-visible, .gb-date:focus, .gb-open:focus-visible, .gb-stat:focus-visible { outline: 2px solid #465fff; outline-offset: 1px; }
-    .dark .gb-arrow { border-color: #344054; color: #d0d5dd; }
-    .gb-date { box-sizing: border-box; width: 10.5rem; height: 2.5rem; padding: .4rem .7rem; border: 1px solid #d0d5dd; border-radius: .6rem; background-color: transparent; color: #1d2939;
-      font: inherit; font-size: .875rem; }
-    .dark .gb-date { background-color: #0c111d; border-color: #344054; color: #f2f4f7; }
-    .gb-quick { display: inline-flex; align-items: center; padding: .3rem .8rem; border: 1px solid #d0d5dd; border-radius: 999px; color: #475467; font-size: .8125rem; font-weight: 500; text-decoration: none; }
-    .gb-quick:hover { background: rgba(152,162,179,.12); }
-    .gb-quick.is-on { background: #465fff; border-color: #465fff; color: #fff; }
-    .dark .gb-quick { border-color: #344054; color: #d0d5dd; }
-    .gb-day { font-size: .9rem; font-weight: 600; color: #1d2939; }
-    .dark .gb-day { color: #f2f4f7; }
-    .gb-stats { display: flex; flex-wrap: wrap; gap: .5rem; padding: 0 1.25rem .9rem; }
-    .gb-stat { display: inline-flex; align-items: center; gap: .5rem; padding: .35rem .8rem; border: 1px solid #d0d5dd; border-radius: 999px; color: #475467; font-size: .875rem; font-weight: 500; text-decoration: none; }
-    .gb-stat b { min-width: 1.25rem; padding: 0 .4rem; border-radius: 999px; background: rgba(152,162,179,.22); font-size: 0.8125rem; font-weight: 600; text-align: center; }
-    .gb-stat:hover { background: rgba(152,162,179,.12); }
-    .gb-stat--hot:not(.is-zero) { border-color: #fda29b; color: #b42318; }
-    .gb-stat--hot:not(.is-zero) b { background: #fee4e2; color: #b42318; }
-    .dark .gb-stat { border-color: #344054; color: #d0d5dd; }
-    .dark .gb-stat--hot:not(.is-zero) { border-color: rgba(240,68,56,.5); color: #fda29b; }
-    .dark .gb-stat--hot:not(.is-zero) b { background: rgba(240,68,56,.18); color: #fda29b; }
-    .gb-note { margin: 0; padding: 0 1.25rem .85rem; font-size: 0.8125rem; color: #667085; }
-    .dark .gb-note { color: #98a2b3; }
-    .gb-sec { border-top: 1px solid #e4e7ec; scroll-margin-top: 5rem; }
-    .dark .gb-sec { border-top-color: #1d2939; }
-    .gb-h { display: flex; align-items: center; gap: .6rem; margin: 0; padding: .9rem 1.25rem .5rem; font-size: .9rem; font-weight: 600; color: #1d2939; }
-    .dark .gb-h { color: #f2f4f7; }
-    .gb-h small { padding: .05rem .55rem; border-radius: 999px; background: #f2f4f7; color: #475467; font-size: 0.8125rem; font-weight: 600; }
-    .dark .gb-h small { background: rgba(255,255,255,.07); color: #d0d5dd; }
-    .gb-h--rush small { background: #fee4e2; color: #b42318; }
-    .dark .gb-h--rush small { background: rgba(240,68,56,.18); color: #fda29b; }
-    .gb-why { margin: 0; padding: 0 1.25rem .5rem; font-size: 0.8125rem; color: #667085; }
-    .dark .gb-why { color: #98a2b3; }
-    .gb-empty { margin: 0; padding: .3rem 1.25rem 1rem; font-size: .875rem; color: #667085; }
-    .gb-line { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1.2fr) minmax(0, .8fr) minmax(0, 1.6fr); align-items: center; gap: .5rem 1rem; padding: .7rem 1.25rem; border-top: 1px solid #f2f4f7; }
-    .dark .gb-line { border-top-color: rgba(255,255,255,.06); }
-    .gb-line:hover { background: rgba(152,162,179,.07); }
-    .gb-gown { display: flex; align-items: center; gap: .65rem; min-width: 0; }
-    .gb-dot { flex: none; width: .8rem; height: .8rem; border-radius: 999px; background: #d0d5dd; box-shadow: inset 0 0 0 1px rgba(16,24,40,.12); }
-    .gb-gown-t { min-width: 0; display: flex; flex-direction: column; }
-    .gb-gown-t b, .gb-cust b { font-size: .875rem; font-weight: 600; color: #1d2939; overflow-wrap: anywhere; }
-    .dark .gb-gown-t b, .dark .gb-cust b { color: #f2f4f7; }
-    .gb-sub { font-size: 0.8125rem; color: #667085; }
-    .dark .gb-sub { color: #98a2b3; }
-    .gb-cust { display: flex; flex-direction: column; min-width: 0; }
-    .gb-tel { font-size: .8125rem; color: #465fff; text-decoration: none; }
-    .gb-tel:hover { text-decoration: underline; }
-    .gb-dates { display: flex; flex-direction: column; font-size: .8125rem; color: #475467; font-variant-numeric: tabular-nums; }
-    .dark .gb-dates { color: #98a2b3; }
-    .gb-dates i { display: inline-block; min-width: 3.6rem; font-style: normal; color: #667085; }
-    .gb-meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .4rem; }
-    .gb-chip { display: inline-flex; align-items: center; padding: .12rem .6rem; border-radius: 999px; background: #f2f4f7; color: #475467; font-size: 0.8125rem; font-weight: 600; white-space: nowrap; }
-    .gb-chip--waiting, .gb-chip--due { background: #e0eaff; color: #3641f5; }
-    .gb-chip--picked, .gb-chip--returned { background: #d1fadf; color: #067647; }
-    .gb-chip--missed, .gb-chip--late { background: #fee4e2; color: #b42318; }
-    .gb-chip--balance { background: #fef0c7; color: #b54708; }
-    .gb-chip--rush { max-width: 100%; background: #fee4e2; color: #b42318; white-space: normal; }
-    .dark .gb-chip { background: rgba(255,255,255,.07); color: #d0d5dd; }
-    .dark .gb-chip--waiting, .dark .gb-chip--due { background: rgba(70,95,255,.2); color: #9bb0ff; }
-    .dark .gb-chip--picked, .dark .gb-chip--returned { background: rgba(18,183,106,.16); color: #32d583; }
-    .dark .gb-chip--missed, .dark .gb-chip--late, .dark .gb-chip--rush { background: rgba(240,68,56,.18); color: #fda29b; }
-    .dark .gb-chip--balance { background: rgba(247,144,9,.18); color: #fdb022; }
-    .gb-open { display: inline-flex; align-items: center; padding: .15rem .7rem; border: 1px solid #d0d5dd; border-radius: 999px; color: #344054; font-size: 0.8125rem; font-weight: 600; text-decoration: none; }
-    .gb-open:hover { background: rgba(152,162,179,.14); }
-    .dark .gb-open { border-color: #344054; color: #d0d5dd; }
-    .gb-ready { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .3rem 1rem; padding: .55rem 1.25rem; border-top: 1px solid #f2f4f7; font-size: .875rem; color: #1d2939; }
-    .dark .gb-ready { border-top-color: rgba(255,255,255,.06); color: #f2f4f7; }
-    .gb-ready span { font-size: 0.8125rem; color: #667085; }
-    details.gb-fold > summary { cursor: pointer; list-style: none; }
-    details.gb-fold > summary::-webkit-details-marker { display: none; }
-    details.gb-fold > summary .gb-h::after { content: "+"; margin-left: auto; color: #667085; font-size: 1.1rem; }
-    details.gb-fold[open] > summary .gb-h::after { content: "\2212"; }
-    @media (max-width: 760px) {
-      .gb-bar, .gb-stats { padding-left: 1rem; padding-right: 1rem; }
-      .gb-date { flex: 1 1 8rem; width: auto; min-width: 8rem; }
-      .gb-h, .gb-why, .gb-empty, .gb-note { padding-left: 1rem; padding-right: 1rem; }
-      .gb-line { grid-template-columns: minmax(0, 1fr); padding: .75rem 1rem; }
-      .gb-meta { justify-content: flex-start; }
-      .gb-ready { padding-left: 1rem; padding-right: 1rem; }
+    /* Gown Monitoring (mo-): two tiles (To prepare / For return), the days, and one table of gowns with a status in words. The look of the other admin lists
+       (white card, 1rem corners, chips), light and dark. The table folds into cards when its own box is narrow. */
+    .mo-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin-bottom: 1.25rem; overflow: hidden; border: 1px solid #e4e7ec; border-radius: 1rem; background: #e4e7ec; }
+    .dark .mo-tabs { border-color: #1d2939; background: #1d2939; }
+    .mo-tab { display: block; min-width: 0; padding: 1rem 1.25rem; background: #fff; color: inherit; text-decoration: none; transition: background-color .15s; }
+    .dark .mo-tab { background: #171f2f; }
+    .mo-tab:hover { background: #f9fafb; }
+    .dark .mo-tab:hover { background: #1c2536; }
+    .mo-tab:focus-visible { outline: 2px solid #465fff; outline-offset: -2px; }
+    .mo-tab.is-on { background: #f5f7ff; box-shadow: inset 0 -4px 0 #465fff; }
+    .dark .mo-tab.is-on { background: rgba(70,95,255,.14); }
+    .mo-tab-top { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+    .mo-tab-name { font-size: 1.0625rem; font-weight: 600; color: #344054; }
+    .dark .mo-tab-name { color: #d0d5dd; }
+    .mo-tab.is-on .mo-tab-name { color: #3641f5; }
+    .dark .mo-tab.is-on .mo-tab-name { color: #9bb0ff; }
+    .mo-tab-num { font-size: 2rem; font-weight: 700; line-height: 1.1; color: #101828; font-variant-numeric: tabular-nums; }
+    .dark .mo-tab-num { color: rgba(255,255,255,.92); }
+    .mo-tab-sub { display: block; margin-top: .3rem; font-size: .875rem; color: #667085; }
+    .dark .mo-tab-sub { color: #98a2b3; }
+    .mo-tab-sub b { font-weight: 600; color: #b42318; }
+    .dark .mo-tab-sub b { color: #fda29b; }
+
+    .mo-card { margin-bottom: 1.25rem; overflow: hidden; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; }
+    .dark .mo-card { border-color: #1d2939; background: rgba(255,255,255,.03); }
+    .mo-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem .75rem; padding: 1rem 1.25rem .5rem; }
+    .mo-bar-l { font-size: .875rem; color: #667085; }
+    .dark .mo-bar-l { color: #98a2b3; }
+    .mo-seg { display: inline-flex; flex-wrap: wrap; gap: .25rem; padding: .25rem; border-radius: .75rem; background: #f2f4f7; }
+    .dark .mo-seg { background: rgba(255,255,255,.05); }
+    .mo-seg a { padding: .45rem .9rem; border-radius: .55rem; font-size: .875rem; font-weight: 500; color: #475467; text-decoration: none; white-space: nowrap; }
+    .dark .mo-seg a { color: #98a2b3; }
+    .mo-seg a.is-on { background: #465fff; color: #fff; box-shadow: 0 1px 2px rgba(16,24,40,.12); }
+    .dark .mo-seg a.is-on { background: #465fff; color: #fff; }
+    .mo-seg a:focus-visible, .mo-date:focus-visible, .mo-btn:focus-visible, .mo-tel:focus-visible, .mo-code:focus-visible, .mo-thumb:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+    .mo-date { box-sizing: border-box; height: 2.75rem; width: 11.5rem; padding: .4rem .7rem; border: 1px solid #d0d5dd; border-radius: .65rem; background: transparent; color: #1d2939; font: inherit; font-size: .875rem; }
+    .dark .mo-date { border-color: #344054; background: #0c111d; color: #f2f4f7; color-scheme: dark; }
+    .mo-date.is-on { border-color: #465fff; box-shadow: 0 0 0 1px #465fff; }
+    .mo-days { font-size: .9375rem; font-weight: 600; color: #1d2939; }
+    .dark .mo-days { color: #f2f4f7; }
+    .mo-note { margin: 0; padding: 0 1.25rem .9rem; font-size: .8125rem; color: #667085; }
+    .dark .mo-note { color: #98a2b3; }
+
+    .mo-list { container-type: inline-size; container-name: molist; }
+    .mo-head, .mo-row { display: grid; grid-template-columns: minmax(12rem, 2.1fr) minmax(7rem, .9fr) minmax(8.5rem, 1.2fr) minmax(9rem, 1.45fr) minmax(7.75rem, .8fr); align-items: center; column-gap: .9rem; }
+    .mo-head { padding: .7rem 1.25rem; border-top: 1px solid #f2f4f7; background: #f9fafb; font-size: .8125rem; font-weight: 500; color: #667085; }
+    .dark .mo-head { border-color: #1d2939; background: rgba(255,255,255,.025); color: #98a2b3; }
+    .mo-head > span:last-child { text-align: right; }
+    .mo-row { padding: .8rem 1.25rem; border-top: 1px solid #f2f4f7; box-shadow: inset 4px 0 0 #98a2b3; }
+    .dark .mo-row { border-color: #1d2939; }
+    .mo-row.is-prepare, .mo-row.is-due { box-shadow: inset 4px 0 0 #f79009; }
+    .mo-row.is-problem, .mo-row.is-late { box-shadow: inset 4px 0 0 #d92d20; background: #fff6f5; }
+    .dark .mo-row.is-problem, .dark .mo-row.is-late { background: rgba(240,68,56,.08); }
+    .mo-row.is-ready { box-shadow: inset 4px 0 0 #12b76a; background: #f4fdf8; }
+    .dark .mo-row.is-ready { background: rgba(18,183,106,.07); }
+    .mo-row.is-cleaning { box-shadow: inset 4px 0 0 #2e90fa; }
+
+    .mo-gown { display: flex; align-items: center; gap: .8rem; min-width: 0; }
+    .mo-thumb { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 3.5rem; height: 4.25rem; overflow: hidden; border: 1px solid #e4e7ec; border-radius: .65rem; background: #f9fafb; color: #98a2b3; cursor: pointer; }
+    .dark .mo-thumb { border-color: #344054; background: #1d2939; }
+    .mo-thumb img { display: block; width: 100%; height: 100%; object-fit: contain; }
+    .mo-thumb svg { width: 1.5rem; height: 1.5rem; }
+    .mo-gown-t, .mo-when, .mo-cust, .mo-state { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+    .mo-name, .mo-cust b, .mo-when b { font-size: .9375rem; font-weight: 600; line-height: 1.35; color: #101828; overflow-wrap: anywhere; }
+    .dark .mo-name, .dark .mo-cust b, .dark .mo-when b { color: rgba(255,255,255,.92); }
+    .mo-sub { font-size: .8125rem; line-height: 1.45; color: #667085; overflow-wrap: anywhere; }
+    .dark .mo-sub { color: #98a2b3; }
+    .mo-codeid { font-weight: 600; color: #475467; }      /* the tag code staff look for on the rack: it breaks between words only, never at its hyphen */
+    .dark .mo-codeid { color: #d0d5dd; }
+    .mo-nw { white-space: nowrap; }
+    .mo-tagdot { display: inline-block; width: .7rem; height: .7rem; margin-right: .35rem; border-radius: 999px; background: #d0d5dd; box-shadow: inset 0 0 0 1px rgba(16,24,40,.18); }
+    .mo-when-l { font-size: .8125rem; color: #667085; }
+    .dark .mo-when-l { color: #98a2b3; }
+    .mo-when b.is-today { color: #b54708; }
+    .dark .mo-when b.is-today { color: #fdb022; }
+    .mo-tel, .mo-code { font-size: .8125rem; line-height: 1.45; color: #465fff; text-decoration: none; overflow-wrap: anywhere; }
+    .mo-tel:hover, .mo-code:hover { text-decoration: underline; }
+    .dark .mo-tel, .dark .mo-code { color: #9bb0ff; }
+    .mo-code { color: #475467; }
+    .dark .mo-code { color: #98a2b3; }
+    .mo-chip { display: inline-flex; align-items: center; padding: .2rem .7rem; border-radius: 999px; font-size: .8125rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+    .mo-chip--prepare, .mo-chip--due { background: #fef0c7; color: #93370d; }
+    .mo-chip--problem, .mo-chip--late { background: #fee4e2; color: #b42318; }
+    .mo-chip--ready { background: #d1fadf; color: #05603a; }
+    .mo-chip--cleaning { background: #d1e9ff; color: #175cd3; }
+    .dark .mo-chip--prepare, .dark .mo-chip--due { background: rgba(247,144,9,.18); color: #fec84b; }
+    .dark .mo-chip--problem, .dark .mo-chip--late { background: rgba(240,68,56,.2); color: #fda29b; }
+    .dark .mo-chip--ready { background: rgba(18,183,106,.18); color: #6ce9a6; }
+    .dark .mo-chip--cleaning { background: rgba(46,144,250,.2); color: #84caff; }
+    .mo-detail { margin-top: .3rem; font-size: .8125rem; line-height: 1.4; color: #475467; overflow-wrap: anywhere; }
+    .dark .mo-detail { color: #d0d5dd; }
+    .mo-act { display: flex; justify-content: flex-end; min-width: 0; }
+    .mo-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 2.5rem; padding: .4rem .95rem; border: 1px solid #d0d5dd; border-radius: .65rem; background: #fff; color: #344054; font: inherit; font-size: .875rem; font-weight: 600; line-height: 1.2; text-align: center; text-decoration: none; cursor: pointer; transition: background-color .15s, border-color .15s; }
+    .mo-btn:hover:not(:disabled) { background: #f2f4f7; }
+    .dark .mo-btn { border-color: #344054; background: transparent; color: #d0d5dd; }
+    .dark .mo-btn:hover:not(:disabled) { background: rgba(255,255,255,.06); }
+    .mo-btn--main { border-color: #465fff; background: #465fff; color: #fff; }
+    .mo-btn--main:hover:not(:disabled) { background: #3641f5; }
+    .dark .mo-btn--main { border-color: #465fff; background: #465fff; color: #fff; }
+    .dark .mo-btn--main:hover:not(:disabled) { background: #3641f5; }
+    .mo-btn:disabled { opacity: .6; cursor: progress; }
+    .mo-later { font-size: .8125rem; color: #667085; text-align: right; }
+    .dark .mo-later { color: #98a2b3; }
+    .mo-empty { padding: 2.5rem 1.25rem; border-top: 1px solid #f2f4f7; text-align: center; }
+    .dark .mo-empty { border-color: #1d2939; }
+    .mo-empty b { display: block; font-size: 1rem; font-weight: 600; color: #1d2939; }
+    .dark .mo-empty b { color: #f2f4f7; }
+    .mo-empty span { display: block; margin-top: .3rem; font-size: .875rem; color: #667085; }
+    .dark .mo-empty span { color: #98a2b3; }
+    .mo-toast { position: fixed; bottom: 1.25rem; left: 50%; z-index: 100001; box-sizing: border-box; width: max-content; max-width: calc(100vw - 2rem); padding: .8rem 1.15rem; border-radius: .75rem; background: #101828; color: #fff; font-size: .9375rem; line-height: 1.45; box-shadow: 0 12px 28px -8px rgba(16,24,40,.45); transform: translateX(-50%); }
+    .dark .mo-toast { border: 1px solid #344054; background: #1d2939; }
+
+    /* A narrow list (a small laptop with big text, a tablet): the gown on its own line, then when and who, then the status and the button. */
+    @container molist (max-width: 49.99rem) {
+      .mo-head { display: none; }
+      .mo-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "gown gown" "when cust" "state act"; row-gap: .75rem; }
+      .mo-row > .mo-gown { grid-area: gown; }
+      .mo-row > .mo-when { grid-area: when; align-self: start; }
+      .mo-row > .mo-cust { grid-area: cust; align-self: start; }
+      .mo-row > .mo-state { grid-area: state; align-self: center; }
+      .mo-row > .mo-act { grid-area: act; align-self: center; }
     }
-    @media (prefers-reduced-motion: reduce) { .gb-line, .gb-arrow, .gb-quick, .gb-open { transition: none; } }
+    @media (max-width: 760px) {
+      .mo-tab { padding: .85rem .9rem; }
+      .mo-tab-name { font-size: .9375rem; }
+      .mo-tab-num { font-size: 1.5rem; }
+      .mo-tab-sub { font-size: .8125rem; }
+      .mo-bar, .mo-note { padding-left: 1rem; padding-right: 1rem; }
+      .mo-date { flex: 1 1 10rem; width: auto; }
+      .mo-days { flex: 1 1 100%; }
+      .mo-row { padding-left: 1rem; padding-right: 1rem; }
+    }
+    /* A phone: the status and a full-width button each on their own line; a line with nothing to press has no button line. */
+    @container molist (max-width: 30rem) {
+      .mo-row { grid-template-areas: "gown gown" "when cust" "state state" "act act"; }
+      .mo-row > .mo-act { justify-content: stretch; }
+      .mo-row > .mo-act > .mo-btn { flex: 1 1 auto; }
+      .mo-row.is-cleaning > .mo-act { display: none; }
+      .mo-later { text-align: left; }
+    }
+    @container molist (max-width: 19rem) {
+      .mo-row { grid-template-columns: minmax(0, 1fr); grid-template-areas: "gown" "when" "cust" "state" "act"; }
+    }
+    @media (prefers-reduced-motion: reduce) { .mo-tab, .mo-btn { transition: none; } }
   </style>
 </head>
   <body
-    x-data="gownBoardApp()"
+    x-data="gownMonitoringApp()"
     x-init="
          darkMode = JSON.parse(localStorage.getItem('darkMode'));
          $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)));"
@@ -156,7 +210,7 @@
     class="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar"
   >
     <!-- Sidebar Menu -->
-    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'gown-board' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown') { selected = 'InventoryManagement' } else if (page === 'clients' || page === 'id-checks') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
+    <nav x-data="{selected: $persist('Dashboard')}" x-init="if (page === 'new-booking' || page === 'rental' || page === 'active' || page === 'rental-history' || page === 'pending') { selected = 'BookingsSchedule' } else if (page === 'gown' || page === 'gown-monitoring') { selected = 'InventoryManagement' } else if (page === 'clients' || page === 'id-checks') { selected = 'CustomerManagement' } else if (page === 'staff-management' || page === 'audit-log') { selected = 'StaffManagement' } else if (page === 'payments' || page === 'payment-verification' || page === 'security-deposits') { selected = 'PaymentsDeposits' } else if (page === 'reservation-records') { selected = 'FinancialReport' }">
       <!-- Menu Group -->
       <div>
         <h3 class="mb-4 text-xs uppercase leading-[20px] text-gray-500 dark:text-gray-400">
@@ -339,15 +393,6 @@
                 </li>
                 <li>
                   <a
-                    href="{% url 'arabela_admin:gown_board' %}"
-                    class="menu-dropdown-item group"
-                    :class="page === 'gown-board' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
-                  >
-                    Gown Board
-                  </a>
-                </li>
-                <li>
-                  <a
                     href="{% url 'arabela_admin:active_reservations' %}"
                     class="menu-dropdown-item group"
                     :class="page === 'active' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
@@ -447,6 +492,15 @@
                     :class="page === 'gown' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
                   >
                     Gown Catalog
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="{% url 'arabela_admin:gown_monitoring' %}"
+                    class="menu-dropdown-item group"
+                    :class="page === 'gown-monitoring' ? 'menu-dropdown-item-active' : 'menu-dropdown-item-inactive'"
+                  >
+                    Gown Monitoring
                   </a>
                 </li>
                 {% if admin_is_owner %}
@@ -1157,7 +1211,7 @@
         <main>
           <div class="mx-auto max-w-(--breakpoint-2xl) p-4 md:p-6">
             <!-- Breadcrumb Start -->
-            <div x-data="{ pageName: `Gown Board`}">
+            <div x-data="{ pageName: `Gown Monitoring`}">
               <div class="mb-4 flex flex-wrap items-center justify-end gap-3">
   <nav>
     <ol class="flex items-center gap-1.5">
@@ -1194,64 +1248,65 @@
 </div>
 </div>
             <!-- Breadcrumb End -->
-            <div class="gb-card">
-              <!-- The day: one exact date, a day back / forward, Today and Tomorrow. A plain form, so the address carries the date (?date=2026-11-28) and a link can open the board on that day. -->
-              <form method="get" action="{% url 'arabela_admin:gown_board' %}" class="gb-bar" role="search" aria-label="Pick the day">
-                <a class="gb-arrow" href="?date={{ board.prev }}" aria-label="The day before" title="The day before">&lsaquo;</a>
-                <input type="date" class="gb-date" name="date" value="{{ board.iso }}" aria-label="Pick one exact date" title="Pick one exact date" onchange="if (this.value) { this.form.submit(); }">
-                <a class="gb-arrow" href="?date={{ board.next }}" aria-label="The day after" title="The day after">&rsaquo;</a>
-                <a class="gb-quick{% if board.iso == today_iso %} is-on{% endif %}" href="?date={{ today_iso }}">Today</a>
-                <a class="gb-quick{% if board.iso == tomorrow_iso %} is-on{% endif %}" href="?date={{ tomorrow_iso }}">Tomorrow</a>
-                <span class="gb-day">{{ board.label }}</span>
-                <noscript><button type="submit" class="gb-quick">Show this day</button></noscript>
+
+            {% comment %}
+              The two lists. Each tile is a link that shows its list for the days chosen; the numbers are the lines in that list. Drawn by the server
+              (arabela_admin/monitoring.py) and kept current by live-regions.js, like the other admin lists.
+            {% endcomment %}
+            <div class="mo-tabs" data-live-region="monitoring-tabs">
+              <a href="{{ prepare_url }}" class="mo-tab{% if tab == 'prepare' %} is-on{% endif %}"{% if tab == 'prepare' %} aria-current="page"{% endif %} data-mo-tab="prepare">
+                <span class="mo-tab-top"><span class="mo-tab-name">To prepare</span><span class="mo-tab-num">{{ prepare_count }}</span></span>
+                <span class="mo-tab-sub">{% if prepare_count %}{% if prepare_tally.problem %}<b class="mo-nw">{{ prepare_tally.problem }} problem{{ prepare_tally.problem|pluralize }}</b> &middot; {% endif %}<span class="mo-nw">{{ prepare_tally.prepare }} to prepare</span> &middot; <span class="mo-nw">{{ prepare_tally.ready }} ready</span>{% else %}No pick-up {{ selection.words }}{% endif %}</span>
+              </a>
+              <a href="{{ return_url }}" class="mo-tab{% if tab == 'return' %} is-on{% endif %}"{% if tab == 'return' %} aria-current="page"{% endif %} data-mo-tab="return">
+                <span class="mo-tab-top"><span class="mo-tab-name">For return</span><span class="mo-tab-num">{{ return_count }}</span></span>
+                <span class="mo-tab-sub">{% if return_count %}{% if return_tally.late %}<b class="mo-nw">{{ return_tally.late }} late</b> &middot; {% endif %}<span class="mo-nw">{{ return_tally.due }} due</span> &middot; <span class="mo-nw">{{ return_tally.cleaning }} cleaning</span>{% else %}Nothing to come back {{ selection.words }}{% endif %}</span>
+              </a>
+            </div>
+
+            <div class="mo-card">
+              <form method="get" action="{% url 'arabela_admin:gown_monitoring' %}" class="mo-bar" role="search" aria-label="Choose the days">
+                {% if tab == 'return' %}<input type="hidden" name="tab" value="return">{% endif %}
+                <span class="mo-bar-l">Date:</span>
+                <span class="mo-seg">
+                  <a href="{{ today_url }}" class="{% if selection.mode == 'today' %}is-on{% endif %}"{% if selection.mode == 'today' %} aria-current="true"{% endif %}>Today</a>
+                  <a href="{{ tomorrow_url }}" class="{% if selection.mode == 'tomorrow' %}is-on{% endif %}"{% if selection.mode == 'tomorrow' %} aria-current="true"{% endif %}>Tomorrow</a>
+                  <a href="{{ next_url }}" class="{% if selection.mode == 'next3' %}is-on{% endif %}"{% if selection.mode == 'next3' %} aria-current="true"{% endif %}>Next {{ next_days }} days</a>
+                </span>
+                {# Typing a year fires "change" for every digit: only a day from today on is sent. #}
+                <input type="date" name="date" class="mo-date{% if selection.mode == 'date' %} is-on{% endif %}" value="{{ date_value }}" min="{{ today_iso }}" max="{{ last_iso }}" aria-label="Pick one exact date" title="Pick one exact date" onchange="if (this.value &amp;&amp; this.value &gt;= this.min) { this.form.submit(); }">
+                <noscript><button type="submit" class="mo-btn">Show</button></noscript>
+                <span class="mo-days">{{ selection.label }}</span>
               </form>
+              <p class="mo-note">{% if tab == 'return' %}Late gowns show on every date. Returns are recorded in Active Reservations (View booking).{% else %}Pick-ups are {{ pickup_hours }}. A gown can be marked ready on its pick-up day or up to {{ ready_ahead_days }} days before.{% endif %}</p>
 
-              <!-- Everything below is drawn from the bookings, the gowns' rest days and the payments, and refreshes by itself (live region). It only shows: a pick-up or a
-                   return is marked in Active Reservations (the link on each gown), where the condition, balance and late-fee rules are. -->
-              <div data-live-region="gown-board" data-live-hold="details[open]">
-                <div class="gb-stats" role="navigation" aria-label="Jump to a part of this day">
-                  <a class="gb-stat gb-stat--hot{% if not board.counts.rush %} is-zero{% endif %}" href="#gb-rush" title="Pick-ups in the next few days whose gown is not ready">Rush <b>{{ board.counts.rush }}</b></a>
-                  <a class="gb-stat" href="#gb-pickups">Pick-ups <b>{{ board.counts.pickups }}</b></a>
-                  <a class="gb-stat" href="#gb-returns">Returns <b>{{ board.counts.returns }}</b></a>
-                  <a class="gb-stat gb-stat--hot{% if not board.counts.overdue %} is-zero{% endif %}" href="#gb-overdue" title="Gowns past their return date and still out, right now">Overdue now <b>{{ board.counts.overdue }}</b></a>
+              <div class="mo-list" data-arpg=".mo-row" data-arpg-noun="gowns" data-arpg-top="off" data-live-region="monitoring-list" data-live-hold=".mo-btn:disabled">
+                {% if rows %}
+                <div class="mo-head" aria-hidden="true"><span>Gown &amp; tag</span><span>Schedule</span><span>Customer</span><span>Status</span><span>Action</span></div>
+                {% for row in rows %}
+                <div class="mo-row is-{{ row.status }}" data-item-id="{{ row.id }}">
+                  <div class="mo-gown">
+                    <span class="mo-thumb" role="button" tabindex="0" data-gpw-name="{{ row.gown }}" data-gpw-sub="{{ row.window_sub }}" data-gpw-photo="{{ row.photo }}" aria-label="See the photo of {{ row.gown }}" title="See the photo">{% if row.thumb %}<img src="{{ row.thumb }}" alt="" loading="lazy">{% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 19.5h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5z"/></svg>{% endif %}</span>
+                    <span class="mo-gown-t">
+                      <span class="mo-name" role="button" tabindex="0" data-gpw-name="{{ row.gown }}" data-gpw-sub="{{ row.window_sub }}" data-gpw-photo="{{ row.photo }}">{{ row.gown }}</span>
+                      {% if row.tag_color or row.size %}<span class="mo-sub">{% if row.tag_color %}<span class="mo-tagdot"{% if row.tag_hex %} style="background: {{ row.tag_hex }};"{% endif %} aria-hidden="true"></span>{{ row.tag_color }} tag{% if row.size %} &middot; {% endif %}{% endif %}{% if row.size %}Size {{ row.size }}{% endif %}</span>{% endif %}
+                      {% if row.code %}<span class="mo-sub mo-codeid">{% for word in row.code_words %}<span class="mo-nw">{{ word }}</span>{% if not forloop.last %} {% endif %}{% endfor %}</span>{% endif %}
+                    </span>
+                  </div>
+                  <div class="mo-when"><span class="mo-when-l">{{ row.date_label }}</span><b{% if row.date_is_today %} class="is-today"{% endif %}>{{ row.date_text }}</b><span class="mo-sub">Event {{ row.event_text }}</span></div>
+                  <div class="mo-cust"><b>{{ row.customer }}</b>{% if row.phone %}<a class="mo-tel" href="tel:{{ row.phone|cut:' ' }}">{{ row.phone }}</a>{% endif %}<a class="mo-code" href="{{ row.booking_url }}" title="Open this booking">{{ row.booking }}</a></div>
+                  <div class="mo-state"><span class="mo-chip mo-chip--{{ row.status }}">{{ row.status_word }}</span>{% if row.detail %}<span class="mo-detail">{{ row.detail }}</span>{% endif %}</div>
+                  <div class="mo-act">
+                    {% if row.status == 'prepare' %}{% if row.can_ready %}<button type="button" class="mo-btn mo-btn--main" data-mo-ready="{% url 'arabela_admin:reservation_item_ready' row.id %}">Mark ready</button>{% else %}<span class="mo-later">Mark ready from {{ row.ready_from }}</span>{% endif %}
+                    {% elif row.status == 'ready' %}<button type="button" class="mo-btn" data-mo-undo="{% url 'arabela_admin:reservation_item_unready' row.id %}" data-mo-told="{% if row.told %}1{% else %}0{% endif %}" data-mo-gown="{{ row.gown }}">Undo</button>
+                    {% elif row.status == 'cleaning' %}<span class="mo-later" title="Nothing to record here">&ndash;</span>
+                    {% else %}<a class="mo-btn" href="{{ row.booking_url }}">View booking</a>{% endif %}
+                  </div>
                 </div>
-                {% if not board.rush_checked %}<p class="gb-note">Rush is checked for today and the next 2 days.</p>{% endif %}
-
-                {% if board.rush %}
-                <section class="gb-sec" id="gb-rush" aria-labelledby="gb-rush-h">
-                  <h2 class="gb-h gb-h--rush" id="gb-rush-h">Rush <small>{{ board.rush|length }}</small></h2>
-                  <p class="gb-why">These gowns are picked up soon but are not ready. Sort them out first.</p>
-                  {% for row in board.rush %}{% include "arabela_admin/partials/gown_board_line.html" %}{% endfor %}
-                </section>
+                {% endfor %}
+                {% else %}
+                <div class="mo-empty">{% if tab == 'return' %}<b>Nothing for return {{ selection.words }}.</b><span>No gown is due back {{ selection.words }}, and none is late or being cleaned.</span>{% else %}<b>Nothing to prepare {{ selection.words }}.</b><span>No gown is waiting to be picked up {{ selection.words }}.</span>{% endif %}</div>
                 {% endif %}
-
-                <section class="gb-sec" id="gb-pickups" aria-labelledby="gb-pickups-h">
-                  <h2 class="gb-h" id="gb-pickups-h">{% if board.is_past %}Pick-ups that day{% else %}To get ready{% endif %} <small>{{ board.pickups|length }}</small></h2>
-                  {% if not board.is_past %}<p class="gb-why">Gowns customers collect on this day (1:00 PM to 5:00 PM). A balance is collected at the counter.</p>{% endif %}
-                  {% for row in board.pickups %}{% include "arabela_admin/partials/gown_board_line.html" %}
-                  {% empty %}<p class="gb-empty">{% if board.rush %}Nothing else is picked up on this day.{% else %}No gown is picked up on this day.{% endif %}</p>{% endfor %}
-                </section>
-
-                <section class="gb-sec" id="gb-returns" aria-labelledby="gb-returns-h">
-                  <h2 class="gb-h" id="gb-returns-h">{% if board.is_past %}Returns that day{% else %}To come back{% endif %} <small>{{ board.returns|length }}</small></h2>
-                  {% for row in board.returns %}{% include "arabela_admin/partials/gown_board_line.html" %}
-                  {% empty %}<p class="gb-empty">No gown is due back on this day.</p>{% endfor %}
-                </section>
-
-                <section class="gb-sec" id="gb-overdue" aria-labelledby="gb-overdue-h">
-                  <h2 class="gb-h gb-h--rush" id="gb-overdue-h">Overdue now <small>{{ board.overdue|length }}</small></h2>
-                  <p class="gb-why">Out past their return date, right now, whichever day is shown.</p>
-                  {% for row in board.overdue %}{% include "arabela_admin/partials/gown_board_line.html" %}
-                  {% empty %}<p class="gb-empty">No gown is overdue right now.</p>{% endfor %}
-                </section>
-
-                <details class="gb-fold gb-sec">
-                  <summary><h2 class="gb-h">Ready again <small>{{ board.ready_again|length }}</small></h2></summary>
-                  <p class="gb-why">Gowns whose cleaning, repair or rest ended the day before, so they are back on the shelf on this day.</p>
-                  {% for g in board.ready_again %}
-                  <div class="gb-ready"><b>{{ g.gown }}{% if g.code %} &middot; {{ g.code }}{% endif %}</b><span>{{ g.why }} ended {{ g.ended|date:"M j" }}</span></div>
-                  {% empty %}<p class="gb-empty">No gown finishes resting before this day.</p>{% endfor %}
-                </details>
               </div>
             </div>
           </div>
@@ -1266,12 +1321,72 @@
   <script defer src="{% static 'arabela_admin/global-search.js' %}"></script>
   <script defer src="{% static 'arabela_admin/pager.js' %}"></script>
   <script>
-    // The board is drawn by the server; the page's own script only gives the sidebar and the dark mode their state.
-    window.gownBoardApp = function () {
-      return { page: 'gown-board', loaded: true, darkMode: false, stickyMenu: false, sidebarToggle: false, scrollTop: false };
+    // The lists are drawn by the server; the page's own script gives the sidebar and dark mode their state, and sends "Mark ready" / "Undo".
+    window.gownMonitoringApp = function () {
+      return { page: 'gown-monitoring', loaded: true, darkMode: false, stickyMenu: false, sidebarToggle: false, scrollTop: false };
     };
+    (function () {
+      'use strict';
+      var NOTE = 'arabelaMonitoringNote', SCROLL = 'arabelaMonitoringScroll';
+      function keep(key, value) { try { sessionStorage.setItem(key, value); } catch (e) { /* the note is lost; the list still shows it */ } }
+      function take(key) { try { var v = sessionStorage.getItem(key); sessionStorage.removeItem(key); return v; } catch (e) { return null; } }
+      function token() { var m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/); return m ? decodeURIComponent(m[1]) : ''; }
+      function scroller() { var main = document.querySelector('main'); return main ? main.parentElement : null; }
+      function toast(text) {
+        var node = document.createElement('div');
+        node.className = 'mo-toast';
+        node.setAttribute('role', 'status');
+        node.textContent = text;
+        document.body.appendChild(node);
+        window.setTimeout(function () { node.remove(); }, 6000);
+      }
+      // The page is drawn again from the server after a change (the same lines, same page of 15 and same place on the screen).
+      function redraw(note) {
+        if (note) { keep(NOTE, note); }
+        var box = scroller();
+        if (box) { keep(SCROLL, String(box.scrollTop)); }
+        window.location.reload();
+      }
+      function send(button, url) {
+        var words = button.textContent;
+        button.disabled = true;
+        button.textContent = 'Saving...';
+        fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token() }, body: '{}' })
+          .then(function (res) { return res.json().catch(function () { return {}; }).then(function (data) { return { ok: res.ok, data: data }; }); })
+          .then(function (answer) {
+            if (answer.ok && answer.data.success) { redraw(answer.data.message); return; }
+            var why = answer.data.error || 'That did not save. Please try again.';
+            window.adminAlert({ title: 'Not saved', message: why }).then(function () { redraw(''); });
+          })
+          .catch(function () {
+            button.disabled = false;
+            button.textContent = words;
+            window.adminAlert({ title: 'Not saved', message: 'The server could not be reached. Check the connection and try again.' });
+          });
+      }
+      // One listener for the whole page, so lines redrawn by the live updates keep working.
+      document.addEventListener('click', function (event) {
+        var target = event.target && event.target.closest ? event.target.closest('[data-mo-ready], [data-mo-undo]') : null;
+        if (!target || target.disabled) { return; }
+        event.preventDefault();
+        if (target.hasAttribute('data-mo-ready')) { send(target, target.getAttribute('data-mo-ready')); return; }
+        var url = target.getAttribute('data-mo-undo');
+        if (target.getAttribute('data-mo-told') !== '1') { send(target, url); return; }
+        window.adminConfirm({
+          title: 'Take back "Ready"?',
+          message: 'The customer was already told ' + target.getAttribute('data-mo-gown') + ' is ready for pick-up. Nothing is sent now, so let them know if it is not.',
+          confirmText: 'Take it back'
+        }).then(function (yes) { if (yes) { send(target, url); } });
+      });
+      window.addEventListener('load', function () {
+        var note = take(NOTE), place = take(SCROLL), box = scroller();
+        if (place !== null && box) { box.scrollTop = Number(place) || 0; }
+        if (note) { toast(note); }
+      });
+    })();
   </script>
 
 {% include "arabela_admin/partials/dialog.html" %}
+{% include "arabela_admin/partials/gown_photo_window.html" %}
 </body>
 </html>

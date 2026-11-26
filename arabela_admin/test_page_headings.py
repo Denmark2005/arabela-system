@@ -19,6 +19,7 @@ PAGES = {
     "categories.html": (reverse("arabela_admin:categories"), "Categories", False),
     "clients.html": (reverse("arabela_admin:clients"), "Client List", False),
     "gown-catalog.html": (reverse("arabela_admin:gown_catalog"), "Gown Catalog", False),
+    "gown-monitoring.html": (reverse("arabela_admin:gown_monitoring"), "Gown Monitoring", False),
     "new-booking.html": (reverse("arabela_admin:new_booking"), "New Booking", False),
     "payment-verification.html": (reverse("arabela_admin:payment_verification"), "Payment Verification", False),
     "pending-approval.html": (reverse("arabela_admin:pending_approval"), "Pending Approval", True),

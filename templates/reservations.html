@@ -431,8 +431,10 @@
                     <span class="res-chip bg-neutral-100 text-neutral-600"><span class="material-symbols-outlined">inventory_2</span>Reservation Completed</span>
                   {% elif item.stage == "Overdue" %}
                     <span class="res-chip bg-red-50 text-red-600"><span class="material-symbols-outlined">warning</span>Return Overdue</span>
+                  {% elif item.stage == "Pick-up" and item.is_ready_for_pickup %}
+                    <span class="res-chip bg-emerald-50 text-emerald-600"><span class="material-symbols-outlined">local_shipping</span>Ready for Pick-up</span>
                   {% elif item.stage == "Pick-up" %}
-                    <span class="res-chip bg-amber-50 text-amber-700"><span class="material-symbols-outlined">local_shipping</span>Ready for Pick-up</span>
+                    <span class="res-chip bg-amber-50 text-amber-700"><span class="material-symbols-outlined">schedule</span>Awaiting Pick-up</span>
                   {% else %}
                     <span class="res-chip bg-emerald-50 text-emerald-600"><span class="material-symbols-outlined">check_circle</span>Currently Rented</span>
                   {% endif %}

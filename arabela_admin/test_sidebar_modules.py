@@ -118,8 +118,10 @@ class SidebarModulesTests(TestCase):
             self.assertIn(name, modules)
         self.assertEqual(hrefs(modules["Bookings & Schedule"]).count(reverse("arabela_admin:new_booking")), 1)
         self.assertEqual(hrefs(modules["Bookings & Schedule"]), [
-            reverse("arabela_admin:new_booking"), reverse("arabela_admin:rental_schedule"), reverse("arabela_admin:gown_board"), reverse("arabela_admin:active_reservations"),
-            reverse("arabela_admin:rental_history"), reverse("arabela_admin:pending_approval")])     # the Gown Board sits right below Rental Schedule; Rental History right below Active Reservations
+            reverse("arabela_admin:new_booking"), reverse("arabela_admin:rental_schedule"), reverse("arabela_admin:active_reservations"),
+            reverse("arabela_admin:rental_history"), reverse("arabela_admin:pending_approval")])     # the Gown Board is gone; Rental History right below Active Reservations
+        self.assertEqual(hrefs(modules["Inventory Management"]), [
+            reverse("arabela_admin:gown_catalog"), reverse("arabela_admin:gown_monitoring"), reverse("arabela_admin:categories")])   # Monitoring right below the Catalog
 
     def test_the_two_pages_name_the_new_module_in_their_year_toast(self):
         found = self.sidebars(self.owner)

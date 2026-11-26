@@ -19,7 +19,12 @@ from .new_booking import (
     booking_gown_search_view,
     new_booking_view,
 )
-from .gown_board import gown_board_view
+from .monitoring import (
+    gown_board_redirect_view,
+    gown_monitoring_view,
+    reservation_item_ready_view,
+    reservation_item_unready_view,
+)
 from .identity_views import (
     booking_id_cancel_view,
     booking_id_counter_view,
@@ -133,7 +138,8 @@ urlpatterns = [
     path("logout/", admin_logout_view, name="admin_logout"),
     path("", dashboard_view, name="dashboard"),
     path("rental-schedule/", rental_schedule_view, name="rental_schedule"),
-    path("gown-board/", gown_board_view, name="gown_board"),
+    path("gown-monitoring/", gown_monitoring_view, name="gown_monitoring"),
+    path("gown-board/", gown_board_redirect_view, name="gown_board"),      # the old Gown Board address, kept so saved links still open
     # New Booking: walk-in / Facebook / phone bookings recorded by staff, and the "Check availability" answers it shares
     # with Gown Catalog (arabela_admin/new_booking.py).
     path("new-booking/", new_booking_view, name="new_booking"),
@@ -201,6 +207,8 @@ urlpatterns = [
     path("api/reservation-items/<int:item_id>/change-dates/", reservation_item_change_dates_view, name="reservation_item_change_dates"),
     path("api/reservation-items/<int:item_id>/send-reminder/", reservation_item_send_reminder_view, name="reservation_item_send_reminder"),
     path("api/reservation-items/<int:item_id>/undo-pickup/", reservation_item_undo_pickup_view, name="reservation_item_undo_pickup"),
+    path("api/reservation-items/<int:item_id>/ready/", reservation_item_ready_view, name="reservation_item_ready"),
+    path("api/reservation-items/<int:item_id>/unready/", reservation_item_unready_view, name="reservation_item_unready"),
     path("clients/", clients_view, name="clients"),
     path("api/customers/<int:user_id>/flag/", customer_flag_view, name="customer_flag"),
     path("api/customers/<int:user_id>/unlock/", customer_unlock_view, name="customer_unlock"),

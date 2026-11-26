@@ -6,7 +6,7 @@
   * what is HIDDEN once customers pay on PayMongo's page (Payment Verification, Pending Approval while nothing is pending, Quick Verify, the GCash cards on
     Profile) and that nothing is hidden while no PayMongo key is set (the shop still on screenshots keeps every page it has).
 
-The money rules themselves are tested in reservations/test_ledger.py and test_payments_service.py; the Gown Board and Security Deposits have their own files."""
+The money rules themselves are tested in reservations/test_ledger.py and test_payments_service.py; Gown Monitoring and Security Deposits have their own files."""
 import json
 import re
 from datetime import timedelta
@@ -156,7 +156,7 @@ class PrintedPaperTests(Base):
         self.as_user(self.staff)
         receipt = self.client.get(reverse("arabela_admin:payment_receipt_print", args=[payment.pk]) + "?look=1&embed=1")
         self.assertEqual(receipt.headers["X-Frame-Options"], "SAMEORIGIN")
-        for name in ("dashboard", "payments", "gown_board", "security_deposits"):
+        for name in ("dashboard", "payments", "gown_monitoring", "security_deposits"):
             with self.subTest(page=name):
                 self.assertEqual(self.client.get(reverse(f"arabela_admin:{name}")).headers["X-Frame-Options"], "DENY")
 
@@ -178,7 +178,7 @@ class PrintedPaperTests(Base):
 class ReceiptWindowTests(Base):
     def test_every_admin_page_carries_the_window_and_the_date_helper_once(self):
         self.as_user(self.staff)
-        for name in ("dashboard", "active_reservations", "reservation_records", "rental_history", "security_deposits", "payments", "gown_board", "calendar"):
+        for name in ("dashboard", "active_reservations", "reservation_records", "rental_history", "security_deposits", "payments", "gown_monitoring", "calendar"):
             with self.subTest(page=name):
                 html = self.client.get(reverse(f"arabela_admin:{name}")).content.decode()
                 self.assertEqual(html.count('id="rcm-root"'), 1)
@@ -478,7 +478,7 @@ class DashboardPageTests(Base):
             with self.subTest(piece=piece):
                 self.assertIn(piece, line)
         self.assertIn(f'href="{reverse("arabela_admin:payments")}"', line)
-        self.assertIn(f'href="{reverse("arabela_admin:gown_board")}#gb-overdue"', line)
+        self.assertIn(f'href="{reverse("arabela_admin:gown_monitoring")}?tab=return"', line)
 
     def test_the_warning_line_is_not_there_when_nothing_needs_a_person(self):
         _, html = self.page()
@@ -507,7 +507,7 @@ class HidingWhilePayMongoIsOnTests(Base):
 
     def sidebar_page(self, user=None):
         self.client.force_login(user or self.owner)
-        return self.client.get(reverse("arabela_admin:gown_board")).content.decode()
+        return self.client.get(reverse("arabela_admin:gown_monitoring")).content.decode()
 
     def pending(self):
         return Reservation.objects.create(customer=self.customer, customer_name="Waiting", phone="09170000001", status=Reservation.Status.PENDING,
@@ -515,7 +515,7 @@ class HidingWhilePayMongoIsOnTests(Base):
 
     def test_without_a_paymongo_key_every_old_page_is_still_in_the_menu(self):
         html = self.sidebar_page()
-        for name in ("pending_approval", "payment_verification", "payments", "security_deposits", "gown_board", "reservation_records"):
+        for name in ("pending_approval", "payment_verification", "payments", "security_deposits", "gown_monitoring", "reservation_records"):
             with self.subTest(link=name):
                 self.assertIn(self.link(name), html)
 
@@ -529,7 +529,7 @@ class HidingWhilePayMongoIsOnTests(Base):
         html = self.sidebar_page()
         self.assertNotIn(self.link("payment_verification"), html)
         self.assertNotIn(self.link("pending_approval"), html)
-        for name in ("payments", "security_deposits", "gown_board", "reservation_records", "active_reservations", "rental_history"):
+        for name in ("payments", "security_deposits", "gown_monitoring", "reservation_records", "active_reservations", "rental_history"):
             with self.subTest(link=name):
                 self.assertIn(self.link(name), html)
 
@@ -560,9 +560,9 @@ class HidingWhilePayMongoIsOnTests(Base):
 
     @override_settings(**PAYMONGO_ON)
     def test_a_customer_or_a_visitor_never_gets_the_flags_or_the_pages(self):
-        self.assertEqual(self.client.get(reverse("arabela_admin:gown_board")).status_code, 302)
+        self.assertEqual(self.client.get(reverse("arabela_admin:gown_monitoring")).status_code, 302)
         self.client.force_login(self.customer)
-        self.assertEqual(self.client.get(reverse("arabela_admin:gown_board")).status_code, 302)
+        self.assertEqual(self.client.get(reverse("arabela_admin:gown_monitoring")).status_code, 302)
 
 
 class PageStateIsWellFormedTests(Base):
@@ -588,7 +588,7 @@ class PageStateIsWellFormedTests(Base):
 
     def test_every_admin_page_with_a_state_has_only_real_attributes_on_its_body_tag(self):
         self.client.force_login(self.owner)
-        for name in ("dashboard", "active_reservations", "reservation_records", "rental_history", "security_deposits", "gown_board", "payments", "calendar",
+        for name in ("dashboard", "active_reservations", "reservation_records", "rental_history", "security_deposits", "gown_monitoring", "payments", "calendar",
                      "pending_approval", "payment_verification", "new_booking", "clients", "gown_catalog"):
             with self.subTest(page=name):
                 html = self.client.get(reverse(f"arabela_admin:{name}")).content.decode()

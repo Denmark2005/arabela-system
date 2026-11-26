@@ -311,9 +311,9 @@ class PageTests(Base):
     def test_the_sidebar_link_is_the_owners_alone(self):
         link = reverse("arabela_admin:id_checks")
         self.assertIn(link, self.owner_client.get(reverse("arabela_admin:new_booking")).content.decode())
-        self.assertIn(link, self.owner_client.get(reverse("arabela_admin:gown_board")).content.decode())
+        self.assertIn(link, self.owner_client.get(reverse("arabela_admin:gown_monitoring")).content.decode())
         self.assertNotIn(link, self.staff_client.get(reverse("arabela_admin:new_booking")).content.decode())
-        self.assertNotIn(link, self.staff_client.get(reverse("arabela_admin:gown_board")).content.decode())
+        self.assertNotIn(link, self.staff_client.get(reverse("arabela_admin:gown_monitoring")).content.decode())
 
     def test_the_review_count_and_the_booking_chip_links_open_the_check(self):
         waiting = self.in_review()

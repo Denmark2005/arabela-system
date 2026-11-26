@@ -51,7 +51,7 @@ class AlertTests(SimpleTestCase):
         self.assertEqual(dashboard_money.alerts({"late_gowns": 0, "pickups_owing": 0, "online_attention": 0}), [])
         one = dashboard_money.alerts({"late_gowns": 1, "pickups_owing": 1, "online_attention": 1})
         self.assertEqual([a["text"] for a in one], ["1 gown is late coming back", "1 pick-up in the next 2 days still has a balance", "1 online payment needs a look"])
-        self.assertEqual([a["url"] for a in one], [reverse("arabela_admin:gown_board") + "#gb-overdue", reverse("arabela_admin:payments"),
+        self.assertEqual([a["url"] for a in one], [reverse("arabela_admin:gown_monitoring") + "?tab=return", reverse("arabela_admin:payments"),
                                                    reverse("arabela_admin:payment_online")])
         two = dashboard_money.alerts({"late_gowns": 2, "pickups_owing": 3, "online_attention": 2})
         self.assertEqual([a["text"] for a in two], ["2 gowns are late coming back", "3 pick-ups in the next 2 days still have a balance", "2 online payments need a look"])
