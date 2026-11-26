@@ -611,20 +611,26 @@ class ExportTests(AuditBase):
 
 # --------------------------------------------------------------------------------------------------------------------------------
 class DashboardAndBellTests(AuditBase):
-    def test_the_dashboard_strip_is_for_the_owner_and_counts_only_staff_work_today(self):
+    def test_the_staff_summary_counts_only_staff_work_today_and_left_the_dashboard(self):
+        """The Dashboard no longer carries the staff strip (the Audit Log has it); the summary itself still counts the same way, and the Audit Log's
+        clean-up still rides on the owner's Dashboard visit."""
+        from arabela_admin.audit_views import today_strip
         write_line(self.maria, 5, summary="Maria Cruz approved a booking")
         write_line(self.maria, 6, summary="Maria Cruz deleted a gown", sensitive=True)
         write_line(self.pedro, 7, summary="Pedro Reyes did something")
         write_line(self.pedro, 8, summary="Pedro's attempt", outcome="refused", sensitive=True)
         write_line(self.owner, 9, summary="cancel_owner changed a setting")
         write_line(self.maria, 60 * 30, summary="Yesterday's work")
+        self.assertEqual(today_strip(), {"actions": 3, "people": 2, "important": 2})
         self.client.force_login(self.owner)
-        response = self.client.get(reverse("arabela_admin:dashboard"))
-        self.assertEqual(response.context["staff_today"], {"actions": 3, "people": 2, "important": 2})
-        self.assertIn("Staff activity today", response.content.decode())
+        with patch("accounts.audit.maybe_purge") as purge:
+            response = self.client.get(reverse("arabela_admin:dashboard"))
+        purge.assert_called_once_with()
+        self.assertNotIn("Staff activity today", response.content.decode())
         self.client.force_login(self.maria)
-        response = self.client.get(reverse("arabela_admin:dashboard"))
-        self.assertIsNone(response.context["staff_today"])
+        with patch("accounts.audit.maybe_purge") as purge:
+            response = self.client.get(reverse("arabela_admin:dashboard"))
+        purge.assert_not_called()
         self.assertNotIn("Staff activity today", response.content.decode())
 
     def test_the_bell_shows_important_staff_actions_to_the_owner_only_and_not_her_own(self):

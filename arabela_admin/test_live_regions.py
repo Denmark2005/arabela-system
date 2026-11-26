@@ -101,7 +101,7 @@ class TheScriptsKeepTheirSafetyRulesTests(SimpleTestCase):
 
 
 ADMIN_PAGES = {
-    "dashboard": ["overview-top", "quick-verify"],
+    "dashboard": ["overview-alerts", "overview-top", "overview-bookings", "quick-verify"],
     "pending_approval": ["pending-list"],
     "active_reservations": ["active-list", "active-filters"],
     "payment_verification": ["pv-list", "pv-verified-today"],

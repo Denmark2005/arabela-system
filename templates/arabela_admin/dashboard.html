@@ -17,35 +17,91 @@
   {% include "arabela_admin/partials/photo_viewer_styles.html" %}
   {% include "arabela_admin/partials/ar_list_styles.html" %}
   <style>
-    /* Dashboard: the overview is two slim strips (ov-*, the four tall tiles took about 480px) and Quick Verify has the Pending Approval look (qv-*, on top of
-       partials/ar_list_styles.html). Light and dark. */
-    .ov-stack { display: grid; gap: .75rem; }
-    .ov-strip { display: grid; overflow: hidden; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; color: inherit; text-decoration: none; }
-    .dark .ov-strip { background: rgba(255,255,255,.03); border-color: #1d2939; }
-    .ov-strip--top { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .ov-strip--staff { grid-template-columns: minmax(11rem, 1.25fr) repeat(3, minmax(0, 1fr)); transition: background-color .15s; }
-    .ov-dot--important { background: #f79009; }
-    .ov-strip--gowns { grid-template-columns: minmax(11rem, 1.25fr) repeat(5, minmax(0, 1fr)); transition: background-color .15s; }
-    a.ov-strip:hover, a.ov-cell:hover { background: rgba(152,162,179,.08); }
-    a.ov-strip:focus-visible, a.ov-cell:focus-visible { outline: 2px solid #465fff; outline-offset: -2px; }
-    .ov-cell { display: flex; align-items: center; gap: .85rem; min-width: 0; padding: .85rem 1.25rem; color: inherit; text-decoration: none; transition: background-color .15s; }
-    .ov-cell + .ov-cell, .ov-head + .ov-cell { border-left: 1px solid #f2f4f7; }
-    .dark .ov-cell + .ov-cell, .dark .ov-head + .ov-cell { border-color: #1d2939; }
-    .ov-cell--stat { flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; }
-    .ov-head { display: flex; align-items: center; gap: .85rem; min-width: 0; padding: .85rem 1.25rem; }
+    /* Dashboard (db-): a greeting, a warning line, two money cards, then Gown Inventory and Bookings as cards of separate boxes; every figure opens the
+       page behind it. The text is a step bigger than the lists' (a dashboard is read at a glance). Light and dark. Quick Verify keeps the Pending Approval look
+       (qv-*, on top of partials/ar_list_styles.html). */
+    .db-stack { display: grid; gap: 1.25rem; container-type: inline-size; container-name: db; }
+    .db-hello { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: .9rem 1.25rem; }
+    .db-greet { margin: 0; font-size: 1.75rem; font-weight: 700; line-height: 1.2; letter-spacing: -.01em; color: #101828; }
+    .dark .db-greet { color: rgba(255,255,255,.92); }
+    .db-date { margin: .3rem 0 0; font-size: .9375rem; color: #667085; }
+    .dark .db-date { color: #98a2b3; }
+    .db-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
+    .db-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 2.75rem; padding: 0 1.1rem; border: 1px solid #d0d5dd; border-radius: .65rem; background: #fff; color: #344054; font-size: .9375rem; font-weight: 500; line-height: 1.2; text-decoration: none; white-space: nowrap; transition: background-color .15s, border-color .15s; }
+    .dark .db-btn { border-color: #344054; background: rgba(255,255,255,.03); color: #d0d5dd; }
+    .db-btn:hover { background: #f9fafb; }
+    .dark .db-btn:hover { background: rgba(255,255,255,.07); }
+    .db-btn--main { border-color: #465fff; background: #465fff; color: #fff; }
+    .dark .db-btn--main { border-color: #465fff; background: #465fff; color: #fff; }
+    .db-btn--main:hover, .dark .db-btn--main:hover { border-color: #3641f5; background: #3641f5; }
+    .db-btn:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+    .db-alerts:empty { display: none; }
+    .db-alert { display: flex; align-items: flex-start; gap: .7rem; padding: .8rem 1.1rem; border: 1px solid #fedf89; border-radius: .9rem; background: #fffaeb; color: #93370d; font-size: .9375rem; line-height: 1.45; }
+    .dark .db-alert { border-color: rgba(247,144,9,.35); background: rgba(247,144,9,.1); color: #fec84b; }
+    .db-alert-ic { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 1.5rem; height: 1.5rem; border-radius: 999px; background: #f79009; color: #fff; font-size: .875rem; font-weight: 700; }
+    .db-alert a { color: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+    .db-alert a:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; border-radius: .25rem; }
+    .db-alert-sep { opacity: .55; }
+    .db-row { display: grid; gap: 1.25rem; }
+    .db-row--money { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .db-row--figures { grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); align-items: stretch; }
+    .db-card { display: flex; flex-direction: column; min-width: 0; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; color: inherit; text-decoration: none; }
+    .dark .db-card { border-color: #1d2939; background: rgba(255,255,255,.03); }
+    a.db-card { transition: border-color .15s, box-shadow .15s, background-color .15s; }
+    a.db-card:hover { border-color: #d0d5dd; box-shadow: 0 6px 18px -10px rgba(16,24,40,.25); }
+    .dark a.db-card:hover { border-color: #344054; background: rgba(255,255,255,.05); box-shadow: none; }
+    a.db-card:focus-visible, a.db-fig:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+    .db-money { gap: .4rem; padding: 1.35rem 1.5rem 1.4rem; }
+    .db-money-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .7rem; }
+    .db-money-title { font-size: 1.0625rem; font-weight: 600; color: #344054; }
+    .dark .db-money-title { color: #d0d5dd; }
+    .db-money-num { margin-top: .45rem; font-size: 2.25rem; font-weight: 700; line-height: 1.15; letter-spacing: -.01em; font-variant-numeric: tabular-nums; color: #101828; overflow-wrap: anywhere; }
+    .dark .db-money-num { color: rgba(255,255,255,.95); }
+    .db-money-sub { font-size: .9375rem; line-height: 1.4; color: #667085; }
+    .dark .db-money-sub { color: #98a2b3; }
+    .db-money-sub b { font-weight: 600; color: #344054; font-variant-numeric: tabular-nums; }
+    .dark .db-money-sub b { color: #d0d5dd; }
+    .db-money-sub .db-due { font-weight: 600; color: #b54708; }
+    .dark .db-money-sub .db-due { color: #fdb022; }
+    .db-fhead { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: 1.1rem 1.25rem 0; }
+    .db-ftitle { margin: 0; font-size: 1.0625rem; font-weight: 600; color: #1d2939; }
+    .dark .db-ftitle { color: rgba(255,255,255,.9); }
+    .db-figs { flex: 1 1 auto; display: grid; gap: .75rem; padding: .9rem 1.25rem 1.25rem; }
+    .db-figs--5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .db-figs--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .db-fig { display: flex; flex-direction: column; justify-content: space-between; gap: .55rem; min-width: 0; padding: .9rem 1rem; border: 1px solid #f2f4f7; border-radius: .85rem; background: #f9fafb; color: inherit; text-decoration: none; transition: background-color .15s, border-color .15s; }
+    .dark .db-fig { border-color: #1d2939; background: rgba(255,255,255,.025); }
+    a.db-fig:hover { border-color: #e4e7ec; background: #f2f4f7; }
+    .dark a.db-fig:hover { border-color: #344054; background: rgba(255,255,255,.06); }
+    .db-fig-lbl { display: flex; align-items: flex-start; gap: .45rem; font-size: .9375rem; line-height: 1.25; color: #475467; }
+    .db-fig-lbl > .ar-dot { flex: none; margin-top: .22em; }          /* the circle stays beside the first word when the label takes two lines */
+    .db-fig-lbl .ov-tag { display: inline-block; margin-top: .2rem; }
+    .dark .db-fig-lbl { color: #98a2b3; }
+    .db-fig-num { font-size: 1.875rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; color: #101828; }
+    .dark .db-fig-num { color: rgba(255,255,255,.92); }
+    .db-fig-num.is-zero { color: #98a2b3; }
+    .dark .db-fig-num.is-zero { color: #667085; }
+    /* Narrower spaces (the page's own width, not the screen's): the two figure cards stack, then the money cards stack, then the boxes go to fewer per row. */
+    @container db (max-width: 76rem) { .db-row--figures { grid-template-columns: minmax(0, 1fr); } }
+    @container db (max-width: 42rem) {
+      .db-row--money { grid-template-columns: minmax(0, 1fr); }
+      .db-figs--5 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .db-greet { font-size: 1.5rem; }
+      .db-money-num { font-size: 2rem; }
+    }
+    @container db (max-width: 30rem) {
+      .db-figs--5, .db-figs--3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .db-figs--5 > .db-fig:last-child, .db-figs--3 > .db-fig:last-child { grid-column: 1 / -1; }
+      .db-actions { width: 100%; }
+      .db-actions > .db-btn { flex: 1 1 auto; }
+      .db-money, .db-figs { padding-left: 1rem; padding-right: 1rem; }
+      .db-fhead { padding-left: 1rem; padding-right: 1rem; }
+    }
+    /* What the old strips shared and the cards still use: the round icon, the small month tag, the inventory circles. */
     .ov-ic { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; border-radius: .75rem; background: #f2f4f7; color: #344054; }
     .dark .ov-ic { background: #1d2939; color: rgba(255,255,255,.9); }
     .ov-ic svg { display: block; width: 1.25rem; height: 1.25rem; fill: currentColor; }
-    .ov-txt { display: flex; flex-direction: column; min-width: 0; }
-    .ov-lbl { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .45rem; font-size: .8125rem; line-height: 1.2; color: #667085; }
-    .dark .ov-lbl { color: #98a2b3; }
-    .ov-head .ov-lbl { font-size: .9375rem; font-weight: 600; color: #1d2939; }
-    .dark .ov-head .ov-lbl { color: rgba(255,255,255,.9); }
-    .ov-num { margin-top: .2rem; font-size: 1.5rem; font-weight: 700; line-height: 1.75rem; font-variant-numeric: tabular-nums; color: #101828; }
-    .dark .ov-num { color: rgba(255,255,255,.9); }
-    .ov-num--zero { color: #667085; }
-    .dark .ov-num--zero { color: #667085; }
-    .ov-tag { padding: .05rem .5rem; border-radius: 999px; background: #f2f4f7; color: #667085; font-size: 0.8125rem; font-weight: 500; white-space: nowrap; }
+    .ov-tag { padding: .05rem .55rem; border-radius: 999px; background: #f2f4f7; color: #667085; font-size: 0.8125rem; font-weight: 500; white-space: nowrap; }
     .dark .ov-tag { background: #1d2939; color: #98a2b3; }
     .ov-dot--available { background: #12b76a; box-shadow: 0 0 0 3px rgba(18,183,106,.18); }
     .ov-dot--reserved { background: #f79009; box-shadow: 0 0 0 3px rgba(247,144,9,.2); }
@@ -113,29 +169,8 @@
       .qv-line > .qv-acts { grid-area: acts; }
       .qv-line > [data-label]::before { content: attr(data-label); display: block; flex: 0 0 100%; margin-bottom: .15rem; font-size: 0.8125rem; font-weight: 500; line-height: 1.2; color: #667085; white-space: nowrap; }
     }
-    /* A small laptop: the gown strip's title takes its own line, the five figures share the next one. */
-    @media (max-width: 1180px) {
-      .ov-strip--gowns { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-      .ov-strip--gowns > .ov-head { grid-column: 1 / -1; padding-bottom: .7rem; border-bottom: 1px solid #f2f4f7; }
-      .dark .ov-strip--gowns > .ov-head { border-color: #1d2939; }
-      .ov-strip--gowns > .ov-head + .ov-cell { border-left: 0; }
-      .ov-strip--staff { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-      .ov-strip--staff > .ov-head { grid-column: 1 / -1; padding-bottom: .7rem; border-bottom: 1px solid #f2f4f7; }
-      .dark .ov-strip--staff > .ov-head { border-color: #1d2939; }
-      .ov-strip--staff > .ov-head + .ov-cell { border-left: 0; }
-    }
-    /* A phone: the strips stack, the gown figures sit two by two, and each payment is two short lines. */
+    /* A phone: each payment waiting in Quick Verify is three short lines. */
     @media (max-width: 760px) {
-      .ov-strip--top { grid-template-columns: minmax(0, 1fr); }
-      .ov-strip--top > .ov-cell + .ov-cell { border-left: 0; border-top: 1px solid #f2f4f7; }
-      .dark .ov-strip--top > .ov-cell + .ov-cell { border-color: #1d2939; }
-      .ov-strip--gowns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .ov-strip--gowns > .ov-cell:nth-child(4) { border-left: 0; border-top: 1px solid #f2f4f7; }
-      .ov-strip--gowns > .ov-cell:nth-child(5) { border-top: 1px solid #f2f4f7; }
-      .ov-strip--gowns > .ov-cell:nth-child(6) { border-left: 0; border-top: 1px solid #f2f4f7; grid-column: 1 / -1; }      /* the fifth figure sits alone on the last row */
-      .dark .ov-strip--gowns > .ov-cell:nth-child(4), .dark .ov-strip--gowns > .ov-cell:nth-child(5), .dark .ov-strip--gowns > .ov-cell:nth-child(6) { border-top-color: #1d2939; }
-      .ov-cell { padding: .8rem 1rem; }
-      .ov-head { padding: .8rem 1rem .7rem; }
       .qv-head, .qv-foot, .qv-empty { padding-left: 1rem; padding-right: 1rem; }
       .qv-line { grid-template-columns: 7.5rem minmax(0, 1fr) 7.25rem; grid-template-areas: "who who acts" "ref amt date" "pick pick ret"; row-gap: .5rem; padding: .7rem 1rem; }
       .qv-line > .qv-pick { grid-area: pick; }
@@ -1274,49 +1309,48 @@
         <main>
           <div class="p-4 mx-auto max-w-(--breakpoint-2xl) md:p-6">
             <div class="grid grid-cols-12 gap-4 md:gap-6">
-              <div class="col-span-12 ov-stack">
-                {# Quick action: record a booking that didn't come through the website (arabela_admin/new_booking.py). #}
-                <div class="flex flex-wrap items-center justify-end gap-3">
-                  <a href="{% url 'arabela_admin:new_booking' %}" title="Record a walk-in booking"
-                    class="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-theme-sm font-medium text-white shadow-theme-xs hover:bg-brand-600">+ New Booking</a>
+              <div class="col-span-12 db-stack">
+                {% comment %} The greeting follows the shop's clock by itself (Good morning from 5:00, afternoon from 12:00, evening from 18:00: the script at the end of the
+                   page); the quick buttons open Active Reservations on today's pick-ups and returns. {% endcomment %}
+                <div class="db-hello">
+                  <div>
+                    <h1 class="db-greet" id="db-greet" data-name="{{ admin_display_name }}" data-zone="{{ shop_time_zone }}">{{ greeting }}{% if admin_display_name %}, {{ admin_display_name }}{% endif %}</h1>
+                    <p class="db-date" id="db-date">{{ today_long }}</p>
+                  </div>
+                  <div class="db-actions">
+                    <a href="{{ pickups_today_url }}" class="db-btn" data-db-day="pickup" title="Gowns to be picked up today - opens Active Reservations">Pick-ups today</a>
+                    <a href="{{ returns_today_url }}" class="db-btn" data-db-day="return" title="Gowns due back today - opens Active Reservations">Returns today</a>
+                    <a href="{% url 'arabela_admin:new_booking' %}" class="db-btn db-btn--main" title="Record a walk-in booking">+ New Booking</a>
+                  </div>
                 </div>
 
-                {# The overview is two slim strips (the four tall tiles they replace took about 480px). Every figure is counted exactly like the page it links to, so a click never lands on a different number. #}
-                <div class="ov-strip ov-strip--top" data-live-region="overview-top">
-                  <a href="{% url 'arabela_admin:clients' %}" title="View Client List" class="ov-cell">
-                    <span class="ov-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M8.80443 5.60156C7.59109 5.60156 6.60749 6.58517 6.60749 7.79851C6.60749 9.01185 7.59109 9.99545 8.80443 9.99545C10.0178 9.99545 11.0014 9.01185 11.0014 7.79851C11.0014 6.58517 10.0178 5.60156 8.80443 5.60156ZM5.10749 7.79851C5.10749 5.75674 6.76267 4.10156 8.80443 4.10156C10.8462 4.10156 12.5014 5.75674 12.5014 7.79851C12.5014 9.84027 10.8462 11.4955 8.80443 11.4955C6.76267 11.4955 5.10749 9.84027 5.10749 7.79851ZM4.86252 15.3208C4.08769 16.0881 3.70377 17.0608 3.51705 17.8611C3.48384 18.0034 3.5211 18.1175 3.60712 18.2112C3.70161 18.3141 3.86659 18.3987 4.07591 18.3987H13.4249C13.6343 18.3987 13.7992 18.3141 13.8937 18.2112C13.9797 18.1175 14.017 18.0034 13.9838 17.8611C13.7971 17.0608 13.4132 16.0881 12.6383 15.3208C11.8821 14.572 10.6899 13.955 8.75042 13.955C6.81096 13.955 5.61877 14.572 4.86252 15.3208ZM3.8071 14.2549C4.87163 13.2009 6.45602 12.455 8.75042 12.455C11.0448 12.455 12.6292 13.2009 13.6937 14.2549C14.7397 15.2906 15.2207 16.5607 15.4446 17.5202C15.7658 18.8971 14.6071 19.8987 13.4249 19.8987H4.07591C2.89369 19.8987 1.73504 18.8971 2.05628 17.5202C2.28015 16.5607 2.76117 15.2906 3.8071 14.2549ZM15.3042 11.4955C14.4702 11.4955 13.7006 11.2193 13.0821 10.7533C13.3742 10.3314 13.6054 9.86419 13.7632 9.36432C14.1597 9.75463 14.7039 9.99545 15.3042 9.99545C16.5176 9.99545 17.5012 9.01185 17.5012 7.79851C17.5012 6.58517 16.5176 5.60156 15.3042 5.60156C14.7039 5.60156 14.1597 5.84239 13.7632 6.23271C13.6054 5.73284 13.3741 5.26561 13.082 4.84371C13.7006 4.37777 14.4702 4.10156 15.3042 4.10156C17.346 4.10156 19.0012 5.75674 19.0012 7.79851C19.0012 9.84027 17.346 11.4955 15.3042 11.4955ZM19.9248 19.8987H16.3901C16.7014 19.4736 16.9159 18.969 16.9827 18.3987H19.9248C20.1341 18.3987 20.2991 18.3141 20.3936 18.2112C20.4796 18.1175 20.5169 18.0034 20.4837 17.861C20.2969 17.0607 19.913 16.088 19.1382 15.3208C18.4047 14.5945 17.261 13.9921 15.4231 13.9566C15.2232 13.6945 14.9995 13.437 14.7491 13.1891C14.5144 12.9566 14.262 12.7384 13.9916 12.5362C14.3853 12.4831 14.8044 12.4549 15.2503 12.4549C17.5447 12.4549 19.1291 13.2008 20.1936 14.2549C21.2395 15.2906 21.7206 16.5607 21.9444 17.5202C22.2657 18.8971 21.107 19.8987 19.9248 19.8987Z"/></svg></span>
-                    <span class="ov-txt"><span class="ov-lbl">Registered Customers</span><span class="ov-num">{{ registered_customers }}</span></span>
-                  </a>
-                  <a href="{% url 'arabela_admin:active_reservations' %}" title="View Active Reservations" class="ov-cell">
-                    <span class="ov-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M11.665 3.75621C11.8762 3.65064 12.1247 3.65064 12.3358 3.75621L18.7807 6.97856L12.3358 10.2009C12.1247 10.3065 11.8762 10.3065 11.665 10.2009L5.22014 6.97856L11.665 3.75621ZM4.29297 8.19203V16.0946C4.29297 16.3787 4.45347 16.6384 4.70757 16.7654L11.25 20.0366V11.6513C11.1631 11.6205 11.0777 11.5843 10.9942 11.5426L4.29297 8.19203ZM12.75 20.037L19.2933 16.7654C19.5474 16.6384 19.7079 16.3787 19.7079 16.0946V8.19202L13.0066 11.5426C12.9229 11.5844 12.8372 11.6208 12.75 11.6516V20.037ZM13.0066 2.41456C12.3732 2.09786 11.6277 2.09786 10.9942 2.41456L4.03676 5.89319C3.27449 6.27432 2.79297 7.05342 2.79297 7.90566V16.0946C2.79297 16.9469 3.27448 17.726 4.03676 18.1071L10.9942 21.5857L11.3296 20.9149L10.9942 21.5857C11.6277 21.9024 12.3732 21.9024 13.0066 21.5857L19.9641 18.1071C20.7264 17.726 21.2079 16.9469 21.2079 16.0946V7.90566C21.2079 7.05342 20.7264 6.27432 19.9641 5.89319L13.0066 2.41456Z"/></svg></span>
-                    <span class="ov-txt"><span class="ov-lbl">Active Rentals</span><span class="ov-num">{{ active_rentals }}</span></span>
-                  </a>
-                  {# One per booking, counted in the month its first gown is picked up; opens Reservation Records filtered to exactly those bookings. #}
-                  <a href="{{ reservations_this_month_url }}" title="Bookings picked up in {{ reservations_this_month_label }} - opens Reservation Records" class="ov-cell">
-                    <span class="ov-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M8 2C8.41421 2 8.75 2.33579 8.75 2.75V3.75H15.25V2.75C15.25 2.33579 15.5858 2 16 2C16.4142 2 16.75 2.33579 16.75 2.75V3.75H18.5C19.7426 3.75 20.75 4.75736 20.75 6V9V19C20.75 20.2426 19.7426 21.25 18.5 21.25H5.5C4.25736 21.25 3.25 20.2426 3.25 19V9V6C3.25 4.75736 4.25736 3.75 5.5 3.75H7.25V2.75C7.25 2.33579 7.58579 2 8 2ZM8 5.25H5.5C5.08579 5.25 4.75 5.58579 4.75 6V8.25H19.25V6C19.25 5.58579 18.9142 5.25 18.5 5.25H16H8ZM19.25 9.75H4.75V19C4.75 19.4142 5.08579 19.75 5.5 19.75H18.5C18.9142 19.75 19.25 19.4142 19.25 19V9.75Z"/></svg></span>
-                    <span class="ov-txt"><span class="ov-lbl">Reservations This Month <span class="ov-tag">{{ reservations_this_month_label }}</span></span><span class="ov-num">{{ reservations_this_month }}</span></span>
-                  </a>
-                </div>
+                {# Only what needs a person (late gowns, pick-ups in the next days that still owe money, online payments): the line is not there when nothing does. #}
+                <div class="db-alerts" data-live-region="overview-alerts">{% if alerts %}<div class="db-alert"><span class="db-alert-ic" aria-hidden="true">!</span><span>{% for a in alerts %}{% if not forloop.first %}<span class="db-alert-sep" aria-hidden="true"> &middot; </span>{% endif %}<a href="{{ a.url }}">{{ a.text }}</a>{% endfor %}</span></div>{% endif %}</div>
 
-                {# Today at the shop: three counts, each opens the page that has the details (counted from the same data, so a click never lands on a different number). #}
-                {% if shop_today %}
-                <div class="ov-strip ov-strip--top" data-live-region="overview-money">
-                  <a href="{% url 'arabela_admin:reservation_records' %}" title="Bookings made today - opens Reservation Records" class="ov-cell">
-                    <span class="ov-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 00-2 2v13a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2zm0 15H5V9h14v10zm-8-8h2v2h2v2h-2v2h-2v-2H9v-2h2v-2z"/></svg></span>
-                    <span class="ov-txt"><span class="ov-lbl">New bookings today</span><span class="ov-num{% if not shop_today.new_bookings %} ov-num--zero{% endif %}">{{ shop_today.new_bookings }}</span></span>
+                {% comment %} The money. Rental Income is what the shop EARNED this month (the rental part of every payment; deposits are the customers' money and are never in
+                   it -- arabela_admin/dashboard_money.month_money). Security Deposits Held is counted by the Security Deposits page's own rules (views._deposits_held). {% endcomment %}
+                {% if month_money or deposits_held %}
+                <div class="db-row db-row--money" data-live-region="overview-top">
+                  {% if month_money %}
+                  <a href="{% url 'arabela_admin:payments' %}" class="db-card db-money" title="The gown rental paid this month (security deposits are not income) - opens Payments">
+                    <span class="db-money-head"><span class="ov-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 14V6c0-1.1-.9-2-2-2H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zm-9-1c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm13-6v11c0 1.1-.9 2-2 2H4v-2h17V7h2z"/></svg></span><span class="db-money-title">Rental Income</span><span class="ov-tag">{{ reservations_this_month_label }}</span></span>
+                    <span class="db-money-num">&#8369;{{ month_money.income }}</span>
+                    <span class="db-money-sub">{% if month_money.bookings %}from {{ month_money.bookings }} booking{{ month_money.bookings|pluralize }}{% else %}No rental paid yet this month{% endif %} &middot; deposits not included</span>
+                    <span class="db-money-sub">Late fees &amp; deductions kept: <b>&#8369;{{ month_money.kept }}</b></span>
                   </a>
-                  <a href="{% url 'arabela_admin:payments' %}" title="Gowns picked up in the next 2 days whose booking still has a balance - opens Payments" class="ov-cell">
-                    <span class="ov-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 15.5V19h-2v-1.5c-1.6-.3-2.7-1.3-2.8-2.9h2c.1.7.7 1.2 1.8 1.2 1 0 1.7-.5 1.7-1.2 0-.8-.6-1.1-2-1.5-1.8-.5-3.2-1.2-3.2-3 0-1.4 1-2.4 2.5-2.7V6h2v1.4c1.4.3 2.4 1.2 2.5 2.7h-2c-.1-.6-.6-1.1-1.5-1.1-.9 0-1.5.4-1.5 1.1 0 .6.5.9 1.9 1.3 1.9.5 3.3 1.1 3.3 3 0 1.5-1.1 2.5-2.7 2.8z"/></svg></span>
-                    <span class="ov-txt"><span class="ov-lbl">Pick-ups with a balance <span class="ov-tag">next 2 days</span></span><span class="ov-num{% if not shop_today.pickups_owing %} ov-num--zero{% endif %}">{{ shop_today.pickups_owing }}</span></span>
+                  {% endif %}
+                  {% if deposits_held %}
+                  <a href="{% url 'arabela_admin:security_deposits' %}" class="db-card db-money" title="Deposit money the shop is holding for its customers - opens Security Deposits">
+                    <span class="db-money-head"><span class="ov-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg></span><span class="db-money-title">Security Deposits Held</span></span>
+                    <span class="db-money-num">&#8369;{{ deposits_held.held }}</span>
+                    <span class="db-money-sub">{% if deposits_held.held_bookings %}for {{ deposits_held.held_bookings }} booking{{ deposits_held.held_bookings|pluralize }} &middot; goes back to the customers{% else %}No deposit is held right now{% endif %}</span>
+                    <span class="db-money-sub">{% if deposits_held.due_bookings %}<span class="db-due">&#8369;{{ deposits_held.due }} to hand back now</span> ({{ deposits_held.due_bookings }} booking{{ deposits_held.due_bookings|pluralize }}){% else %}Nothing to hand back right now{% endif %}</span>
                   </a>
-                  <a href="{% if shop_today.late_gowns or not shop_today.online_attention %}{% url 'arabela_admin:gown_board' %}{% if shop_today.late_gowns %}#gb-overdue{% endif %}{% else %}{% url 'arabela_admin:payment_online' %}{% endif %}" title="Gowns late in coming back, and online payments that need a person" class="ov-cell">
-                    <span class="ov-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg></span>
-                    <span class="ov-txt"><span class="ov-lbl">Needs a look{% if shop_today.late_gowns %} <span class="ov-tag">{{ shop_today.late_gowns }} late</span>{% endif %}{% if shop_today.online_attention %} <span class="ov-tag">{{ shop_today.online_attention }} online</span>{% endif %}</span><span class="ov-num{% if not shop_today.needs_look %} ov-num--zero{% endif %}">{{ shop_today.needs_look }}</span></span>
-                  </a>
+                  {% endif %}
                 </div>
                 {% endif %}
 
-                {# With an empty catalog nothing else on this page matters (no real booking can complete without real inventory), so that case is an alert, not a quiet strip. #}
+                <div class="db-row db-row--figures">
 {% if catalog_is_empty %}
 <a
   href="{% url 'arabela_admin:gown_catalog' %}"
@@ -1338,25 +1372,31 @@
   </span>
 </a>
 {% else %}
-                <a href="{% url 'arabela_admin:gown_catalog' %}" title="View Gown Catalog" class="ov-strip ov-strip--gowns" data-live-region="overview-gowns">
-                  <div class="ov-head"><span class="ov-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"/></svg></span><span class="ov-lbl">Gown Inventory</span></div>
-                  {# The same five figures, in the same words, as the stat row on Gown Catalog (every gown is in exactly ONE box, so they add up to Total Gowns -- see gown_inventory.py); the circles are the Catalog's own colours. #}
-                  <div class="ov-cell ov-cell--stat"><span class="ov-lbl">Total Gowns</span><span class="ov-num">{{ gown_total }}</span></div>
-                  <div class="ov-cell ov-cell--stat"><span class="ov-lbl"><span class="ar-dot ov-dot--available" aria-hidden="true"></span>Available</span><span class="ov-num">{{ gown_available }}</span></div>
-                  <div class="ov-cell ov-cell--stat"><span class="ov-lbl"><span class="ar-dot ov-dot--reserved" aria-hidden="true"></span>Reserved</span><span class="ov-num">{{ gown_reserved }}</span></div>
-                  <div class="ov-cell ov-cell--stat"{% if not gown_blocked %} title="None blocked today"{% endif %}><span class="ov-lbl"><span class="ar-dot ov-dot--blocked" aria-hidden="true"></span>Blocked Gowns</span><span class="ov-num{% if not gown_blocked %} ov-num--zero{% endif %}">{{ gown_blocked }}</span></div>
-                  <div class="ov-cell ov-cell--stat"{% if not gown_out_of_stock %} title="None out of stock"{% endif %}><span class="ov-lbl"><span class="ar-dot ov-dot--oos" aria-hidden="true"></span>Out-of-Stock</span><span class="ov-num{% if not gown_out_of_stock %} ov-num--zero{% endif %}">{{ gown_out_of_stock }}</span></div>
-                </a>
+                  {% comment %} The same five figures, in the same words, as the stat row on Gown Catalog (every gown is in exactly ONE box, so they add up to Total Gowns --
+                     gown_inventory.py); the circles are the Catalog's own colours. Reserved and Out-of-Stock open the Catalog already filtered (its filter counts
+                     exactly those gowns); the others open the whole Catalog, whose stat row shows the same numbers. {% endcomment %}
+                  <div class="db-card" data-live-region="overview-gowns">
+                    <div class="db-fhead"><h2 class="db-ftitle">Gown Inventory</h2></div>
+                    <div class="db-figs db-figs--5">
+                      <a href="{% url 'arabela_admin:gown_catalog' %}" class="db-fig" title="Every gown in the catalog - opens Gown Catalog"><span class="db-fig-lbl">Total Gowns</span><span class="db-fig-num">{{ gown_total }}</span></a>
+                      <a href="{% url 'arabela_admin:gown_catalog' %}" class="db-fig" title="Gowns that can be rented today - opens Gown Catalog"><span class="db-fig-lbl"><span class="ar-dot ov-dot--available" aria-hidden="true"></span><span>Available</span></span><span class="db-fig-num">{{ gown_available }}</span></a>
+                      <a href="{% url 'arabela_admin:gown_catalog' %}?status=Reserved" class="db-fig" title="Gowns an approved booking holds - opens Gown Catalog"><span class="db-fig-lbl"><span class="ar-dot ov-dot--reserved" aria-hidden="true"></span><span>Reserved</span></span><span class="db-fig-num">{{ gown_reserved }}</span></a>
+                      <a href="{% url 'arabela_admin:gown_catalog' %}" class="db-fig" title="{% if gown_blocked %}Gowns with a block covering today - opens Gown Catalog{% else %}None blocked today{% endif %}"><span class="db-fig-lbl"><span class="ar-dot ov-dot--blocked" aria-hidden="true"></span><span>Blocked Gowns</span></span><span class="db-fig-num{% if not gown_blocked %} is-zero{% endif %}">{{ gown_blocked }}</span></a>
+                      <a href="{% url 'arabela_admin:gown_catalog' %}?status=Out-of-Stock" class="db-fig" title="{% if gown_out_of_stock %}Gowns off the website - opens Gown Catalog{% else %}None out of stock{% endif %}"><span class="db-fig-lbl"><span class="ar-dot ov-dot--oos" aria-hidden="true"></span><span>Out-of-Stock</span></span><span class="db-fig-num{% if not gown_out_of_stock %} is-zero{% endif %}">{{ gown_out_of_stock }}</span></a>
+                    </div>
+                  </div>
 {% endif %}
-                {# Owner only: what staff did today, as one slim strip. It opens the Audit Log. #}
-                {% if staff_today %}
-                <a href="{% url 'arabela_admin:audit_log' %}" title="Open the Audit Log" class="ov-strip ov-strip--staff" data-live-region="overview-staff">
-                  <div class="ov-head"><span class="ov-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11a3 3 0 100-6 3 3 0 000 6zM8 11a3 3 0 100-6 3 3 0 000 6zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg></span><span class="ov-lbl">Staff activity today</span></div>
-                  <div class="ov-cell ov-cell--stat"><span class="ov-lbl">Actions</span><span class="ov-num">{{ staff_today.actions }}</span></div>
-                  <div class="ov-cell ov-cell--stat"><span class="ov-lbl">Staff working</span><span class="ov-num">{{ staff_today.people }}</span></div>
-                  <div class="ov-cell ov-cell--stat"><span class="ov-lbl"><span class="ar-dot ov-dot--important" aria-hidden="true"></span>Important</span><span class="ov-num">{{ staff_today.important }}</span></div>
-                </a>
-                {% endif %}
+                  {# Every figure is counted exactly like the page it opens, so a click never lands on a different number. #}
+                  <div class="db-card" data-live-region="overview-bookings">
+                    <div class="db-fhead"><h2 class="db-ftitle">Bookings</h2></div>
+                    <div class="db-figs db-figs--3">
+                      <a href="{% url 'arabela_admin:active_reservations' %}" class="db-fig" title="View Active Reservations"><span class="db-fig-lbl">Active Rentals</span><span class="db-fig-num">{{ active_rentals }}</span></a>
+                      {# One per booking, counted in the month its first gown is picked up; opens Reservation Records filtered to exactly those bookings. #}
+                      <a href="{{ reservations_this_month_url }}" class="db-fig" title="Bookings picked up in {{ reservations_this_month_label }} - opens Reservation Records"><span class="db-fig-lbl"><span>Reservations This Month <span class="ov-tag">{{ reservations_this_month_label }}</span></span></span><span class="db-fig-num">{{ reservations_this_month }}</span></a>
+                      <a href="{% url 'arabela_admin:clients' %}" class="db-fig" title="View Client List"><span class="db-fig-lbl">Registered Customers</span><span class="db-fig-num">{{ registered_customers }}</span></a>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div class="col-span-12">
@@ -1600,6 +1640,44 @@
 
   </script>
 {% include "arabela_admin/partials/dialog.html" %}
+<script>
+  /* The Dashboard's greeting and date follow the SHOP's clock (Philippine time, whatever the computer's own time zone): Good morning from 5:00, Good
+     afternoon from 12:00, Good evening from 18:00 -- the same steps as dashboard_money.greeting, so the words the server drew are already right. Checked
+     every minute and whenever the tab comes back; the "Pick-ups today" and "Returns today" buttons move to the new day after midnight too. */
+  (function () {
+    var greet = document.getElementById('db-greet');
+    if (!greet || !window.Intl || !Intl.DateTimeFormat) { return; }
+    var dateEl = document.getElementById('db-date');
+    var name = greet.getAttribute('data-name') || '';
+    var zone = greet.getAttribute('data-zone') || 'Asia/Manila';
+    function now() {
+      try {
+        var parts = {};
+        new Intl.DateTimeFormat('en-US', { timeZone: zone, hourCycle: 'h23', hour: 'numeric', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+          .formatToParts(new Date()).forEach(function (p) { parts[p.type] = p.value; });
+        var num = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+        return { hour: parseInt(parts.hour, 10) % 24, long: parts.weekday + ', ' + parts.month + ' ' + parts.day + ', ' + parts.year, iso: num };
+      } catch (e) { return null; }
+    }
+    function word(hour) { return hour >= 5 && hour < 12 ? 'Good morning' : (hour >= 12 && hour < 18 ? 'Good afternoon' : 'Good evening'); }
+    function tick() {
+      var t = now();
+      if (!t || isNaN(t.hour)) { return; }
+      var text = word(t.hour) + (name ? ', ' + name : '');
+      if (greet.textContent !== text) { greet.textContent = text; }
+      if (dateEl && dateEl.textContent !== t.long) { dateEl.textContent = t.long; }
+      if (/^\d{4}-\d{2}-\d{2}$/.test(t.iso)) {
+        Array.prototype.forEach.call(document.querySelectorAll('a[data-db-day]'), function (a) {
+          var url = new URL(a.getAttribute('href'), window.location.href);
+          if (url.searchParams.get('date') !== t.iso) { url.searchParams.set('date', t.iso); a.setAttribute('href', url.pathname + url.search); }
+        });
+      }
+    }
+    tick();
+    window.setInterval(tick, 60000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) { tick(); } });
+  })();
+</script>
 </body>
 </html>
 

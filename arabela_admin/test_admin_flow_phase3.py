@@ -451,38 +451,50 @@ class DashboardPageTests(Base):
         self.assertNotIn("<b>Gown</b>", card)
         self.assertIn("&lt;img src=x onerror=alert(1)&gt;", card)
 
-    def test_the_money_overview_going_wrong_never_costs_staff_their_dashboard(self):
+    def alert_line(self, html):
+        start = html.index('data-live-region="overview-alerts">') + len('data-live-region="overview-alerts">')
+        return html[start:html.index("</div></div>", start) + 6] if html[start:start + 6] != "</div>" else ""
+
+    def test_one_part_of_the_money_overview_going_wrong_never_costs_staff_their_dashboard(self):
         with mock.patch("arabela_admin.dashboard_money.latest_transactions", side_effect=RuntimeError("boom")):
             with self.assertLogs("arabela_admin.views", level="ERROR"):
                 _, html = self.page()
-        self.assertNotIn('data-live-region="overview-money"', html)
         self.assertIn("No payment has been recorded yet.", html)
         self.assertIn("Registered Customers", html)
+        self.assertIn('data-live-region="overview-top"', html)                              # the money cards are built on their own
+        with mock.patch("arabela_admin.dashboard_money.month_money", side_effect=RuntimeError("boom")):
+            with self.assertLogs("arabela_admin.views", level="ERROR"):
+                _, html = self.page()
+        self.assertNotIn("Rental Income", html)
+        self.assertIn("Security Deposits Held", html)
 
-    def test_today_at_the_shop_says_each_count_and_opens_the_page_with_the_details(self):
-        make_booking(pickup=1, ret=4)
-        make_booking(stage=S.RESERVED, pickup=-9, ret=-3)
+    def test_the_warning_line_says_what_needs_a_person_and_opens_the_page_with_the_details(self):
+        make_booking(pickup=1, ret=4)                                                         # picks up tomorrow, nothing paid
+        make_booking(stage=S.RESERVED, pickup=-9, ret=-3)                                     # out, 3 days late
         response, html = self.page()
-        strip = html[html.index('data-live-region="overview-money"'):]
-        strip = strip[:strip.index("</div>\n")]
+        line = self.alert_line(html)
         self.assertEqual(response.context["shop_today"]["new_bookings"], 2)
-        for piece in ("New bookings today", "Pick-ups with a balance", "next 2 days", "Needs a look", "1 late"):
+        for piece in ("1 gown is late coming back", "1 pick-up in the next 2 days still has a balance"):
             with self.subTest(piece=piece):
-                self.assertIn(piece, strip)
-        self.assertIn(f'href="{reverse("arabela_admin:reservation_records")}"', strip)
-        self.assertIn(f'href="{reverse("arabela_admin:payments")}"', strip)
-        self.assertIn(f'href="{reverse("arabela_admin:gown_board")}#gb-overdue"', strip)
+                self.assertIn(piece, line)
+        self.assertIn(f'href="{reverse("arabela_admin:payments")}"', line)
+        self.assertIn(f'href="{reverse("arabela_admin:gown_board")}#gb-overdue"', line)
 
-    def test_needs_a_look_opens_the_online_list_when_only_an_online_payment_needs_a_person(self):
+    def test_the_warning_line_is_not_there_when_nothing_needs_a_person(self):
+        _, html = self.page()
+        self.assertIn('<div class="db-alerts" data-live-region="overview-alerts"></div>', html)
+
+    def test_an_online_payment_that_needs_a_person_opens_the_online_list(self):
         PaymentAttempt.objects.create(token="u" * 30, customer=self.customer, customer_name="Ana Cruz", purpose="deposit", amount=D("2000"),
                                       expires_at=timezone.now() + timedelta(minutes=20), status=PaymentAttempt.Status.FLAGGED)
         _, html = self.page()
-        strip = html[html.index('data-live-region="overview-money"'):]
-        self.assertIn(f'href="{reverse("arabela_admin:payment_online")}"', strip[:strip.index("</div>\n")])
+        line = self.alert_line(html)
+        self.assertIn("1 online payment needs a look", line)
+        self.assertIn(f'href="{reverse("arabela_admin:payment_online")}"', line)
 
     def test_the_new_parts_are_live_regions(self):
         _, html = self.page()
-        for name in ("overview-money", "latest-transactions"):
+        for name in ("overview-alerts", "overview-top", "overview-bookings", "latest-transactions"):
             self.assertEqual(html.count(f'data-live-region="{name}"'), 1)
 
 

@@ -2192,8 +2192,8 @@ class DashboardGownInventoryTileTests(TestCase):
     def test_the_tile_uses_the_catalogs_wording_and_drops_needs_attention(self):
         self.seed()
         html = self.client.get(self.dashboard).content.decode()
-        tile = html[html.index("Gown Inventory"):]
-        tile = tile[:tile.index("</a>")]
+        tile = html[html.index('data-live-region="overview-gowns"'):]
+        tile = tile[:tile.index('data-live-region="overview-bookings"')]          # the whole card: each of its five boxes is its own link now
         for word in ("Total Gowns", "Available", "Reserved", "Blocked Gowns", "Out-of-Stock"):
             with self.subTest(word=word):
                 self.assertIn(word, tile)

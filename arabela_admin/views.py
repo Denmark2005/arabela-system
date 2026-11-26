@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from functools import wraps
 
+from django.conf import settings
 from django.contrib.auth import login, logout, get_user_model
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
@@ -240,27 +241,42 @@ def dashboard_view(request):
         .count()
     )
 
-    # The owner's one-line summary of what staff did today (the Audit Log has the detail); nobody else sees it.
-    staff_today = None
+    # The Audit Log's clean-up of old lines rides on the owner's visit (the staff summary that used to sit here lives in the Audit Log itself).
     if _is_owner(request):
         from accounts import audit
-        from arabela_admin.audit_views import today_strip
-        audit.maybe_purge()
-        staff_today = today_strip()
+        try:
+            audit.maybe_purge()
+        except Exception:
+            logging.getLogger(__name__).exception("Dashboard: the audit clean-up failed")
 
-    # The money on the Dashboard (the latest payments and today's few counts). It is only an overview, so a failure here must never cost staff their dashboard.
-    try:
-        latest_transactions = dashboard_money.latest_transactions()
-        shop_today = dashboard_money.shop_today(today)
-    except Exception:
-        logging.getLogger(__name__).exception("Dashboard: the money overview could not be built")
-        latest_transactions, shop_today = [], None
+    # The money and today's counts. It is only an overview, so each part that fails is left out (and logged) -- it never costs staff their dashboard.
+    def overview(what, build, fallback):
+        try:
+            return build()
+        except Exception:
+            logging.getLogger(__name__).exception("Dashboard: %s could not be built", what)
+            return fallback
+
+    latest_transactions = overview("the latest transactions", dashboard_money.latest_transactions, [])
+    shop_today = overview("today's counts", lambda: dashboard_money.shop_today(today), None)
+    month_money = overview("the rental income", lambda: dashboard_money.month_money(today), None)
+    deposits_held = overview("the deposits held", lambda: _deposits_held(today), None)
+    now_local = timezone.localtime()
+    day_url = reverse("arabela_admin:active_reservations") + "?"
 
     return render(
         request,
         "arabela_admin/dashboard.html",
         {
-            "staff_today": staff_today,
+            # The greeting changes by itself with the shop's clock (the page's own script); the server draws the right one first so nothing flickers.
+            "greeting": dashboard_money.greeting(now_local.hour),
+            "today_long": f"{today:%A}, {today:%B} {today.day}, {today.year}",
+            "shop_time_zone": settings.TIME_ZONE,
+            "pickups_today_url": day_url + urlencode({"date": today.isoformat(), "kind": "pickup"}),
+            "returns_today_url": day_url + urlencode({"date": today.isoformat(), "kind": "return"}),
+            "alerts": dashboard_money.alerts(shop_today),
+            "month_money": month_money,
+            "deposits_held": deposits_held,
             "latest_transactions": latest_transactions,
             "shop_today": shop_today,
             # "View all": the owner has the list of every receipt; staff open the Payments page.
@@ -967,6 +983,31 @@ def _deposit_gown_state(item):
 #   Returned     every gown is back and nothing is left to hand back: it was handed back, or the late fee and deductions used all of it
 # A deposit marked returned by hand before the Payments page existed (deposit_returned_at) counts as Returned with its own date.
 _DEPOSIT_KINDS = {"Held": "held", "Return due": "due", "Returned": "returned"}
+
+
+def _deposits_held(today):
+    """The Dashboard's "Security Deposits Held": the deposit money the shop is holding for its customers, by the SAME states as the Security Deposits page
+    (_deposit_state, over the same bookings): a Held booking (a gown is not back yet) counts what was paid less anything already handed back; a Return due
+    booking (every gown back) counts what is still to hand back -- the late fee and deductions it keeps are the shop's, not held; a Returned one counts
+    nothing. Amounts are text ("24,000.00")."""
+    held = due = Decimal("0")
+    held_bookings = due_bookings = 0
+    bookings = Reservation.objects.filter(status__in=_SCHEDULED_STATUSES).prefetch_related("items", _receipts_prefetch(), "payments", "deductions")
+    for reservation in bookings:
+        live = [i for i in reservation.items.all() if i.stage != ReservationItem.Stage.CANCELLED]
+        state = _deposit_state(reservation, live, today)
+        if state["state"] == "Held":
+            amount = max(state["paid"] - state["handed_back"], Decimal("0"))
+        elif state["state"] == "Return due":
+            amount = state["to_hand_back"]
+            due += amount
+            due_bookings += 1
+        else:
+            continue
+        if amount > 0:
+            held += amount
+            held_bookings += 1
+    return {"held": f"{held:,.2f}", "held_bookings": held_bookings, "due": f"{due:,.2f}", "due_bookings": due_bookings}
 
 
 def _deposit_state(reservation, live_items, today):

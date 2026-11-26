@@ -131,7 +131,7 @@ class ThePagesTests(TestCase):
     def test_the_dashboard_tile_has_five_figures_and_the_layout_makes_room_for_them(self):
         _make_gown(1)
         html = self.client.get(reverse("arabela_admin:dashboard")).content.decode()
-        self.assertIn(".ov-strip--gowns { grid-template-columns: minmax(11rem, 1.25fr) repeat(5, minmax(0, 1fr));", html)
+        self.assertIn(".db-figs--5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }", html)
         self.assertIn(".ov-dot--oos", html)
         catalog = self.client.get(reverse("arabela_admin:gown_catalog")).content.decode()
         self.assertIn("grid-template-columns: repeat(5, minmax(0, 1fr))", catalog)
