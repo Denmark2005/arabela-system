@@ -293,7 +293,7 @@ class ButtonTests(HistoryBase):
         panel = self.panel(html, item)
         self.assertIn(f'@click="toggleHistory({item.id})"', panel)
         self.assertIn(f'aria-controls="rh-history-{item.id}"', panel)
-        self.assertIn(f'<div class="rh-history" id="rh-history-{item.id}" x-show="isHistoryOpen({item.id})" x-cloak>', panel)
+        self.assertIn(f'<div class="rh-history" id="rh-history-{item.id}" x-show="isHistoryOpen({item.id})" x-cloak x-slide>', panel)
         self.assertIn('<div class="arb-tl-panel">', panel)
 
 

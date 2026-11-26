@@ -296,8 +296,8 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="overflow-hidden transform translate"
-              :class="(selected === 'Dashboard') ? 'block' :'hidden'"
+              class="overflow-hidden"
+              x-show="selected === 'Dashboard'" x-cloak x-slide
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
@@ -370,8 +370,8 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="transform overflow-hidden translate"
-              :class="(selected === 'BookingsSchedule') ? 'block' :'hidden'"
+              class="overflow-hidden"
+              x-show="selected === 'BookingsSchedule'" x-cloak x-slide
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
@@ -482,8 +482,8 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="transform overflow-hidden translate"
-              :class="(selected === 'InventoryManagement') ? 'block' :'hidden'"
+              class="overflow-hidden"
+              x-show="selected === 'InventoryManagement'" x-cloak x-slide
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
@@ -574,8 +574,8 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="transform overflow-hidden translate"
-              :class="(selected === 'CustomerManagement') ? 'block' :'hidden'"
+              class="overflow-hidden"
+              x-show="selected === 'CustomerManagement'" x-cloak x-slide
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
@@ -660,8 +660,8 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="transform overflow-hidden translate"
-              :class="(selected === 'StaffManagement') ? 'block' :'hidden'"
+              class="overflow-hidden"
+              x-show="selected === 'StaffManagement'" x-cloak x-slide
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
@@ -739,8 +739,8 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="transform overflow-hidden translate"
-              :class="(selected === 'PaymentsDeposits') ? 'block' :'hidden'"
+              class="overflow-hidden"
+              x-show="selected === 'PaymentsDeposits'" x-cloak x-slide
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
@@ -828,8 +828,8 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="transform overflow-hidden translate"
-              :class="(selected === 'FinancialReport') ? 'block' :'hidden'"
+              class="overflow-hidden"
+              x-show="selected === 'FinancialReport'" x-cloak x-slide
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
@@ -894,7 +894,7 @@
 
       <!-- ===== Content Area Start ===== -->
       <div
-        class="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden"
+        class="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden" data-stay-put
       >
         <!-- Small Device Overlay Start -->
         <div
@@ -1337,7 +1337,7 @@
                         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7.5l5 5 5-5" /></svg>
                       </button>
                     </div>
-                    <div class="ar-panel" id="ar-panel-{{ r.id }}" x-show="isBookingOpen({{ r.id }})" x-cloak>
+                    <div class="ar-panel" id="ar-panel-{{ r.id }}" x-show="isBookingOpen({{ r.id }})" x-cloak x-slide>
                       <div class="ar-strip">
                         {% if r.booked_as_name %}<span>Booked as: {{ r.booked_as_name }}</span>{% endif %}
                         {% if r.is_staff_recorded %}<span class="inline-flex w-fit items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-theme-xs font-medium text-brand-500 dark:bg-brand-500/15 dark:text-brand-400" title="Recorded by staff in New Booking">{{ r.get_channel_display }}</span>{% endif %}
@@ -1434,7 +1434,7 @@
                             </button>
                           </div>
 
-                          <div class="ar-gmore" id="ar-more-{{ item.id }}" x-show="more" x-cloak>
+                          <div class="ar-gmore" id="ar-more-{{ item.id }}" x-show="more" x-cloak x-slide>
                             {% if r.multi_gown %}
                             <!-- Several gowns: the table row can only show the booking as a whole, so each gown says its own days and price here. A date that was moved shows the day it was booked for. -->
                             <div class="ar-gfacts">
@@ -1529,7 +1529,7 @@
                         {% endfor %}
                       </div>
 
-                      <div class="ar-tl" x-show="openTimeline === {{ r.id }}" x-cloak>
+                      <div class="ar-tl" x-show="openTimeline === {{ r.id }}" x-cloak x-slide>
                         {% include "arabela_admin/partials/timeline_rows.html" with timeline=r.timeline %}
                       </div>
                     </div>
@@ -2311,6 +2311,7 @@
         });
     }
   </script>
+  <script defer src="{% static 'arabela_admin/smooth-motion.js' %}?v={{ admin_asset_version }}"></script>
   <script defer src="{% static 'arabela_admin/bundle.js' %}?v={{ admin_asset_version }}"></script>
   <script defer src="{% static 'arabela_admin/global-search.js' %}"></script>
   <script defer src="{% static 'arabela_admin/pager.js' %}"></script>

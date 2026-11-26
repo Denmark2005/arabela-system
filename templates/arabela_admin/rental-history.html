@@ -330,7 +330,8 @@
           this.clearFilters();
           this.gownFilter = key;
           this.gownName = name;
-          this.$nextTick(() => { const list = document.getElementById('rh-list'); if (list) { list.scrollIntoView({ behavior: 'smooth', block: 'start' }); } });
+          // The page stays where it is. It only goes to the list when none of its rows can be seen (a phone, a short window), so the tap still shows its result.
+          this.$nextTick(() => { const list = document.getElementById('rh-list'); if (list && list.getBoundingClientRect().top > window.innerHeight - 160) { list.scrollIntoView({ behavior: 'smooth', block: 'start' }); } });
         },
         addFilters(params) {
           if (this.statusFilter !== 'All') { params.set('status', this.statusFilter); }
@@ -515,8 +516,8 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="overflow-hidden transform translate"
-              :class="(selected === 'Dashboard') ? 'block' :'hidden'"
+              class="overflow-hidden"
+              x-show="selected === 'Dashboard'" x-cloak x-slide
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
@@ -589,8 +590,8 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="transform overflow-hidden translate"
-              :class="(selected === 'BookingsSchedule') ? 'block' :'hidden'"
+              class="overflow-hidden"
+              x-show="selected === 'BookingsSchedule'" x-cloak x-slide
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
@@ -701,8 +702,8 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="transform overflow-hidden translate"
-              :class="(selected === 'InventoryManagement') ? 'block' :'hidden'"
+              class="overflow-hidden"
+              x-show="selected === 'InventoryManagement'" x-cloak x-slide
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
@@ -793,8 +794,8 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="transform overflow-hidden translate"
-              :class="(selected === 'CustomerManagement') ? 'block' :'hidden'"
+              class="overflow-hidden"
+              x-show="selected === 'CustomerManagement'" x-cloak x-slide
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
@@ -879,8 +880,8 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="transform overflow-hidden translate"
-              :class="(selected === 'StaffManagement') ? 'block' :'hidden'"
+              class="overflow-hidden"
+              x-show="selected === 'StaffManagement'" x-cloak x-slide
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
@@ -958,8 +959,8 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="transform overflow-hidden translate"
-              :class="(selected === 'PaymentsDeposits') ? 'block' :'hidden'"
+              class="overflow-hidden"
+              x-show="selected === 'PaymentsDeposits'" x-cloak x-slide
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
@@ -1047,8 +1048,8 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="transform overflow-hidden translate"
-              :class="(selected === 'FinancialReport') ? 'block' :'hidden'"
+              class="overflow-hidden"
+              x-show="selected === 'FinancialReport'" x-cloak x-slide
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
@@ -1113,7 +1114,7 @@
 
       <!-- ===== Content Area Start ===== -->
       <div
-        class="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden"
+        class="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden" data-stay-put
       >
         <!-- Small Device Overlay Start -->
         <div
@@ -1645,7 +1646,7 @@
                       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7.5l5 5 5-5" /></svg>
                     </button>
                   </div>
-                  <div class="ar-panel" id="rh-panel-{{ item.id }}" x-show="isRowOpen({{ item.id }})" x-cloak>
+                  <div class="ar-panel" id="rh-panel-{{ item.id }}" x-show="isRowOpen({{ item.id }})" x-cloak x-slide>
                     <div class="rh-open">
                       <div class="rh-top">
                         <span class="rh-chip rh-chip--{{ item.view.kind }}">{{ item.view.status }}</span>
@@ -1677,7 +1678,7 @@
                         {% if item.has_receipt %}<button type="button" class="rh-btn" @click="arabelaReceipt.open({{ r.id }})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>Receipt</button>{% endif %}
                         <button type="button" class="rh-btn" :class="isHistoryOpen({{ item.id }}) ? 'is-on' : ''" @click="toggleHistory({{ item.id }})" aria-expanded="false" :aria-expanded="isHistoryOpen({{ item.id }}) ? 'true' : 'false'" aria-controls="rh-history-{{ item.id }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><span x-text="isHistoryOpen({{ item.id }}) ? 'Hide history' : 'History'">History</span></button>
                       </div>
-                      <div class="rh-history" id="rh-history-{{ item.id }}" x-show="isHistoryOpen({{ item.id }})" x-cloak>
+                      <div class="rh-history" id="rh-history-{{ item.id }}" x-show="isHistoryOpen({{ item.id }})" x-cloak x-slide>
                         {% include "arabela_admin/partials/timeline_rows.html" with timeline=item.timeline %}
                       </div>
                     </div>
@@ -1780,6 +1781,7 @@
     {{ rental_records|json_script:"rental-records-data" }}
     {{ view_data|json_script:"rh-view-data" }}
 
+  <script defer src="{% static 'arabela_admin/smooth-motion.js' %}?v={{ admin_asset_version }}"></script>
   <script defer src="{% static 'arabela_admin/bundle.js' %}?v={{ admin_asset_version }}"></script>
   <script defer src="{% static 'arabela_admin/global-search.js' %}"></script>
   <script defer src="{% static 'arabela_admin/pager.js' %}"></script>

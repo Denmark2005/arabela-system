@@ -3669,6 +3669,37 @@ svg{-ms-touch-action:none;touch-action:none}image,text,.jvm-zoomin,.jvm-zoomout{
   -webkit-transition: all 300ms ease-in-out !important;
   transition: all 300ms ease-in-out !important;
 }
+/* Phones and tablets: the menu is a drawer, and a finger "hovers" as it taps. The hover rules above are for the narrow desktop menu: here they
+   would add the logo and push every item down under the finger (the first tap then missed). The drawer looks the same, hovered or not. */
+@media (max-width: 1023.98px) {
+  .sidebar .logo {
+    display: block;
+  }
+  .sidebar .logo-icon, .sidebar .menu-group-icon {
+    display: none;
+  }
+  .sidebar .sidebar-header {
+    justify-content: space-between;
+  }
+  .sidebar .menu-group-title, .sidebar .menu-item-arrow {
+    display: block;
+  }
+  .sidebar .menu-item-text {
+    display: inline;
+  }
+  .sidebar .menu-dropdown {
+    display: flex;
+  }
+  html[data-text-size="normal"] .sidebar {
+    width: 18.125rem;
+  }
+  html[data-text-size="large"] .sidebar {
+    width: max(290px, 17rem);
+  }
+  html[data-text-size="xl"] .sidebar {
+    width: max(290px, 17.5rem);
+  }
+}
 .menu-item {
   -webkit-transition: background-color 200ms ease-in-out, color 200ms ease-in-out, fill 200ms ease-in-out;
   transition: background-color 200ms ease-in-out, color 200ms ease-in-out, fill 200ms ease-in-out;

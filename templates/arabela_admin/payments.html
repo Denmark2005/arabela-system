@@ -322,8 +322,8 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="overflow-hidden transform translate"
-              :class="(selected === 'Dashboard') ? 'block' :'hidden'"
+              class="overflow-hidden"
+              x-show="selected === 'Dashboard'" x-cloak x-slide
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
@@ -396,8 +396,8 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="transform overflow-hidden translate"
-              :class="(selected === 'BookingsSchedule') ? 'block' :'hidden'"
+              class="overflow-hidden"
+              x-show="selected === 'BookingsSchedule'" x-cloak x-slide
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
@@ -508,8 +508,8 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="transform overflow-hidden translate"
-              :class="(selected === 'InventoryManagement') ? 'block' :'hidden'"
+              class="overflow-hidden"
+              x-show="selected === 'InventoryManagement'" x-cloak x-slide
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
@@ -600,8 +600,8 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="transform overflow-hidden translate"
-              :class="(selected === 'CustomerManagement') ? 'block' :'hidden'"
+              class="overflow-hidden"
+              x-show="selected === 'CustomerManagement'" x-cloak x-slide
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
@@ -686,8 +686,8 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="transform overflow-hidden translate"
-              :class="(selected === 'StaffManagement') ? 'block' :'hidden'"
+              class="overflow-hidden"
+              x-show="selected === 'StaffManagement'" x-cloak x-slide
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
@@ -765,8 +765,8 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="transform overflow-hidden translate"
-              :class="(selected === 'PaymentsDeposits') ? 'block' :'hidden'"
+              class="overflow-hidden"
+              x-show="selected === 'PaymentsDeposits'" x-cloak x-slide
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
@@ -854,8 +854,8 @@
 
             <!-- Dropdown Menu Start -->
             <div
-              class="transform overflow-hidden translate"
-              :class="(selected === 'FinancialReport') ? 'block' :'hidden'"
+              class="overflow-hidden"
+              x-show="selected === 'FinancialReport'" x-cloak x-slide
             >
               <ul
                 :class="sidebarToggle ? 'lg:hidden' : 'flex'"
@@ -920,7 +920,7 @@
 
       <!-- ===== Content Area Start ===== -->
       <div
-        class="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden"
+        class="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden" data-stay-put
       >
         <!-- Small Device Overlay Start -->
         <div
@@ -1669,6 +1669,7 @@
     </div>
     <!-- ===== Page Wrapper End ===== -->
 
+  <script defer src="{% static 'arabela_admin/smooth-motion.js' %}?v={{ admin_asset_version }}"></script>
   <script defer src="{% static 'arabela_admin/bundle.js' %}?v={{ admin_asset_version }}"></script>
   <script defer src="{% static 'arabela_admin/global-search.js' %}"></script>
   <script defer src="{% static 'arabela_admin/pager.js' %}"></script>
