@@ -144,7 +144,7 @@ class TheWindowTests(Base):
         data = self.as_user(self.staff).client.get(reverse("arabela_admin:payment_detail", args=[booking.pk])).json()
         self.assertEqual((data["code"], data["customer"], data["hasAccount"]), (booking.reference_code, "Juan Tolentino", False))
         self.assertEqual((data["peso"]["total"], data["peso"]["balance_due"], data["peso"]["late_fee"]), ("5,500.00", "3,500.00", "600.00"))
-        self.assertEqual(data["lateLines"][0]["days"], 3)
+        self.assertEqual([(l["kind"], l["label"], l["days"], l["amount"]) for l in data["feeLines"]], [("overdue", "Overdue fee", 3, "600.00")])
         self.assertEqual(data["choices"], {"kind": "balance", "max": "3500.00"})
         self.assertEqual(len(data["payments"]), 1)
         self.assertTrue(data["payments"][0]["printUrl"].endswith(f"/payments/receipt/{data['payments'][0]['id']}/"))
@@ -335,7 +335,7 @@ class PrintedReceiptTests(Base):
         self.record(booking, P.FULL, "5500")
         payment = payments.return_deposit(reservation_id=booking.pk, amount=D("1400"), method=M.CASH, user=self.owner)
         html = self.as_user(self.staff).client.get(reverse("arabela_admin:payment_receipt_print", args=[payment.pk])).content.decode()
-        for piece in ("DEPOSIT RETURN", "Security deposit paid", "2,000.00", "Late fee", "600.00", "3 days x &#8369;200", "DEPOSIT RETURNED", "1,400.00", "Returned by"):
+        for piece in ("DEPOSIT RETURN", "Security deposit paid", "2,000.00", "Overdue fee", "600.00", "3 days x &#8369;200", "DEPOSIT RETURNED", "1,400.00", "Returned by"):
             with self.subTest(piece=piece):
                 self.assertIn(piece, html)
 

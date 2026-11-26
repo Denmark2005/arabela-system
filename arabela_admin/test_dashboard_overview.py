@@ -50,11 +50,11 @@ class AlertTests(SimpleTestCase):
         self.assertEqual(dashboard_money.alerts(None), [])
         self.assertEqual(dashboard_money.alerts({"late_gowns": 0, "pickups_owing": 0, "online_attention": 0}), [])
         one = dashboard_money.alerts({"late_gowns": 1, "pickups_owing": 1, "online_attention": 1})
-        self.assertEqual([a["text"] for a in one], ["1 gown is late coming back", "1 pick-up in the next 2 days still has a balance", "1 online payment needs a look"])
+        self.assertEqual([a["text"] for a in one], ["1 gown is overdue", "1 pick-up in the next 2 days still has a balance", "1 online payment needs a look"])
         self.assertEqual([a["url"] for a in one], [reverse("arabela_admin:gown_monitoring") + "?tab=return", reverse("arabela_admin:payments"),
                                                    reverse("arabela_admin:payment_online")])
         two = dashboard_money.alerts({"late_gowns": 2, "pickups_owing": 3, "online_attention": 2})
-        self.assertEqual([a["text"] for a in two], ["2 gowns are late coming back", "3 pick-ups in the next 2 days still have a balance", "2 online payments need a look"])
+        self.assertEqual([a["text"] for a in two], ["2 gowns are overdue", "3 pick-ups in the next 2 days still have a balance", "2 online payments need a look"])
 
 
 class RentalIncomeTests(TestCase):
@@ -165,7 +165,7 @@ class DashboardTopTests(TestCase):
     def test_the_money_cards_say_what_they_count_and_open_their_pages(self):
         pay(make_booking(), P.FULL, "5500")
         _, html = self.page()
-        for piece in ("Rental Income", "&#8369;3,500.00", "from 1 booking &middot; deposits not included", "Late fees &amp; deductions kept: <b>&#8369;0.00</b>",
+        for piece in ("Rental Income", "&#8369;3,500.00", "from 1 booking &middot; deposits not included", "Fees &amp; deductions kept: <b>&#8369;0.00</b>",
                       "Security Deposits Held", "&#8369;2,000.00", "for 1 booking &middot; goes back to the customers", "Nothing to hand back right now",
                       'href="%s"' % reverse("arabela_admin:payments"), 'href="%s"' % reverse("arabela_admin:security_deposits")):
             with self.subTest(piece=piece):

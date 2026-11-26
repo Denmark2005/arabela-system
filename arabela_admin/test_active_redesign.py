@@ -47,12 +47,12 @@ class GownCircleTests(ActiveDropdownBase):
         self.assertEqual((circle["kind"], circle["number"]), ("active", 3))
         self.assertEqual(self.circle(-4, 0, R, picked_up_on=self.today - timedelta(days=4))["number"], 0)      # due today
 
-    def test_a_late_gown_is_red_with_the_days_late_counted_from_the_original_return_date(self):
+    def test_an_overdue_gown_is_red_with_the_days_overdue_counted_from_the_agreed_return_date(self):
         circle = self.circle(-9, -5, R, picked_up_on=self.today - timedelta(days=9))
         self.assertEqual((circle["kind"], circle["number"]), ("overdue", 5))
-        self.assertIn("5 days late", circle["title"])
+        self.assertIn("Overdue · 5 days", circle["title"])
         _, [moved] = self.book("Moved Return", "09170002222", [(-9, -3, R, {"picked_up_on": self.today - timedelta(days=9), "original_return_date": self.today - timedelta(days=5)})])
-        self.assertEqual(_gown_circle(moved, self.today)["number"], 5)            # the customer asked for longer: still counted from the date they booked
+        self.assertEqual(_gown_circle(moved, self.today)["number"], 3)            # the 2 days the return was moved are the date change fee, not overdue
 
     def test_returned_and_cancelled_gowns_are_grey_with_no_number(self):
         back = self.circle(-9, -5, RET, picked_up_on=self.today - timedelta(days=9), returned_on=self.today - timedelta(days=5))
@@ -97,7 +97,7 @@ class RedesignedPageTests(ActiveDropdownBase):
             self.assertIn(f'<span class="ar-dot {dot}"></span>', self.card)
         key = self.card[self.card.index('aria-label="What the circles mean"'):]
         key = key[:key.index("</details>")]
-        for word in ("Green: waiting for pick-up", "Blue: out with the customer", "Red: late", "Grey: already returned, or cancelled", "How many gowns are in the booking"):
+        for word in ("Green: waiting for pick-up", "Blue: out with the customer", "Red: overdue, or late for pick-up", "Grey: already returned, or cancelled", "How many gowns are in the booking"):
             self.assertIn(word, key)
         self.assertEqual(key.count("<li>"), 5)
 
@@ -173,7 +173,7 @@ class RedesignedPageTests(ActiveDropdownBase):
         more = self.card.index(f'id="ar-more-{self.m_items[2].id}"')
         line = self.card[self.card.rindex('<div class="ar-gl ar-gl2">', 0, more):more]
         self.assertIn("Out with customer", line)
-        self.assertIn("Overdue · 5 days late", line)
+        self.assertIn("Overdue · 5 days", line)
 
     def test_a_moved_date_shows_the_day_it_was_booked_for_as_text_in_the_table_and_the_note_in_the_dots(self):
         self.client.logout()

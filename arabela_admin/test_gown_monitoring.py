@@ -234,11 +234,11 @@ class ForReturnTests(Base):
         for params in ({}, {"when": "tomorrow"}, {"date": self.day(20).isoformat()}):
             with self.subTest(params=params):
                 [row] = self.lines("return", **params)
-                self.assertEqual((row["id"], row["status"], row["detail"], row["date_label"]), (item.pk, "late", "3 days late", "Was due"))
+                self.assertEqual((row["id"], row["status"], row["detail"], row["date_label"]), (item.pk, "late", "3 days overdue", "Was due"))
 
-    def test_days_late_count_from_the_return_day_first_booked(self):
-        item = self.book(-9, -1, S.RESERVED, original_return=-4)                            # moved later, still not back
-        self.assertEqual(self.lines("return")[0]["detail"], "4 days late")
+    def test_days_overdue_count_from_the_return_day_agreed_now(self):
+        item = self.book(-9, -1, S.RESERVED, original_return=-4)                            # moved 3 days later, still not back
+        self.assertEqual(self.lines("return")[0]["detail"], "1 day overdue")
         self.assertEqual(self.lines("return")[0]["id"], item.pk)
 
     def test_due_back_on_the_chosen_days_only(self):
@@ -483,7 +483,7 @@ class PageTests(Base):
         _, returns = self.page("?tab=return")
         self.assertIn(">View booking</a>", self.row_html(returns, late))
         self.assertNotIn(">View booking</a>", self.row_html(returns, cleaning))
-        self.assertIn("2 days late", returns)
+        self.assertIn("2 days overdue", returns)
 
     def test_empty_days_say_so(self):
         _, html = self.page()

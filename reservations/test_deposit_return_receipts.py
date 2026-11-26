@@ -77,27 +77,30 @@ class CashReturnTests(TestCase):
         r = payment.snapshot["return"]
         self.assertEqual((r["deposit_paid"], r["late_fee"], r["deductions_total"], r["returned_now"], r["still_to_return"]),
                          ("2000.00", "600.00", "0.00", "1400.00", "0.00"))
-        self.assertEqual(r["gowns"], [{"name": "Wedding Gown 1", "size": "Large", "due": day(-6), "back": day(-3), "late_days": 3}])
+        self.assertEqual(r["gowns"], [{"name": "Wedding Gown 1", "size": "Large", "due": day(-6), "back": day(-3), "late_days": 3, "agreed": day(-6), "overdue_days": 3}])
+        self.assertEqual((r["change_fee"], r["overdue_fee"]), ("0.00", "600.00"))
         self.assertEqual((r["late_lines"][0]["due"], r["late_lines"][0]["returned"], r["late_lines"][0]["amount"]), (day(-6), day(-3), "600.00"))
-        self.assertEqual(r["why"], "The ₱2,000.00 security deposit less the ₱600.00 late fee leaves ₱1,400.00 to give back.")
+        self.assertEqual(r["why"], "The ₱2,000.00 security deposit less the ₱600.00 overdue fee leaves ₱1,400.00 to give back.")
 
         for html in (paper(self.printed(payment)), paper(self.customer_copy(payment))):
-            for piece in ("GOWN RETURNED", "Wedding Gown 1 (Large)", f"Due back {day(-6)}", f"Returned {day(-3)}", "3 days late",
+            for piece in ("GOWN RETURNED", "Wedding Gown 1 (Large)", f"Due back {day(-6)}", f"Returned {day(-3)}", "3 days overdue", "Overdue fee",
                           "SECURITY DEPOSIT", "Security deposit paid", "&#8369;2,000.00", "-&#8369;600.00", "3 days x &#8369;200 = &#8369;600.00",
                           "DEPOSIT RETURNED", "&#8369;1,400.00", "Returned by", "Cash", r["why"]):
                 with self.subTest(piece=piece):
                     self.assertIn(piece, html)
             self.assertNotIn("Pick-up ", html)                                # the booked dates list gives way to the gown returned
             self.assertNotIn("Sent back to the account", html)                # cash: nothing was sent online
+            self.assertNotIn("Late fee", html)
+            self.assertNotIn("Date change fee", html)                         # nothing was moved
         self.assertIn("CUSTOMER COPY", self.customer_copy(payment))
-        self.assertIn("Your ₱2,000.00 deposit less the ₱600.00 late fee comes to ₱1,400.00. The receipt shows the details.", self.notice())
+        self.assertIn("Your ₱2,000.00 deposit less the ₱600.00 overdue fee comes to ₱1,400.00. The receipt shows the details.", self.notice())
 
     def test_on_time_with_no_deductions_the_whole_deposit_goes_back_and_the_receipt_says_so(self):
         booking = self.returned(ret=-3, returned_on=-4)                     # came back a day early: no late fee
         payment = self.give_back(booking, "2000")
         r = payment.snapshot["return"]
         self.assertEqual((r["late_fee"], r["deductions_total"], r["returned_now"]), ("0.00", "0.00", "2000.00"))
-        self.assertEqual(r["why"], "No late fee and no deductions: the security deposit is returned in full.")
+        self.assertEqual(r["why"], "No fees and no deductions: the security deposit is returned in full.")
         html = paper(self.printed(payment))
         for piece in ("GOWN RETURNED", f"Due back {day(-3)}", f"Returned {day(-4)}", "On time", r["why"], "&#8369;2,000.00"):
             with self.subTest(piece=piece):
@@ -115,13 +118,13 @@ class CashReturnTests(TestCase):
         r = payment.snapshot["return"]
         self.assertEqual((r["late_fee"], r["deductions_total"], r["returned_now"]), ("400.00", "300.00", "1300.00"))
         self.assertEqual(r["deductions"], [{"reason": "Stain on the skirt", "amount": "300.00"}])
-        self.assertEqual(r["why"], "The ₱2,000.00 security deposit less the ₱400.00 late fee and ₱300.00 of deductions leaves ₱1,300.00 to give back.")
+        self.assertEqual(r["why"], "The ₱2,000.00 security deposit less the ₱400.00 overdue fee and ₱300.00 of deductions leaves ₱1,300.00 to give back.")
         for html in (paper(self.printed(payment)), paper(self.customer_copy(payment))):
-            for piece in ("2 days late", "2 days x &#8369;200 = &#8369;400.00", "-&#8369;400.00", "Stain on the skirt: -&#8369;300.00",
+            for piece in ("2 days overdue", "2 days x &#8369;200 = &#8369;400.00", "-&#8369;400.00", "Stain on the skirt: -&#8369;300.00",
                           "-&#8369;300.00", "&#8369;1,300.00", r["why"]):
                 with self.subTest(piece=piece):
                     self.assertIn(piece, html)
-        self.assertIn("Your ₱2,000.00 deposit less the ₱400.00 late fee and ₱300.00 of deductions comes to ₱1,300.00.", self.notice())
+        self.assertIn("Your ₱2,000.00 deposit less the ₱400.00 overdue fee and ₱300.00 of deductions comes to ₱1,300.00.", self.notice())
 
     def test_a_deposit_handed_back_in_two_parts_keeps_every_sentence_true(self):
         booking = self.returned(ret=-6, returned_on=-3)                     # ₱600 late fee, ₱1,400 to give back in all
@@ -142,26 +145,33 @@ class CashReturnTests(TestCase):
 
         on_time = self.returned(ret=-3, returned_on=-3)
         part = self.give_back(on_time, "500")
-        self.assertEqual(part.snapshot["return"]["why"], "No late fee and no deductions: the whole ₱2,000.00 security deposit goes back to the customer.")
+        self.assertEqual(part.snapshot["return"]["why"], "No fees and no deductions: the whole ₱2,000.00 security deposit goes back to the customer.")
 
     def test_a_return_date_moved_later_still_counts_the_fee_from_the_day_first_booked(self):
         booking = self.returned(ret=-2, returned_on=-2, original_return=-5)   # booked back 5 days ago, moved to 2 days ago, came back then
         payment = self.give_back(booking, "1400")                             # 3 days x ₱200 = ₱600 off
         r = payment.snapshot["return"]
         self.assertEqual((r["gowns"][0]["due"], r["gowns"][0]["late_days"], r["late_fee"]), (day(-5), 3, "600.00"))
-        self.assertIn(f"Due back {day(-5)}", paper(self.printed(payment)))
+        self.assertEqual((r["change_fee"], r["overdue_fee"], r["gowns"][0]["agreed"], r["gowns"][0]["overdue_days"]), ("600.00", "0.00", day(-2), 0))
+        self.assertEqual(r["why"], "The ₱2,000.00 security deposit less the ₱600.00 date change fee leaves ₱1,400.00 to give back.")
+        html = paper(self.printed(payment))
+        for piece in (f"Booked return {day(-5)}", f"Moved to {day(-2)}", "On time", "Date change fee", "-&#8369;600.00", "3 days x &#8369;200 = &#8369;600.00"):
+            with self.subTest(piece=piece):
+                self.assertIn(piece, html)
+        self.assertNotIn("Overdue fee", html)
+        self.assertNotIn(f"Due back {day(-5)}", html)
 
     def test_a_receipt_saved_before_this_change_still_prints_the_way_it_did(self):
         booking = self.returned(ret=-6, returned_on=-3)
         payment = self.give_back(booking, "1400")
-        old = dict(payment.snapshot)
-        old["return"] = {k: v for k, v in old["return"].items() if k not in ("gowns", "why")}
+        old = {k: v for k, v in payment.snapshot.items() if k != "fee_names"}
+        old["return"] = {k: v for k, v in old["return"].items() if k not in ("gowns", "why", "fee_lines", "change_fee", "overdue_fee")}
         old["return"]["late_lines"] = [{k: v for k, v in line.items() if k in ("gown", "days", "rate", "amount")} for line in old["return"]["late_lines"]]
         old["return"]["late_fee"] = "600.00"
         Payment.objects.filter(pk=payment.pk).update(snapshot=old)
         payment.refresh_from_db()
         html = paper(self.printed(payment))
-        for piece in ("Pick-up ", "3 days x &#8369;200</div>", "-&#8369;0.00", "DEPOSIT RETURNED", "&#8369;1,400.00"):
+        for piece in ("Pick-up ", "Late fee", "3 days x &#8369;200</div>", "-&#8369;0.00", "DEPOSIT RETURNED", "&#8369;1,400.00"):
             with self.subTest(piece=piece):
                 self.assertIn(piece, html)
         self.assertNotIn("GOWN RETURNED", html)
@@ -177,7 +187,7 @@ class CashReturnTests(TestCase):
         self.assertEqual((x["late_fee"], x["deposit_used"], x["over"]), ("2400.00", "2000.00", "400.00"))
         html = paper(self.printed(extra))
         for piece in ("WHY THIS IS OWED", "12 days x &#8369;200 = &#8369;2,400.00", f"Due back {day(-15)}", f"Returned {day(-3)}",
-                      "Taken from the deposit", "-&#8369;2,000.00", "Over the deposit", "PAID NOW: Late fee / extra charge", "&#8369;400.00",
+                      "Overdue fee", "Taken from the deposit", "-&#8369;2,000.00", "Over the deposit", "PAID NOW: Extra charge", "&#8369;400.00",
                       "This receipt is for the part the deposit did not cover."):
             with self.subTest(piece=piece):
                 self.assertIn(piece, html)
@@ -188,10 +198,10 @@ class CashReturnTests(TestCase):
         payments.add_deduction(reservation_id=booking.pk, amount=D("300"), reason="Stain on the skirt", user=self.owner)
         self.client.force_login(self.owner)
         data = self.client.get(reverse("arabela_admin:payment_detail", args=[booking.pk])).json()
-        self.assertEqual(data["lateLines"][0]["due"], day(-5))
+        self.assertEqual((data["feeLines"][0]["kind"], data["feeLines"][0]["due"]), ("overdue", day(-5)))
         self.assertEqual((data["peso"]["deposit_paid"], data["peso"]["refund_available"], data["canReturn"]), ("2,000.00", "1,300.00", True))
         page = self.client.get(reverse("arabela_admin:payments")).content.decode()
-        for piece in ("How the amount to hand back is worked out", "To hand back now", "Already handed back", "No late fee and no deductions: the whole deposit goes back.",
+        for piece in ("How the amount to hand back is worked out", "To hand back now", "Already handed back", "No fees and no deductions: the whole deposit goes back.",
                       "retShown()", "workingText()", "Send deposit back"):
             with self.subTest(piece=piece):
                 self.assertIn(piece, page)
@@ -223,7 +233,8 @@ class OnlineReturnTests(online_helpers.Base):
         self.assertEqual(self.fake.refunds["ref_0001"]["amount"], 140000)     # PayMongo is asked for exactly ₱1,400.00
         r = payment.snapshot["return"]
         self.assertEqual((r["late_fee"], r["returned_now"], r["gowns"][0]["due"], r["gowns"][0]["late_days"]), ("600.00", "1400.00", day(-3), 3))
-        self.assertEqual(r["why"], "The ₱2,000.00 security deposit less the ₱600.00 late fee leaves ₱1,400.00 to give back.")
+        self.assertEqual((r["change_fee"], r["overdue_fee"], r["gowns"][0]["overdue_days"]), ("400.00", "200.00", 1))     # moved 2 days, back 1 day after that
+        self.assertEqual(r["why"], "The ₱2,000.00 security deposit less the ₱400.00 date change fee and the ₱200.00 overdue fee leaves ₱1,400.00 to give back.")
 
         self.client.force_login(self.owner)
         shop = paper(self.client.get(reverse("arabela_admin:payment_receipt_print", args=[payment.pk])).content.decode())
@@ -231,20 +242,20 @@ class OnlineReturnTests(online_helpers.Base):
         mine = self.client.get(reverse("gowns:receipt_view", args=[payment.pk])).content.decode()
         self.assertIn("CUSTOMER COPY", mine)
         for html in (shop, paper(mine)):
-            for piece in ("GOWN RETURNED", f"Due back {day(-3)}", "3 days late", "-&#8369;600.00", "DEPOSIT RETURNED", "&#8369;1,400.00",
+            for piece in ("GOWN RETURNED", f"Booked return {day(-3)}", f"Moved to {day(-1)}", "1 day overdue", "-&#8369;400.00", "-&#8369;200.00", "DEPOSIT RETURNED", "&#8369;1,400.00",
                           "Sent back to the account the customer paid with. It can take up to a day to show.", r["why"]):
                 with self.subTest(piece=piece):
                     self.assertIn(piece, html)
         body = CustomerMessage.objects.filter(recipient=self.ana, category="Payment").latest("id").body
         self.assertIn("Your security deposit of ₱1,400.00", body)
-        self.assertIn("Your ₱2,000.00 deposit less the ₱600.00 late fee comes to ₱1,400.00.", body)
+        self.assertIn("Your ₱2,000.00 deposit less the ₱400.00 date change fee and the ₱200.00 overdue fee comes to ₱1,400.00.", body)
         self.assertIn("up to a day", body)
 
     def test_on_time_the_whole_deposit_goes_back_online_and_the_receipt_says_so(self):
         booking = self.late_online_booking(booked_back=0, moved_to=0, came_back=0)
         payment = self.refund(booking, "2000")
         self.assertEqual(self.fake.refunds["ref_0001"]["amount"], 200000)
-        self.assertEqual(payment.snapshot["return"]["why"], "No late fee and no deductions: the security deposit is returned in full.")
+        self.assertEqual(payment.snapshot["return"]["why"], "No fees and no deductions: the security deposit is returned in full.")
         body = CustomerMessage.objects.filter(recipient=self.ana, category="Payment").latest("id").body
         self.assertNotIn("comes to", body)
 

@@ -59,7 +59,7 @@ class GownStateTests(DepositsBase):
     def test_every_stage_has_its_words(self):
         self.assertEqual(self.state(P), ("waiting", "Waiting for pick-up"))
         self.assertEqual(self.state(R, picked_up_on=self.today), ("out", "Out with the customer"))
-        self.assertEqual(self.state(OVERDUE, picked_up_on=self.today - timedelta(days=5)), ("late", "Out with the customer, late"))
+        self.assertEqual(self.state(OVERDUE, picked_up_on=self.today - timedelta(days=5)), ("late", "Out with the customer, overdue"))
         self.assertEqual(self.state(CAN), ("cancelled", ""))
 
     def test_a_returned_gown_says_the_day_it_came_back(self):
@@ -362,7 +362,7 @@ class DepositStateTests(TestCase):
         pay(booking, Payment.Purpose.FULL, "5500")
         due = self.state(booking)
         self.assertEqual(due["state"], "Return due")
-        self.assertEqual(due["notes"], ["₱1,400.00 to hand back", "₱600.00 kept for late fee or deductions"])
+        self.assertEqual(due["notes"], ["₱1,400.00 to hand back", "₱600.00 kept for fees or deductions"])
         self.assertEqual(due["late_fee"], Decimal("600.00"))
 
     def test_a_handed_back_deposit_is_returned_with_its_day_and_how(self):
@@ -378,7 +378,7 @@ class DepositStateTests(TestCase):
         pay(booking, Payment.Purpose.FULL, "5500")
         used = self.state(booking)
         self.assertEqual(used["state"], "Returned")
-        self.assertEqual(used["notes"], ["Nothing to hand back: the late fee and deductions used the deposit"])
+        self.assertEqual(used["notes"], ["Nothing to hand back: the fees and deductions used the deposit"])
 
     def test_a_deposit_marked_returned_by_hand_before_the_payments_page_keeps_its_date(self):
         booking = make_booking(stage=RET, pickup=-6, ret=-2, returned_on=-2)

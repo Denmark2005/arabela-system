@@ -1163,6 +1163,13 @@ class Payment(models.Model):
         """The receipt's heading."""
         return 'DEPOSIT RETURN' if self.purpose == self.Purpose.DEPOSIT_RETURN else 'PAYMENT RECEIPT'
 
+    def get_purpose_display(self):
+        """The words people read for the purpose. EXTRA is whatever the security deposit did not cover (an overdue fee, a date change fee, a
+        deduction): "Extra charge". The stored choice keeps its old label, so the database needs no change."""
+        if self.purpose == self.Purpose.EXTRA:
+            return 'Extra charge'
+        return dict(self.Purpose.choices).get(self.purpose, self.purpose)
+
     def __str__(self):
         return f'{self.receipt_number or "legacy"} {self.direction} {self.amount} for {self.reservation.reference_code}'
 

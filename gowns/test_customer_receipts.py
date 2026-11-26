@@ -106,7 +106,8 @@ class BookingPageTests(Base):
                       payment.receipt_number, "Deposit", "Cash", "View &amp; print", reverse("gowns:receipt_view", args=[payment.pk])):
             with self.subTest(piece=piece):
                 self.assertIn(piece, section)
-        self.assertNotIn("Late fee", section)
+        self.assertNotIn("Overdue fee", section)
+        self.assertNotIn("Date change fee", section)
 
     def test_nothing_left_to_pay_says_so(self):
         booking = make_booking(customer=self.juan)
@@ -115,12 +116,13 @@ class BookingPageTests(Base):
         section = section[section.index('id="payments"'):]
         self.assertIn("Nothing left to pay", section)
 
-    def test_the_late_fee_so_far_is_shown_while_the_gown_is_out(self):
+    def test_the_overdue_fee_so_far_is_shown_while_the_gown_is_out(self):
         booking = make_booking(customer=self.juan, stage=ReservationItem.Stage.OVERDUE, ret=-3)
         self.record(booking, P.FULL, "5500")
         section = self.page(booking)
         section = section[section.index('id="payments"'):]
-        for piece in ("Late fee so far", "Wedding Gown 1: 3 days x PHP 200 = <strong>PHP 600.00</strong> so far", "taken from your security deposit"):
+        for piece in ("Overdue fee so far", "Wedding Gown 1: 3 days x PHP 200 = <strong>PHP 600.00</strong> so far", "taken from your security deposit",
+                      "Return the gown to stop it growing."):
             with self.subTest(piece=piece):
                 self.assertIn(piece, section)
 

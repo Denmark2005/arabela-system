@@ -413,7 +413,7 @@
 
         {% if money.tracked %}
         {% comment %}
-          Payments & Receipts: what the booking owes and has paid, the late fee so far, and the Payment Receipts the shop issued (opened in the same
+          Payments & Receipts: what the booking owes and has paid, its date change and overdue fees so far, and the Payment Receipts the shop issued (opened in the same
           paper look and printed or saved as a PDF from there). Everything shown is worked out by the system (reservations/ledger.py).
         {% endcomment %}
         <section class="mt-20 border-t border-black/5 pt-16" id="payments" data-live-region="item-payments">
@@ -430,13 +430,25 @@
             </div>
           </div>
 
-          {% if money.late_lines %}
+          {% if money.change_fee > 0 %}
           <div class="mt-8 max-w-2xl border-l-2 border-amber-300 bg-amber-50/50 p-6 text-sm text-secondary">
-            <p class="mb-2 text-[0.6875rem] font-semibold uppercase tracking-[0.1rem] text-amber-800">{% if money.late_now %}Late fee so far{% else %}Late fee{% endif %}</p>
-            {% for line in money.late_lines %}
+            <p class="mb-2 text-[0.6875rem] font-semibold uppercase tracking-[0.1rem] text-amber-800">Date change fee</p>
+            {% for line in money.fee_lines %}{% if line.kind == "change" %}
+              <p>{{ line.gown }}: {{ line.days }} day{{ line.days|pluralize }} x PHP {{ line.rate|floatformat:"0g" }} = <strong>PHP {{ line.amount|floatformat:"2g" }}</strong>{% if line.growing %} so far{% endif %}</p>
+              <p class="text-secondary/70">Your return date was moved from {{ line.booked }} to {{ line.agreed }}.</p>
+            {% endif %}{% endfor %}
+            <p class="mt-2 text-secondary/70">A date change fee is taken from your security deposit.</p>
+          </div>
+          {% endif %}
+
+          {% if money.overdue_fee > 0 %}
+          <div class="mt-8 max-w-2xl border-l-2 border-amber-300 bg-amber-50/50 p-6 text-sm text-secondary">
+            <p class="mb-2 text-[0.6875rem] font-semibold uppercase tracking-[0.1rem] text-amber-800">{% if money.overdue_now %}Overdue fee so far{% else %}Overdue fee{% endif %}</p>
+            {% for line in money.fee_lines %}{% if line.kind == "overdue" %}
               <p>{{ line.gown }}: {{ line.days }} day{{ line.days|pluralize }} x PHP {{ line.rate|floatformat:"0g" }} = <strong>PHP {{ line.amount|floatformat:"2g" }}</strong>{% if not line.back %} so far{% endif %}</p>
-            {% endfor %}
-            <p class="mt-2 text-secondary/70">A late fee is taken from your security deposit. Return the gown to stop it growing.</p>
+              <p class="text-secondary/70">It was due back {{ line.agreed }}.</p>
+            {% endif %}{% endfor %}
+            <p class="mt-2 text-secondary/70">An overdue fee is taken from your security deposit.{% if money.overdue_now %} Return the gown to stop it growing.{% endif %}</p>
           </div>
           {% endif %}
 
@@ -444,7 +456,8 @@
           <div class="mt-8 max-w-2xl space-y-2 text-sm">
             <p class="text-[0.6875rem] font-semibold uppercase tracking-[0.1rem] text-secondary/60">Your security deposit</p>
             <div class="flex items-center justify-between text-secondary/70"><span>Deposit paid</span><span>PHP {{ money.deposit_paid|floatformat:"2g" }}</span></div>
-            <div class="flex items-center justify-between text-secondary/70"><span>Late fee</span><span>- PHP {{ money.late_fee|floatformat:"2g" }}</span></div>
+            {% if money.change_fee > 0 %}<div class="flex items-center justify-between text-secondary/70"><span>Date change fee</span><span>- PHP {{ money.change_fee|floatformat:"2g" }}</span></div>{% endif %}
+            <div class="flex items-center justify-between text-secondary/70"><span>Overdue fee</span><span>- PHP {{ money.overdue_fee|floatformat:"2g" }}</span></div>
             <div class="flex items-center justify-between text-secondary/70"><span>Deductions</span><span>- PHP {{ money.deductions_total|floatformat:"2g" }}</span></div>
             <div class="h-px w-full bg-black/5"></div>
             <div class="flex items-center justify-between font-semibold text-secondary"><span>{% if money.refunded > 0 %}Handed back to you{% else %}To get back{% endif %}</span><span>PHP {% if money.refunded > 0 %}{{ money.refunded|floatformat:"2g" }}{% else %}{{ money.refundable_total|floatformat:"2g" }}{% endif %}</span></div>

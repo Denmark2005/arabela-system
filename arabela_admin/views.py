@@ -459,11 +459,11 @@ def _item_remarks(item, today=None):
     colour the same booking differently. tone: warning (orange, pick-up), success (green,
     out), primary (blue, return), danger (red, late/overdue), muted (grey, plain info).
 
-    Early / late are always measured against what the customer ORIGINALLY booked
-    (original_rental_date / original_return_date), the figures the Php 200/day charge is
-    counted from -- so a pick-up the customer moved to the 10th keeps saying "6 days
-    early" even if they finally collect it on the 17th, and a late return keeps counting
-    from the original return date. Deliberately just day counts, no peso amounts."""
+    A moved date is always measured against what the customer ORIGINALLY booked
+    (original_rental_date / original_return_date) -- so a pick-up the customer moved to
+    the 10th keeps saying "6 days early" even if they finally collect it on the 17th.
+    "Days overdue" count from the return date agreed now (see _days_late): the days a
+    return was moved are the date change fee, not overdue. Day counts only, no peso amounts."""
     today = today or timezone.localdate()
     scheduled_pickup = item.original_rental_date or item.rental_date
     scheduled_return = item.original_return_date or item.return_date
@@ -476,8 +476,9 @@ def _item_remarks(item, today=None):
     if stage == ReservationItem.Stage.RETURNED:
         when = item.returned_on
         remarks.append({"text": f"Returned {when:%b %d}" if when else "Returned", "tone": "success"})
-        if when and when > scheduled_return:
-            remarks.append({"text": f"{_plural_days((when - scheduled_return).days)} late", "tone": "danger"})
+        over = _days_late(item, today)
+        if over:
+            remarks.append({"text": f"{_plural_days(over)} overdue", "tone": "danger"})
     elif stage == ReservationItem.Stage.PICKUP:
         days = (item.rental_date - today).days
         if days > 0:
@@ -489,9 +490,7 @@ def _item_remarks(item, today=None):
     else:  # out with the customer
         remarks.append({"text": "Out with customer", "tone": "success"})
         if stage == ReservationItem.Stage.OVERDUE:
-            remarks.append({
-                "text": f"Overdue · {_plural_days((today - scheduled_return).days)} late", "tone": "danger",
-            })
+            remarks.append({"text": f"Overdue · {_plural_days(_days_late(item, today))}", "tone": "danger"})
         else:
             days = (item.return_date - today).days
             remarks.append({
@@ -506,7 +505,7 @@ def _item_remarks(item, today=None):
         remarks.append({"text": f"Pick-up moved {_plural_days(-moved)} later", "tone": "muted"})
     extended = (item.return_date - scheduled_return).days
     if extended > 0:
-        remarks.append({"text": f"Changed return date by customer · {_plural_days(extended)} late", "tone": "primary"})
+        remarks.append({"text": f"Changed return date by customer · {_plural_days(extended)} later", "tone": "primary"})
     elif extended < 0:
         remarks.append({"text": f"Return moved {_plural_days(-extended)} earlier", "tone": "muted"})
     return remarks
@@ -527,18 +526,18 @@ def _is_late_and_out(item, today=None):
 
 
 def _days_late(item, today=None):
-    """How late this gown is (still out, past its return date) or was (already back), in days. Counted from the return date the customer
-    ORIGINALLY booked -- the same measuring stick as the remarks above -- so Active Reservations, Rental History and the Rental Schedule
-    always give the same number. 0 means it came back on time. None means there is nothing to say: not picked up yet, cancelled, out but not
-    due yet, or an old record with no return day."""
+    """How many days overdue this gown is (still out, past its return date) or was (already back). Counted from the return date agreed with the
+    customer now -- a return the shop moved later is the date change fee, not overdue (reservations/ledger.agreed_return) -- so Active
+    Reservations, Rental History, the Rental Schedule and Gown Monitoring always give the same number. 0 means it came back on time. None means
+    there is nothing to say: not picked up yet, cancelled, out but not due yet, or an old record with no return day."""
     today = today or timezone.localdate()
-    scheduled_return = item.original_return_date or item.return_date
+    agreed = reservation_ledger.agreed_return(item)
     if item.stage == ReservationItem.Stage.RETURNED:
         if not item.returned_on:
             return None
-        return max(0, (item.returned_on - scheduled_return).days)
+        return max(0, (item.returned_on - agreed).days)
     if _is_late_and_out(item, today):
-        return max(1, (today - scheduled_return).days)       # past the current return date, so at least one day late
+        return max(1, (today - agreed).days)       # past the current return date, so at least one day overdue
     return None
 
 
@@ -546,8 +545,8 @@ def _gown_circle(item, today=None):
     """The small coloured circle on one gown's line in Active Reservations: {"kind", "number", "title"}.
 
     kind uses the SAME three colours as the booking's own status circle -- confirmed (green: waiting for pick-up), active (blue: out with the
-    customer), overdue (red: late) -- plus returned / cancelled (grey). number is the days the circle carries: days until pick-up (green), days
-    until it is due back (blue), days late (red; a pick-up that was never collected counts days late too). title is the full sentence the old text
+    customer), overdue (red) -- plus returned / cancelled (grey). number is the days the circle carries: days until pick-up (green), days until
+    it is due back (blue), days overdue (red; a pick-up that was never collected counts its days late for pick-up). title is the full sentence the old text
     chips said (the very remarks the Rental Schedule shows), so nothing is lost: it is on hover now, and written out when the line is opened."""
     today = today or timezone.localdate()
     stage = getattr(item, "effective_stage", None) or _effective_stage(item, today)
@@ -884,7 +883,7 @@ def payment_verification_view(request):
 # Rental History: the circle each status gets (the page's CSS knows done / active / overdue / missed) and the one sentence that says what it means.
 _HISTORY_LOOK = {
     "Completed": ("done", "The gown is back"),
-    "Ongoing": ("active", "Waiting for pick-up, or out with the customer and not late yet"),
+    "Ongoing": ("active", "Waiting for pick-up, or out with the customer and not overdue yet"),
     "Overdue": ("overdue", "The gown is out with the customer and past its return date"),
     "Not picked up": ("missed", "The dates passed and nobody picked the gown up"),
 }
@@ -917,7 +916,7 @@ def rental_history_view(request):
     # rather than re-expressed as template conditionals in every place they appear
     # (badge, modal payload, search haystack).
     for item in items:
-        # Overdue = the gown is OUT and late (the same rule as Active Reservations). A gown nobody ever picked up is not "overdue": once its
+        # Overdue = the gown is OUT past its return date (the same rule as Active Reservations). A gown nobody ever picked up is not "overdue": once its
         # dates have passed it is "Not picked up".
         if item.stage == ReservationItem.Stage.RETURNED:
             item.history_status = "Completed"
@@ -928,7 +927,7 @@ def rental_history_view(request):
         else:
             item.history_status = "Ongoing"
         item.history_kind, item.history_tip = _HISTORY_LOOK[item.history_status]
-        item.late_days = _days_late(item, today)       # None = nothing to say, 0 = on time, N = N days late (so far, if it is still out)
+        item.late_days = _days_late(item, today)       # None = nothing to say, 0 = on time, N = N days overdue (so far, if it is still out)
         item.has_receipt = reservation_payments.has_receipt(item.reservation)
 
     reservation_timeline.attach_to_items(items)
@@ -973,14 +972,14 @@ def _deposit_gown_state(item):
     if stage == ReservationItem.Stage.PICKUP:
         return "waiting", "Waiting for pick-up"
     if stage == ReservationItem.Stage.OVERDUE:
-        return "late", "Out with the customer, late"
+        return "late", "Out with the customer, overdue"
     return "out", "Out with the customer"
 
 
 # Security Deposits: where each booking's deposit stands, read from the same payments ledger the Payments page uses (reservations/ledger.py).
 #   Held         some gown is not back yet: the deposit is the shop's protection until then
 #   Return due   every gown is back and there is deposit left to hand back (it is handed back in Payments, which prints the receipt)
-#   Returned     every gown is back and nothing is left to hand back: it was handed back, or the late fee and deductions used all of it
+#   Returned     every gown is back and nothing is left to hand back: it was handed back, or the fees and deductions used all of it
 # A deposit marked returned by hand before the Payments page existed (deposit_returned_at) counts as Returned with its own date.
 _DEPOSIT_KINDS = {"Held": "held", "Return due": "due", "Returned": "returned"}
 
@@ -988,7 +987,7 @@ _DEPOSIT_KINDS = {"Held": "held", "Return due": "due", "Returned": "returned"}
 def _deposits_held(today):
     """The Dashboard's "Security Deposits Held": the deposit money the shop is holding for its customers, by the SAME states as the Security Deposits page
     (_deposit_state, over the same bookings): a Held booking (a gown is not back yet) counts what was paid less anything already handed back; a Return due
-    booking (every gown back) counts what is still to hand back -- the late fee and deductions it keeps are the shop's, not held; a Returned one counts
+    booking (every gown back) counts what is still to hand back -- the fees and deductions it keeps are the shop's, not held; a Returned one counts
     nothing. Amounts are text ("24,000.00")."""
     held = due = Decimal("0")
     held_bookings = due_bookings = 0
@@ -1041,7 +1040,7 @@ def _deposit_state(reservation, live_items, today):
         state = "Return due"
         notes.append(f"{ledger.peso(statement.refund_available)} to hand back")
         if statement.deposit_used > 0:
-            notes.append(f"{ledger.peso(statement.deposit_used)} kept for late fee or deductions")
+            notes.append(f"{ledger.peso(statement.deposit_used)} kept for fees or deductions")
     else:
         state = "Returned"
         when = reservation.deposit_returned_on
@@ -1052,10 +1051,11 @@ def _deposit_state(reservation, live_items, today):
         elif statement.deposit_paid <= 0:
             notes.append("No deposit was paid")
         else:
-            notes.append("Nothing to hand back: the late fee and deductions used the deposit")
+            notes.append("Nothing to hand back: the fees and deductions used the deposit")
     return {
         "state": state, "kind": _DEPOSIT_KINDS[state], "notes": notes, "when": when, "how": how,
-        "paid": statement.deposit_paid, "late_fee": statement.late_fee, "deductions": statement.deductions_total,
+        "paid": statement.deposit_paid, "late_fee": statement.late_fee, "change_fee": statement.change_fee, "overdue_fee": statement.overdue_fee,
+        "deductions": statement.deductions_total,
         "handed_back": statement.refunded, "to_hand_back": statement.refund_available,
     }
 
@@ -1626,11 +1626,16 @@ def active_reservations_view(request):
             item.note_remarks = [r for r in item.remarks if _is_change_note(r)]           # the notes about moved dates, inside its dots
             item.circle = _gown_circle(item, today)
             item.has_rest = item.id in rest_item_ids
-            # The late fee for the dates as they stand (reservations/ledger.py): counted from the ORIGINAL return date, ₱ per day per gown, up to the planned return
-            # (or up to today when the gown is out and already past it). Display only; the Payments page keeps working out the real, so-far figure.
+            # The fee for the dates as they stand (reservations/ledger.py): ₱ per day per gown, counted from the ORIGINAL return date up to the planned return (or up to
+            # today when the gown is out and already past it), read as a date change fee (the days the return was moved) and an overdue fee (the days past the agreed
+            # date). Display only; the Payments page keeps working out the real, so-far figure.
             rate = int(reservation.late_fee_per_day or 0)
             item.late_days_planned = reservation_ledger.planned_late_days(item, today)
             item.late_fee_planned = Decimal(item.late_days_planned * rate)
+            item.overdue_days_planned = reservation_ledger.overdue_days(item, today)
+            item.change_days_planned = item.late_days_planned - item.overdue_days_planned
+            item.change_fee_planned = Decimal(item.change_days_planned * rate)
+            item.overdue_fee_planned = Decimal(item.overdue_days_planned * rate)
             if item.stage == ReservationItem.Stage.RETURNED:
                 item.late_fee_kind = "back"
             elif item.stage in reservation_ledger.OUT_STAGES and item.return_date and today > item.return_date:
@@ -1688,9 +1693,13 @@ def active_reservations_view(request):
         money = reservation_ledger.statement(reservation, today)
         reservation.balance_due = money.balance_due
         reservation.balance_text = f"{money.balance_due:,.2f}"
-        # The booking's late fee (all its gowns) and how it sits against the security deposit: it comes out of the deposit; what does not fit is still to pay.
+        # The booking's fees (all its gowns) and how they sit against the security deposit: they come out of the deposit; what does not fit is still to pay.
         reservation.late_fee_planned = sum((i.late_fee_planned for i in booking_items), Decimal("0"))
         reservation.late_days_planned = sum(i.late_days_planned for i in booking_items)
+        reservation.change_fee_planned = sum((i.change_fee_planned for i in booking_items), Decimal("0"))
+        reservation.overdue_fee_planned = sum((i.overdue_fee_planned for i in booking_items), Decimal("0"))
+        reservation.change_days_planned = sum(i.change_days_planned for i in booking_items)
+        reservation.overdue_days_planned = sum(i.overdue_days_planned for i in booking_items)
         # Measured against the deposit paid -- or, when nothing is paid yet (a walk-in that pays at pick-up), the deposit the booking was made with:
         # the fee comes out of it once it is paid, so an unpaid deposit never makes every fee look "over the deposit".
         reservation.fee_deposit_paid = money.deposit_paid
@@ -1752,7 +1761,7 @@ def active_reservations_view(request):
         reservation.cancel_request = waiting_requests.get(reservation.id)
 
     # This page is for rentals that are still running. A booking whose every gown is back is finished: it lives on in Reservation Records and
-    # Rental History, so it leaves this list. Late ones go first (the most days late on top); the rest keep their order (the sort is stable).
+    # Rental History, so it leaves this list. Overdue ones go first (the most days overdue on top); the rest keep their order (the sort is stable).
     running = [r for r in reservations if not r.is_completed]
     running.sort(key=lambda r: (0, -r.overdue_days) if r.state == "overdue" else (1, 0))
     state_counts = {"all": len(running)}
@@ -3670,7 +3679,7 @@ def _change_item_dates(request, item_id, want_pickup, want_return):
     Return (want_return): later only (there is no early return), never a day that has passed.
     Never: a day another booking or a block holds this gown. When the RETURN moves, the gown's rest days after it must also stay clear of a later booking, and the
     gown's rest block (its cooldown) moves to sit right after the new return -- unless staff already released it, which is respected and never undone.
-    The late fee does not change: it is always counted from the ORIGINAL return date (reservations/ledger.py). The customer's event date is frozen, never moved."""
+    The fee is always counted from the ORIGINAL return date (reservations/ledger.py): a later return is a date change fee. The customer's event date is frozen, never moved."""
     item, error = _load_open_item(request, item_id)
     if error:
         return error
@@ -3789,7 +3798,7 @@ def reservation_item_change_pickup_view(request, item_id):
 def reservation_item_change_return_view(request, item_id):
     """The customer needs the gown LONGER: move the return date later. Only later (there is no early return -- bringing it back sooner changes nothing), never to a
     day that has passed, never into days another booking or block holds the gown, and the gown's rest days after the new return must stay free too. The gown's own
-    rest block moves along with it. Counted as late days against the ORIGINAL return date."""
+    rest block moves along with it. The extra days are the date change fee, counted from the ORIGINAL return date."""
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
     chosen, error = _date_choices(request, None, "date")

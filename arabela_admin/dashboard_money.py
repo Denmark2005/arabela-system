@@ -1,10 +1,10 @@
 """What the Dashboard says about money and today's work. Everything is READ from the payments ledger and the bookings (nothing is stored), so it can never
 disagree with the pages it links to.
 
-  latest_transactions()   the last few movements of money (received, late fee, deposit handed back), each with how it was paid, who paid, the rental and the amount
-  shop_today(today)       three small counts: bookings made today, pick-ups in the next 2 days that still owe money, and what needs a look (late gowns, online payments)
-  alerts(shop_today)      the warning line under the greeting: only what needs a person (late gowns, pick-ups that still owe money, online payments)
-  month_money(today)      Rental Income: the gown rental paid this month, and the late fees and deductions the shop kept (never the security deposits)
+  latest_transactions()   the last few movements of money (received, extra charge, deposit handed back), each with how it was paid, who paid, the rental and the amount
+  shop_today(today)       three small counts: bookings made today, pick-ups in the next 2 days that still owe money, and what needs a look (overdue gowns, online payments)
+  alerts(shop_today)      the warning line under the greeting: only what needs a person (overdue gowns, pick-ups that still owe money, online payments)
+  month_money(today)      Rental Income: the gown rental paid this month, and the fees and deductions the shop kept (never the security deposits)
   greeting(hour)          "Good morning" / "Good afternoon" / "Good evening" for an hour of the shop's clock
 """
 from datetime import timedelta
@@ -33,7 +33,7 @@ def _kind(payment):
     if payment.direction == Payment.Direction.OUT:
         return "Deposit returned", ""
     if payment.purpose == Payment.Purpose.EXTRA:
-        return "Late fee received", ""
+        return "Extra charge received", ""
     return "Payment received", payment.get_purpose_display()
 
 
@@ -122,7 +122,7 @@ def alerts(shop_today):
     out = []
     late = shop_today.get("late_gowns") or 0
     if late:
-        out.append({"text": f"{late} gown{'s are' if late != 1 else ' is'} late coming back", "url": reverse("arabela_admin:gown_monitoring") + "?tab=return"})
+        out.append({"text": f"{late} gown{'s are' if late != 1 else ' is'} overdue", "url": reverse("arabela_admin:gown_monitoring") + "?tab=return"})
     owing = shop_today.get("pickups_owing") or 0
     if owing:
         out.append({"text": f"{owing} pick-up{'s' if owing != 1 else ''} in the next {PICKUP_DAYS} days still {'have' if owing != 1 else 'has'} a balance",
@@ -158,13 +158,13 @@ def _money_rows(reservation):
 
 def month_money(today):
     """What the shop EARNED in the calendar month of `today`. The security deposits are never in it: a deposit is the customer's money and goes back to
-    them, until a late fee or a deduction keeps part of it.
+    them, until a fee or a deduction keeps part of it.
 
       income     the gown-rental part of every payment received this month. A payment covers the deposit first and then the rental (the rule of the
                  Payments page, reservations/ledger.py), so a "Paid in full" counts only its rental part and a deposit-only payment counts nothing.
       bookings   how many bookings that income came from.
-      kept       the late fees and deductions the shop kept this month: what they took out of the deposit of a booking whose last gown came back this month
-                 (only then is the late fee final), plus a late fee or extra charge paid on top of a deposit this month.
+      kept       the fees and deductions the shop kept this month: what they took out of the deposit of a booking whose last gown came back this month
+                 (only then are the fees final), plus an extra charge paid on top of a deposit this month.
 
     Only bookings whose money is tracked count (approved, running, finished, or cancelled after approval), like everywhere else. Amounts are text ("84,500.00")."""
     first = today.replace(day=1)

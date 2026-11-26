@@ -4071,7 +4071,7 @@ class ScheduleActionsTests(TestCase):
         self.assertEqual(item.return_date, self.today + timedelta(days=7))
         self.assertEqual(item.original_return_date, self.today + timedelta(days=4))
         self.assertEqual((block.start_date, block.end_date), (self.today + timedelta(days=8), self.today + timedelta(days=7 + COOLDOWN_DAYS)))
-        self.assertIn("Changed return date by customer · 3 days late", self._remarks(item))
+        self.assertIn("Changed return date by customer · 3 days later", self._remarks(item))
 
     def test_return_cannot_move_earlier_or_stay_the_same(self):
         item = self._item(0, 6)
@@ -4103,20 +4103,22 @@ class ScheduleActionsTests(TestCase):
         item = self._item(-6, -2, stage=ReservationItem.Stage.RESERVED, picked_up_on=self.today - timedelta(days=6))
         remarks = self._remarks(item)
         self.assertIn("Out with customer", remarks)
-        self.assertIn("Overdue · 2 days late", remarks)
+        self.assertIn("Overdue · 2 days", remarks)
         events = self.client.get(reverse("arabela_admin:rental_schedule")).context["calendar_events"]
         mine = [e for e in events if e["extendedProps"].get("itemId") == item.id]
         self.assertIn("Danger", [e["extendedProps"]["calendar"] for e in mine])  # the red Overdue marker
         self.assertEqual(mine[0]["extendedProps"]["stage"], "Overdue")
 
-    def test_overdue_counts_from_the_original_return_date(self):
+    def test_overdue_counts_from_the_return_date_agreed_now(self):
         item = self._item(-8, -1, stage=ReservationItem.Stage.RESERVED, picked_up_on=self.today - timedelta(days=8),
                           original_return_date=self.today - timedelta(days=4))
-        self.assertIn("Overdue · 4 days late", self._remarks(item))
+        remarks = self._remarks(item)
+        self.assertIn("Overdue · 1 day", remarks)                                          # the 3 moved days are the date change fee
+        self.assertIn("Changed return date by customer · 3 days later", remarks)
 
-    def test_a_late_return_keeps_its_late_remark_after_it_comes_back(self):
+    def test_a_late_return_keeps_its_overdue_remark_after_it_comes_back(self):
         item = self._item(-8, -2, stage=ReservationItem.Stage.RETURNED, returned_on=self.today - timedelta(days=1))
-        self.assertIn("1 day late", self._remarks(item))
+        self.assertIn("1 day overdue", self._remarks(item))
 
     # ---- the pages --------------------------------------------------------------------------------
     def test_active_reservations_shows_remarks_phone_and_the_right_buttons(self):
@@ -4160,7 +4162,7 @@ class ScheduleActionsTests(TestCase):
         self.assertEqual(props["originalReturnDate"], (self.today + timedelta(days=10)).isoformat())
         texts = [r["text"] for r in props["remarks"]]
         self.assertIn("Changed pick-up date by customer · 5 days early", texts)
-        self.assertIn("Changed return date by customer · 2 days late", texts)
+        self.assertIn("Changed return date by customer · 2 days later", texts)
         self.assertIn(item.reservation.reference_code, props["activeUrl"])
         # The pick-up / return stretches are painted by the same Pick-up / Return markers --
         # the pick-up starts on the NEW day, the return runs to the NEW end.

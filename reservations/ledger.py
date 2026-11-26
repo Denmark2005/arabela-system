@@ -1,14 +1,16 @@
-"""What a booking OWES, what it has PAID, its LATE FEE and the DEPOSIT it can give back -- all worked out here, never typed by anyone.
+"""What a booking OWES, what it has PAID, its DATE CHANGE and OVERDUE FEES and the DEPOSIT it can give back -- all worked out here, never typed by anyone.
 
 The one rule set the Payments page, the printed receipts, the customer's booking page and the walk-in form all read:
 
   * Total to pay = the gown rental + the security deposit (the deposit the booking was made with).
   * Money received covers the DEPOSIT first, then the rental. (The deposit is the shop's protection and it is never paid in halves, see
     reservations/payments.py: a deposit payment is exactly the deposit, or the booking is paid in full.)
-  * Late fee = the booking's late fee per day x the days each gown is late, counted from the return date the customer ORIGINALLY booked
-    (a gown that is still out counts up to today -- "late fee so far"; a gown that is back counts up to the day it came back). It is not
-    stored: it is worked out every time, so moving a return date later never makes it disappear.
-  * The late fee and any manual deductions come out of the deposit. Refundable = deposit paid - late fee - deductions. If they are
+  * The fee for days past the booked return date (`late_fee` in the code) = the booking's fee per day x those days, counted from the return
+    date the customer ORIGINALLY booked (a gown that is still out counts up to today -- "so far"; a gown that is back counts up to the day
+    it came back). It is not stored: it is worked out every time, so moving a return date later never makes it disappear.
+    People read it in two parts, the same money: the DATE CHANGE FEE (the days the shop moved the return date) and the OVERDUE FEE (the days
+    past the date agreed now, while the booking shows as Overdue).
+  * The fees and any manual deductions come out of the deposit. Refundable = deposit paid - fees - deductions. If they are
     MORE than the deposit, the extra is what the customer still owes ("extra owed").
   * Balance still to pay = what is unpaid of the deposit and the rental + any extra owed.
 
@@ -45,6 +47,10 @@ CANCELLED = "cancelled"    # cancelled after approval: the deposit is kept
 STATE_LABELS = {
     BALANCE: "Balance due", REFUND: "Refund due", PAID: "Paid in full", SETTLED: "Settled", CANCELLED: "Cancelled - deposit kept",
 }
+
+# The two names of the fee (the same money per day): see agreed_return() and overdue_days().
+CHANGE_FEE, OVERDUE_FEE = "change", "overdue"
+FEE_LABELS = {CHANGE_FEE: "Date change fee", OVERDUE_FEE: "Overdue fee"}
 
 
 def long_day(value):
@@ -116,6 +122,25 @@ def planned_late_days(item, today=None):
     if item.stage in OUT_STAGES and today > end:
         end = today
     return max(0, (end - scheduled).days)
+
+
+def agreed_return(item):
+    """The return date agreed with the customer now: the current one (staff move it later when the customer asks for more days), and never earlier
+    than the one originally booked. The days between the two are the Date change fee; the days after it are overdue."""
+    booked = item.original_return_date or item.return_date
+    if booked is None or item.return_date is None:
+        return booked
+    return max(booked, item.return_date)
+
+
+def overdue_days(item, today=None):
+    """Of late_days(item), the days PAST the agreed return date: the gown is (or was) overdue -- the Overdue fee, and the "N days overdue" people read.
+    The rest of late_days are days the return date was moved: the Date change fee."""
+    total = late_days(item, today)
+    if total <= 0:
+        return 0
+    ends = item.returned_on if item.stage == ReservationItem.Stage.RETURNED else (today or timezone.localdate())
+    return min(total, max(0, (ends - agreed_return(item)).days))
 
 
 # ---------------------------------------------------------------- old bookings
@@ -203,17 +228,29 @@ def statement(reservation, today=None):
     deposit_unpaid = deposit_due - deposit_paid
     rental_unpaid = rental - rental_paid
 
-    late_lines = []
+    late_lines, fee_lines = [], []
     for item in live:
         days = late_days(item, today)
         if days > 0 and rate > 0:
+            back = item.stage == ReservationItem.Stage.RETURNED
+            overdue = overdue_days(item, today)
+            booked, agreed = item.original_return_date or item.return_date, agreed_return(item)
             late_lines.append({
-                "item_id": item.id, "gown": item.gown_name, "days": days, "rate": Decimal(rate), "amount": money(days * rate),
-                "back": item.stage == ReservationItem.Stage.RETURNED,
+                "item_id": item.id, "gown": item.gown_name, "days": days, "rate": Decimal(rate), "amount": money(days * rate), "back": back,
                 # the return date the fee is counted from (the ORIGINAL one) and the day it really came back: what a receipt says to explain the days
-                "due": long_day(item.original_return_date or item.return_date), "returned": long_day(item.returned_on),
+                "due": long_day(booked), "returned": long_day(item.returned_on), "change_days": days - overdue, "overdue_days": overdue,
             })
+            # The same days under the names people read: moved (booked -> agreed) first, then overdue (past the agreed date). "growing": another day adds to it.
+            for kind, count, due, growing in ((CHANGE_FEE, days - overdue, booked, not back and today < agreed), (OVERDUE_FEE, overdue, agreed, not back)):
+                if count > 0:
+                    fee_lines.append({
+                        "kind": kind, "label": FEE_LABELS[kind], "item_id": item.id, "gown": item.gown_name, "days": count, "rate": Decimal(rate),
+                        "amount": money(count * rate), "back": back, "growing": growing, "booked": long_day(booked), "agreed": long_day(agreed),
+                        "due": long_day(due), "returned": long_day(item.returned_on),
+                    })
     late_fee = sum((line["amount"] for line in late_lines), ZERO)
+    change_fee = sum((line["amount"] for line in fee_lines if line["kind"] == CHANGE_FEE), ZERO)
+    overdue_fee = sum((line["amount"] for line in fee_lines if line["kind"] == OVERDUE_FEE), ZERO)
 
     deductions = [d for d in reservation.deductions.all() if not d.is_void]
     deductions_total = sum((money(d.amount) for d in deductions), ZERO)
@@ -231,7 +268,8 @@ def statement(reservation, today=None):
         balance_core = balance_due = ZERO                      # nothing more is asked of a booking that is not running (or was cancelled)
         extra_owed = ZERO
 
-    late_now = any(not line["back"] for line in late_lines)
+    late_now = any(not line["back"] for line in late_lines)          # a fee is still moving: a gown that has one is still out
+    overdue_now = any(line["kind"] == OVERDUE_FEE and not line["back"] for line in fee_lines)          # a gown is out past its agreed return date
     if cancelled and tracked:
         state = CANCELLED
     elif balance_due > 0:
@@ -249,7 +287,9 @@ def statement(reservation, today=None):
         received=core_in + extra_in, refunded=refunded,
         deposit_paid=deposit_paid, rental_paid=rental_paid, deposit_unpaid=deposit_unpaid, rental_unpaid=rental_unpaid,
         late_rate=Decimal(rate), late_lines=late_lines, late_days_total=sum(line["days"] for line in late_lines), late_fee=late_fee,
-        late_now=late_now,
+        late_now=late_now, overdue_now=overdue_now, fee_lines=fee_lines, change_fee=change_fee, overdue_fee=overdue_fee,
+        change_days_total=sum(line["days"] for line in fee_lines if line["kind"] == CHANGE_FEE),
+        overdue_days_total=sum(line["days"] for line in fee_lines if line["kind"] == OVERDUE_FEE),
         deductions_total=deductions_total, deposit_used=min(deposit_paid, against), overflow=overflow, extra_received=extra_in,
         extra_owed=extra_owed, refundable_total=refundable_total, refund_available=refund_available,
         all_returned=all_returned, balance_core=balance_core, balance_due=balance_due,

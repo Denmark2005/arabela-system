@@ -153,7 +153,7 @@ class ClosedLineTests(HistoryBase):
         _, waiting = self.one("Waiting", 2, 6, P)
         _, html = self.page()
         self.assertIn("On time", self.closed(html, on_time))
-        self.assertIn("2 days late", self.closed(html, late))
+        self.assertIn("2 days overdue", self.closed(html, late))
         self.assertIn("Still not back", self.closed(html, late))                    # the hover: this number is still growing
         waiting_line = self.closed(html, waiting)
         self.assertNotIn("rh-chip", waiting_line.split('class="rh-late"')[1].split("rh-amt")[0])

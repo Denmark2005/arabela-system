@@ -716,8 +716,8 @@ def receipt_send(ctx):
 def late_fee_setting(ctx):
     from gowns.models import SiteSettings
     new = SiteSettings.load().late_fee_per_day
-    return {"summary": f"changed the late fee per gown per day from ₱{ctx.before.get('late_fee', '')} to ₱{new}", "sensitive": True,
-            "details": {"late fee per day": [ctx.before.get("late_fee", ""), new]}}
+    return {"summary": f"changed the overdue / date change fee per gown per day from ₱{ctx.before.get('late_fee', '')} to ₱{new}", "sensitive": True,
+            "details": {"fee per day": [ctx.before.get("late_fee", ""), new]}}
 
 
 def before_settings_late_fee(request, kwargs):

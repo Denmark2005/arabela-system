@@ -4,7 +4,7 @@
                  TO PREPARE   steam it, check it, hang it on the ready rack
                  PROBLEM      it can't be ready: it needs repair, it is Out-of-Stock, another customer still has it, or it is blocked that day
                  READY        staff marked it (the customer with a website account is told, once per pick-up day)
-  For return   LATE gowns (on every date), the gowns DUE back on those days, and gowns already returned that are being CLEANED / resting then.
+  For return   OVERDUE gowns (on every date), the gowns DUE back on those days, and gowns already returned that are being CLEANED / resting then.
 
 The page changes ONE thing: the "ready" mark. Pick-ups, returns and money are recorded in Active Reservations (each line links to its booking), where the
 condition, balance and late-fee rules are. Everything else is read from the bookings, the gowns and their blocked days, so it can never disagree with them."""
@@ -40,7 +40,7 @@ THUMB_WIDTH = 200
 PICKUP_HOURS = "1:00 PM to 5:00 PM only"
 PREPARE, PROBLEM, READY = "prepare", "problem", "ready"
 LATE, DUE, CLEANING = "late", "due", "cleaning"
-STATUS_WORDS = {PREPARE: "To prepare", PROBLEM: "Problem", READY: "Ready", LATE: "Late", DUE: "Due", CLEANING: "Cleaning"}
+STATUS_WORDS = {PREPARE: "To prepare", PROBLEM: "Problem", READY: "Ready", LATE: "Overdue", DUE: "Due", CLEANING: "Cleaning"}
 BLOCK_WORDS = {
     GownUnavailability.Reason.COOLDOWN: "Resting after its last rental", GownUnavailability.Reason.CLEANING: "Being cleaned",
     GownUnavailability.Reason.REPAIR: "In repair", GownUnavailability.Reason.ALTERATION: "Being altered", GownUnavailability.Reason.OTHER: "Blocked",
@@ -203,7 +203,7 @@ def prepare_rows(selection, today, tag_colors):
 
 # ---------------------------------------------------------------- for return
 def return_rows(selection, today, tag_colors):
-    """Late gowns first (the most days late on top), then the gowns due back on the chosen days, then returned gowns still being cleaned or resting then."""
+    """Overdue gowns first (the most days overdue on top), then the gowns due back on the chosen days, then returned gowns still being cleaned or resting then."""
     start, end = selection["start"], selection["end"]
     rows = []
 
@@ -213,11 +213,11 @@ def return_rows(selection, today, tag_colors):
                     "date_is_today": date_text == "Today", "event_text": _short(item.effective_event_date, today), "sort": sort_key})
         rows.append(row)
 
-    # Out with a customer: late (whatever day is shown), or due back on the chosen days.
+    # Out with a customer: overdue (whatever day is shown), or due back on the chosen days.
     for item in _items().filter(stage__in=_OUT_STAGES, return_date__lte=end, reservation__status__in=_SCHEDULED_STATUSES).order_by("return_date", "id"):
         if item.return_date < today:
             days = _days_late(item, today) or 0
-            add(item, LATE, f"{days} day{'s' if days != 1 else ''} late", "Was due", _short(item.return_date, today), (0, -days))
+            add(item, LATE, f"{days} day{'s' if days != 1 else ''} overdue", "Was due", _short(item.return_date, today), (0, -days))
         elif item.return_date >= start:
             add(item, DUE, "", "Return", _day_word(item.return_date, today), (1, item.return_date.toordinal()))
 

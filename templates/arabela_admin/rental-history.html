@@ -1223,7 +1223,7 @@
               <div class="rh-keyrow">
                 <div class="ar-filters" role="group" aria-label="Show rentals by status">
                   <button type="button" class="ar-filter" :class="statusFilter === 'All' ? 'is-on' : ''" :aria-pressed="statusFilter === 'All' ? 'true' : 'false'" @click="statusFilter = 'All'">All <span class="ar-n" x-text="countFor('All')">{{ rental_items|length }}</span></button>
-                  <button type="button" class="ar-filter" :class="statusFilter === 'Ongoing' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Ongoing' ? 'true' : 'false'" @click="statusFilter = 'Ongoing'" title="Waiting for pick-up, or out with the customer and not late yet"><span class="ar-dot ar-dot--active"></span>Ongoing <span class="ar-n" x-text="countFor('Ongoing')"></span></button>
+                  <button type="button" class="ar-filter" :class="statusFilter === 'Ongoing' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Ongoing' ? 'true' : 'false'" @click="statusFilter = 'Ongoing'" title="Waiting for pick-up, or out with the customer and not overdue yet"><span class="ar-dot ar-dot--active"></span>Ongoing <span class="ar-n" x-text="countFor('Ongoing')"></span></button>
                   <button type="button" class="ar-filter" :class="statusFilter === 'Completed' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Completed' ? 'true' : 'false'" @click="statusFilter = 'Completed'" title="The gown is back"><span class="ar-dot ar-dot--done"></span>Completed <span class="ar-n" x-text="countFor('Completed')"></span></button>
                   <button type="button" class="ar-filter ar-filter--hot" :class="statusFilter === 'Overdue' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Overdue' ? 'true' : 'false'" @click="statusFilter = 'Overdue'" title="The gown is out with the customer and past its return date"><span class="ar-dot ar-dot--overdue"></span>Overdue <span class="ar-n" x-text="countFor('Overdue')"></span></button>
                   <button type="button" class="ar-filter" :class="statusFilter === 'Not picked up' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Not picked up' ? 'true' : 'false'" @click="statusFilter = 'Not picked up'" title="The dates passed and nobody picked the gown up"><span class="ar-dot rh-dot--missed"></span>Not picked up <span class="ar-n" x-text="countFor('Not picked up')"></span></button>
@@ -1238,7 +1238,7 @@
                   <span>Customer</span>
                   <span>Gown</span>
                   <span>Rental dates</span>
-                  <span>Late</span>
+                  <span>Overdue</span>
                   <span>Amount</span>
                   <span></span>
                   <span></span>
@@ -1256,13 +1256,13 @@
                     <div class="rh-gown">{{ item.gown_name }}</div>
                     <div class="rh-dates">{{ item.rental_date|date:"M j" }}{% if item.rental_date.year != item.return_date.year %}, {{ item.rental_date|date:"Y" }}{% endif %} &rarr; {{ item.return_date|date:"M j, Y" }}</div>
                     <div class="rh-late">
-                      <!-- How late the gown was (or is, so far): counted from the return date the customer booked, like Active Reservations. -->
+                      <!-- How many days overdue the gown was (or is, so far): counted from the return date agreed with the customer (moved days are the date change fee), like Active Reservations. -->
                       {% if item.late_days is None %}
                       <span class="ar-none">&mdash;</span>
                       {% elif item.late_days == 0 %}
                       <span class="rh-chip rh-chip--ok">On time</span>
                       {% else %}
-                      <span class="rh-chip rh-chip--bad"{% if item.history_status == 'Overdue' %} title="Still not back, so this keeps growing"{% endif %}>{{ item.late_days }} day{{ item.late_days|pluralize }} late</span>
+                      <span class="rh-chip rh-chip--bad"{% if item.history_status == 'Overdue' %} title="Still not back, so this keeps growing"{% endif %}>{{ item.late_days }} day{{ item.late_days|pluralize }} overdue</span>
                       {% endif %}
                     </div>
                     <div class="rh-amt">&#8369;{{ item.rental_price|floatformat:'-2g' }}</div>

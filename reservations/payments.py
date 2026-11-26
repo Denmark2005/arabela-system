@@ -128,15 +128,27 @@ def _gown_lines(reservation):
     return [{"name": i.gown_name, "size": i.size, "pickup": _day(i.rental_date), "return": _day(i.return_date)} for i in kept]
 
 
+def fee_words(change_fee, overdue_fee):
+    """["the ₱1,400.00 date change fee", "the ₱400.00 overdue fee"]: the fees a sentence names, only those above zero."""
+    return ([f"the {peso(change_fee)} date change fee"] if change_fee > 0 else []) + ([f"the {peso(overdue_fee)} overdue fee"] if overdue_fee > 0 else [])
+
+
+def _listed(parts):
+    """'a', 'a and b', 'a, b and c'."""
+    if len(parts) < 2:
+        return "".join(parts)
+    return f"{', '.join(parts[:-1])} and {parts[-1]}"
+
+
 def _return_gowns(reservation):
-    """The gowns of a deposit return receipt: the day each was due back (the ORIGINAL return date, which the late fee counts from), the day it came back, and how
-    many days late that is."""
+    """The gowns of a deposit return receipt: the day each was first booked to come back (which the fee counts from), the day agreed now (when it was moved), the
+    day it came back, and how many of those days were overdue."""
     out = []
     for i in reservation.items.all():
         if i.stage == i.Stage.CANCELLED:
             continue
         out.append({"name": i.gown_name, "size": i.size, "due": ledger.long_day(i.original_return_date or i.return_date), "back": ledger.long_day(i.returned_on),
-                    "late_days": ledger.late_days(i)})
+                    "late_days": ledger.late_days(i), "agreed": ledger.long_day(ledger.agreed_return(i)), "overdue_days": ledger.overdue_days(i)})
     return out
 
 
@@ -145,18 +157,23 @@ def _return_reason(before, after):
     late, taken = after.late_fee, after.deductions_total
     if late <= 0 and taken <= 0:
         if before.refunded <= 0 and after.refund_available <= 0:
-            return "No late fee and no deductions: the security deposit is returned in full."
-        return f"No late fee and no deductions: the whole {peso(after.deposit_paid)} security deposit goes back to the customer."
-    parts = ([f"the {peso(late)} late fee"] if late > 0 else []) + ([f"{peso(taken)} of deductions"] if taken > 0 else [])
-    return f"The {peso(after.deposit_paid)} security deposit less {' and '.join(parts)} leaves {peso(after.refundable_total)} to give back."
+            return "No fees and no deductions: the security deposit is returned in full."
+        return f"No fees and no deductions: the whole {peso(after.deposit_paid)} security deposit goes back to the customer."
+    parts = fee_words(after.change_fee, after.overdue_fee) + ([f"{peso(taken)} of deductions"] if taken > 0 else [])
+    return f"The {peso(after.deposit_paid)} security deposit less {_listed(parts)} leaves {peso(after.refundable_total)} to give back."
 
 
 def _working(reservation, after):
-    """The late fee and the deductions, line by line: what a receipt shows so the customer can see where an amount comes from."""
+    """The fees and the deductions, line by line: what a receipt shows so the customer can see where an amount comes from."""
     return {
         "late_lines": [{"gown": l["gown"], "days": l["days"], "rate": f"{l['rate']:.0f}", "amount": f"{l['amount']:.2f}", "due": l.get("due", ""),
                         "returned": l.get("returned", ""), "back": l["back"]} for l in after.late_lines],
         "late_fee": f"{after.late_fee:.2f}",
+        # the same money under its two names (reservations/ledger.py): what the receipt prints
+        "fee_lines": [{**{k: l[k] for k in ("kind", "gown", "days", "back", "booked", "agreed", "due", "returned")}, "rate": f"{l['rate']:.0f}",
+                       "amount": f"{l['amount']:.2f}"} for l in after.fee_lines],
+        "change_fee": f"{after.change_fee:.2f}",
+        "overdue_fee": f"{after.overdue_fee:.2f}",
         "deductions": [{"reason": d.reason, "amount": f"{money(d.amount):.2f}"} for d in reservation.deductions.all() if not d.is_void],
         "deductions_total": f"{after.deductions_total:.2f}",
     }
@@ -169,6 +186,7 @@ def _snapshot(reservation, payment, before, after, *, served_by):
     local = timezone.localtime(payment.paid_at)
     snap = {
         "title": payment.title,
+        "fee_names": True,          # issued since the fee has two names (Date change / Overdue); a receipt saved before prints as it did
         "shop": _shop(),
         "number": payment.receipt_number,
         "when": f"{local:%b} {local.day}, {local.year} {local.hour % 12 or 12}:{local:%M} {'AM' if local.hour < 12 else 'PM'}",
@@ -199,7 +217,7 @@ def _snapshot(reservation, payment, before, after, *, served_by):
             "why": _return_reason(before, after),
         }
     elif payment.purpose == Payment.Purpose.EXTRA:
-        # the late fee and deductions were more than the deposit, so nothing goes back: this receipt is where the customer sees why they pay more
+        # the fees and deductions were more than the deposit, so nothing goes back: this receipt is where the customer sees why they pay more
         snap["extra"] = {**_working(reservation, after), "deposit_used": f"{after.deposit_used:.2f}", "over": f"{after.overflow:.2f}"}
     return snap
 
@@ -323,8 +341,12 @@ def _notice_text(payment):
         late, taken = money(gone.get("late_fee") or 0), money(gone.get("deductions_total") or 0)
         if late > 0 or taken > 0:          # the customer is told why it is not the whole deposit (true for a deposit handed back in parts too)
             paid = money(gone.get("deposit_paid") or 0)
-            parts = ([f"the {peso(late)} late fee"] if late > 0 else []) + ([f"{peso(taken)} of deductions"] if taken > 0 else [])
-            working = (f" Your {peso(paid)} deposit less {' and '.join(parts)} comes to {peso(max(paid - late - taken, money(0)))}."
+            if "change_fee" in gone:
+                fees = fee_words(money(gone["change_fee"]), money(gone.get("overdue_fee") or 0))
+            else:                          # a receipt issued before the fee had its two names keeps the words printed on it
+                fees = [f"the {peso(late)} late fee"] if late > 0 else []
+            parts = fees + ([f"{peso(taken)} of deductions"] if taken > 0 else [])
+            working = (f" Your {peso(paid)} deposit less {_listed(parts)} comes to {peso(max(paid - late - taken, money(0)))}."
                        " The receipt shows the details.")
         return f"Your security deposit of {peso(payment.amount)} for {code} was returned ({how}). Receipt {payment.receipt_number}.{working}{later}"
     snapshot = payment.snapshot or {}
@@ -341,7 +363,7 @@ def _event(reservation, label, detail):
 def choices(statement):
     """What the Record payment window should offer for this statement, so the page and the rules can never disagree.
     {"kind": "deposit", "options": [{"purpose", "label", "amount"}]} while the deposit is unpaid (exact amounts only);
-    {"kind": "balance", "max": ...} for the rental; {"kind": "extra", "max": ...} for a late fee beyond the deposit; {"kind": "none"}."""
+    {"kind": "balance", "max": ...} for the rental; {"kind": "extra", "max": ...} for fees or deductions beyond the deposit; {"kind": "none"}."""
     if not statement.tracked or statement.cancelled:
         return {"kind": "none"}
     if statement.deposit_unpaid > 0:
@@ -550,7 +572,7 @@ def return_deposit(*, reservation_id, amount, method, reference="", note="", use
         if before.refund_available <= 0:
             raise PaymentError("There is no deposit left to hand back on this booking.", status=409)
         if amount > before.refund_available:
-            raise PaymentError(f"Only {peso(before.refund_available)} can be handed back (the deposit less the late fee and deductions).")
+            raise PaymentError(f"Only {peso(before.refund_available)} can be handed back (the deposit less the fees and deductions).")
         if digits:
             used = _reference_in_use(digits, reservation)
             if used:
@@ -673,7 +695,7 @@ def return_deposit_online(*, reservation_id, amount, note="", user=None, request
         if before.refund_available <= 0:
             raise PaymentError("There is no deposit left to hand back on this booking.", status=409)
         if amount > before.refund_available:
-            raise PaymentError(f"Only {peso(before.refund_available)} can be handed back (the deposit less the late fee and deductions).")
+            raise PaymentError(f"Only {peso(before.refund_available)} can be handed back (the deposit less the fees and deductions).")
         source, why = _online_refund_source(reservation, amount, now)
         if source is None:
             raise PaymentError(why, status=409)

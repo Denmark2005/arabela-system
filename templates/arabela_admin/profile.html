@@ -2139,8 +2139,8 @@
                 </div>
                 <p class="mt-2 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">Whole pesos, from 1 to 10,000. For example, 5 gowns at <span x-text="peso(perGown || 0)"></span> each is <span x-text="peso(perGown * 5)"></span>.</p>
               </div>
-              <!-- Late fee per gown per day: taken from the customer's security deposit (Payments page, receipts). Owner-only; the endpoint enforces that too.
-                   Applies to NEW bookings only: every booking keeps the rate it was made with. 0 means no late fee. -->
+              <!-- Overdue / date change fee per gown per day: taken from the customer's security deposit (Payments page, receipts). Owner-only; the endpoint enforces that too.
+                   Applies to NEW bookings only: every booking keeps the rate it was made with. 0 means no fee. -->
               <script>
                 window.lateFeeCard = function () {
                   return {
@@ -2160,7 +2160,7 @@
                       }).then((res) => res.json().then((data) => ({ ok: res.ok, data: data }))).then((r) => {
                         this.busy = false;
                         this.ok = !!(r.ok && r.data.success);
-                        if (this.ok) { this.saved = String(r.data.amount); this.amount = this.saved; this.msg = Number(r.data.amount) === 0 ? 'Saved. New bookings have no late fee.' : 'Saved. New bookings are charged ' + this.peso(r.data.amount) + ' per gown for each day late.'; }
+                        if (this.ok) { this.saved = String(r.data.amount); this.amount = this.saved; this.msg = Number(r.data.amount) === 0 ? 'Saved. New bookings have no overdue or date change fee.' : 'Saved. New bookings are charged ' + this.peso(r.data.amount) + ' per gown for each day overdue or moved.'; }
                         else { this.msg = r.data.error || 'Could not save.'; }
                       }).catch(() => { this.busy = false; this.ok = false; this.msg = 'Network error. Please try again.'; });
                     }
@@ -2168,21 +2168,21 @@
                 };
               </script>
               <div x-data="lateFeeCard()" data-amount="{{ site_late_fee_per_day }}" class="p-5 border border-gray-200 rounded-2xl dark:border-gray-800 lg:p-6" style="margin-top: 1.5rem;">
-                <h4 class="flex items-center text-lg font-semibold text-gray-800 dark:text-white/90">Late fee<details class="ht-tip"><summary aria-label="About the late fee" title="About the late fee">?</summary><div class="ht-tip-pop">What a customer is charged for EACH gown for every day it is late (counted from the return date they booked). It comes out of their security deposit, and the Payments page and the printed receipts show it. A booking keeps the late fee it was made with, so changing this only affects new bookings. Enter 0 for no late fee.</div></details></h4>
+                <h4 class="flex items-center text-lg font-semibold text-gray-800 dark:text-white/90">Overdue &amp; date change fee<details class="ht-tip"><summary aria-label="About this fee" title="About this fee">?</summary><div class="ht-tip-pop">What a customer is charged for EACH gown for every day after the return date they booked: a date change fee for the days the return date is moved, and an overdue fee for any days after that. It comes out of their security deposit, and the Payments page and the printed receipts show it. A booking keeps the fee it was made with, so changing this only affects new bookings. Enter 0 for no fee.</div></details></h4>
                 <div style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 1rem; margin-top: 1.1rem;">
                   <div style="min-width: 220px; flex: 1; max-width: 340px;">
-                    <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Late fee for each gown, each day (pesos)</label>
-                    <input type="text" inputmode="numeric" x-model="amount" @input="amount = amount.replace(/[^0-9]/g, '').slice(0, 5)" maxlength="5" placeholder="200" aria-label="Late fee per gown per day in pesos, from 0 to 10,000"
+                    <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Fee for each gown, each day (pesos)</label>
+                    <input type="text" inputmode="numeric" x-model="amount" @input="amount = amount.replace(/[^0-9]/g, '').slice(0, 5)" maxlength="5" placeholder="200" aria-label="Overdue and date change fee per gown per day in pesos, from 0 to 10,000"
                            class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90" />
                   </div>
                   <div style="display: flex; align-items: center; gap: .75rem;">
                     <button type="button" @click="save()" :disabled="busy || amount === ''" :style="(busy || amount === '') ? 'opacity: 0.6; cursor: not-allowed;' : ''"
                             class="flex justify-center rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs hover:bg-black dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
-                            x-text="busy ? 'Saving...' : 'Save Late Fee'"></button>
+                            x-text="busy ? 'Saving...' : 'Save Fee'"></button>
                     <p x-show="msg" x-cloak x-text="msg" class="text-xs font-medium" :class="ok ? 'text-success-700 dark:text-success-500' : 'text-error-600 dark:text-error-500'"></p>
                   </div>
                 </div>
-                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">Whole pesos, from 0 to 10,000. For example, 3 days late at <span x-text="peso(Number(amount) || 0)"></span> a day is <span x-text="peso((Number(amount) || 0) * 3)"></span> for one gown.</p>
+                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">Whole pesos, from 0 to 10,000. For example, 3 days overdue at <span x-text="peso(Number(amount) || 0)"></span> a day is <span x-text="peso((Number(amount) || 0) * 3)"></span> for one gown.</p>
               </div>
               <!-- Valid ID rule: a customer's valid ID has to be verified before they pay online, and before a walk-in booking is saved. Owner-only; the endpoint enforces that too. -->
               <script>

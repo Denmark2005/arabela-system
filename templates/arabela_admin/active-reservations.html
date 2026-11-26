@@ -128,15 +128,18 @@
       .ar-gbtns { gap: .75rem; padding-top: .95rem; border-top: 1px dashed #d0d5dd; }
       .dark .ar-gbtns { border-color: #344054; }
       .ar-sp { flex: 1 1 1rem; }
-      /* The late fee (what the customer will have taken from the security deposit): amber, and a link to the booking in Payments. */
+      /* The fees (what will be taken from the security deposit): the date change fee amber, the overdue fee red; each a link to the booking in Payments. */
       .ar-feechip, .ar-feeline { display: inline-flex; align-items: center; border-radius: 999px; background: #fffaeb; color: #b54708; font-size: .8125rem; font-weight: 600; text-decoration: none; }
       .ar-feechip { padding: .1rem .55rem; white-space: nowrap; }
       .ar-feeline { padding: .3rem .8rem; border-radius: .65rem; line-height: 1.35; }
       .ar-feechip:hover, .ar-feeline:hover { background: #fef0c7; }
+      .ar-feechip--over, .ar-feeline--over, .ar-feechip--over:hover, .ar-feeline--over:hover { background: #fee4e2; color: #b42318; }
+      .ar-feechip--over:hover, .ar-feeline--over:hover { background: #fecdca; }
       .ar-feeover { display: inline-flex; align-items: center; padding: .1rem .55rem; border-radius: 999px; background: #fee4e2; color: #b42318; font-size: .8125rem; font-weight: 600; white-space: nowrap; }
       .dark .ar-feechip, .dark .ar-feeline { background: rgba(247,144,9,.16); color: #fdb022; }
       .dark .ar-feechip:hover, .dark .ar-feeline:hover { background: rgba(247,144,9,.26); }
-      .dark .ar-feeover { background: rgba(240,68,56,.18); color: #fda29b; }
+      .dark .ar-feeover, .dark .ar-feechip--over, .dark .ar-feeline--over { background: rgba(240,68,56,.18); color: #fda29b; }
+      .dark .ar-feechip--over:hover, .dark .ar-feeline--over:hover { background: rgba(240,68,56,.28); }
       .ar-gfacts { display: grid; grid-template-columns: repeat(4, minmax(0, 9.5rem)); gap: 1rem 1.75rem; margin-bottom: 1rem; }
       .ar-fc { display: grid; gap: .2rem; align-content: start; min-width: 0; }
       .ar-fk { font-size: .8125rem; font-weight: 500; color: #667085; } .dark .ar-fk { color: #98a2b3; }
@@ -1269,7 +1272,7 @@
                       <ul class="ar-leg">
                         <li><span class="ar-num ar-num--confirmed">3</span><span>Green: waiting for pick-up. The number is the days until pick-up.</span></li>
                         <li><span class="ar-num ar-num--active">2</span><span>Blue: out with the customer. The number is the days until it is due back.</span></li>
-                        <li><span class="ar-num ar-num--overdue">14</span><span>Red: late. The number is the days late.</span></li>
+                        <li><span class="ar-num ar-num--overdue">14</span><span>Red: overdue, or late for pick-up. The number is how many days.</span></li>
                         <li><span class="ar-num ar-num--returned"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg></span><span>Grey: already returned, or cancelled.</span></li>
                         <li><span class="ar-count-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0"/></svg>4</span><span>How many gowns are in the booking.</span></li>
                       </ul>
@@ -1306,9 +1309,9 @@
                         <b>{{ r.reference_code }}</b>
                         {% if r.cancel_request %}<span class="cr-chip{% if r.cancel_request.overdue %} is-late{% endif %}" title="{{ r.cancel_request.by }} asked to cancel {{ r.cancel_request.what }}. Open the booking to answer.">Cancel requested</span>{% endif %}
                         {% if r.gown_count > 1 %}<span class="ar-count-pill" title="{{ r.gown_count }} gowns in this booking" aria-label="{{ r.gown_count }} gowns in this booking"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0"/></svg>{{ r.gown_count }}</span>{% endif %}
-                        {% if r.state == 'overdue' %}<span class="ar-num ar-num--overdue" title="{{ r.overdue_days }} day{{ r.overdue_days|pluralize }} late" aria-label="{{ r.overdue_days }} day{{ r.overdue_days|pluralize }} late">{{ r.overdue_days }}</span>{% endif %}
+                        {% if r.state == 'overdue' %}<span class="ar-num ar-num--overdue" title="{{ r.overdue_days }} day{{ r.overdue_days|pluralize }} overdue" aria-label="{{ r.overdue_days }} day{{ r.overdue_days|pluralize }} overdue">{{ r.overdue_days }}</span>{% endif %}
                         {% if r.balance_due > 0 %}<a class="ar-bal-chip" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Still to pay at the shop. Open it in Payments." @click.stop>Balance &#8369;{{ r.balance_text }}</a>{% endif %}
-                        {% if r.late_fee_planned > 0 %}<a class="ar-feechip" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Late fee: &#8369;{{ r.late_fee_per_day }} a day for each day past the original return date ({{ r.late_days_planned }} day{{ r.late_days_planned|pluralize }} so far or planned). It comes out of the security deposit. Click to open it in Payments." @click.stop>Late fee &#8369;{{ r.late_fee_planned|floatformat:'-2g' }}</a>{% if r.fee_over_deposit > 0 %}<span class="ar-feeover" title="The late fee and deductions are more than the security deposit: the customer pays this extra.">&#8369;{{ r.fee_over_deposit|floatformat:'-2g' }} over the deposit</span>{% endif %}{% endif %}
+                        {% if r.change_fee_planned > 0 %}<a class="ar-feechip" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Date change fee: &#8369;{{ r.late_fee_per_day }} a day for each day the return date was moved ({{ r.change_days_planned }} day{{ r.change_days_planned|pluralize }}). It comes out of the security deposit. Click to open it in Payments." @click.stop>Date change fee &#8369;{{ r.change_fee_planned|floatformat:'-2g' }}</a>{% endif %}{% if r.overdue_fee_planned > 0 %}<a class="ar-feechip ar-feechip--over" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Overdue fee: &#8369;{{ r.late_fee_per_day }} a day for each day past the return date ({{ r.overdue_days_planned }} day{{ r.overdue_days_planned|pluralize }}). It comes out of the security deposit. Click to open it in Payments." @click.stop>Overdue fee &#8369;{{ r.overdue_fee_planned|floatformat:'-2g' }}</a>{% endif %}{% if r.late_fee_planned > 0 and r.fee_over_deposit > 0 %}<span class="ar-feeover" title="The fees and deductions are more than the security deposit: the customer pays this extra.">&#8369;{{ r.fee_over_deposit|floatformat:'-2g' }} over the deposit</span>{% endif %}
                       </div>
                       <div class="ar-phone-cell">
                         {% if r.phone %}<a href="tel:{{ r.phone }}" class="ar-phone" title="Call the customer" @click.stop>{{ r.phone }}</a>{% else %}<span class="ar-none">&mdash;</span>{% endif %}
@@ -1436,7 +1439,7 @@
                             {% endif %}
                             {% if item.note_remarks or item.picked_up_on or item.late_fee_planned > 0 %}
                             <div class="ar-facts" data-item-remarks="{{ item.id }}">
-                              {% if item.late_fee_planned > 0 %}<a class="ar-feeline" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Open this booking in Payments">Late fee &#8369;{{ item.late_fee_planned|floatformat:'-2g' }} &middot; {{ item.late_days_planned }} day{{ item.late_days_planned|pluralize }} &times; &#8369;{{ r.late_fee_per_day }}{% if item.late_fee_kind == 'planned' %} if it comes back {{ item.return_date|date:"M j" }}{% elif item.late_fee_kind == 'sofar' %} so far, growing each day it is out{% else %} (it came back {{ item.returned_on|date:"M j" }}){% endif %} &middot; comes out of the security deposit &rsaquo;</a>{% endif %}
+                              {% if item.change_fee_planned > 0 %}<a class="ar-feeline" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Open this booking in Payments">Date change fee &#8369;{{ item.change_fee_planned|floatformat:'-2g' }} &middot; {{ item.change_days_planned }} day{{ item.change_days_planned|pluralize }} &times; &#8369;{{ r.late_fee_per_day }}{% if item.late_fee_kind == 'planned' %} if it comes back {{ item.return_date|date:"M j" }}{% elif item.late_fee_kind == 'back' and not item.overdue_days_planned %} (it came back {{ item.returned_on|date:"M j" }}){% else %}, return moved to {{ item.return_date|date:"M j" }}{% endif %} &middot; comes out of the security deposit &rsaquo;</a>{% endif %}{% if item.overdue_fee_planned > 0 %}<a class="ar-feeline ar-feeline--over" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Open this booking in Payments">Overdue fee &#8369;{{ item.overdue_fee_planned|floatformat:'-2g' }} &middot; {{ item.overdue_days_planned }} day{{ item.overdue_days_planned|pluralize }} &times; &#8369;{{ r.late_fee_per_day }}{% if item.late_fee_kind == 'back' %} (it came back {{ item.returned_on|date:"M j" }}){% else %} so far, growing each day it is out{% endif %} &middot; comes out of the security deposit &rsaquo;</a>{% endif %}
                               {% for remark in item.note_remarks %}<span class="inline-flex items-center rounded-full px-2 py-0.5 text-theme-xs font-medium {% if remark.tone == 'warning' %}bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400{% elif remark.tone == 'success' %}bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500{% elif remark.tone == 'primary' %}bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400{% elif remark.tone == 'danger' %}bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500{% else %}bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400{% endif %}">{{ remark.text }}</span>{% endfor %}
                               {% if item.picked_up_on %}<span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">Picked up {{ item.picked_up_on|date:"M j" }}</span>{% endif %}
                             </div>
@@ -1467,7 +1470,7 @@
                               {% endif %}
                               {% if not item.returned_on %}
                               <button type="button" class="resv-change-date-btn ar-ib ar-lb" title="Change return date" aria-label="Change the return date of {{ item.gown_name }}"
-                                data-kind="return" data-item-id="{{ item.id }}"
+                                data-kind="return" data-item-id="{{ item.id }}" data-out="{% if item.stage != 'Pick-up' %}1{% else %}0{% endif %}"
                                 data-orig-pickup="{{ item.scheduled_pickup|date:'Y-m-d' }}" data-orig-return="{{ item.scheduled_return|date:'Y-m-d' }}"
                                 data-rest="{% if item.has_rest %}1{% else %}0{% endif %}" data-rate="{{ r.late_fee_per_day }}"
                                 data-deposit-paid="{{ r.fee_deposit_paid|floatformat:'2u' }}" data-deposit="{{ r.fee_deposit_basis|floatformat:'2u' }}" data-fee-others="{{ item.fee_others|floatformat:'2u' }}"
@@ -1784,7 +1787,7 @@
     // A day is only clickable if the gown is free for the WHOLE stretch the booking would then cover -- the same overlap test the server runs
     // (_schedule_conflict) -- and, for a return, if the gown's REST days after it (while it still has its rest block) stay clear of a later booking.
     // Days that are taken are faded and say who has the gown. The server decides everything again; this only greys out what it would refuse.
-    // The late fee never depends on the pick-up: it counts the days after the ORIGINAL return date, so the return step shows what the chosen day costs.
+    // The fee never depends on the pick-up: it counts the days after the ORIGINAL return date, so the return step shows what the chosen day costs (a date change fee).
     var REST_DAYS = {{ cooldown_days }};
     var PICKUP_MAX_DAYS = {{ pickup_max_days }};
     var RETURN_MAX_DAYS = {{ return_max_days }};
@@ -1970,7 +1973,7 @@
           if (st.chosen < st.curPickup) addLine(box, "This only changes the customer's booked dates. The gown is still in the shop.", false);
           else if (st.chosen <= st.curReturn) addLine(box, 'The days from ' + fmtShort(st.curPickup) + ' to ' + fmtShort(shiftIso(st.chosen, -1)) + ' are free again for other customers.', false);
           else addLine(box, 'This is after the current return date (' + fmtShort(st.curReturn) + '), so the return date has to move too. Choose it next.', false);
-          if (st.rate > 0) addLine(box, 'The late fee does not change: it counts the days after the original return date (' + fmtShort(st.origReturn) + ').', false);
+          if (st.rate > 0) addLine(box, 'Moving the pick-up adds no fee: the date change fee counts only the days after the original return date (' + fmtShort(st.origReturn) + ').', false);
           root.appendChild(box);
           if (st.chosen > st.curReturn) {
             button('Choose the return date ›', 'resv-cal-next rounded-md bg-brand-500 px-3 py-1 text-theme-xs font-medium text-white');
@@ -1990,13 +1993,14 @@
             feeBox.className = 'mt-1.5 rounded-md px-2 py-1.5';
             feeBox.style.cssText = CAL_COLORS.pickup.soft;
             if (fee.days > 0) {
-              addLine(feeBox, 'Late fee: ' + plural(fee.days) + ' × ' + pesos(st.rate) + ' = ' + pesos(fee.amount), true);
+              addLine(feeBox, 'Date change fee: ' + plural(fee.days) + ' × ' + pesos(st.rate) + ' = ' + pesos(fee.amount), true);
+              if (st.out && st.curReturn < TODAY) addLine(feeBox, 'This gown is overdue now. Moving the return turns those days into the date change fee.', false);
               addLine(feeBox, (st.depositPaid > 0
                 ? 'It comes out of the security deposit (' + pesos(st.depositPaid) + ' paid).'
                 : 'It comes out of the security deposit (' + pesos(st.deposit) + ') once it is paid.')
                 + (fee.over > 0 ? ' That is ' + pesos(fee.over) + ' more than the deposit, so the customer pays the extra.' : ''), false);
             } else {
-              addLine(feeBox, 'No late fee: the return is not past the original return date.', true);
+              addLine(feeBox, 'No date change fee: the return is not past the original return date.', true);
             }
             root.appendChild(feeBox);
           }
@@ -2039,7 +2043,7 @@
       var kind = d.kind;
       var start = kind === 'pickup' ? (d.rental > TODAY ? d.rental : TODAY) : shiftIso(d['return'], 1);
       calState = {
-        kind: kind, itemId: d.itemId,
+        kind: kind, itemId: d.itemId, out: d.out === '1',
         curPickup: d.rental, curReturn: d['return'], origPickup: d.origPickup || d.rental, origReturn: d.origReturn || d['return'],
         holds: ITEM_HOLDS[d.itemId] || [], hasRest: d.rest === '1',
         rate: parseInt(d.rate || '0', 10) || 0, depositPaid: parseFloat(d.depositPaid || '0') || 0, deposit: parseFloat(d.deposit || '0') || 0,
@@ -2066,7 +2070,7 @@
           var text = kind === 'pickup'
             ? 'The pick-up is now ' + fmtLong(chosen) + '.'
             : (newPickup ? 'The pick-up is now ' + fmtLong(newPickup) + ' and the return is now ' + fmtLong(chosen) + '.' : 'The return is now ' + fmtLong(chosen) + '.');
-          if (fee && fee.days > 0) text += ' Late fee: ' + plural(fee.days) + ' × ' + pesos(st.rate) + ' = ' + pesos(fee.amount) + ', taken from the security deposit.';
+          if (fee && fee.days > 0) text += ' Date change fee: ' + plural(fee.days) + ' × ' + pesos(st.rate) + ' = ' + pesos(fee.amount) + ', taken from the security deposit.';
           return adminAlert({
             title: kind === 'pickup' ? 'Pick-up date changed' : (newPickup ? 'Dates changed' : 'Return date changed'),
             message: text + ' The Rental Schedule shows the new dates too.'

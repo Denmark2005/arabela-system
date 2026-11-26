@@ -4,8 +4,8 @@
   * every listed booking is Confirmed (waiting for the first pick-up), Active (a gown has gone out) or Overdue (a gown is past its return
     date), and the page's colour key is the filter for those three, with the counts;
   * late bookings come first, the most days late on top, and say how many days late they are;
-  * "days late" is ONE rule (arabela_admin.views._days_late): counted from the return date the customer originally booked, the same
-    number the gown's remarks print;
+  * "days overdue" is ONE rule (arabela_admin.views._days_late): counted from the return date agreed with the customer now (days a
+    return was moved are the date change fee), the same number the gown's remarks print;
   * Rental History shows the same number for every gown, and calls a gown nobody picked up "Not picked up", not "Overdue";
   * all of it is the same for the owner, a Manager and a Staff account.
 """
@@ -82,9 +82,9 @@ class RunningRentals(Base):
 
     def test_a_late_booking_says_how_many_days_late(self):
         html = self.page().content.decode()
-        self.assertIn('class="ar-num ar-num--overdue" title="6 days late" aria-label="6 days late">6</span>', html)       # a red circle with just the number
-        self.assertIn('class="ar-num ar-num--overdue" title="4 days late" aria-label="4 days late">4</span>', html)
-        self.assertIn('class="ar-num ar-num--overdue" title="1 day late" aria-label="1 day late">1</span>', html)        # singular
+        self.assertIn('class="ar-num ar-num--overdue" title="6 days overdue" aria-label="6 days overdue">6</span>', html)       # a red circle with just the number
+        self.assertIn('class="ar-num ar-num--overdue" title="4 days overdue" aria-label="4 days overdue">4</span>', html)
+        self.assertIn('class="ar-num ar-num--overdue" title="1 day overdue" aria-label="1 day overdue">1</span>', html)        # singular
         self.assertEqual(html.count('class="ar-num ar-num--overdue" title="'), 3)                 # one per late booking
 
     def test_the_colour_key_is_the_filter_with_counts(self):
@@ -187,19 +187,19 @@ class DaysLateRule(Base):
         self.assertIsNone(_days_late(self.item(stage=Stage.PICKUP), self.today))
         self.assertIsNone(_days_late(self.item(stage=Stage.CANCELLED), self.today))
 
-    def test_it_counts_from_the_ORIGINAL_return_date_when_the_customer_asked_for_longer(self):
+    def test_days_the_return_was_moved_are_not_overdue(self):
         item = self.item()
         item.original_return_date = item.return_date - timedelta(days=2)    # the customer first booked it 2 days shorter
         item.save()
-        self.assertEqual(_days_late(item, self.today), 8)                    # 6 past the new date + the 2 extra days, like the remarks
+        self.assertEqual(_days_late(item, self.today), 6)                    # 6 past the date agreed now; the 2 moved days are the date change fee
 
     def test_the_number_matches_the_one_in_the_remarks(self):
         late = self.item()
         text = " ".join(r["text"] for r in _item_remarks(late, self.today))
-        self.assertIn(f"{_days_late(late, self.today)} days late", text)
+        self.assertIn(f"Overdue · {_days_late(late, self.today)} days", text)
         back = self.item(stage=Stage.RETURNED, returned_on=late.return_date + timedelta(days=3))
         text = " ".join(r["text"] for r in _item_remarks(back, self.today))
-        self.assertIn(f"{_days_late(back, self.today)} days late", text)
+        self.assertIn(f"{_days_late(back, self.today)} days overdue", text)
         self.assertEqual(_effective_stage(late, self.today), Stage.OVERDUE)
 
 
@@ -230,13 +230,13 @@ class RentalHistoryDaysLate(Base):
                 self.assertEqual((self.items[pk].history_status, self.items[pk].late_days), (status, late))
 
     def test_the_page_words_it_for_people(self):
-        self.assertIn("2 days late", self.html)
+        self.assertIn("2 days overdue", self.html)
         self.assertIn("On time", self.html)
-        self.assertIn("5 days late", self.html)
+        self.assertIn("5 days overdue", self.html)
         self.assertIn("Still not back, so this keeps growing", self.html)          # the hover on a gown that is still out: this number is "so far"
         self.assertIn("The gown is out with the customer and past its return date", self.html)
         self.assertIn("Not picked up", self.html)
-        self.assertIn("<span>Late</span>", self.html)                              # the column title (the old table said "Days late")
+        self.assertIn("<span>Overdue</span>", self.html)                           # the column title
         back = self.today - timedelta(days=6)
         self.assertIn(f'<span class="rh-k">Returned</span><span class="rh-v">{back:%b} {back.day}, {back.year}</span>', self.html)
 

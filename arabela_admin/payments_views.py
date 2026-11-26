@@ -1,4 +1,4 @@
-"""The Payments page: what every booking still owes, its late fee and the deposit it can give back; recording a payment, handing the deposit back,
+"""The Payments page: what every booking still owes, its date change and overdue fees and the deposit it can give back; recording a payment, handing the deposit back,
 deductions, voiding a mistake, and the printed Payment Receipts. The rules live in reservations/ledger.py (the arithmetic) and
 reservations/payments.py (what is accepted); this file is only the web side.
 
@@ -17,7 +17,7 @@ reservations/payments.py (what is accepted); this file is only the web side.
                           POST api/payments/online/<id>/refund/       send a paid-but-not-booked online payment back to the customer
                           POST api/payments/online/<id>/handled/      note that a person sorted such a payment out by hand
   owner only              GET  payments/receipts/                     every receipt, with search
-                          POST api/late-fee/                          the late fee per gown per day (profile page)
+                          POST api/late-fee/                          the overdue / date change fee per gown per day (profile page)
 
 Kept out of views.py on purpose: it is a self-contained feature, and views.py is already very large."""
 import json
@@ -108,7 +108,7 @@ def payments_view(request):
         counts["all"] += 1
         if s.state in (ledger.BALANCE, ledger.REFUND):
             counts[s.state] += 1
-        if s.late_now:
+        if s.overdue_now:
             counts["late"] += 1
         balance_total += s.balance_due
         rows.append(reservation)
@@ -149,6 +149,7 @@ def _detail(reservation, request):
                  "voidReason": "", "voidedBy": "", "legacy": True, "printUrl": "", "reprints": 0, "notified": False} for r in ledger.legacy_rows(reservation)]
     stmt = s.as_dict()
     stmt.pop("late_lines", None)
+    stmt.pop("fee_lines", None)
     return {
         "id": reservation.pk, "code": reservation.reference_code, "customer": reservation.display_customer_name, "phone": reservation.phone or "",
         "channel": reservation.get_channel_display(), "status": reservation.status, "hasAccount": reservation.customer_id is not None,
@@ -156,9 +157,10 @@ def _detail(reservation, request):
                    "stage": i.stage} for i in items],
         "s": stmt,
         "peso": {k: f"{getattr(s, k):,.2f}" for k in ("rental", "deposit", "total", "received", "refunded", "deposit_paid", "rental_paid", "late_fee",
-                                                       "deductions_total", "refundable_total", "refund_available", "balance_due", "extra_owed")},
-        "lateLines": [{"gown": l["gown"], "days": l["days"], "rate": f"{l['rate']:,.0f}", "amount": f"{l['amount']:,.2f}", "back": l["back"], "due": l.get("due", ""),
-                       "returned": l.get("returned", "")} for l in s.late_lines],
+                                                       "change_fee", "overdue_fee", "deductions_total", "refundable_total", "refund_available", "balance_due",
+                                                       "extra_owed")},
+        "feeLines": [{**{k: l[k] for k in ("kind", "label", "gown", "days", "back", "growing", "booked", "agreed", "due", "returned")},
+                      "rate": f"{l['rate']:,.0f}", "amount": f"{l['amount']:,.2f}"} for l in s.fee_lines],
         "choices": payments.choices(s),
         "onlineRefund": payments.online_refund_choice(reservation, s),
         "payments": rows,
@@ -520,16 +522,16 @@ def payment_online_handled_view(request, attempt_id):
     return JsonResponse({"success": True})
 
 
-# ---------------------------------------------------------------- the late fee setting (owner, on the profile page)
+# ---------------------------------------------------------------- the overdue / date change fee setting (owner, on the profile page)
 @require_http_methods(["POST"])
 @audited("settings.late_fee", "Settings", audit_describe.late_fee_setting, sensitive=True, before=audit_describe.before_settings_late_fee)
 def late_fee_setting_update_view(request):
-    """Save the late fee per gown per day (whole pesos, 0 to 10,000). Owner only. It applies to NEW bookings: every booking keeps the rate it was
+    """Save the fee per gown per day, for overdue days and moved return days (whole pesos, 0 to 10,000). Owner only. It applies to NEW bookings: every booking keeps the rate it was
     made with."""
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
     if not _is_owner(request):
-        return JsonResponse({"error": "Only the owner can change the late fee."}, status=403)
+        return JsonResponse({"error": "Only the owner can change the overdue and date change fee."}, status=403)
     data = _body(request)
     if data is None:
         return JsonResponse({"error": "Invalid request."}, status=400)

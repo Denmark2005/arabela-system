@@ -300,7 +300,7 @@ class LatestTransactionsTests(Base):
         out = Payment(direction=Payment.Direction.OUT, purpose=P.DEPOSIT_RETURN)
         late = Payment(direction=Payment.Direction.IN, purpose=P.EXTRA)
         self.assertEqual(dashboard_money._kind(out), ("Deposit returned", ""))
-        self.assertEqual(dashboard_money._kind(late), ("Late fee received", ""))
+        self.assertEqual(dashboard_money._kind(late), ("Extra charge received", ""))
         self.assertEqual(dashboard_money._kind(Payment(direction=Payment.Direction.IN, purpose=P.FULL)), ("Payment received", "Paid in full"))
 
     def test_a_voided_payment_stays_in_the_list_marked_void(self):
@@ -474,7 +474,7 @@ class DashboardPageTests(Base):
         response, html = self.page()
         line = self.alert_line(html)
         self.assertEqual(response.context["shop_today"]["new_bookings"], 2)
-        for piece in ("1 gown is late coming back", "1 pick-up in the next 2 days still has a balance"):
+        for piece in ("1 gown is overdue", "1 pick-up in the next 2 days still has a balance"):
             with self.subTest(piece=piece):
                 self.assertIn(piece, line)
         self.assertIn(f'href="{reverse("arabela_admin:payments")}"', line)

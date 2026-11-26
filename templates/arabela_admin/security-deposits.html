@@ -1224,7 +1224,7 @@
                   <button type="button" class="ar-filter" :class="statusFilter === 'All' ? 'is-on' : ''" :aria-pressed="statusFilter === 'All' ? 'true' : 'false'" @click="statusFilter = 'All'">All <span class="ar-n">{{ all_count }}</span></button>
                   <button type="button" class="ar-filter" :class="statusFilter === 'Held' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Held' ? 'true' : 'false'" @click="statusFilter = 'Held'" title="The deposit is still held: not every gown is back"><span class="ar-dot sd-dot--held"></span>Held <span class="ar-n">{{ held_count }}</span></button>
                   <button type="button" class="ar-filter" :class="statusFilter === 'Return due' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Return due' ? 'true' : 'false'" @click="statusFilter = 'Return due'" title="Every gown is back and the deposit is waiting to be handed back"><span class="ar-dot sd-dot--due"></span>Return due <span class="ar-n">{{ due_count }}</span></button>
-                  <button type="button" class="ar-filter" :class="statusFilter === 'Returned' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Returned' ? 'true' : 'false'" @click="statusFilter = 'Returned'" title="The deposit was handed back, or used up by the late fee and deductions"><span class="ar-dot sd-dot--returned"></span>Returned <span class="ar-n">{{ returned_count }}</span></button>
+                  <button type="button" class="ar-filter" :class="statusFilter === 'Returned' ? 'is-on' : ''" :aria-pressed="statusFilter === 'Returned' ? 'true' : 'false'" @click="statusFilter = 'Returned'" title="The deposit was handed back, or used up by the fees and deductions"><span class="ar-dot sd-dot--returned"></span>Returned <span class="ar-n">{{ returned_count }}</span></button>
                 </div>
                 <div class="sd-year-wrap">
                   <input type="text" inputmode="numeric" class="ar-search-input sd-year-input" x-model="yearFilter" @input="yearFilter = yearFilter.replace(/[^0-9]/g, '').slice(0, 4)" maxlength="4" placeholder="Year" aria-label="Show one year only, for example 2026" title="Show one year only, for example 2026">
@@ -1297,7 +1297,8 @@
                     {% endif %}
                     <div class="ar-strip sd-money">
                       <span>Deposit paid &#8369;{{ r.dep.paid|floatformat:'-2g' }}</span>
-                      {% if r.dep.late_fee %}<span>Late fee &#8369;{{ r.dep.late_fee|floatformat:'-2g' }}</span>{% endif %}
+                      {% if r.dep.change_fee %}<span>Date change fee &#8369;{{ r.dep.change_fee|floatformat:'-2g' }}</span>{% endif %}
+                      {% if r.dep.overdue_fee %}<span>Overdue fee &#8369;{{ r.dep.overdue_fee|floatformat:'-2g' }}</span>{% endif %}
                       {% if r.dep.deductions %}<span>Deductions &#8369;{{ r.dep.deductions|floatformat:'-2g' }}</span>{% endif %}
                       {% if r.dep.handed_back %}<span>Handed back &#8369;{{ r.dep.handed_back|floatformat:'-2g' }}</span>{% endif %}
                       {% if r.dep.to_hand_back %}<span>To hand back &#8369;{{ r.dep.to_hand_back|floatformat:'-2g' }}</span>{% endif %}

@@ -70,9 +70,10 @@
     .mo-row.is-cleaning { box-shadow: inset 4px 0 0 #2e90fa; }
 
     .mo-gown { display: flex; align-items: center; gap: .8rem; min-width: 0; }
-    .mo-thumb { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 3.5rem; height: 4.25rem; overflow: hidden; border: 1px solid #e4e7ec; border-radius: .65rem; background: #f9fafb; color: #98a2b3; cursor: pointer; }
-    .dark .mo-thumb { border-color: #344054; background: #1d2939; }
-    .mo-thumb img { display: block; width: 100%; height: 100%; object-fit: contain; }
+    /* The gown's picture, like the Gown Catalog: a square box the photo fills completely (a tall photo shows its middle; a click opens the whole photo). */
+    .mo-thumb { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 3.5rem; height: 3.5rem; overflow: hidden; border-radius: .5rem; background: #f2f4f7; color: #98a2b3; cursor: pointer; }
+    .dark .mo-thumb { background: #1d2939; }
+    .mo-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
     .mo-thumb svg { width: 1.5rem; height: 1.5rem; }
     .mo-gown-t, .mo-when, .mo-cust, .mo-state { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
     .mo-name, .mo-cust b, .mo-when b { font-size: .9375rem; font-weight: 600; line-height: 1.35; color: #101828; overflow-wrap: anywhere; }
@@ -1260,7 +1261,7 @@
               </a>
               <a href="{{ return_url }}" class="mo-tab{% if tab == 'return' %} is-on{% endif %}"{% if tab == 'return' %} aria-current="page"{% endif %} data-mo-tab="return">
                 <span class="mo-tab-top"><span class="mo-tab-name">For return</span><span class="mo-tab-num">{{ return_count }}</span></span>
-                <span class="mo-tab-sub">{% if return_count %}{% if return_tally.late %}<b class="mo-nw">{{ return_tally.late }} late</b> &middot; {% endif %}<span class="mo-nw">{{ return_tally.due }} due</span> &middot; <span class="mo-nw">{{ return_tally.cleaning }} cleaning</span>{% else %}Nothing to come back {{ selection.words }}{% endif %}</span>
+                <span class="mo-tab-sub">{% if return_count %}{% if return_tally.late %}<b class="mo-nw">{{ return_tally.late }} overdue</b> &middot; {% endif %}<span class="mo-nw">{{ return_tally.due }} due</span> &middot; <span class="mo-nw">{{ return_tally.cleaning }} cleaning</span>{% else %}Nothing to come back {{ selection.words }}{% endif %}</span>
               </a>
             </div>
 
@@ -1278,7 +1279,7 @@
                 <noscript><button type="submit" class="mo-btn">Show</button></noscript>
                 <span class="mo-days">{{ selection.label }}</span>
               </form>
-              <p class="mo-note">{% if tab == 'return' %}Late gowns show on every date. Returns are recorded in Active Reservations (View booking).{% else %}Pick-ups are {{ pickup_hours }}. A gown can be marked ready on its pick-up day or up to {{ ready_ahead_days }} days before.{% endif %}</p>
+              <p class="mo-note">{% if tab == 'return' %}Overdue gowns show on every date. Returns are recorded in Active Reservations (View booking).{% else %}Pick-ups are {{ pickup_hours }}. A gown can be marked ready on its pick-up day or up to {{ ready_ahead_days }} days before.{% endif %}</p>
 
               <div class="mo-list" data-arpg=".mo-row" data-arpg-noun="gowns" data-arpg-top="off" data-live-region="monitoring-list" data-live-hold=".mo-btn:disabled">
                 {% if rows %}
@@ -1305,7 +1306,7 @@
                 </div>
                 {% endfor %}
                 {% else %}
-                <div class="mo-empty">{% if tab == 'return' %}<b>Nothing for return {{ selection.words }}.</b><span>No gown is due back {{ selection.words }}, and none is late or being cleaned.</span>{% else %}<b>Nothing to prepare {{ selection.words }}.</b><span>No gown is waiting to be picked up {{ selection.words }}.</span>{% endif %}</div>
+                <div class="mo-empty">{% if tab == 'return' %}<b>Nothing for return {{ selection.words }}.</b><span>No gown is due back {{ selection.words }}, and none is overdue or being cleaned.</span>{% else %}<b>Nothing to prepare {{ selection.words }}.</b><span>No gown is waiting to be picked up {{ selection.words }}.</span>{% endif %}</div>
                 {% endif %}
               </div>
             </div>

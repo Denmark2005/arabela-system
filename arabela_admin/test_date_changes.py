@@ -329,9 +329,10 @@ class ActivePageTests(DateBase):
         self.assertEqual((booking.late_days_planned, booking.late_fee_planned, booking.fee_over_deposit), (4, D("800"), D("0")))
         payments = reverse("arabela_admin:payments") + f"?open={it.reservation_id}"
         self.assertIn(f'<a class="ar-feechip" href="{payments}"', html)
-        self.assertIn("Late fee &#8369;800</a>", html)
+        self.assertIn("Date change fee &#8369;800</a>", html)
+        self.assertNotIn("Overdue fee", html.split('<main>')[1].split('id="ar-more-')[0])
         self.assertIn("comes out of the security deposit", html)
-        self.assertIn("Late fee &#8369;800 &middot; 4 days &times; &#8369;200 if it comes back", html)                    # inside the gown: amount, days, rate, and what it is
+        self.assertIn("Date change fee &#8369;800 &middot; 4 days &times; &#8369;200 if it comes back", html)             # inside the gown: amount, days, rate, and what it is
         self.assertNotIn("over the deposit", html)
 
     def test_a_fee_bigger_than_the_deposit_says_how_much_is_over(self):
@@ -340,7 +341,7 @@ class ActivePageTests(DateBase):
         response, html = self.page()
         booking = self.booking(response, it)
         self.assertEqual((booking.late_fee_planned, booking.fee_deposit_paid, booking.fee_over_deposit), (D("2400"), D("2000"), D("400")))
-        self.assertIn("Late fee &#8369;2,400", html)
+        self.assertIn("Date change fee &#8369;2,400", html)
         self.assertIn("&#8369;400 over the deposit", html)
 
     def test_a_deposit_not_paid_yet_is_measured_against_the_deposit_the_booking_was_made_with(self):
@@ -359,8 +360,13 @@ class ActivePageTests(DateBase):
     def test_a_gown_that_is_out_past_its_return_counts_so_far_and_a_gown_back_late_says_when_it_came_back(self):
         late = self.item(-12, -3, stage=STAGE.RESERVED, picked_up_on=self.day(-12), original_return_date=self.day(-10))
         response, html = self.page()
-        self.assertEqual(self.booking(response, late).late_days_planned, 10)                                            # up to today, not up to the old return day
-        self.assertIn("10 days &times; &#8369;200 so far, growing each day it is out", html)
+        booking = self.booking(response, late)
+        self.assertEqual(booking.late_days_planned, 10)                                                                 # up to today, not up to the old return day
+        self.assertEqual((booking.change_days_planned, booking.overdue_days_planned), (7, 3))                           # moved 7 days, then 3 days past the new date
+        self.assertIn("Date change fee &#8369;1,400</a>", html)
+        self.assertIn("Overdue fee &#8369;600</a>", html)
+        self.assertIn("7 days &times; &#8369;200, return moved to", html)
+        self.assertIn("3 days &times; &#8369;200 so far, growing each day it is out", html)
         ReservationItem.objects.filter(pk=late.pk).update(stage=STAGE.RETURNED, returned_on=self.day(-5))
         other = ReservationItem.objects.create(reservation=late.reservation, gown=self.gown(), gown_name="Second Gown", stage=STAGE.PICKUP, rental_price=D("1000"),
                                                rental_date=self.day(3), return_date=self.day(7))
