@@ -243,7 +243,7 @@ def receipt_delete(ctx):
 # ---------------------------------------------------------------------------------------------------------------------------------
 # gowns
 # ---------------------------------------------------------------------------------------------------------------------------------
-_GOWN_FIELDS = ("name", "category", "color_name", "size", "design_variant", "rental_price", "condition", "status", "notes")
+_GOWN_FIELDS = ("name", "category", "color_name", "size", "design_variant", "rental_price", "condition", "status", "notes", "fabric", "description")
 
 
 def before_gown(request, kwargs):
@@ -254,7 +254,7 @@ def before_gown(request, kwargs):
 def gown_create(ctx):
     gown_id = ctx.data.get("gown_id") or (ctx.data.get("gown") or {}).get("gown_id") or ctx.data.get("id") or ""
     return {"summary": f"added a new gown{f' {gown_id}' if gown_id else ''}", "target": ("gown", "", str(gown_id)),
-            "details": _keep(ctx.body, "name", "category", "color_name", "size", "rental_price", "status")}
+            "details": _keep(ctx.body, "name", "category", "color_name", "size", "rental_price", "status", "fabric", "description")}
 
 
 def gown_update(ctx):
@@ -265,7 +265,9 @@ def gown_update(ctx):
             old, new = ctx.before.get(field, ""), str(getattr(gown, field))
             if old != new:
                 changes[field] = [old, new]
-    return {"summary": f"edited {_gown_text(gown)}", "target": ("gown", gown.pk if gown else "", gown.gown_id if gown else ""),
+    units = ctx.data.get("design_units") or 0
+    shared = f" (its fabric and description are shared by all {units} gowns with this name)" if units > 1 and ("fabric" in changes or "description" in changes) else ""
+    return {"summary": f"edited {_gown_text(gown)}{shared}", "target": ("gown", gown.pk if gown else "", gown.gown_id if gown else ""),
             "details": changes}
 
 

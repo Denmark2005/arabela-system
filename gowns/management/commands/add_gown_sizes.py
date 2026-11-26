@@ -10,8 +10,9 @@ How it chooses (the owner agreed to an automatic split, which is an ESTIMATE of 
   * inside a category every design gets ONE new size before any design gets a second, and a design gets the size closest to one it already has
     (a Medium-only gown gets Large before Small, Large before Extra Large...). When two sizes are equally close the one the category has more of
     wins, so the split follows what the shop really rents;
-  * a new gown is a copy of the design's existing gown (same name, colour, price and photo) with the new size, status Available, and its own
-    tag number from the category's running count, exactly like Add Gown makes it. The customer site shows one product with more size buttons;
+  * a new gown is a copy of the design's existing gown (same name, colour, price, photo, fabric and description) with the new size, status
+    Available, and its own tag number from the category's running count, exactly like Add Gown makes it. The customer site shows one product with
+    more size buttons;
   * a design whose gowns are all Out-of-Stock is left alone, and Extra Small / Double XL / Free Size are never added.
 
 Everything is planned first and written in ONE transaction: if anything is wrong, nothing is added. `--dry-run` prints the plan and changes
@@ -216,7 +217,7 @@ class Command(BaseCommand):
             units.append(Gown(
                 gown_id=gown_id, slug=slug, name=template.name, category=category, color_name=template.color_name, color_code=template.color_code,
                 size=size, design_variant=template.design_variant, rental_price=template.rental_price, condition=Gown.Condition.GOOD,
-                status=Gown.Status.AVAILABLE, photo_url=template.photo_url))
+                status=Gown.Status.AVAILABLE, photo_url=template.photo_url, fabric=template.fabric, description=template.description))
         self.say(f"  saving {len(units)} gowns ...")
         Gown.objects.bulk_create(units, batch_size=100)
         return units

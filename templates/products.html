@@ -446,9 +446,16 @@
     </div>
 
     <div class="space-y-4">
-      <p class="text-body-md text-secondary/80 leading-relaxed font-light">
-        Hand-draped from heritage textiles, tailored for a clean editorial silhouette. Designed to photograph beautifully and move with effortless precision—crafted for modern luxury.
-      </p>
+      {% comment %}What staff wrote for this gown in Gown Catalog (gowns/design_details.py), the same for every size. Nothing written: nothing shown.{% endcomment %}
+      {% if product.fabric %}
+      <div id="product-fabric" class="space-y-1" style="overflow-wrap: anywhere;">
+        <span class="block font-label text-[0.6875rem] tracking-widest uppercase font-bold">Fabric</span>
+        <p class="text-body-md text-secondary leading-relaxed">{{ product.fabric }}</p>
+      </div>
+      {% endif %}
+      {% if product.description %}
+      <p id="product-description" class="text-body-md text-secondary/80 leading-relaxed font-light" style="overflow-wrap: anywhere;">{{ product.description|linebreaksbr }}</p>
+      {% endif %}
       <div class="flex gap-4 border-t border-outline-variant/15 pt-4">
         <div class="flex items-center gap-2">
           <span class="material-symbols-outlined text-[1rem]">dry_cleaning</span>

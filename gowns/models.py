@@ -143,7 +143,11 @@ class Gown(models.Model):
     photo_url = models.URLField(blank=True)
     is_verified = models.BooleanField(default=False)
     last_returned_at = models.DateField(null=True, blank=True)
-    notes = models.TextField(blank=True)
+    notes = models.TextField(blank=True)                        # private: only staff see these
+    # What customers read on the gown's page. It belongs to the DESIGN: every size/unit with the same name in a category carries the same
+    # text (gowns/design_details.py keeps it so). db_default: the column fills itself even for code that doesn't know it yet (a deploy in progress).
+    fabric = models.CharField(max_length=200, blank=True, default='', db_default='')
+    description = models.TextField(blank=True, default='', db_default='')
     # The last time someone physically laid eyes on this gown and marked it present
     # (the periodic walkthrough check). Only the latest check is kept -- enough to answer
     # "when was this last confirmed here, and by whom", which is what narrows a missing

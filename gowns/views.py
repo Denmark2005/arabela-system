@@ -46,7 +46,7 @@ from gowns.context_processors import (
 from gowns.models import (
     COOLDOWN_DAYS, EXTRA_SMALL_CATEGORY, SIZE_CODES, Gown, GownUnavailability, group_gowns_by_name, pick_representative_gown, size_codes_of,
 )
-from gowns import availability, deposit, late_fee, proof_image, receipt_check, receipt_tries, reservation_limits, typed_payment
+from gowns import availability, deposit, design_details, late_fee, proof_image, receipt_check, receipt_tries, reservation_limits, typed_payment
 from gowns.photos import GRID_WIDTH, PAGE_WIDTH, sized
 from gowns.size_guides import size_guide_for
 from reservations import gateway, identity, ledger, reminders, timeline
@@ -822,8 +822,11 @@ def product_detail(request, collection: str, slug: str):
             "restDays": COOLDOWN_DAYS,
         }
     size_choices = _size_choices(size_options, real_gown.category)
+    fabric, description = design_details.text_of(siblings)             # what staff wrote in Gown Catalog, shared by every size
     product = {
         "title": display_unit.name,
+        "fabric": fabric,
+        "description": description,
         "price": f"₱{display_unit.rental_price:,.0f}",
         "image": sized(display_unit.photo_url, PAGE_WIDTH) or _FALLBACK_IMG,
         # No label while the gown can be booked now; otherwise the real date (or "Fully booked for now") -- see booking_badge.

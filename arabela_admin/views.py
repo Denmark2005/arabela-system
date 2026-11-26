@@ -41,7 +41,7 @@ from accounts.roles import (
 )
 from accounts.services import CANCELLATION_FLAG_THRESHOLD, clear_proof_block, record_rejected_proof
 from arabela_admin import audit_describe, dashboard_money, gown_inventory, gown_photo, rental_history
-from gowns import availability, deposit, gcash_numbers
+from gowns import availability, deposit, design_details, gcash_numbers
 from gowns.models import (
     COOLDOWN_DAYS,
     EXTRA_SMALL_CATEGORY,
@@ -1995,8 +1995,13 @@ def gown_catalog_view(request):
     _decorate_gowns_for_catalog(gowns, tag_colors, now)
     # Who each Reserved gown is reserved for -- shown under its status and in its View window.
     holders_by_gown = _reserved_gown_holders(gowns, today)
+    # How many gowns share each design (name + category): they carry the same fabric and description.
+    design_counts = defaultdict(int)
+    for g in gowns:
+        design_counts[(g.category, g.name.strip().casefold())] += 1
     for g in gowns:
         g.holders = holders_by_gown.get(g.id, [])
+        g.design_sizes = design_counts[(g.category, g.name.strip().casefold())]
 
     # Minimal per-gown data the catalog's Alpine layer needs for the client-side
     # "no gowns match your filters" count and the select-all-visible checkbox. Kept
@@ -2775,8 +2780,12 @@ def gown_create_view(request):
     if condition not in Gown.Condition.values:
         condition = Gown.Condition.GOOD
     notes = (request.POST.get("notes") or "").strip()
+    # What customers read on the gown's page, shared by every size of the design (gowns/design_details.py).
+    fabric = design_details.clean_fabric(request.POST.get("fabric"))
+    description = design_details.clean_description(request.POST.get("description"))
 
-    error = _validate_gown_fields(name, category, color_name, color_code, size, design_variant)
+    error = (_validate_gown_fields(name, category, color_name, color_code, size, design_variant)
+             or design_details.problem(fabric, description))
     if error:
         return JsonResponse({"error": error}, status=400)
 
@@ -2850,6 +2859,8 @@ def gown_create_view(request):
         gown_id = f"{category}-{color_code}-{tracking_number:03d}"
         try:
             with transaction.atomic():
+                # Another size of a design: what was left empty takes the design's text; what was typed goes to every size.
+                design_fabric, design_description = design_details.text_of(design_details.units_of(category, name))
                 gown = Gown.objects.create(
                     gown_id=gown_id,
                     name=name,
@@ -2861,9 +2872,12 @@ def gown_create_view(request):
                     rental_price=rental_price,
                     condition=condition,
                     notes=notes,
+                    fabric=fabric or design_fabric,
+                    description=description or design_description,
                     status=status,
                     photo_url=photo_url,
                 )
+                design_details.share(category, name, gown.fabric, gown.description)
         except IntegrityError:
             gown = None
             continue
@@ -2926,11 +2940,15 @@ def gown_update_view(request, gown_id):
     design_variant = (request.POST.get("design_variant") or "").strip()
     condition = request.POST.get("condition") or gown.condition
     notes = (request.POST.get("notes") or "").strip()
+    # A request without these boxes (an Edit window left open from before they existed) keeps the text as it is.
+    fabric = design_details.clean_fabric(request.POST["fabric"]) if "fabric" in request.POST else gown.fabric
+    description = (design_details.clean_description(request.POST["description"]) if "description" in request.POST
+                   else gown.description)
 
     error = _validate_gown_fields(
         name, category, color_name, color_code, size, design_variant,
         exclude_gown_id=gown.id,
-    )
+    ) or design_details.problem(fabric, description)
     if error:
         return JsonResponse({"error": error}, status=400)
 
@@ -2941,6 +2959,17 @@ def gown_update_view(request, gown_id):
     if condition not in Gown.Condition.values:
         condition = gown.condition
 
+    # Moved into another design (renamed or re-categorised onto gowns that already exist): the text that was left as it was, or emptied,
+    # follows the design it joins -- another dress's words must never overwrite that design's. Text typed now goes to all of them.
+    others = list(design_details.units_of(category, name, exclude_pk=gown.pk))
+    moved = (category, name.casefold()) != (gown.category, gown.name.strip().casefold())
+    if moved and others:
+        design_fabric, design_description = design_details.text_of(others)
+        if fabric in ("", gown.fabric):
+            fabric = design_fabric
+        if description in ("", gown.description):
+            description = design_description
+
     gown.name = name
     gown.category = category
     gown.color_name = color_name
@@ -2950,6 +2979,8 @@ def gown_update_view(request, gown_id):
     gown.rental_price = rental_price
     gown.condition = condition
     gown.notes = notes
+    gown.fabric = fabric
+    gown.description = description
     # _validate_gown_fields + _parse_rental_price already bound every field to its
     # column, so DataError here should be unreachable -- this is a backstop that keeps
     # even a future unguarded field from turning into a raw 500 for staff.
@@ -2957,8 +2988,12 @@ def gown_update_view(request, gown_id):
         with transaction.atomic():
             gown.save(update_fields=[
                 "name", "category", "color_name", "color_code", "size",
-                "design_variant", "rental_price", "condition", "notes", "updated_at",
+                "design_variant", "rental_price", "condition", "notes", "fabric", "description", "updated_at",
             ])
+            if moved or "fabric" in request.POST or "description" in request.POST:
+                design_units = design_details.share(category, name, fabric, description)
+            else:
+                design_units = design_details.units_of(category, name).count()
     except DataError:
         return JsonResponse(
             {"error": "Some of those values are out of range. Please shorten the "
@@ -2981,9 +3016,12 @@ def gown_update_view(request, gown_id):
             "rental_price": str(gown.rental_price),
             "condition": gown.condition,
             "notes": gown.notes,
+            "fabric": gown.fabric,
+            "description": gown.description,
             "status": gown.status,
             "photo_url": gown.photo_url,
         },
+        "design_units": design_units,              # how many sizes/units share this fabric and description
     })
 
 
