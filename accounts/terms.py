@@ -3,20 +3,22 @@
 What is stored. UserProfile.terms_accepted_at (a column that has always been there, and that nothing used to fill) holds WHEN the customer
 agreed. No new database column is needed -- which matters, because this project's local and live sites share one database.
 
-When the terms change. TERMS_UPDATED_ON is the day the current wording was published (templates/partials/terms_body.html). A customer counts as
-having agreed only if they agreed on or after that day, so changing the terms and moving this date makes every customer read and agree once
-more. Move it to the day the new wording goes live.
+When the terms change. TERMS_UPDATED_ON (and TERMS_UPDATED_TIME, the shop's clock) is when the current wording was published
+(templates/partials/terms_body.html). A customer counts as having agreed only if they agreed at or after that moment, so changing the terms and
+moving it makes every customer read and agree once more -- even for a second change on the same day. Move both to when the new wording goes
+live.
 
 Who has to agree. Customers only: not an anonymous visitor (they sign in first), and not an admin / staff / owner account that happens to
 look at the customer site."""
-from datetime import date
+from datetime import date, time
 
 from django.utils import timezone
 from django.utils.formats import date_format
 
 from accounts.models import UserProfile
 
-TERMS_UPDATED_ON = date(2026, 11, 27)        # free rental days, extra days, changing dates by calling the shop (customers agree once more)
+TERMS_UPDATED_ON = date(2026, 11, 27)        # amounts over the deposit are paid right away; paid date changes (customers agree once more)
+TERMS_UPDATED_TIME = time(20, 11)
 
 
 def label():
@@ -33,7 +35,10 @@ def applies_to(user):
 
 
 def _agreed_in_time(accepted_at):
-    return bool(accepted_at) and timezone.localtime(accepted_at).date() >= TERMS_UPDATED_ON
+    if not accepted_at:
+        return False
+    agreed = timezone.localtime(accepted_at)
+    return (agreed.date(), agreed.time()) >= (TERMS_UPDATED_ON, TERMS_UPDATED_TIME)
 
 
 def has_accepted(user):

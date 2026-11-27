@@ -81,6 +81,12 @@ class Reservation(models.Model):
     # The late-return fee for EACH gown, per day late, this booking was made with (the owner's setting then, gowns/late_fee.py): like the
     # deposit, changing the setting later does not touch a booking that already exists. Used by reservations/ledger.py.
     late_fee_per_day = models.PositiveIntegerField(default=200, db_default=200)
+    # A booking made since amounts OVER the deposit are paid right away: booked extra days that cost more than the deposit are paid when booking,
+    # a date change that goes over it is paid before it happens (reservations/date_requests.py), and a cancelled booking gets that extra back.
+    # False = an older booking, which keeps paying such amounts at the shop. db_default: see channel.
+    pays_over_deposit = models.BooleanField(default=False, db_default=False)
+    # What was due over the security deposit at the moment of booking (paid together with the deposit or the whole booking).
+    upfront_extra = models.DecimalField(max_digits=10, decimal_places=2, default=0, db_default=0)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     notes = models.TextField(blank=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
@@ -343,20 +349,30 @@ class Reservation(models.Model):
         deposit, rental, total = self.security_deposit, self.rental_subtotal, self.total_amount
         if not (deposit > 0 and rental > 0 and rental + deposit == total):
             return None
+        # Booked extra days over the deposit, paid with the booking (0 for most): its own line, counted in what was paid and in the total.
+        over = self.upfront_extra if self.pays_over_deposit else 0
+
+        def lines(deposit_note, rental_note):
+            out = [{"label": "Security deposit", "note": deposit_note, "amount": _peso_text(deposit)}]
+            if over:
+                out.append({"label": "Extra days over the deposit", "note": deposit_note, "amount": _peso_text(over)})
+            return out + [{"label": "Gown rental", "note": rental_note, "amount": _peso_text(rental)}]
+
+        both = f"Gown {_peso_text(rental)} + Deposit {_peso_text(deposit)}" + (f" + Extra days {_peso_text(over)}" if over else "")
         if self.is_staff_recorded:
             covers = ReceiptRecord.Covers
             labels = {r.covers for r in self.receipt_records.all()}
             # What the shop RECORDED (the Payments page): the money received at the counter says what was paid. Old bookings, made when a
             # shop receipt photo said it instead, keep reading their photos' labels.
-            received = sum((p.amount for p in self.payments.all()
+            received = sum((p.amount - p.extra_part for p in self.payments.all()
                             if not p.is_void and p.direction == Payment.Direction.IN
                             and p.purpose in (Payment.Purpose.DEPOSIT, Payment.Purpose.FULL, Payment.Purpose.BALANCE)), 0)
             if received >= total or covers.BOTH in labels or {covers.RENTAL, covers.DEPOSIT} <= labels:
-                paid, paid_label, deposit_note, rental_note = total, "Paid at the shop", "paid at the shop", "paid at the shop"
-                sub = f"Gown {_peso_text(rental)} + Deposit {_peso_text(deposit)}"
+                paid, paid_label, deposit_note, rental_note = total + over, "Paid at the shop", "paid at the shop", "paid at the shop"
+                sub = both
             elif received >= deposit or covers.DEPOSIT in labels:
-                paid, paid_label, deposit_note, rental_note = deposit, "Deposit paid at the shop", "paid at the shop", "still to pay"
-                sub = f"Gown {_peso_text(rental)} still to pay · Total {_peso_text(total)}"
+                paid, paid_label, deposit_note, rental_note = deposit + over, "Deposit paid at the shop", "paid at the shop", "still to pay"
+                sub = f"Gown {_peso_text(rental)} still to pay · Total {_peso_text(total + over)}"
             else:
                 return None
         else:
@@ -366,41 +382,36 @@ class Reservation(models.Model):
             if online:
                 how = (online[0].get_method_display() or '').replace(' (online payment)', '')
                 core = (Payment.Purpose.DEPOSIT, Payment.Purpose.FULL, Payment.Purpose.BALANCE)
-                received = sum((p.amount for p in self.payments.all() if not p.is_void and p.direction == Payment.Direction.IN and p.purpose in core), 0)
+                received = sum((p.amount - p.extra_part for p in self.payments.all()
+                                if not p.is_void and p.direction == Payment.Direction.IN and p.purpose in core), 0)
                 if received >= total:
                     everything_online = any(p.purpose == Payment.Purpose.FULL for p in online)
                     paid_label = f"Paid in full online ({how})" if everything_online else "Paid in full (deposit online, rental at the shop)"
                     deposit_note = f"paid online ({how})"
                     rental_note = f"paid online ({how})" if everything_online else "paid at the shop"
-                    paid, sub = total, f"Gown {_peso_text(rental)} + Deposit {_peso_text(deposit)}"
+                    paid, sub = total + over, both
                 else:
-                    paid, paid_label, deposit_note, rental_note = deposit, f"Deposit paid online ({how})", f"paid online ({how})", "to pay at the shop"
-                    sub = f"Gown {_peso_text(rental)} still to pay · Total {_peso_text(total)}"
+                    paid, paid_label, deposit_note, rental_note = deposit + over, f"Deposit paid online ({how})", f"paid online ({how})", "to pay at the shop"
+                    sub = f"Gown {_peso_text(rental)} still to pay · Total {_peso_text(total + over)}"
                 return {
                     "paidLabel": paid_label, "headline": _peso_text(paid), "sub": sub,
-                    "lines": [
-                        {"label": "Security deposit", "note": deposit_note, "amount": _peso_text(deposit)},
-                        {"label": "Gown rental", "note": rental_note, "amount": _peso_text(rental)},
-                    ],
-                    "total": _peso_text(total),
+                    "lines": lines(deposit_note, rental_note),
+                    "total": _peso_text(total + over),
                 }
             by = " by GCash" if self.payment_method == self.PaymentMethod.GCASH else ""
-            paid, paid_label, deposit_note = deposit, f"Paid online{by}", f"paid online{by}"
+            paid, paid_label, deposit_note = deposit + over, f"Paid online{by}", f"paid online{by}"
             if self.status == self.Status.REJECTED:
                 # The shop did not accept that payment: it was only sent, not paid.
                 paid_label, deposit_note = f"Sent online{by} (rejected)", f"sent online{by}, rejected"
             # A receipt the shop attached to an online booking is its full one (rental + deposit): the gown was paid at the shop.
             rental_note = "paid at the shop" if self.receipt_records.all() else "to pay at the shop"
-            sub = f"Gown {_peso_text(rental)} · Total {_peso_text(total)}"
+            sub = f"Gown {_peso_text(rental)} · Total {_peso_text(total + over)}"
         return {
             "paidLabel": paid_label,
             "headline": _peso_text(paid),
             "sub": sub,
-            "lines": [
-                {"label": "Security deposit", "note": deposit_note, "amount": _peso_text(deposit)},
-                {"label": "Gown rental", "note": rental_note, "amount": _peso_text(rental)},
-            ],
-            "total": _peso_text(total),
+            "lines": lines(deposit_note, rental_note),
+            "total": _peso_text(total + over),
         }
 
     @property
@@ -1159,6 +1170,9 @@ class Payment(models.Model):
     purpose = models.CharField(max_length=20, choices=Purpose.choices)
     method = models.CharField(max_length=20, choices=Method.choices, default=Method.CASH)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
+    # The part of `amount` that paid booked extra days over the deposit, received together with the deposit (or the whole booking). It counts
+    # as an extra charge, never as deposit or rental (reservations/ledger.py). 0 for every other payment.
+    extra_part = models.DecimalField(max_digits=10, decimal_places=2, default=0, db_default=0)
     # The GCash reference number (digits only) when the method is GCash; empty for cash.
     reference = models.CharField(max_length=20, blank=True, default='')
     # NULL (not '') for a legacy row, so the unique rule below allows any number of them.
@@ -1199,15 +1213,24 @@ class Payment(models.Model):
         return self.direction == self.Direction.IN
 
     @property
+    def is_over_return(self):
+        """Money given back to a CANCELLED booking: what it paid over its security deposit, not the deposit."""
+        return self.purpose == self.Purpose.DEPOSIT_RETURN and bool(((self.snapshot or {}).get('return') or {}).get('cancelled'))
+
+    @property
     def title(self):
         """The receipt's heading."""
-        return 'DEPOSIT RETURN' if self.purpose == self.Purpose.DEPOSIT_RETURN else 'PAYMENT RECEIPT'
+        if self.purpose != self.Purpose.DEPOSIT_RETURN:
+            return 'PAYMENT RECEIPT'
+        return 'REFUND' if self.is_over_return else 'DEPOSIT RETURN'
 
     def get_purpose_display(self):
         """The words people read for the purpose. EXTRA is whatever the security deposit did not cover (an overdue fee, a date change fee, a
         deduction): "Extra charge". The stored choice keeps its old label, so the database needs no change."""
         if self.purpose == self.Purpose.EXTRA:
             return 'Extra charge'
+        if self.is_over_return:
+            return 'Refund'
         return dict(self.Purpose.choices).get(self.purpose, self.purpose)
 
     def __str__(self):
@@ -1244,6 +1267,57 @@ class Deduction(models.Model):
 
     def __str__(self):
         return f'Deduction {self.amount} on {self.reservation.reference_code}: {self.reason}'
+
+
+class DateChangeRequest(models.Model):
+    """A date change that costs more than the security deposit covers: the shop asks the customer to pay the part over it FIRST and holds the new
+    days for that gown; once the money is in, the dates change by themselves (reservations/date_requests.py). A request that is not paid in
+    time, cancelled or no longer needed changes nothing. Only that module changes these rows."""
+
+    class Status(models.TextChoices):
+        WAITING = 'waiting', 'Waiting for payment'
+        APPLIED = 'applied', 'Paid, dates changed'
+        EXPIRED = 'expired', 'Not paid in time'
+        CANCELLED = 'cancelled', 'Cancelled by the shop'
+        REPLACED = 'replaced', 'Replaced by a newer request'
+        CLOSED = 'closed', 'No longer needed'
+
+    reservation = models.ForeignKey(Reservation, on_delete=models.CASCADE, related_name='date_requests')
+    item = models.ForeignKey(ReservationItem, on_delete=models.CASCADE, related_name='date_requests')
+    gown = models.ForeignKey('gowns.Gown', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    # What the staff member asked to change (empty = that date stays as it is).
+    want_pickup = models.DateField(null=True, blank=True)
+    want_return = models.DateField(null=True, blank=True)
+    want_event = models.DateField(null=True, blank=True)
+    # The dates when it was asked (the request is dropped when they changed meanwhile).
+    from_pickup = models.DateField()
+    from_return = models.DateField()
+    # The days this gown is held for while the request waits: from the new pick-up to the new return and the cleaning days after it.
+    hold_start = models.DateField()
+    hold_end = models.DateField()
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.WAITING, db_index=True)
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    requested_by_name = models.CharField(max_length=150, blank=True, default='')
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+    expires_at = models.DateTimeField(db_index=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    note = models.CharField(max_length=300, blank=True, default='')
+    payment = models.ForeignKey('Payment', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+        constraints = [
+            models.UniqueConstraint(fields=['reservation'], condition=models.Q(status='waiting'), name='datechange_one_waiting_per_booking'),
+        ]
+
+    @property
+    def is_open(self):
+        """Still waiting for the money and inside its time."""
+        return self.status == self.Status.WAITING and self.expires_at > timezone.now()
+
+    def __str__(self):
+        return f'{self.reservation_id}: {self.amount} {self.get_status_display()}'
 
 
 class PaymentAttempt(models.Model):
@@ -1297,6 +1371,8 @@ class PaymentAttempt(models.Model):
     paid_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     paid_at = models.DateTimeField(null=True, blank=True)
     reservation = models.ForeignKey(Reservation, on_delete=models.SET_NULL, null=True, blank=True, related_name='payment_attempts')
+    # A payment for a date change request (reservations/date_requests.py): made by the customer on their booking page, or from the shop's QR code.
+    date_change = models.ForeignKey(DateChangeRequest, on_delete=models.SET_NULL, null=True, blank=True, related_name='attempts')
     refund_id = models.CharField(max_length=60, blank=True, default='')                # when the money was sent back (the booking could not be made)
     refund_status = models.CharField(max_length=12, blank=True, default='')
     refund_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)

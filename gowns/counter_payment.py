@@ -134,13 +134,14 @@ def start(*, request, staff, staff_name, reservation_id, purpose, amount, note="
         raise payments.PaymentError(f"At most {peso(max_amount())} can be paid online at once. {parts}")
 
     # An older QR code of this booking (any staff member's) is closed first; one that turns out to be paid is shown instead of opening another.
-    for other in PaymentAttempt.objects.filter(source=SHOP, reservation_id=reservation_id, status=S.CREATED).order_by("id"):
+    for other in PaymentAttempt.objects.filter(source=SHOP, reservation_id=reservation_id, status=S.CREATED, date_change__isnull=True).order_by("id"):
         closed = online_checkout.cancel_attempt(other.pk)
         if closed is not None and closed.status in _MONEY_IN:
             return answer(closed)
         if closed is not None and closed.status == S.CREATED:
             raise payments.PaymentError("An earlier QR code of this booking could not be closed just now. Please try again in a moment.", status=409)
-    paying = PaymentAttempt.objects.filter(source=SHOP, reservation_id=reservation_id, status=S.PAID, paid_at__gte=now - PAID_WAIT).order_by("-id").first()
+    paying = PaymentAttempt.objects.filter(
+        source=SHOP, reservation_id=reservation_id, status=S.PAID, paid_at__gte=now - PAID_WAIT, date_change__isnull=True).order_by("-id").first()
     if paying is not None:
         return answer(paying)
 
@@ -148,7 +149,7 @@ def start(*, request, staff, staff_name, reservation_id, purpose, amount, note="
         with transaction.atomic():
             # Two staff pressing at the same moment: the booking's lock lets only one of them open a code.
             Reservation.objects.select_for_update(of=("self",)).filter(pk=reservation_id).first()
-            if PaymentAttempt.objects.filter(source=SHOP, reservation_id=reservation_id, status=S.CREATED).exists():
+            if PaymentAttempt.objects.filter(source=SHOP, reservation_id=reservation_id, status=S.CREATED, date_change__isnull=True).exists():
                 raise payments.PaymentError("Another QR code of this booking is just being opened. Close this window and open the booking again.", status=409)
             attempt = PaymentAttempt.objects.create(
                 token=secrets.token_urlsafe(24), source=SHOP, staff=staff, customer=None, customer_name=reservation.display_customer_name[:120],
@@ -211,7 +212,8 @@ def refreshed_state(attempt):
 def window_state(reservation_id):
     """What the booking's window shows about its QR code: None when there is nothing to show, else the `answer` of the one still open (after asking Xendit once;
     a payment that came in while no screen was watching is recorded by that look)."""
-    attempt = PaymentAttempt.objects.filter(source=SHOP, reservation_id=reservation_id, status__in=(S.CREATED, S.PAID)).order_by("-id").first()
+    attempt = PaymentAttempt.objects.filter(
+        source=SHOP, reservation_id=reservation_id, status__in=(S.CREATED, S.PAID), date_change__isnull=True).order_by("-id").first()
     if attempt is None:
         return None
     attempt, now_state = refreshed_state(attempt)
@@ -222,7 +224,8 @@ def close_open(reservation_id):
     """Close this booking's open QR codes before money is recorded another way. True when one of them turned out to be paid (it is recorded now, or being
     sent back), so the caller can ask staff to look at the amounts again."""
     came_in = False
-    for attempt in PaymentAttempt.objects.filter(source=SHOP, reservation_id=reservation_id, status__in=(S.CREATED, S.PAID)).order_by("id"):
+    for attempt in PaymentAttempt.objects.filter(
+            source=SHOP, reservation_id=reservation_id, status__in=(S.CREATED, S.PAID), date_change__isnull=True).order_by("id"):
         if attempt.status == S.PAID:
             online_checkout.confirm_attempt(attempt.pk, source="sweep")
             came_in = True

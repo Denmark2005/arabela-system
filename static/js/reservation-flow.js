@@ -155,11 +155,24 @@
         var info = window.arabelaExtraDays(item);
         return info.event ? 'Event ' + shortDay(info.event) : '';
     };
-    window.arabelaDeductionText = function (item, qty) {
+    // `over`: the bag's extra days cost more than its deposit, so they are not simply taken "off your deposit" (part is paid when booking).
+    window.arabelaDeductionText = function (item, qty, over) {
         var info = window.arabelaExtraDays(item);
         var copies = Math.max(1, Number(qty) || 1);
         if (!info.days || !info.fee) return '';
-        return formatPesoInt(info.fee * copies) + ' off your deposit (' + info.days + ' extra day' + (info.days === 1 ? '' : 's') + (copies > 1 ? ' × ' + copies + ' gowns' : '') + ')';
+        var days = info.days + ' extra day' + (info.days === 1 ? '' : 's') + (copies > 1 ? ' × ' + copies + ' gowns' : '');
+        return formatPesoInt(info.fee * copies) + (over ? ' for ' + days : ' off your deposit (' + days + ')');
+    };
+    // What these lines' extra days cost MORE than their deposit (one deposit per gown, pooled): paid when booking. 0 when the deposit covers it.
+    window.arabelaOverDeposit = function (items) {
+        var fee = 0;
+        var gowns = 0;
+        (items || []).forEach(function (it) {
+            var copies = Math.max(1, Number(it && it.qty) || 1);
+            gowns += copies;
+            if (window.arabelaHasRentalDates(it)) fee += window.arabelaExtraDays(it).fee * copies;
+        });
+        return Math.max(0, fee - gowns * DEPOSIT_PER_ITEM);
     };
 
     // Display label for a size that was never chosen. products.html seeds the
@@ -719,22 +732,25 @@
         }
 
         function setTotals(subtotal, deposit, total, itemCount) {
+            // Booked days that cost more than the deposit are paid now, with it (showDeduction worked out how much).
+            var over = Number(window.arabelaCheckoutOver) || 0;
             if (subEl) subEl.textContent = formatPesoSummary(subtotal);
             if (depEl) depEl.textContent = formatPesoSummary(deposit);
-            if (totalEl) totalEl.textContent = formatPesoSummary(total);
+            if (totalEl) totalEl.textContent = formatPesoSummary(total + over);
             if (countEl) {
                 var n = itemCount || 0;
                 if (!n) countEl.textContent = '';
                 else if (n === 1) countEl.textContent = '1 item reserved';
                 else countEl.textContent = n + ' items reserved';
             }
-            if (gcashDep) gcashDep.textContent = 'Amount: ' + formatPesoInt(deposit);
+            if (gcashDep) gcashDep.textContent = 'Amount: ' + formatPesoInt(deposit + over);
             // The checkout page (templates/reservation.html) shows what each way of paying costs, so it is told the same numbers.
-            if (typeof window.onReservationTotals === 'function') window.onReservationTotals(subtotal, deposit, total, itemCount);
+            if (typeof window.onReservationTotals === 'function') window.onReservationTotals(subtotal, deposit, total, itemCount, over);
         }
 
-        // The days outside the free days come out of the deposit when the gowns are returned (never added to what is paid now): the red
-        // line under the deposit, and what comes back. window.arabelaCheckoutExtraFee is what the page sends as the amount it showed.
+        // The days outside the free days come out of the deposit when the gowns are returned: the red line under the deposit, and what comes
+        // back. What they cost MORE than the deposit is paid now, with it. window.arabelaCheckoutExtraFee and window.arabelaCheckoutOver are
+        // what the page sends as the amounts it showed.
         function showDeduction(list, deposit) {
             var fee = 0;
             var days = 0;
@@ -746,6 +762,7 @@
                 days += info.days * copies;
             });
             window.arabelaCheckoutExtraFee = fee;
+            window.arabelaCheckoutOver = Math.max(0, fee - deposit);
             var refundNote = document.getElementById('reservation-deposit-note');
             if (refundNote) refundNote.textContent = fee > 0 ? '(Refundable upon return, less the deduction below)' : '(Fully refundable upon return)';
             var box = document.getElementById('reservation-deduction');
@@ -754,14 +771,16 @@
             var back = Math.max(0, deposit - fee);
             var owed = Math.max(0, fee - deposit);
             var put = function (id, text) { var el = document.getElementById(id); if (el) el.textContent = text; };
-            put('reservation-deduction-label', '− ' + formatPesoInt(fee) + ' off your security deposit');
-            put('reservation-deduction-note', days + ' extra day' + (days === 1 ? '' : 's') + ' outside the free days, ' + formatPesoInt(FEE_PER_DAY)
-                + ' each. Taken from the deposit when the gown is returned, even if you pick up later or return earlier.');
+            var daysText = days + ' extra day' + (days === 1 ? '' : 's') + ' outside the free days, ' + formatPesoInt(FEE_PER_DAY) + ' each.';
+            put('reservation-deduction-label', owed > 0 ? formatPesoInt(fee) + ' for your extra days' : '− ' + formatPesoInt(fee) + ' off your security deposit');
+            put('reservation-deduction-note', owed > 0
+                ? daysText + ' That is more than your ' + formatPesoInt(deposit) + ' deposit, which covers part of it. Charged even if you pick up later or return earlier.'
+                : daysText + ' Taken from the deposit when the gown is returned, even if you pick up later or return earlier.');
             put('reservation-deposit-back', formatPesoSummary(back));
             var owedEl = document.getElementById('reservation-extra-owed');
             if (owedEl) {
                 owedEl.hidden = !(owed > 0);
-                owedEl.textContent = owed > 0 ? 'The deduction is more than the deposit: ' + formatPesoInt(owed) + ' more is paid at the shop.' : '';
+                owedEl.textContent = owed > 0 ? 'Paid now over the deposit: ' + formatPesoInt(owed) + '. You pay ' + formatPesoInt(deposit + owed) + ' to reserve.' : '';
             }
             var wasHidden = box.hidden;
             box.hidden = false;
@@ -782,8 +801,8 @@
             // button that cannot work -- say what happened and take them home.
             root.innerHTML =
                 '<p class="text-sm text-secondary">No items in your selection. Return to the shop and add pieces first.</p>';
-            setTotals(0, 0, 0, 0);
             showDeduction([], 0);
+            setTotals(0, 0, 0, 0);
             var confirmBtn = document.getElementById('confirm-rental-btn');
             if (confirmBtn) confirmBtn.disabled = true;
             if (holdIsAlive()) {
@@ -799,6 +818,7 @@
         var items = data.items || [];
         var html = '';
         var gaps = [];
+        var listOver = window.arabelaOverDeposit(items) > 0;
         for (var j = 0; j < items.length; j++) {
             var it = items[j];
             var qtyNote =
@@ -833,11 +853,11 @@
                     + 'Pick-up ' + escapeHtml(info.pickup ? shortDay(info.pickup) : String(it.rental).split(' - ')[0]) + ', 1:00 PM to 5:00 PM only</p>'
                 : '';
             // Days outside the free days: what this gown takes out of the deposit when it is returned (never added to what is paid now).
-            var deduction = dated ? window.arabelaDeductionText(it, it.qty) : '';
+            var deduction = dated ? window.arabelaDeductionText(it, it.qty, listOver) : '';
             if (deduction) {
                 pickupLine += '<p class="mt-1 inline-flex items-center gap-1 rounded-[4px] px-1.5 py-0.5 text-[0.6875rem] font-semibold res-item-deduct">'
-                    + '<span class="material-symbols-outlined" style="font-size: 0.85rem;">remove_circle</span>'
-                    + '&minus; ' + escapeHtml(deduction) + '</p>';
+                    + '<span class="material-symbols-outlined" style="font-size: 0.85rem;">' + (listOver ? 'add_circle' : 'remove_circle') + '</span>'
+                    + (listOver ? '' : '&minus; ') + escapeHtml(deduction) + '</p>';
             }
 
             // A gown that comes in several sizes and has none chosen: the size line is the control that goes and chooses one.
@@ -884,8 +904,8 @@
 
         // The saved selection remembers the deposit it was made with; the checkout always shows what the owner asks NOW.
         var liveDeposit = (Number(data.itemCount) || 0) * DEPOSIT_PER_ITEM;
+        showDeduction(items, liveDeposit);                     // first: the totals count what is over the deposit
         setTotals(data.subtotal, liveDeposit, (Number(data.subtotal) || 0) + liveDeposit, data.itemCount);
-        showDeduction(items, liveDeposit);
 
         // Tell the page which gowns still block checkout (no dates, or a size still to choose), so Confirm Rental can be
         // held back up front instead of failing after the form and the upload.

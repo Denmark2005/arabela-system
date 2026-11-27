@@ -25,6 +25,13 @@ from .monitoring import (
     reservation_item_ready_view,
     reservation_item_unready_view,
 )
+from .date_request_views import (
+    date_request_cancel_view,
+    date_request_cash_view,
+    date_request_qr_view,
+    date_request_resend_view,
+    item_request_payment_view as item_request_payment_view,
+)
 from .identity_views import (
     booking_id_cancel_view,
     booking_id_counter_view,
@@ -210,6 +217,11 @@ urlpatterns = [
     path("api/reservation-items/<int:item_id>/change-pickup/", reservation_item_change_pickup_view, name="reservation_item_change_pickup"),
     path("api/reservation-items/<int:item_id>/change-return/", reservation_item_change_return_view, name="reservation_item_change_return"),
     path("api/reservation-items/<int:item_id>/change-dates/", reservation_item_change_dates_view, name="reservation_item_change_dates"),
+    path("api/reservation-items/<int:item_id>/request-payment/", item_request_payment_view, name="reservation_item_request_payment"),
+    path("api/date-requests/<int:request_id>/resend/", date_request_resend_view, name="date_request_resend"),
+    path("api/date-requests/<int:request_id>/cancel/", date_request_cancel_view, name="date_request_cancel"),
+    path("api/date-requests/<int:request_id>/cash/", date_request_cash_view, name="date_request_cash"),
+    path("api/date-requests/<int:request_id>/qr/", date_request_qr_view, name="date_request_qr"),
     path("api/reservation-items/<int:item_id>/send-reminder/", reservation_item_send_reminder_view, name="reservation_item_send_reminder"),
     path("api/reservation-items/<int:item_id>/undo-pickup/", reservation_item_undo_pickup_view, name="reservation_item_undo_pickup"),
     path("api/reservation-items/<int:item_id>/ready/", reservation_item_ready_view, name="reservation_item_ready"),

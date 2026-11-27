@@ -82,6 +82,14 @@
     /* a gown taken earlier than 2 days before the event: what comes out of the deposit for it (amber, the page's own fee colour) */
     .nb-extra-fee { margin: .45rem 0 0; padding: .45rem .6rem; border-radius: .5rem; background: #fffaeb; color: #b54708; font-size: .8125rem; font-weight: 500; }
     .dark .nb-extra-fee { background: rgba(247,144,9,.14); color: #fdb022; }
+    /* A later return day (the gown is kept longer than the 2 free days after the event) */
+    .nb-ret { margin-top: .9rem; max-width: 22rem; animation: nb-ret-in .28s cubic-bezier(.34,1.56,.64,1) both; }
+    @keyframes nb-ret-in { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: none; } }
+    .nb-ret small { display: block; margin-top: .35rem; font-size: .8125rem; line-height: 1.45; color: #667085; }
+    .dark .nb-ret small { color: #98a2b3; }
+    @media (prefers-reduced-motion: reduce) { .nb-ret { animation: none; } }
+    .nb-sum tr.nb-sum-over td { color: #b42318; font-weight: 700; }
+    .dark .nb-sum tr.nb-sum-over td { color: #fda29b; }
     .nb-verdict-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .55rem; }
     .nb-hint { margin-top: .75rem; padding: .65rem .85rem; border-radius: .7rem; background: #fffaeb; color: #93370d; border: 1px solid #fedf89; font-size: .8125rem; line-height: 1.5; }
     .dark .nb-hint { background: rgba(247,144,9,.12); color: #fdb022; border-color: rgba(247,144,9,.35); }
@@ -1799,6 +1807,19 @@
                             {% endif %}
                           </div>
 
+                          <div class="nb-ret" x-show="line.check &amp;&amp; line.check.returnMax" x-cloak>
+                            <div class="nb-lblrow">
+                              <label class="nb-label" :for="'nb-rt-' + line.key">Return date</label>
+                              <details class="nb-tip" @click.outside="$el.removeAttribute('open')" @keydown.escape.stop="$el.removeAttribute('open')">
+                                <summary aria-label="About the return date">?</summary>
+                                <div class="nb-tip-pop">Usually 2 days after the event, which is free. Choose a later day when the customer keeps the gown longer: each extra day costs &#8369;{{ late_fee_per_day }}, taken from the security deposit. What goes over the deposit is paid with this booking.</div>
+                              </details>
+                            </div>
+                            <input class="nb-input" :id="'nb-rt-' + line.key" type="date" :min="line.check ? line.check.returnMin : ''" :max="line.check ? line.check.returnMax : ''"
+                                   :value="line.ret || (line.check ? line.check.returnMin : '')" @change="chooseReturn(line, $event.target.value)">
+                            <small x-text="returnHint(line)"></small>
+                          </div>
+
                           <template x-if="line.checking">
                             <div class="nb-verdict nb-verdict--wait" aria-live="polite"><span class="nb-spinner"></span> Checking the calendar…</div>
                           </template>
@@ -1870,7 +1891,7 @@
                         <div x-show="method !== 'Online'" style="margin-top: .75rem;">
                           <label class="nb-label" for="nb-amount">Amount received (pesos) <span class="nb-req">*</span></label>
                           <input class="nb-input" id="nb-amount" type="text" inputmode="decimal" :value="amountText" @input="amount = $event.target.value; amountEdited = true" autocomplete="off">
-                          <p class="nb-hint" x-text="'It must be exactly ' + peso(amountDue) + ' (' + (payment === 'full' ? 'the rental and the deposit' : 'the deposit') + '). Check it against what the customer handed over.'"></p>
+                          <p class="nb-hint" x-text="'It must be exactly ' + peso(amountDue) + ' (' + (payment === 'full' ? 'the rental and the deposit' : 'the deposit') + (overTotal > 0 ? ', plus ' + peso(overTotal) + ' for the extra days over the deposit' : '') + '). Check it against what the customer handed over.'"></p>
                         </div>
                       </div>
 
@@ -1889,11 +1910,12 @@
                           <tr x-show="!chosenLines.length"><td colspan="2" style="color: #98a2b3;">No gown chosen yet.</td></tr>
                           <tr><td>Rental</td><td x-text="peso(rentalTotal)"></td></tr>
                           <tr><td x-text="'Security deposit (' + peso(DEPOSIT) + ' per gown)'"></td><td x-text="peso(depositTotal)"></td></tr>
-                          <tr class="nb-sum-total"><td>Total</td><td x-text="peso(rentalTotal + depositTotal)"></td></tr>
-                          <tr x-show="payment === 'deposit'" x-cloak><td>Paid now (the deposit)</td><td x-text="peso(depositTotal)"></td></tr>
+                          <tr class="nb-sum-over" x-show="overTotal > 0" x-cloak><td>Extra days over the deposit</td><td x-text="peso(overTotal)"></td></tr>
+                          <tr class="nb-sum-total"><td>Total</td><td x-text="peso(rentalTotal + depositTotal + overTotal)"></td></tr>
+                          <tr x-show="payment === 'deposit'" x-cloak><td x-text="overTotal > 0 ? 'Paid now (the deposit and the extra days)' : 'Paid now (the deposit)'"></td><td x-text="peso(depositTotal + overTotal)"></td></tr>
                           <tr x-show="payment === 'deposit'" x-cloak><td>Still to pay (the rental)</td><td x-text="peso(rentalTotal)"></td></tr>
                           <tr class="nb-sum-extra" x-show="extraTotal > 0" x-cloak>
-                            <td>Early pick-up fee<small x-text="extraTotal > depositTotal ? 'taken from the deposit; ' + peso(extraTotal - depositTotal) + ' more is paid at the shop' : 'taken from the deposit when the gown is returned'"></small></td>
+                            <td>Extra days fee<small x-text="overTotal > 0 ? 'the deposit covers ' + peso(depositTotal) + '; ' + peso(overTotal) + ' more is paid now' : 'taken from the deposit when the gown is returned'"></small></td>
                             <td x-text="'−' + peso(extraTotal)"></td>
                           </tr>
                         </tbody>
@@ -1993,7 +2015,7 @@
       }
       function newLine() {
         return {
-          key: ++keySeq, gown: null, event: '', takesNow: false, pickedUpOn: TODAY, calOpen: false,
+          key: ++keySeq, gown: null, event: '', ret: '', takesNow: false, pickedUpOn: TODAY, calOpen: false,      // ret: a later return day ('' = the usual one)
           check: null, checking: false, checkError: '', checkSeq: 0, timer: null,
           snap: null,                          // what the row looked like when its editor opened (so the X can put it back)
           pk: newPicker()
@@ -2047,10 +2069,12 @@
         get anyTakesNow() { return this.lines.some(function (l) { return l.takesNow; }); },
         get rentalTotal() { return this.chosenLines.reduce(function (sum, l) { return sum + l.gown.priceValue; }, 0); },
         get depositTotal() { return this.chosenLines.length * this.DEPOSIT; },
-        // What taking gowns before their free days takes out of the deposit (each gown's own check says it).
+        // What the days outside the free days take out of the deposit (each gown's own check says it), and what of that is MORE than the deposit.
         get extraTotal() { return this.chosenLines.reduce(function (sum, l) { return sum + (!l.checking && l.check && l.check.ok ? Number(l.check.extraFee) || 0 : 0); }, 0); },
-        // What the payment choice asks for, exactly: the deposit alone, or the rental and the deposit. The box starts with it; staff confirm or correct it.
-        get amountDue() { return this.payment === 'full' ? this.rentalTotal + this.depositTotal : this.depositTotal; },
+        get overTotal() { return Math.max(0, this.extraTotal - this.depositTotal); },
+        // What the payment choice asks for, exactly: the deposit alone, or the rental and the deposit -- each with what is over the deposit. The box
+        // starts with it; staff confirm or correct it.
+        get amountDue() { return (this.payment === 'full' ? this.rentalTotal + this.depositTotal : this.depositTotal) + this.overTotal; },
         get amountText() { return this.amountEdited ? this.amount : (this.payment === '' || !this.amountDue ? '' : String(this.amountDue)); },
         get payClock() { var s = this.payLeft; return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); },
         get payTitle() {
@@ -2156,7 +2180,7 @@
         openEditor: function (line) {
           var current = this.editingLine;
           if (current && current.key !== line.key) { this.closeOpenEditor(); }
-          line.snap = this.isComplete(line) ? { gown: line.gown, event: line.event, takesNow: line.takesNow, pickedUpOn: line.pickedUpOn } : null;
+          line.snap = this.isComplete(line) ? { gown: line.gown, event: line.event, ret: line.ret, takesNow: line.takesNow, pickedUpOn: line.pickedUpOn } : null;
           line.pk.open = false;
           this.editKey = line.key;
         },
@@ -2176,7 +2200,7 @@
           this.closeCal(line); this.closePicker(line);
           var snap = line.snap;
           if (snap) {
-            line.gown = snap.gown; line.event = snap.event; line.takesNow = snap.takesNow; line.pickedUpOn = snap.pickedUpOn;
+            line.gown = snap.gown; line.event = snap.event; line.ret = snap.ret; line.takesNow = snap.takesNow; line.pickedUpOn = snap.pickedUpOn;
             line.snap = null;
             if (this.editKey === line.key) { this.editKey = 0; }
             this.queueCheck(line, 0);
@@ -2191,7 +2215,7 @@
             if (at !== -1) { this.lines.splice(at, 1); }
             if (this.editKey === line.key) { this.editKey = 0; }
           } else {                                                   // the only gown: empty it and keep the editor open
-            line.gown = null; line.event = ''; line.takesNow = false; line.pickedUpOn = TODAY;
+            line.gown = null; line.event = ''; line.ret = ''; line.takesNow = false; line.pickedUpOn = TODAY;
             line.check = null; line.checking = false; line.checkError = ''; line.snap = null;
             this.editKey = line.key;
           }
@@ -2214,7 +2238,18 @@
           if (this.editKey === line.key) { this.editKey = 0; }
           this.lines.splice(index, 1);
         },
-        useDate: function (line, iso) { line.event = iso; this.runCheck(line); },
+        useDate: function (line, iso) { line.event = iso; line.ret = ''; this.runCheck(line); },
+        // A later return day than the usual one (2 days after the event). Choosing the usual day, or an earlier one, goes back to it.
+        chooseReturn: function (line, iso) {
+          var usual = line.check ? line.check.returnMin : '';
+          line.ret = (iso && usual && iso > usual) ? iso : '';
+          this.runCheck(line);
+        },
+        returnHint: function (line) {
+          var c = line.check;
+          if (!c || !c.returnMax) { return ''; }
+          return 'Free until ' + shortMD(c.returnMin) + (c.returnOpen ? '. Nothing else is booked after that.' : '. This gown can stay out until ' + c.returnMaxText + ' at the latest.');
+        },
 
         // What the short row shows.
         rowDate: function (line) { return line.event ? shortDay(line.event) : '—'; },
@@ -2294,7 +2329,7 @@
         },
         pickGown: function (line, gown) {
           this.closeCal(line);
-          line.gown = gown; line.pk.open = false; line.pk.active = -1;
+          line.gown = gown; line.ret = ''; line.pk.open = false; line.pk.active = -1;
           this.queueCheck(line, 0);
           if (!line.event) {                                           // the date is the next thing to choose
             var key = line.key;
@@ -2323,7 +2358,7 @@
             selected: line.event || '',
             title: line.gown.name + ' (' + line.gown.gownId + ')',
             load: function (month) { return self.loadCalendarMonth(line, month); },
-            onPick: function (iso) { line.event = iso; self.queueCheck(line, 0); },
+            onPick: function (iso) { line.event = iso; line.ret = ''; self.queueCheck(line, 0); },
             onClose: function () { line.calOpen = false; }
           });
           line.calOpen = true;
@@ -2357,6 +2392,7 @@
             params.takes_now = '1';
             params.picked_up_on = IS_OWNER ? (line.pickedUpOn || TODAY) : TODAY;
           }
+          if (line.ret) { params['return'] = line.ret; }
           var seq = ++line.checkSeq;
           line.checking = true; line.checkError = '';
           return getJSON(URLS.check + '?' + new URLSearchParams(params)).then(function (data) {
@@ -2436,7 +2472,7 @@
           form.append('id_check', this.idToken);
           form.append('lines', JSON.stringify(this.lines.map(function (l) {
             return {
-              gown: l.gown.id, event: l.event, takes_now: l.takesNow,
+              gown: l.gown.id, event: l.event, takes_now: l.takesNow, 'return': l.ret || '',
               picked_up_on: l.takesNow ? (IS_OWNER ? (l.pickedUpOn || TODAY) : TODAY) : ''
             };
           })));

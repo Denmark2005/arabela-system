@@ -23,7 +23,7 @@ from django.utils import timezone
 
 from gowns import availability, deposit, late_fee
 from gowns.models import COOLDOWN_DAYS, Gown, GownUnavailability
-from reservations import payments
+from reservations import ledger, payments
 from reservations.models import IdentityCheck, Payment, Reservation, ReservationItem, ReservationStatusEvent
 
 DEPOSIT_PER_GOWN = Decimal("2000")          # only the starting default: the amount really used is the owner's setting (gowns/deposit.py)
@@ -192,7 +192,12 @@ def parse_lines(raw_lines, *, today, is_owner):
             picked_up_on = _date(raw.get("picked_up_on")) or today
             if picked_up_on != today and not is_owner:
                 raise BookingError("Staff record a gown taken now with today's date. Only the owner can enter an earlier day.")
-        lines.append({"gown": gown, "event": event, "takes_now": takes_now, "picked_up_on": picked_up_on})
+        chosen_return = None
+        if str(raw.get("return") or "").strip():
+            chosen_return = _date(raw.get("return"))
+            if chosen_return is None:
+                raise BookingError(f"Choose the return date for {gown.name} again.")
+        lines.append({"gown": gown, "event": event, "takes_now": takes_now, "picked_up_on": picked_up_on, "chosen_return": chosen_return})
     return lines
 
 
@@ -205,11 +210,14 @@ def _date(raw):
 
 
 def check_line(line, *, now, is_owner):
-    """availability.check_unit for one form line."""
-    return availability.check_unit(
+    """availability.check_unit for one form line, with the later return day staff chose for it (if any)."""
+    result = availability.check_unit(
         line["gown"], line["event"], picked_up_on=line["picked_up_on"], now=now,
         backdate_days=availability.OWNER_BACKDATE_DAYS if is_owner else 0,
     )
+    if line.get("chosen_return") is None:
+        return result
+    return availability.check_return(line["gown"], result, line["chosen_return"], now=now)
 
 
 def lock_and_check(lines, *, now, is_owner):
@@ -226,6 +234,11 @@ def lock_and_check(lines, *, now, is_owner):
 
 
 # ---------------------------------------------------------------- payment
+def booked_fee(lines, rate) -> Decimal:
+    """What the booked days outside the free days cost for these judged lines (lock_and_check): an early pick-up and a later return."""
+    return Decimal(sum(sum(availability.extra_days(line["event"], line["pickup"], line["return_date"])) for line in lines) * int(rate))
+
+
 def purpose_for(payment) -> str:
     """What the payment recorded with the booking is for: decided by the Payment choice, never asked for separately."""
     return Payment.Purpose.FULL if payment == PAYMENT_FULL else Payment.Purpose.DEPOSIT
@@ -250,7 +263,8 @@ def _online_method(attempt):
 
 
 def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, account, address, notebook_number,
-                   lines, payment, method, reference, amount, note, request_id="", now=None, city="", postal_code="", online_attempt=None, identity_check=None):
+                   lines, payment, method, reference, amount, note, request_id="", now=None, city="", postal_code="", online_attempt=None, identity_check=None,
+                  fee_per_day=None):
     """Save the booking AND the payment taken for it. Everything is checked again inside one transaction with the gowns locked, so neither
     another staff member nor an online customer can take the same gown in between: either the whole booking (with its receipt) is saved,
     or nothing. `method` is Cash for a counter payment, `amount` is what the staff member confirmed was received (it must be exactly what the choice
@@ -288,6 +302,7 @@ def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, a
 
             rental_subtotal = sum((line["gown"].rental_price for line in lines), Decimal("0"))
             security_deposit = deposit.for_gowns(len(lines))
+            rate = late_fee.per_day() if online_attempt is None or fee_per_day is None else fee_per_day
             reservation = Reservation.objects.create(
                 customer=account,
                 customer_name=name,
@@ -300,8 +315,11 @@ def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, a
                 status=Reservation.Status.CONFIRMED,        # something was paid at the shop, so it is confirmed at once
                 rental_subtotal=rental_subtotal,
                 security_deposit=security_deposit,
-                late_fee_per_day=late_fee.per_day(),
+                late_fee_per_day=rate,
                 total_amount=rental_subtotal + security_deposit,
+                # Booked days outside the free days that cost more than the deposit are paid now, with it.
+                pays_over_deposit=True,
+                upfront_extra=ledger.over_deposit(booked_fee(lines, rate), security_deposit),
                 reviewed_at=timezone.now(),
                 channel=channel,
                 recorded_by=recorded_by,

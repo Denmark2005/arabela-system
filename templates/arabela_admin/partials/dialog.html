@@ -6,7 +6,7 @@
    Follows the panel's dark mode via the `.dark` class Alpine puts on <body>.
 
    API (all return a Promise):
-     adminConfirm({title, message, confirmText, cancelText, danger}) -> bool
+     adminConfirm({title, message, confirmText, cancelText, danger, extraText}) -> bool, or 'extra' for the extraText button
      adminAlert({title, message, confirmText})                       -> true
      adminPrompt({title, message, placeholder, confirmText, value, multiline})
                                                                      -> string|null
@@ -83,6 +83,11 @@
   .adm-dlg--danger .adm-dlg__btn--primary:hover { background: #b42318; }
   .adm-dlg__btn:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
   .adm-dlg__actions--single .adm-dlg__btn--ghost { display: none; }
+  .adm-dlg__btn--extra { background: #ffffff; color: #3641f5; border: 1px solid #465fff; }
+  .adm-dlg__btn--extra:hover { background: #ecf3ff; }
+  .adm-dlg__btn[hidden] { display: none; }
+  .dark .adm-dlg__btn--extra { background: transparent; color: #9cb9ff; border-color: #465fff; }
+  .dark .adm-dlg__btn--extra:hover { background: rgba(70, 95, 255, 0.14); }
 
   /* Dark mode -- the panel toggles `.dark` on <body>. */
   .dark .adm-dlg__card { background: #1a2231; box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.6); }
@@ -112,6 +117,7 @@
     <textarea class="adm-dlg__input" id="adm-dlg-textarea" rows="5" hidden></textarea>
     <div class="adm-dlg__actions" id="adm-dlg-actions">
       <button type="button" class="adm-dlg__btn adm-dlg__btn--ghost" id="adm-dlg-cancel" data-dlg-dismiss>Cancel</button>
+      <button type="button" class="adm-dlg__btn adm-dlg__btn--extra" id="adm-dlg-extra" hidden></button>
       <button type="button" class="adm-dlg__btn adm-dlg__btn--primary" id="adm-dlg-confirm">Confirm</button>
     </div>
   </div>
@@ -129,6 +135,7 @@
     const actionsEl = document.getElementById('adm-dlg-actions');
     const cancelBtn = document.getElementById('adm-dlg-cancel');
     const confirmBtn = document.getElementById('adm-dlg-confirm');
+    const extraBtn = document.getElementById('adm-dlg-extra');
 
     const ICONS = {
       check: '<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />',
@@ -164,6 +171,7 @@
     }
 
     confirmBtn.addEventListener('click', onConfirm);
+    extraBtn.addEventListener('click', function () { finish('extra'); });
     Array.prototype.forEach.call(root.querySelectorAll('[data-dlg-dismiss]'), function (el) {
       el.addEventListener('click', onDismiss);
     });
@@ -171,6 +179,7 @@
       if (!settle) return;
       if (e.key === 'Escape') { e.preventDefault(); onDismiss(); }
       else if (e.key === 'Enter') {
+        if (document.activeElement === extraBtn || document.activeElement === cancelBtn) return;      // the focused button answers for itself
         // In a textarea Enter means "new line", not "send" -- otherwise a staff member
         // writing a second sentence would fire the message off mid-thought. Ctrl/Cmd+Enter
         // still submits, which is the convention people already expect from chat boxes.
@@ -212,6 +221,8 @@
 
       confirmBtn.textContent = opts.confirmText || (mode === 'alert' ? 'OK' : 'Confirm');
       cancelBtn.textContent = opts.cancelText || 'Cancel';
+      extraBtn.textContent = opts.extraText || '';
+      extraBtn.hidden = !(mode === 'confirm' && opts.extraText);
       actionsEl.classList.toggle('adm-dlg__actions--single', mode === 'alert');
 
       root.classList.add('is-open');

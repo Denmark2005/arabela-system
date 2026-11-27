@@ -20,7 +20,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from gowns import online_checkout
+from gowns import date_payment, online_checkout
 from gowns import availability
 from gowns.context_processors import clear_reservation_hold, continue_shopping_links
 from gowns.views import _signed_in_or_json
@@ -40,14 +40,28 @@ def pay_start(request):
     return online_checkout.start_payment(request)
 
 
+@_signed_in_or_json
+@require_http_methods(["POST"])
+def date_pay_start(request, request_id):
+    """The booking page's Pay button for new dates that cost more than the deposit: -> {"checkout_url"}."""
+    try:
+        address = date_payment.start_customer(request, request_id)
+    except payments.PaymentError as exc:
+        return JsonResponse({"success": False, "error": exc.message}, status=exc.status)
+    return JsonResponse({"success": True, "checkout_url": address})
+
+
 @login_required(login_url="accounts:login")
 @never_cache
 def payment_return(request, token):
     """A page that only SHOWS the result: the work is the status address below, called as soon as the page opens (so the page itself never waits on PayMongo)."""
     attempt = _own_attempt(request, token)
+    change = attempt.date_change if attempt.date_change_id else None
     return render(request, "payment_return.html", {
         "token": attempt.token,
         "status_url": reverse("gowns:payment_status", args=[attempt.token]),
+        # a date change payment goes back to the booking it belongs to, not to the checkout
+        "date_change_url": reverse("gowns:reservation_item_detail", args=[change.item_id]) if change else "",
         "checkout_url": reverse("gowns:reservation"),
         "orders_url": reverse("gowns:orders"),
         "amount": attempt.amount,
@@ -78,7 +92,7 @@ def payment_status(request, token):
     attempt = _own_attempt(request, token)
     attempt = online_checkout.confirm_attempt(attempt.pk, source="poll") or attempt
     state = online_checkout.attempt_state(attempt)
-    if state["state"] in ("booked", "refunded", "flagged", "handled"):
+    if state["state"] in ("booked", "refunded", "flagged", "handled") and not state.get("date_change"):
         clear_reservation_hold(request)             # the checkout's countdown is over: the booking exists, the money went back, or the shop has the payment
     return JsonResponse({"success": True, **state})
 
@@ -90,6 +104,8 @@ def payment_cancel(request, token):
     attempt = online_checkout.cancel_attempt(attempt.pk) or attempt
     if attempt.status in (PaymentAttempt.Status.PAID, PaymentAttempt.Status.BOOKED, PaymentAttempt.Status.REFUNDED, PaymentAttempt.Status.FLAGGED):
         return redirect("gowns:payment_return", token=attempt.token)          # it WAS paid: show what happened, never a "cancelled" page
+    if attempt.date_change_id:
+        return redirect(reverse("gowns:reservation_item_detail", args=[attempt.date_change.item_id]) + "?payment=cancelled#pay-request")
     return redirect(reverse("gowns:reservation") + "?payment=cancelled")
 
 

@@ -1529,8 +1529,9 @@
                           </div>
                         </template>
                         <div class="pm-l pm-minus" x-show="d.s.total_deduction !== '0.00'"><span>Total deduction<small>taken from the security deposit</small></span><b x-text="'-' + peso(d.peso.total_deduction)"></b></div>
-                        <div class="pm-l" x-show="d.s.extra_credit !== '0.00'"><span>Extra charge paid before<small>the fees no longer need it, so it goes back with the deposit</small></span><b x-text="'+' + peso(d.peso.extra_received)"></b></div>
-                        <div class="pm-l is-total" x-show="d.s.deposit_paid !== '0.00'"><span>Deposit to hand back<small x-text="d.s.all_returned ? (d.s.refunded !== '0.00' ? peso(d.peso.refunded) + ' already handed back' : 'every gown is back') : 'once every gown is back'"></small></span><b x-text="peso(d.s.all_returned ? d.peso.refund_available : d.peso.refundable_total)"></b></div>
+                        <div class="pm-l" x-show="d.s.extra_credit !== '0.00' && !d.s.cancelled"><span>Extra charge paid before<small>the fees no longer need it, so it goes back with the deposit</small></span><b x-text="'+' + peso(d.peso.extra_received)"></b></div>
+                        <div class="pm-l is-total" x-show="d.s.cancelled && d.s.extra_credit !== '0.00'"><span>Paid over the deposit<small x-text="'the booking was cancelled: this goes back, the deposit is kept' + (d.s.refunded !== '0.00' ? ' (' + peso(d.peso.refunded) + ' already handed back)' : '')"></small></span><b x-text="peso(d.peso.refund_available)"></b></div>
+                        <div class="pm-l is-total" x-show="d.s.deposit_paid !== '0.00' && !d.s.cancelled"><span>Deposit to hand back<small x-text="d.s.all_returned ? (d.s.refunded !== '0.00' ? peso(d.peso.refunded) + ' already handed back' : 'every gown is back') : 'once every gown is back'"></small></span><b x-text="peso(d.s.all_returned ? d.peso.refund_available : d.peso.refundable_total)"></b></div>
                         <div class="pm-l pm-minus" x-show="d.s.extra_owed !== '0.00'"><span>Still owed beyond the deposit<small>the fees and deductions are more than the deposit</small></span><b x-text="peso(d.peso.extra_owed)"></b></div>
                       </div>
                     </div>
@@ -1597,7 +1598,7 @@
                         <div>
                           <div class="pm-radios" role="radiogroup" aria-label="What is being paid">
                             <template x-for="o in d.choices.options" :key="o.purpose">
-                              <label :class="rec.purpose === o.purpose ? 'is-on' : ''"><input type="radio" name="pm-purpose" :value="o.purpose" x-model="rec.purpose" @change="rec.amount = o.amount" style="accent-color: #465fff;"> <span x-text="o.label + ' - ' + peso(fmt(o.amount))"></span></label>
+                              <label :class="rec.purpose === o.purpose ? 'is-on' : ''"><input type="radio" name="pm-purpose" :value="o.purpose" x-model="rec.purpose" @change="rec.amount = o.amount" style="accent-color: #465fff;"> <span x-text="o.label + ' - ' + peso(fmt(o.amount)) + (o.over ? ' (with ' + peso(fmt(o.over)) + ' over the deposit)' : '')"></span></label>
                             </template>
                           </div>
                           <p class="pm-hint" style="margin-top: .45rem;">The deposit is received exactly, never in parts. Check the amount against what the customer handed over.</p>
@@ -1619,11 +1620,12 @@
                     </div>
 
                     <div class="pm-form" x-show="d.canReturn">
-                      <p class="pm-sec" style="margin: 0;">Hand the security deposit back</p>
+                      <p class="pm-sec" style="margin: 0;" x-text="d.s.cancelled ? 'Give back what was paid over the deposit' : 'Hand the security deposit back'">Hand the security deposit back</p>
                       <!-- The working, so staff (and the customer standing there) can see why it is this amount: the deposit, what comes off it, and what goes back. -->
                       <div class="pm-lines" aria-label="How the amount to hand back is worked out">
-                        <div class="pm-l"><span>Security deposit paid</span><b x-text="peso(d.peso.deposit_paid)"></b></div>
-                        <div class="pm-l" x-show="d.s.extra_credit !== '0.00'"><span>Extra charge paid before<small>the fees no longer need it</small></span><b x-text="'+' + peso(d.peso.extra_received)"></b></div>
+                        <div class="pm-l" x-show="!d.s.cancelled"><span>Security deposit paid</span><b x-text="peso(d.peso.deposit_paid)"></b></div>
+                        <div class="pm-l" x-show="d.s.extra_credit !== '0.00' && !d.s.cancelled"><span>Extra charge paid before<small>the fees no longer need it</small></span><b x-text="'+' + peso(d.peso.extra_received)"></b></div>
+                        <div class="pm-l" x-show="d.s.cancelled"><span>Paid over the deposit<small>the deposit itself is not refunded (cancelled booking)</small></span><b x-text="peso(d.peso.extra_received)"></b></div>
                         <template x-for="(l, li) in d.feeLines" :key="'rfee' + li">
                           <div class="pm-l pm-minus"><span><span x-text="l.label + ': ' + l.gown"></span><small x-text="l.days + ' day' + (l.days === 1 ? '' : 's') + ' x ' + peso(l.rate) + (l.kind === 'early' ? ' (picked up ' + l.pickup + ', free from ' + l.free_from + ')' : l.kind === 'later' ? ' (return ' + l.until + ', free until ' + l.free_until + ')' : l.kind === 'change' ? ' (booked to return ' + l.booked + ', moved to ' + l.agreed + ')' : ' (it was due back ' + l.agreed + ')')"></small></span><b x-text="'-' + peso(l.amount)"></b></div>
                         </template>
@@ -1633,19 +1635,21 @@
                         <div class="pm-l" x-show="d.s.refunded !== '0.00'"><span>Already handed back</span><b x-text="'-' + peso(d.peso.refunded)"></b></div>
                         <div class="pm-l is-total"><span>To hand back now</span><b x-text="peso(d.peso.refund_available)"></b></div>
                       </div>
-                      <p class="pm-hint" x-show="d.s.late_fee === '0.00' && d.s.deductions_total === '0.00'">No fees and no deductions: the whole deposit goes back.</p>
-                      <p class="pm-hint">Every gown is back. No more than the amount above can be handed back.</p>
+                      <p class="pm-hint" x-show="!d.s.cancelled && d.s.late_fee === '0.00' && d.s.deductions_total === '0.00'">No fees and no deductions: the whole deposit goes back.</p>
+                      <p class="pm-hint" x-text="d.s.cancelled ? 'No more than the amount above can be handed back.' : 'Every gown is back. No more than the amount above can be handed back.'">Every gown is back. No more than the amount above can be handed back.</p>
                       <div><label for="pm-ret-amount">Amount handed back (pesos)</label><input id="pm-ret-amount" type="text" inputmode="decimal" class="pm-in" x-model="ret.amount" autocomplete="off"></div>
                       <div>
                         <div class="pm-lblrow"><span class="pm-lbl">Handed back by</span><details class="ht-tip"><summary aria-label="About handing the deposit back" title="About handing the deposit back">?</summary><div class="ht-tip-pop"><p><b>Cash:</b> hand over the money, then Record deposit return.</p><p x-show="d.onlineRefund && d.onlineRefund.available"><b>Pay online:</b> {{ payment_provider }} sends it back to the <span x-text="d.onlineRefund ? d.onlineRefund.label : ''"></span> account the customer paid with, usually within a day. It cannot be undone.</p><p x-show="d.onlineRefund && !d.onlineRefund.available"><b>Why only cash:</b> <span x-text="d.onlineRefund ? d.onlineRefund.reason : ''"></span></p></div></details></div>
                         <div class="pm-radios" role="radiogroup" aria-label="How it is handed back">
-                          <label :class="ret.method === 'Cash' ? 'is-on' : ''"><input type="radio" name="pm-ret-method" value="Cash" x-model="ret.method" @change="formError = ''" style="accent-color: #465fff;"> Cash</label>
-                          <label x-show="d.onlineRefund && d.onlineRefund.available" :class="ret.method === 'PayMongo' ? 'is-on' : ''"><input type="radio" name="pm-ret-method" value="PayMongo" x-model="ret.method" @change="formError = ''" style="accent-color: #465fff;"> <span x-text="'Pay online (back to their ' + (d.onlineRefund ? d.onlineRefund.label : '') + ')'">Pay online</span></label>
+                          <label :class="ret.method === 'Cash' ? 'is-on' : ''"><input type="radio" name="pm-ret-method" value="Cash" x-model="ret.method" @change="pickReturnWay()" style="accent-color: #465fff;"> Cash</label>
+                          <label x-show="d.onlineRefund && d.onlineRefund.available" :class="ret.method === 'PayMongo' ? 'is-on' : ''"><input type="radio" name="pm-ret-method" value="PayMongo" x-model="ret.method" @change="pickReturnWay()" style="accent-color: #465fff;"> <span x-text="'Pay online (back to their ' + (d.onlineRefund ? d.onlineRefund.label : '') + ')'">Pay online</span></label>
                         </div></div>
+                      <!-- Paid in separate online payments: online it goes back one payment at a time. -->
+                      <p class="pm-hint pm-ret-parts" x-show="d.onlineRefund && d.onlineRefund.part" x-text="d.onlineRefund && d.onlineRefund.part ? d.onlineRefund.reason : ''"></p>
                       <p class="pm-hint" x-show="ret.method === 'PayMongo'">It is sent as soon as you press the button and cannot be undone.</p>
                       <div><label for="pm-ret-note">Note (optional)</label><input id="pm-ret-note" type="text" class="pm-in" x-model="ret.note" maxlength="200"></div>
                       <p class="pm-err" x-show="formError && formWhere === 'ret'" x-text="formError"></p>
-                      <div class="pm-btns"><button type="button" class="pm-b pm-b--main" @click="giveBack()" :disabled="busy" x-text="busy && formWhere === 'ret' ? 'Saving...' : (ret.method === 'PayMongo' ? (retNumber() > 0 ? 'Send ' + retShown() + ' back' : 'Send deposit back') : 'Record deposit return')"></button></div>
+                      <div class="pm-btns"><button type="button" class="pm-b pm-b--main" @click="giveBack()" :disabled="busy" x-text="busy && formWhere === 'ret' ? 'Saving...' : (ret.method === 'PayMongo' ? (retNumber() > 0 ? 'Send ' + retShown() + ' back' : 'Send deposit back') : (d.s.cancelled ? 'Record the return' : 'Record deposit return'))"></button></div>
                     </div>
 
                     <details class="pm-form" x-show="d.canVoid && d.canDeduct">
@@ -1698,6 +1702,7 @@
       var VOID_DEDUCTION = '{% url "arabela_admin:deduction_void" 999999 %}';
       var SEND = '{% url "arabela_admin:payment_send" 999999 %}';
       var OPEN_ID = '{{ open_id|escapejs }}';
+      var OPEN_PAY = '{{ open_pay|escapejs }}';          // "cash" or "qr": opened to collect what is still owed
       return {
         page: 'payments', loaded: true, darkMode: false, stickyMenu: false, sidebarToggle: false, scrollTop: false,
         search: '', statusFilter: 'All',
@@ -1738,8 +1743,19 @@
           this.openId = id; this.d = null; this.loadError = ''; this.last = null; this.voiding = null; this.formError = ''; this.loading = true;
           this.paySet(null);
           var self = this;
-          this.api(this.url(DETAIL, id), 'GET').then(function (data) { self.show(data); self.loading = false; })
+          this.api(this.url(DETAIL, id), 'GET').then(function (data) { self.show(data); self.loading = false; self.collect(); })
             .catch(function (e) { self.loading = false; self.loadError = e.message; });
+        },
+        // Opened with "?pay=cash" or "?pay=qr" (after a gown came back with money still owed): the whole amount is filled in, and the QR code
+        // is shown at once. Done only the first time, and the address forgets it so a reload never opens another code.
+        collect: function () {
+          var how = OPEN_PAY, c = this.d && this.d.choices;
+          OPEN_PAY = '';
+          if (!how) { return; }
+          if (window.history && window.history.replaceState) { window.history.replaceState(null, '', window.location.pathname + '?open=' + this.openId); }
+          if (!c || c.kind === 'none') { return; }
+          if (c.kind !== 'deposit') { this.rec.amount = c.max; }
+          if (how === 'qr' && {% if online_enabled %}true{% else %}false{% endif %} && !this.pay) { this.rec.method = 'Online'; this.startPay(); }
         },
         show: function (data) {
           this.d = data;
@@ -1748,7 +1764,8 @@
           if (c.kind === 'deposit') { this.rec.purpose = c.options[0].purpose; this.rec.amount = c.options[0].amount; }
           else if (c.kind === 'balance') { this.rec.purpose = 'Balance'; }
           else if (c.kind === 'extra') { this.rec.purpose = 'Extra'; }
-          this.ret = { amount: data.canReturn ? data.peso.refund_available.replace(/,/g, '') : '', method: (data.onlineRefund && data.onlineRefund.available) ? 'PayMongo' : 'Cash', note: '', rid: pmUid() };
+          var online = data.onlineRefund && data.onlineRefund.available;
+          this.ret = { amount: data.canReturn ? (online && data.onlineRefund.part ? data.onlineRefund.part : data.peso.refund_available.replace(/,/g, '')) : '', method: online ? 'PayMongo' : 'Cash', note: '', rid: pmUid() };
           this.ded = { amount: '', reason: '', rid: pmUid() };
           this.formError = ''; this.voiding = null;
           // Only the window's own load carries the QR code: the answers to the other actions leave the one on screen as it is.
@@ -1887,15 +1904,24 @@
           var send = function () {
             self.run('ret', self.url(RETURN, self.d.id), {
               amount: self.ret.amount, method: self.ret.method, note: self.ret.note, request_id: self.ret.rid
-            }, function (data) { return 'Deposit return recorded. Receipt ' + data.payment.receiptNumber + ' is ready to print.'; });
+            }, function (data) {
+              var left = data.detail && data.detail.canReturn ? ' ' + self.peso(data.detail.peso.refund_available) + ' is still to hand back.' : '';
+              return (data.payment.purposeLabel === 'Refund' ? 'Return recorded. Receipt ' : 'Deposit return recorded. Receipt ') + data.payment.receiptNumber + ' is ready to print.' + left;
+            });
           };
           if (this.ret.method !== 'PayMongo') { send(); return; }
           // Money leaves at once and cannot be called back: ask first.
           adminConfirm({
-            title: 'Send the deposit back now?',
+            title: this.d.s.cancelled ? 'Send this money back now?' : 'Send the deposit back now?',
             message: this.retShown() + ' goes back to the ' + (this.d.onlineRefund ? this.d.onlineRefund.label : 'account') + ' the customer paid with, through {{ payment_provider }}.' + this.workingText() + ' This cannot be undone.',
             confirmText: 'Send it back', danger: true
           }).then(function (ok) { if (ok) send(); });
+        },
+        // Cash or online chosen. When online can only take a part right now, the amount follows the choice: the part online, all of it in cash.
+        pickReturnWay: function () {
+          this.formError = '';
+          var o = this.d && this.d.onlineRefund;
+          if (o && o.part) { this.ret.amount = this.ret.method === 'PayMongo' ? o.part : this.d.peso.refund_available.replace(/,/g, ''); }
         },
         // The amount typed in the Return form, as a number (0 when it is not one) and as it is shown (1,400.00 with the peso sign, or what was typed when it is not a number).
         retNumber: function () { var n = Number(String(this.ret.amount).replace(/,/g, '')); return n > 0 ? n : 0; },
@@ -1905,6 +1931,7 @@
           var d = this.d, s = d.s, parts = [];
           var whole = this.retNumber() === Number(String(d.peso.refund_available).replace(/,/g, ''));
           if (!whole || s.refunded !== '0.00') { return ''; }
+          if (s.cancelled) { return ' That is what was paid over the deposit; the deposit itself is kept.'; }
           var extra = s.extra_credit !== '0.00' ? ' and the ' + this.peso(d.peso.extra_received) + ' extra charge paid before' : '';
           if (s.late_fee === '0.00' && s.deductions_total === '0.00') { return ' That is the whole deposit' + extra + ': no fees and no deductions.'; }
           if (s.early_fee && s.early_fee !== '0.00') { parts.push(this.peso(d.peso.early_fee) + ' early pick-up fee'); }

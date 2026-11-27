@@ -62,6 +62,8 @@ urlpatterns = [
     path("selection/", views.selection, name="selection"),
     path("reservation/", views.reservation, name="reservation"),
     path("reservation/submit/", views.reservation_submit, name="reservation_submit"),
+    # Paying the amount asked for new dates, from the booking page (reservations/date_requests.py)
+    path("reservation/date-payment/<int:request_id>/start/", online_views.date_pay_start, name="date_pay_start"),
     path("gcash-qr/", views.gcash_qr, name="gcash_qr"),
     # Online payment through PayMongo (gowns/online_checkout.py, gowns/online_views.py)
     path("reservation/pay/start/", online_views.pay_start, name="pay_start"),

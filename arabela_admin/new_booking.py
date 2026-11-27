@@ -91,6 +91,7 @@ def new_booking_view(request):
         "is_owner": _is_owner(request),
         "owner_backdate_days": availability.OWNER_BACKDATE_DAYS,
         "deposit_per_gown": deposit.per_gown(),
+        "late_fee_per_day": late_fee.per_day(),
         "max_gowns": staff_booking.MAX_GOWNS,
         "note_max": staff_booking.NOTE_MAX,
         "id_required": identity.required_walkin(),
@@ -171,17 +172,29 @@ def _check_payload(gown, result, *, now, tag_colors, with_extras=True):
         "nextFree": "",
         "nextFreeText": "",
         "alternatives": [],
-        # A customer who takes the gown earlier than 2 days before the event pays for those days out of the deposit (reservations/ledger.py).
+        # A customer who takes the gown earlier than 2 days before the event, or keeps it past 2 days after it, pays for those days out of the
+        # security deposit (reservations/ledger.py); what the deposit does not cover is paid with the booking.
         "extraDays": 0, "extraFee": 0, "extraText": "",
+        # The return day staff may choose: from 2 days after the event up to the latest day this gown is free ("" until the gown can be booked).
+        # returnOpen: nothing else is booked after it (the latest day is only the one-year limit).
+        "returnMin": "", "returnMax": "", "returnMaxText": "", "returnOpen": False,
     }
+    latest = result.get("latest_return")
+    if latest:
+        payload.update(returnMin=availability.free_days(result["event"])[1].isoformat(), returnMax=latest.isoformat(), returnMaxText=_day(latest),
+                       returnOpen=latest >= availability.last_return_day((now or availability.now_local()).date(), result["event"]))
     if result["ok"] and result["pickup"]:
-        early, _later = availability.extra_days(result["event"], result["pickup"], result["return_date"])
+        early, later = availability.extra_days(result["event"], result["pickup"], result["return_date"])
         rate = late_fee.per_day()
-        if early > 0 and rate > 0:
-            free_from = availability.free_days(result["event"])[0]
-            payload.update(extraDays=early, extraFee=early * rate, extraText=(
-                f"Early pick-up fee: {early} day{'s' if early != 1 else ''} × ₱{rate:,} = ₱{early * rate:,}, taken from the security deposit "
-                f"when the gown is returned (the free days start {_day(free_from)})."))
+        if early + later > 0 and rate > 0:
+            free_from, free_until = availability.free_days(result["event"])
+            words = []
+            if early > 0:
+                words.append(f"Early pick-up fee: {early} day{'s' if early != 1 else ''} × ₱{rate:,} = ₱{early * rate:,} (the free days start {_day(free_from)}).")
+            if later > 0:
+                words.append(f"Later return fee: {later} day{'s' if later != 1 else ''} × ₱{rate:,} = ₱{later * rate:,} (the free days end {_day(free_until)}).")
+            words.append("Taken from the security deposit; anything over the deposit is paid with this booking.")
+            payload.update(extraDays=early + later, extraFee=(early + later) * rate, extraText=" ".join(words))
     if with_extras and not result["ok"] and result["reason"] in ("booked", "rest"):
         nxt = availability.next_free_event(gown, result["event"], now=now)
         payload["nextFree"] = nxt.isoformat() if nxt else ""
@@ -199,8 +212,8 @@ def _check_payload(gown, result, *, now, tag_colors, with_extras=True):
 
 
 def availability_check_view(request):
-    """GET ?gown=<id>&event=YYYY-MM-DD[&takes_now=1[&picked_up_on=YYYY-MM-DD]] -> can this exact gown be booked?
-    Read-only: nothing is saved. Used by New Booking and by Gown Catalog's "Check availability"."""
+    """GET ?gown=<id>&event=YYYY-MM-DD[&takes_now=1[&picked_up_on=YYYY-MM-DD]][&return=YYYY-MM-DD] -> can this exact gown be booked?
+    Read-only: nothing is saved. Used by New Booking and by Gown Catalog's "Check availability". `return`: a later return day staff chose."""
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
     try:
@@ -218,6 +231,7 @@ def availability_check_view(request):
             picked_up_on = now.date()        # staff can only record today's pick-up; the form never offers more
     backdate = _backdate_days(request)
     result = availability.check_unit(gown, event, picked_up_on=picked_up_on, now=now, backdate_days=backdate)
+    result = availability.check_return(gown, result, staff_booking._date(request.GET.get("return")), now=now)
     result["picked_up_on"], result["backdate_days"] = picked_up_on, backdate
     return JsonResponse(_check_payload(gown, result, now=now, tag_colors=SiteSettings.load().tag_colors()))
 

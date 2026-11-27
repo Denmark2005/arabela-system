@@ -22,7 +22,8 @@ from datetime import date, time, timedelta
 from django.utils import timezone
 
 from gowns.models import COOLDOWN_DAYS, Gown, GownUnavailability
-from reservations.models import Reservation, ReservationItem
+from reservations.date_changes import held_requests
+from reservations.models import DateChangeRequest, Reservation, ReservationItem
 
 PICKUP_OPENS = time(13, 0)       # 1:00 PM
 PICKUP_CLOSES = time(17, 0)      # 5:00 PM
@@ -264,12 +265,17 @@ PAST = "past"
 CLOSED = "closed"
 PICKUP_IN_FUTURE = "pickup_in_future"
 PICKUP_AFTER_EVENT = "pickup_after_event"
+# ... for a return day staff chose (later than the 2 days after the event)
+RETURN_EARLY = "return_early"
+RETURN_FAR = "return_far"
+RETURN_TAKEN = "return_taken"
 
 
 def unit_busy(unit_id, start: date, end: date):
     """What holds ONE physical gown on any day of start..end (the past included), as (bookings, blocks): lists of
     (start, end, row). The same rule as load_busy_ranges: a gown line that is back or that staff cancelled, and a Rejected or
-    Cancelled booking, hold nothing; every block counts (staff blocks and the automatic rest days)."""
+    Cancelled booking, hold nothing; every block counts (staff blocks and the automatic rest days). Days held while a date change
+    waits for payment count as a booking (its row is the DateChangeRequest)."""
     items = (
         ReservationItem.objects.filter(gown_id=unit_id, rental_date__lte=end, return_date__gte=start)
         .exclude(stage__in=ReservationItem.FINISHED_STAGES)
@@ -282,11 +288,20 @@ def unit_busy(unit_id, start: date, end: date):
         .select_related("auto_for_item__reservation")
         .order_by("start_date", "id")
     )
-    return [(i.rental_date, i.return_date, i) for i in items], [(b.start_date, b.end_date, b) for b in blocks]
+    held = (
+        held_requests([unit_id]).filter(hold_start__lte=end, hold_end__gte=start)
+        .select_related("reservation__customer__profile").order_by("hold_start", "id")
+    )
+    bookings = [(i.rental_date, i.return_date, i) for i in items] + [(r.hold_start, r.hold_end, r) for r in held]
+    return bookings, [(b.start_date, b.end_date, b) for b in blocks]
 
 
 def _conflict(row_start, row_end, row):
     """One thing in the way, the way staff read it: who has the gown (and the booking number), or why it is blocked."""
+    if isinstance(row, DateChangeRequest):
+        reservation = row.reservation
+        return {"kind": "booking", "start": row_start, "end": row_end, "reference": reservation.reference_code,
+                "label": f"{reservation.display_customer_name} ({reservation.reference_code}) · held for a date change waiting for payment"}
     if isinstance(row, ReservationItem):
         reservation = row.reservation
         label = f"{reservation.display_customer_name} ({reservation.reference_code})"
@@ -380,6 +395,37 @@ def check_unit(gown, event: date, *, picked_up_on=None, now=None, backdate_days=
     return result
 
 
+def check_return(gown, result, chosen=None, *, now=None):
+    """Adds to a check_unit answer that said yes the latest day this gown could come back (`latest_return`), and -- when staff chose a later
+    return than the 2 days after the event (`chosen`) -- judges it: the gown must be free through that day and still get its rest days before
+    the next booking. A chosen day that works becomes the answer's return day."""
+    result["latest_return"] = None
+    if not result["ok"]:
+        return result
+    now = now or now_local()
+    event, default_return = result["event"], result["return_date"]
+    last = last_return_day(now.date(), event)
+    bookings, blocks = unit_busy(gown.id, default_return + timedelta(days=1), last + timedelta(days=COOLDOWN_DAYS))
+    # What starts after the usual return day limits how long the gown can be kept: a block from its first day, a booking early enough that
+    # the rest days still fit before it.
+    limits = [(start - timedelta(days=1), (start, end, row)) for start, end, row in blocks if start > default_return]
+    limits += [(start - timedelta(days=COOLDOWN_DAYS + 1), (start, end, row)) for start, end, row in bookings if start > default_return]
+    latest = max(default_return, min([last] + [day for day, _row in limits]))
+    result["latest_return"] = latest
+    if chosen is None or chosen == default_return:
+        return result
+    if chosen < default_return:
+        result.update(ok=False, reason=RETURN_EARLY)
+    elif chosen > last:
+        result.update(ok=False, reason=RETURN_FAR)
+    elif chosen > latest:
+        result.update(ok=False, reason=RETURN_TAKEN,
+                      conflicts=[_conflict(*row) for day, row in sorted(limits, key=lambda pair: pair[0]) if day < chosen])
+    else:
+        result.update(return_date=chosen, rest_until=chosen + timedelta(days=COOLDOWN_DAYS))
+    return result
+
+
 def calendar_days(gown, first: date, last: date, *, picked_up_on=None, now=None, backdate_days=0):
     """check_unit's answer for every event date from `first` to `last` -> {date: result}, for the New Booking calendar.
 
@@ -439,6 +485,14 @@ def check_message(gown, result, with_names=True) -> str:
         return "\"Customer takes the gown now\" means the gown leaves today -- the pick-up day can't be later than today."
     if reason == PICKUP_AFTER_EVENT:
         return "The pick-up day can't be after the event date."
+    if reason == RETURN_EARLY:
+        return f"The return can't be before {_day_text(result['return_date'])}: returning by then is free (2 days after the event)."
+    if reason == RETURN_FAR:
+        return "That return date is too far away. Please choose a nearer day."
+    if reason == RETURN_TAKEN:
+        latest = result.get("latest_return")
+        names = "; ".join(f"{c['label']}, {_day_text(c['start'])} – {_day_text(c['end'])}" for c in result["conflicts"]) if with_names else ""
+        return (f"{label} can't be kept that long. The latest return date is {_day_text(latest)}" + (f" ({names})." if names else "."))
     names = "; ".join(f"{c['label']}, {_day_text(c['start'])} – {_day_text(c['end'])}" for c in result["conflicts"]) if with_names else ""
     if reason == "rest":
         return (f"Not available. {label} would not get its {COOLDOWN_DAYS} rest days before the next booking"
@@ -475,8 +529,12 @@ def load_busy_ranges(unit_ids, today: date, horizon_days: int, exclude_block_id=
         .exclude(stage__in=ReservationItem.FINISHED_STAGES)
         .exclude(reservation__status__in=[Reservation.Status.REJECTED, Reservation.Status.CANCELLED])
         .values_list("gown_id", "rental_date", "return_date")
+        .order_by()
     )
-    for gown_id, start, end in booked:
+    # Days held while a date change waits for payment count as booked; read in the same question to the database.
+    held = (held_requests(unit_ids).filter(hold_end__gte=today, hold_start__lte=far)
+            .values_list("gown_id", "hold_start", "hold_end").order_by())
+    for gown_id, start, end in booked.union(held, all=True):
         bookings[gown_id].append((start, end))
     held = GownUnavailability.objects.filter(gown_id__in=unit_ids, end_date__gte=today, start_date__lte=far)
     if exclude_block_id is not None:

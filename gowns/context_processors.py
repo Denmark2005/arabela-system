@@ -446,7 +446,7 @@ def expire_reservation_hold_if_lapsed(request):
     from reservations.models import PaymentAttempt
     if PaymentAttempt.objects.filter(
             customer=request.user, status__in=(PaymentAttempt.Status.PAID, PaymentAttempt.Status.BOOKED, PaymentAttempt.Status.REFUNDED),
-            paid_at__gte=timezone.now() - timedelta(hours=2)).exists():
+            date_change__isnull=True, paid_at__gte=timezone.now() - timedelta(hours=2)).exists():
         return
     from accounts.services import record_abandoned_hold
 
@@ -459,7 +459,7 @@ def _paid_during_this_hold(request, deadline):
     began = deadline - timedelta(minutes=RESERVATION_HOLD_MINUTES)
     S = PaymentAttempt.Status
     return PaymentAttempt.objects.filter(
-        customer=request.user, status__in=(S.PAID, S.BOOKED, S.REFUNDED, S.FLAGGED, S.HANDLED), paid_at__gte=began).exists()
+        customer=request.user, status__in=(S.PAID, S.BOOKED, S.REFUNDED, S.FLAGGED, S.HANDLED), date_change__isnull=True, paid_at__gte=began).exists()
 
 
 def reservation_hold(request):

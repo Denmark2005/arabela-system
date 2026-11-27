@@ -25,7 +25,7 @@ from django.utils import timezone
 from django.utils.http import urlencode
 
 from accounts import rate_limit
-from gowns import availability, deposit, online_checkout
+from gowns import availability, deposit, late_fee, online_checkout
 from reservations import gateway, ledger, staff_booking
 from reservations.ledger import money
 from reservations.models import Payment, PaymentAttempt, Reservation
@@ -54,13 +54,14 @@ def qr_image(url):
 
 
 def _selection(lines):
-    """What makes two walk-in forms the same booking to pay for: each gown with its event date."""
-    return sorted((int(line["gown"]), str(line["event"]), bool(line.get("takes_now"))) for line in lines)
+    """What makes two walk-in forms the same booking to pay for: each gown with its event date and a later return day when one was chosen."""
+    return sorted((int(line["gown"]), str(line["event"]), bool(line.get("takes_now")), str(line.get("return") or "")) for line in lines)
 
 
 def _stored_lines(lines):
     return [{"gown": line["gown"].id, "event": line["event"].isoformat(), "takes_now": bool(line["takes_now"]),
-             "picked_up_on": line["picked_up_on"].isoformat() if line.get("picked_up_on") else ""} for line in lines]
+             "picked_up_on": line["picked_up_on"].isoformat() if line.get("picked_up_on") else "",
+             "return": line["chosen_return"].isoformat() if line.get("chosen_return") else ""} for line in lines]
 
 
 def urls_for(attempt):
@@ -135,7 +136,10 @@ def start(*, request, staff, staff_name, is_owner, name, phone, address, city, p
         staff_booking.lock_and_check(lines, now=availability.now_local(), is_owner=is_owner)
         rental_subtotal = sum((line["gown"].rental_price for line in lines), Decimal("0"))
         security_deposit = deposit.for_gowns(len(lines))
-    amount = security_deposit if purpose == PaymentAttempt.Purpose.DEPOSIT else rental_subtotal + security_deposit
+        rate = late_fee.per_day()
+        # Booked days outside the free days that cost more than the deposit are paid now, with it.
+        over = ledger.over_deposit(staff_booking.booked_fee(lines, rate), security_deposit)
+    amount = (security_deposit if purpose == PaymentAttempt.Purpose.DEPOSIT else rental_subtotal + security_deposit) + over
     if expected_amount is not None and money(expected_amount) != money(amount):
         raise staff_booking.BookingError(f"The amount changed to ₱{amount:,.2f} (the price or the deposit was updated). Please check the amounts and try again.", 409)
     if amount > min(online_checkout.MAX_ONLINE_AMOUNT, Decimal(gateway.max_amount())):
@@ -152,6 +156,7 @@ def start(*, request, staff, staff_name, is_owner, name, phone, address, city, p
         "staff_name": staff_name,
         "rental_subtotal": str(rental_subtotal),
         "security_deposit": str(security_deposit),
+        "late_fee_per_day": rate,                            # the fee per day the amount was worked out with: the booking keeps it
         "identity_check": id_check.pk if id_check is not None else None,       # the customer's valid-ID check the booking will rest on
     }
     try:
@@ -165,6 +170,8 @@ def start(*, request, staff, staff_name, is_owner, name, phone, address, city, p
         raise staff_booking.BookingError("The payment page is opening. Please wait a moment.", 409)
     done_path = reverse("gowns:walkin_pay_done", args=[attempt.token])
     what = "Security deposit" if purpose == PaymentAttempt.Purpose.DEPOSIT else "Gown rental and security deposit"
+    if over > 0:
+        what = f"{what} and extra days"
     gowns = ", ".join(line["gown"].name for line in lines)[:140]
     try:
         session = gateway.create_checkout_session(
@@ -203,7 +210,8 @@ def create_booking(attempt):
             name=details.get("name") or attempt.customer_name, phone=details.get("phone", ""), account=account, address=details.get("address", ""),
             city=details.get("city", ""), postal_code=details.get("postal_code", ""), notebook_number=payload.get("notebook_number", ""),
             lines=lines, payment=payload.get("payment") or staff_booking.PAYMENT_DEPOSIT, method="", reference="", amount=attempt.paid_amount,
-            note=payload.get("note", ""), request_id="", now=now, online_attempt=attempt, identity_check=id_check)
+            note=payload.get("note", ""), request_id="", now=now, online_attempt=attempt, identity_check=id_check,
+            fee_per_day=payload.get("late_fee_per_day"))
     except staff_booking.BookingError as exc:
         raise online_checkout.BookingUnavailable(exc.message)
     # The same Audit Log line a cash booking writes (this runs from the payment's confirmation, not from a staff request, so it is written here).

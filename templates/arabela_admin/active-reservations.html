@@ -142,10 +142,33 @@
       .ar-feechip:hover, .ar-feeline:hover { background: #fef0c7; }
       .ar-feechip--over, .ar-feeline--over, .ar-feechip--over:hover, .ar-feeline--over:hover { background: #fee4e2; color: #b42318; }
       .ar-feechip--over:hover, .ar-feeline--over:hover { background: #fecdca; }
+      /* A payment request on a booking, and its QR window */
+      .dr-note .dr-sub { display: block; margin-top: .15rem; font-size: .8125rem; opacity: .85; }
+      .dr-note .cr-btns { display: flex; flex-wrap: wrap; gap: .45rem; }
+      .dr-win { position: fixed; inset: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; padding: 1.25rem; background: rgba(15,20,30,.55); }
+      .dr-win[hidden] { display: none; }
+      .dr-card { width: 100%; max-width: 24rem; max-height: calc(100vh - 2.5rem); overflow-y: auto; box-sizing: border-box; border-radius: 16px; background: #fff; padding: 1.5rem 1.25rem 1.25rem; text-align: center; box-shadow: 0 24px 60px -12px rgba(16,24,40,.35); animation: dr-in .28s cubic-bezier(.16,1,.3,1); }
+      @keyframes dr-in { from { opacity: 0; transform: translateY(12px) scale(.96); } to { opacity: 1; transform: none; } }
+      .dr-title { margin: 0 0 .75rem; font-size: 1.05rem; font-weight: 600; color: #101828; }
+      .dr-qr { display: block; width: 13rem; max-width: 100%; height: auto; margin: 0 auto .75rem; box-sizing: border-box; padding: .45rem; border: 1px solid #e4e7ec; border-radius: .75rem; background: #fff; image-rendering: pixelated; }
+      .dr-qr[hidden] { display: none; }
+      .dr-amount { margin: 0 0 .35rem; font-size: 1.35rem; font-weight: 700; color: #101828; }
+      .dr-text { margin: 0 0 .35rem; font-size: .85rem; line-height: 1.55; color: #667085; }
+      .dr-clock { font-weight: 600; color: #344054; }
+      .dr-btns { display: flex; flex-wrap: wrap; justify-content: center; gap: .5rem; margin-top: 1rem; }
+      .dr-btns a { text-decoration: none; }
+      .dr-btns [hidden] { display: none; }
+      .dark .dr-card { background: #1a2231; }
+      .dark .dr-title, .dark .dr-amount { color: #f2f4f7; }
+      .dark .dr-text { color: #98a2b3; }
+      .dark .dr-clock { color: #d0d5dd; }
+      @media (prefers-reduced-motion: reduce) { .dr-card { animation: none; } }
       .ar-feeover { display: inline-flex; align-items: center; padding: .1rem .55rem; border-radius: 999px; background: #fee4e2; color: #b42318; font-size: .8125rem; font-weight: 600; white-space: nowrap; }
       .dark .ar-feechip, .dark .ar-feeline { background: rgba(247,144,9,.16); color: #fdb022; }
       .dark .ar-feechip:hover, .dark .ar-feeline:hover { background: rgba(247,144,9,.26); }
       .dark .ar-feeover, .dark .ar-feechip--over, .dark .ar-feeline--over { background: rgba(240,68,56,.18); color: #fda29b; }
+      .ar-feeover--paid { background: #ecfdf3; color: #027a48; }
+      .dark .ar-feeover.ar-feeover--paid { background: rgba(18,183,106,.16); color: #6ce9a6; }
       .dark .ar-feechip--over:hover, .dark .ar-feeline--over:hover { background: rgba(240,68,56,.28); }
       .ar-gfacts { display: grid; grid-template-columns: repeat(4, minmax(0, 9.5rem)); gap: 1rem 1.75rem; margin-bottom: 1rem; }
       .ar-fc { display: grid; gap: .2rem; align-content: start; min-width: 0; }
@@ -1315,10 +1338,11 @@
                       <div class="ar-ref">
                         <b>{{ r.reference_code }}</b>
                         {% if r.cancel_request %}<span class="cr-chip{% if r.cancel_request.overdue %} is-late{% endif %}" title="{{ r.cancel_request.by }} asked to cancel {{ r.cancel_request.what }}. Open the booking to answer.">Cancel requested</span>{% endif %}
+                        {% if r.pay_request %}<span class="cr-chip dr-chip" title="&#8369;{{ r.pay_request.amount }} for new dates of {{ r.pay_request.gown }}: {{ r.pay_request.left }}. Open the booking.">Waiting for payment</span>{% endif %}
                         {% if r.gown_count > 1 %}<span class="ar-count-pill" title="{{ r.gown_count }} gowns in this booking" aria-label="{{ r.gown_count }} gowns in this booking"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0"/></svg>{{ r.gown_count }}</span>{% endif %}
                         {% if r.state == 'overdue' %}<span class="ar-num ar-num--overdue" title="{{ r.overdue_days }} day{{ r.overdue_days|pluralize }} overdue" aria-label="{{ r.overdue_days }} day{{ r.overdue_days|pluralize }} overdue">{{ r.overdue_days }}</span>{% endif %}
                         {% if r.balance_due > 0 %}<a class="ar-bal-chip" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Still to pay at the shop. Open it in Payments." @click.stop>Balance &#8369;{{ r.balance_text }}</a>{% endif %}
-                        {% if r.extra_days_fee_planned > 0 %}<a class="ar-feechip" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Extra days: &#8369;{{ r.late_fee_per_day }} a day for each booked day outside the free days (2 days before and 2 days after the event): {{ r.extra_days_planned }} day{{ r.extra_days_planned|pluralize }}. Charged even if the days are not used. It comes out of the security deposit. Click to open it in Payments." @click.stop>Extra days &#8369;{{ r.extra_days_fee_planned|floatformat:'-2g' }}</a>{% endif %}{% if r.change_fee_planned > 0 %}<a class="ar-feechip" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Date change fee: &#8369;{{ r.late_fee_per_day }} a day for each day the return date was moved ({{ r.change_days_planned }} day{{ r.change_days_planned|pluralize }}). It comes out of the security deposit. Click to open it in Payments." @click.stop>Date change fee &#8369;{{ r.change_fee_planned|floatformat:'-2g' }}</a>{% endif %}{% if r.overdue_fee_planned > 0 %}<a class="ar-feechip ar-feechip--over" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Overdue fee: &#8369;{{ r.late_fee_per_day }} a day for each day past the return date ({{ r.overdue_days_planned }} day{{ r.overdue_days_planned|pluralize }}). It comes out of the security deposit. Click to open it in Payments." @click.stop>Overdue fee &#8369;{{ r.overdue_fee_planned|floatformat:'-2g' }}</a>{% endif %}{% if r.late_fee_planned > 0 and r.fee_over_deposit > 0 %}<span class="ar-feeover" title="The fees and deductions are more than the security deposit: the customer pays this extra.">&#8369;{{ r.fee_over_deposit|floatformat:'-2g' }} over the deposit</span>{% endif %}
+                        {% if r.extra_days_fee_planned > 0 %}<a class="ar-feechip" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Extra days: &#8369;{{ r.late_fee_per_day }} a day for each booked day outside the free days (2 days before and 2 days after the event): {{ r.extra_days_planned }} day{{ r.extra_days_planned|pluralize }}. Charged even if the days are not used. It comes out of the security deposit. Click to open it in Payments." @click.stop>Extra days &#8369;{{ r.extra_days_fee_planned|floatformat:'-2g' }}</a>{% endif %}{% if r.change_fee_planned > 0 %}<a class="ar-feechip" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Date change fee: &#8369;{{ r.late_fee_per_day }} a day for each day the return date was moved ({{ r.change_days_planned }} day{{ r.change_days_planned|pluralize }}). It comes out of the security deposit. Click to open it in Payments." @click.stop>Date change fee &#8369;{{ r.change_fee_planned|floatformat:'-2g' }}</a>{% endif %}{% if r.overdue_fee_planned > 0 %}<a class="ar-feechip ar-feechip--over" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Overdue fee: &#8369;{{ r.late_fee_per_day }} a day for each day past the return date ({{ r.overdue_days_planned }} day{{ r.overdue_days_planned|pluralize }}). It comes out of the security deposit. Click to open it in Payments." @click.stop>Overdue fee &#8369;{{ r.overdue_fee_planned|floatformat:'-2g' }}</a>{% endif %}{% if r.late_fee_planned > 0 and r.fee_over_deposit > 0 %}{% if r.fee_over_paid %}<span class="ar-feeover ar-feeover--paid" title="The fees are more than the security deposit, and that part is paid.">&#8369;{{ r.fee_over_deposit|floatformat:'-2g' }} over the deposit, paid</span>{% else %}<span class="ar-feeover" title="The fees and deductions are more than the security deposit: the customer pays this extra.">&#8369;{{ r.fee_over_deposit|floatformat:'-2g' }} over the deposit</span>{% endif %}{% endif %}
                       </div>
                       <div class="ar-phone-cell">
                         {% if r.phone %}<a href="tel:{{ r.phone }}" class="ar-phone" title="Call the customer" @click.stop>{{ r.phone }}</a>{% else %}<span class="ar-none">&mdash;</span>{% endif %}
@@ -1355,6 +1379,19 @@
                           {% elif r.cancel_request.mine %}
                           <button type="button" class="cb-btn cb-btn--keep cr-act" data-cr-action="withdraw" data-url="{{ r.cancel_request.withdraw_url }}" data-ref="{{ r.reference_code }}">Withdraw</button>
                           {% endif %}
+                        </span>
+                      </div>
+                      {% endif %}
+
+                      {% if r.pay_request %}
+                      <!-- New dates that cost more than the deposit: they change by themselves once the customer pays (reservations/date_requests.py). -->
+                      <div class="cr-note dr-note" data-dr-id="{{ r.pay_request.id }}" data-amount="{{ r.pay_request.amount }}" data-booking="{{ r.id }}" data-customer="{{ r.display_customer_name }}">
+                        <span class="cr-text"><b>Waiting for payment: &#8369;{{ r.pay_request.amount }}</b> for new dates of {{ r.pay_request.gown }} ({{ r.pay_request.dates }}). <span class="cr-age">&middot; {{ r.pay_request.left }}</span><span class="dr-sub">The dates change by themselves once it is paid. The new days are held until {{ r.pay_request.until }}.{% if not r.pay_request.hasAccount %} No website account: show the QR code or take cash.{% endif %}</span></span>
+                        <span class="cr-btns">
+                          {% if online_pay %}<button type="button" class="cb-btn cb-btn--primary dr-act" data-dr="qr">Show QR</button>{% endif %}
+                          <button type="button" class="cb-btn {% if online_pay %}cb-btn--keep{% else %}cb-btn--primary{% endif %} dr-act" data-dr="cash">Cash</button>
+                          {% if r.pay_request.hasAccount %}<button type="button" class="cb-btn cb-btn--keep dr-act" data-dr="resend">Resend</button>{% endif %}
+                          <button type="button" class="cb-btn cb-btn--keep dr-act" data-dr="cancel">Cancel request</button>
                         </span>
                       </div>
                       {% endif %}
@@ -1470,7 +1507,7 @@
                                 data-kind="pickup" data-item-id="{{ item.id }}" data-event-day="{{ item.effective_event_date|date:'Y-m-d' }}"
                                 data-orig-pickup="{{ item.scheduled_pickup|date:'Y-m-d' }}" data-orig-return="{{ item.scheduled_return|date:'Y-m-d' }}"
                                 data-rest="{% if item.has_rest %}1{% else %}0{% endif %}" data-rate="{{ r.late_fee_per_day }}" data-free-pickup="{{ item.free_pickup_date|date:'Y-m-d' }}" data-free-return="{{ item.free_return_date|date:'Y-m-d' }}" data-return-floor="{{ item.return_floor|date:'Y-m-d' }}"
-                                data-deposit-paid="{{ r.fee_deposit_paid|floatformat:'2u' }}" data-deposit="{{ r.fee_deposit_basis|floatformat:'2u' }}" data-fee-others="{{ item.fee_others|floatformat:'2u' }}"
+                                data-deposit-paid="{{ r.fee_deposit_paid|floatformat:'2u' }}" data-deposit="{{ r.fee_deposit_basis|floatformat:'2u' }}" data-fee-others="{{ item.fee_others|floatformat:'2u' }}" data-pays-over="{% if r.pays_over_deposit %}1{% else %}0{% endif %}" data-extra-paid="{{ r.extra_paid|floatformat:'2u' }}"
                                 data-current="{{ item.rental_date|date:'Y-m-d' }}"
                                 data-original="{{ item.scheduled_pickup|date:'Y-m-d' }}"
                                 data-rental="{{ item.rental_date|date:'Y-m-d' }}"
@@ -1481,7 +1518,7 @@
                                 data-kind="return" data-item-id="{{ item.id }}" data-out="{% if item.stage != 'Pick-up' %}1{% else %}0{% endif %}" data-event-day="{{ item.effective_event_date|date:'Y-m-d' }}"
                                 data-orig-pickup="{{ item.scheduled_pickup|date:'Y-m-d' }}" data-orig-return="{{ item.scheduled_return|date:'Y-m-d' }}"
                                 data-rest="{% if item.has_rest %}1{% else %}0{% endif %}" data-rate="{{ r.late_fee_per_day }}" data-free-pickup="{{ item.free_pickup_date|date:'Y-m-d' }}" data-free-return="{{ item.free_return_date|date:'Y-m-d' }}" data-return-floor="{{ item.return_floor|date:'Y-m-d' }}"
-                                data-deposit-paid="{{ r.fee_deposit_paid|floatformat:'2u' }}" data-deposit="{{ r.fee_deposit_basis|floatformat:'2u' }}" data-fee-others="{{ item.fee_others|floatformat:'2u' }}"
+                                data-deposit-paid="{{ r.fee_deposit_paid|floatformat:'2u' }}" data-deposit="{{ r.fee_deposit_basis|floatformat:'2u' }}" data-fee-others="{{ item.fee_others|floatformat:'2u' }}" data-pays-over="{% if r.pays_over_deposit %}1{% else %}0{% endif %}" data-extra-paid="{{ r.extra_paid|floatformat:'2u' }}"
                                 data-changes="{{ item.return_changes|length }}" data-current="{{ item.return_date|date:'Y-m-d' }}"
                                 data-original="{{ item.scheduled_return|date:'Y-m-d' }}"
                                 data-rental="{{ item.rental_date|date:'Y-m-d' }}"
@@ -1490,7 +1527,7 @@
                               {% if item.event_off %}
                               <!-- The pick-up was moved past the event day (before the new event date was asked for): staff set it here. -->
                               <button type="button" class="resv-change-date-btn ar-ib ar-lb ar-warn" title="Set new event date" aria-label="Set the new event date of {{ item.gown_name }}"
-                                data-kind="event" data-item-id="{{ item.id }}" data-event-day="{{ item.effective_event_date|date:'Y-m-d' }}"
+                                data-kind="event" data-item-id="{{ item.id }}" data-event-day="{{ item.effective_event_date|date:'Y-m-d' }}" data-pays-over="{% if r.pays_over_deposit %}1{% else %}0{% endif %}" data-extra-paid="{{ r.extra_paid|floatformat:'2u' }}"
                                 data-rate="{{ r.late_fee_per_day }}" data-free-pickup="{{ item.free_pickup_date|date:'Y-m-d' }}" data-free-return="{{ item.free_return_date|date:'Y-m-d' }}" data-return-floor="{{ item.return_floor|date:'Y-m-d' }}" data-rental="{{ item.rental_date|date:'Y-m-d' }}" data-return="{{ item.return_date|date:'Y-m-d' }}"
                                 data-orig-pickup="{{ item.scheduled_pickup|date:'Y-m-d' }}" data-orig-return="{{ item.scheduled_return|date:'Y-m-d' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M12 13.5v3M12 19h.01"/></svg>Set new event date</button>
                               {% endif %}
@@ -1742,7 +1779,11 @@
       })
         .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
         .then(function (result) {
-          if (!result.ok || !result.data.success) throw new Error(result.data.error || 'Something went wrong. Please try again.');
+          if (!result.ok || !result.data.success) {
+            var problem = new Error(result.data.error || 'Something went wrong. Please try again.');
+            problem.data = result.data;
+            throw problem;
+          }
           return result.data;
         });
     }
@@ -2047,10 +2088,14 @@
           addLine(feeBox, (free ? 'Extra days after this change: ' : 'Date change fee: ') + plural(fee.days) + ' × ' + pesos(st.rate) + ' = ' + pesos(fee.amount), true);
           if (free) addLine(feeBox, 'Days outside the free days (' + fmtShort(st.freePickup) + ' to ' + fmtShort(st.freeReturn) + ') are charged even if they are not used.', false);
           if (st.out && st.curReturn < TODAY) addLine(feeBox, 'This gown is overdue now. Moving the return turns those days into the date change fee.', false);
+          // A booking that pays amounts above the deposit first: when this change adds to what is not covered, saving asks for it (the server decides).
+          var payFirst = st.paysOver && fee.amount > feeFor(st, st.curReturn, st.curPickup).amount ? Math.max(0, fee.over - st.extraPaid) : 0;
           addLine(feeBox, (st.depositPaid > 0
             ? 'It comes out of the security deposit (' + pesos(st.depositPaid) + ' paid).'
             : 'It comes out of the security deposit (' + pesos(st.deposit) + ') once it is paid.')
-            + (fee.over > 0 ? ' That is ' + pesos(fee.over) + ' more than the deposit, so the customer pays the extra.' : ''), false);
+            + (payFirst > 0 ? '' : (fee.over > 0 ? (st.paysOver && st.extraPaid >= fee.over ? ' The part above the deposit is already paid.'
+              : ' That is ' + pesos(fee.over) + ' more than the deposit, so the customer pays the extra.') : '')), false);
+          if (payFirst > 0) addLine(feeBox, 'About ' + pesos(payFirst) + ' is more than the deposit covers: Save asks you to send a payment request, and the dates change once it is paid.', true);
         } else {
           addLine(feeBox, free ? 'No extra days: the dates are inside the free days (' + fmtShort(st.freePickup) + ' to ' + fmtShort(st.freeReturn) + ').'
                                : 'No date change fee: the return is not past the original return date.', true);
@@ -2170,6 +2215,7 @@
         holds: ITEM_HOLDS[d.itemId] || [], hasRest: d.rest === '1',
         rate: parseInt(d.rate || '0', 10) || 0, depositPaid: parseFloat(d.depositPaid || '0') || 0, deposit: parseFloat(d.deposit || '0') || 0,
         feeOthers: parseFloat(d.feeOthers || '0') || 0,
+        paysOver: d.paysOver === '1', extraPaid: parseFloat(d.extraPaid || '0') || 0,
         lastPickup: shiftIso(TODAY, PICKUP_MAX_DAYS), lastReturn: shiftIso(TODAY, RETURN_MAX_DAYS),
         curEvent: d.eventDay || null, newPickup: null, newReturn: null, eventFrom: null, chosen: null, month: start.slice(0, 7),
         // a free-days booking: its free days (each day outside them is charged); the earliest day the return may go back to; how often it was moved
@@ -2209,11 +2255,155 @@
         .then(function () { window.location.reload(); })
         .catch(function (err) {
           saveBtn.disabled = false;
+          if (err.data && err.data.needsPayment) { askToSendRequest(st.itemId, body, err.data); return; }
           adminAlert({ title: "Can't change this date", message: err.message, danger: true });
         });
     }
 
+    // ---- New dates that cost more than the deposit: a payment request (reservations/date_requests.py) ------------------------------
+    function askToSendRequest(itemId, body, data) {
+      closeRowPopover();
+      adminConfirm({
+        title: 'Payment needed first',
+        message: 'These dates cost \u20b1' + data.amount + ' more than the security deposit covers, so they are saved once it is paid.\n\n'
+          + (data.hasAccount ? 'The customer gets a message and an email with a Pay button.' : 'This booking has no website account: show the QR code or take cash on the booking.')
+          + ' The new days are held until ' + data.until + '.',
+        confirmText: 'Send payment request', cancelText: 'Not now'
+      }).then(function (send) {
+        if (!send) return;
+        postJson('/admin-panel/api/reservation-items/' + itemId + '/request-payment/', body)
+          .then(function (sent) {
+            return adminAlert({ title: 'Payment request sent', message: '\u20b1' + sent.amount + ' to pay by ' + sent.request.until + '. It is on the booking, with Show QR and Cash.' })
+              .then(function () { window.location.reload(); });
+          })
+          .catch(function (err) { adminAlert({ title: "Can't send the request", message: err.message, danger: true }); });
+      });
+    }
+
+    function newKey() {
+      if (window.crypto && window.crypto.randomUUID) { return window.crypto.randomUUID(); }
+      return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+    }
+
+    function dateRequestAction(btn) {
+      var note = btn.closest('.dr-note');
+      var id = note.dataset.drId, amount = note.dataset.amount, booking = note.dataset.booking;
+      var base = '/admin-panel/api/date-requests/' + id + '/';
+      function failed(title) { return function (err) { btn.disabled = false; adminAlert({ title: title, message: err.message, danger: true }); }; }
+      var action = btn.dataset.dr;
+      if (action === 'qr') {
+        btn.disabled = true;
+        postJson(base + 'qr/', {}).then(function (data) { btn.disabled = false; payWindow.open(data); }).catch(failed("Can't show the QR code"));
+        return;
+      }
+      if (action === 'resend') {
+        btn.disabled = true;
+        postJson(base + 'resend/', {}).then(function () {
+          btn.disabled = false;
+          adminAlert({ title: 'Sent again', message: 'The customer got the message and the email with the Pay button again.' });
+        }).catch(failed("Can't send it again"));
+        return;
+      }
+      if (action === 'cancel') {
+        adminConfirm({ title: 'Cancel this payment request?', message: 'The dates stay as they are, the held days open again and the customer is told.', confirmText: 'Cancel request', cancelText: 'Keep it', danger: true })
+          .then(function (ok) {
+            if (!ok) return;
+            postJson(base + 'cancel/', {}).then(function () { window.location.reload(); }).catch(failed("Can't cancel it"));
+          });
+        return;
+      }
+      var key = btn.dataset.key || (btn.dataset.key = newKey());          // a double press can never record the cash twice
+      adminConfirm({ title: 'Cash received?', message: 'Did the customer hand over \u20b1' + amount + ' in cash? The new dates are saved and a receipt is made.', confirmText: 'Yes, received', cancelText: 'Not yet' })
+        .then(function (ok) {
+          if (!ok) return;
+          btn.disabled = true;
+          postJson(base + 'cash/', { request_id: key }).then(function (data) {
+            return adminConfirm({ title: 'Paid: the new dates are saved', message: '\u20b1' + data.amount + ' received. Receipt ' + data.receiptNumber + '.', confirmText: 'Show receipt', cancelText: 'Done' })
+              .then(function (show) {
+                if (show && window.arabelaReceipt) { window.arabelaReceipt.open(booking, { payment: data.paymentId, onClose: function () { window.location.reload(); } }); return; }
+                window.location.reload();
+              });
+          }).catch(failed("Can't record the cash"));
+        });
+    }
+
+    // The QR code of a payment request: the customer scans it and pays on their phone; this window only shows what the server reads back.
+    var payWindow = (function () {
+      var root = null, els = {}, now = null, timer = null, ticks = 0, endsAt = 0, asking = false;
+      function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
+      function build() {
+        root = el('div', 'dr-win'); root.hidden = true; root.setAttribute('role', 'dialog'); root.setAttribute('aria-modal', 'true'); root.setAttribute('aria-labelledby', 'dr-title');
+        var card = el('div', 'dr-card');
+        els.title = el('h2', 'dr-title'); els.title.id = 'dr-title';
+        els.img = el('img', 'dr-qr'); els.img.alt = 'QR code of the payment page';
+        els.amount = el('p', 'dr-amount'); els.sub = el('p', 'dr-text'); els.sub.setAttribute('aria-live', 'polite'); els.clock = el('p', 'dr-text dr-clock');
+        var buttons = el('div', 'dr-btns');
+        els.link = el('a', 'cb-btn cb-btn--keep', 'Open the payment page on this screen'); els.link.target = '_blank'; els.link.rel = 'noopener';
+        els.stop = el('button', 'cb-btn cb-btn--keep', 'Cancel payment'); els.stop.type = 'button';
+        els.close = el('button', 'cb-btn cb-btn--primary', 'Close'); els.close.type = 'button';
+        buttons.appendChild(els.link); buttons.appendChild(els.stop); buttons.appendChild(els.close);
+        [els.title, els.img, els.amount, els.sub, els.clock, buttons].forEach(function (c) { card.appendChild(c); });
+        root.appendChild(card); document.body.appendChild(root);
+        els.close.addEventListener('click', shut);
+        root.addEventListener('mousedown', function (e) { if (e.target === root) shut(); });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !root.hidden && !e.defaultPrevented) shut(); });
+        els.stop.addEventListener('click', function () {
+          if (!now || !now.cancelUrl) return;
+          els.stop.disabled = true;
+          postJson(now.cancelUrl, {}).then(function (data) { els.stop.disabled = false; apply(data); })
+            .catch(function (err) { els.stop.disabled = false; els.sub.textContent = err.message; });
+        });
+      }
+      function stopTimer() { if (timer) { window.clearInterval(timer); timer = null; } asking = false; }
+      function shut() { stopTimer(); root.hidden = true; document.body.style.overflow = ''; }
+      function clock() { var s = Math.max(0, Math.round((endsAt - Date.now()) / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+      function apply(data) {
+        now = Object.assign({}, now || {}, data);
+        var s = now.state, waiting = s === 'waiting';
+        els.img.hidden = !(waiting && now.qr); if (now.qr) els.img.src = now.qr;
+        els.link.hidden = !(waiting && now.checkoutUrl); if (now.checkoutUrl) els.link.href = now.checkoutUrl;
+        els.stop.hidden = !waiting; els.clock.hidden = !waiting;
+        els.amount.textContent = '\u20b1' + (now.amount || '');
+        if (waiting) {
+          if (data.secondsLeft !== undefined) endsAt = Date.now() + Number(data.secondsLeft || 0) * 1000;
+          els.title.textContent = 'Pay online'; els.sub.textContent = 'The customer scans this code and pays with GCash, Maya or QR Ph. The new dates are saved by themselves.';
+          els.clock.textContent = 'The payment page closes in ' + clock();
+        } else if (s === 'confirming') { els.title.textContent = 'Payment received'; els.sub.textContent = 'Saving the new dates, one moment.'; }
+        else if (s === 'ended') { els.title.textContent = 'The payment page was closed'; els.sub.textContent = 'Nothing was charged. The request stays on the booking until its time runs out.'; }
+        else if (s === 'refunded') { els.title.textContent = 'The money is being sent back'; els.sub.textContent = (now.message ? now.message + ' ' : '') + (now.refundFailed ? 'The refund did not go through: please open Online payments.' : ''); }
+        else if (s === 'flagged') { els.title.textContent = 'The payment needs a look'; els.sub.textContent = 'Open Payments, then Online payments, to sort it out. The customer is not charged twice.'; }
+        else if (s === 'recorded') {
+          stopTimer(); shut();
+          adminAlert({ title: 'Paid: the new dates are saved', message: '\u20b1' + now.amount + ' received with ' + now.paidWith + '. Receipt ' + now.receiptNumber + '.' + (now.test ? ' (A test payment: no real money moved.)' : '') })
+            .then(function () { window.location.reload(); });
+          return;
+        }
+        if (s !== 'waiting' && s !== 'confirming') stopTimer();
+      }
+      function tick() {
+        ticks += 1;
+        if (now && now.state === 'waiting') els.clock.textContent = 'The payment page closes in ' + clock();
+        if (ticks % 3 !== 0 || asking || !now || !now.statusUrl) return;
+        asking = true;
+        var token = now.token;
+        fetch(now.statusUrl, { credentials: 'same-origin' }).then(function (r) { return r.json(); })
+          .then(function (data) { asking = false; if (now && now.token === token && data.success) apply(data); })
+          .catch(function () { asking = false; /* a dropped connection is not a failed payment: keep asking */ });
+      }
+      return {
+        open: function (data) {
+          if (!root) build();
+          stopTimer(); now = null; root.hidden = false; document.body.style.overflow = 'hidden';
+          apply(data);
+          if (data.state === 'waiting' || data.state === 'confirming') timer = window.setInterval(tick, 1000);
+        }
+      };
+    })();
+
     document.addEventListener('click', function (e) {
+      var requestBtn = e.target.closest('.dr-act');
+      if (requestBtn) { dateRequestAction(requestBtn); return; }
+
       var changeBtn = e.target.closest('.resv-change-date-btn');
       if (changeBtn) { openChangeCalendar(changeBtn); return; }
 
@@ -2333,8 +2523,18 @@
           var said = condition === 'Needs Repair'
             ? "It's off the website until it's set back to Available in Gown Catalog."
             : "It's back on the website and can be booked again.";
-          var step = afterReturnStep(data && data.money);
+          var money = data && data.money;
+          var step = afterReturnStep(money);
           var message = step.text ? said + '\n\n' + step.text : said;
+          if (money && money.stillOwed) {
+            // Money still to collect: take it now, in cash or with the QR code (the Payments window opens with it chosen).
+            return adminConfirm({ title: 'Customer needs to pay \u20b1' + money.stillOwed, message: 'Marked as returned. ' + message, confirmText: 'Cash', extraText: money.qrUrl ? 'Show QR' : '', cancelText: 'Later' })
+              .then(function (choice) {
+                if (!choice) { return; }
+                window.location.href = choice === 'extra' ? money.qrUrl : money.cashUrl;
+                return new Promise(function () {});          // the page is leaving: no reload underneath it
+              });
+          }
           if (!step.payments) { return adminAlert({ title: 'Marked as returned', message: message }); }
           return adminConfirm({ title: 'Marked as returned', message: message, confirmText: 'Open Payments', cancelText: 'Later' })
             .then(function (open) {

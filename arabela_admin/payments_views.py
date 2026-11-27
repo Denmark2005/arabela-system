@@ -80,6 +80,10 @@ def _gown_text(items):
 
 def _deposit_text(s):
     if s.cancelled:
+        if s.refund_available > 0:
+            return f"Kept (cancelled), give back {_php(s.refund_available)} paid over it"
+        if s.refunded > 0:
+            return f"Kept (cancelled), {_php(s.refunded)} paid over it returned"
         return "Kept (cancelled)"
     if s.deposit_unpaid > 0:
         return "Not paid yet"
@@ -122,6 +126,8 @@ def payments_view(request):
         "page": "payments", "mode": "bookings", "rows": rows, "counts": counts, "balance_total": balance_total,
         "is_owner": _is_owner(request), "can_void": _can(request, "void_receipts"),
         "late_fee_per_day": late_fee.per_day(), "open_id": request.GET.get("open", ""), "online_attention": online_attention_count(),
+        # "Customer needs to pay" after a return: the booking's window opens with cash chosen, or shows the QR code at once.
+        "open_pay": request.GET.get("pay", "") if request.GET.get("pay") in ("cash", "qr") else "",
         "payment_provider": gateway.label(), "paymongo_mode": gateway.mode(), "paymongo_demo": gateway.is_demo(),
         "online_enabled": gateway.enabled(), "online_max": int(counter_payment.max_amount()) if gateway.enabled() else 0,
         "online_minutes": counter_payment.MINUTES,
@@ -538,14 +544,19 @@ def _online_row(attempt, now):
     elif attempt.status == PaymentAttempt.Status.CREATED and attempt.expires_at < now - online_checkout.SWEEP_GRACE:
         chip, words = "cancelled", "Not paid"
     attempt.chip, attempt.chip_words, attempt.attention = chip, words, attention
-    attempt.kind_label = attempt.get_purpose_display()
+    attempt.kind_label = "Date change" if attempt.date_change_id else attempt.get_purpose_display()
     attempt.channel_label = gateway.CHANNEL_LABELS.get(attempt.channel, attempt.channel or "-")
     attempt.who = attempt.customer_name or (attempt.customer.get_username() if attempt.customer_id else "-")
     attempt.booking_code = attempt.reservation.reference_code if attempt.reservation_id else ""
     at_shop = attempt.source in (PaymentAttempt.Source.WALKIN, PaymentAttempt.Source.SHOP)
     attempt.staff_label = (attempt.payload or {}).get("staff_name", "") if at_shop else ""
-    if not attention and attempt.source == PaymentAttempt.Source.SHOP and attempt.status == PaymentAttempt.Status.BOOKED:
-        attempt.chip_words = "Recorded"                  # the booking existed already: the money was recorded on it
+    if not attention and attempt.status == PaymentAttempt.Status.BOOKED:
+        if attempt.date_change_id:
+            attempt.chip_words = "Dates changed"
+        elif attempt.source == PaymentAttempt.Source.SHOP:
+            attempt.chip_words = "Recorded"              # the booking existed already: the money was recorded on it
+    elif not attention and attempt.date_change_id and attempt.status == PaymentAttempt.Status.PAID:
+        attempt.chip_words = "Saving the new dates"
     attempt.can_refund = attempt.attention and attempt.refund_can_be_asked
     attempt.can_handle = attempt.attention
     return attempt

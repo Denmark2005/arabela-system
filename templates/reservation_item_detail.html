@@ -350,17 +350,41 @@
                 <p class="text-sm text-secondary">{{ item.free_pickup_date|date:"M d" }} &mdash; {{ item.free_return_date|date:"M d, Y" }} <span class="text-secondary/60">(2 days before and 2 days after your event)</span></p>
                 {% if item_fee.amount > 0 %}
                   <div class="border-l-2 border-[#d92d20] bg-[#fef3f2] px-4 py-3 text-sm text-[#b42318]">
-                    <p class="font-semibold">&minus; PHP {{ item_fee.amount|floatformat:"2g" }} off your security deposit</p>
+                    <p class="font-semibold">{% if paid_over > 0 %}PHP {{ item_fee.amount|floatformat:"2g" }} for your extra days{% else %}&minus; PHP {{ item_fee.amount|floatformat:"2g" }} off your security deposit{% endif %}</p>
                     <p class="mt-1 text-[0.8125rem] leading-relaxed text-[#b42318]/85">
                       {{ item_fee.days }} booked day{{ item_fee.days|pluralize }} outside the free days &times; PHP {{ item_fee.rate|floatformat:"0g" }}.
                       {% if item_fee.early %}Pick-up {{ item_fee.early }} day{{ item_fee.early|pluralize }} early.{% endif %}
                       {% with after=item_fee.later|add:item_fee.change %}{% if after %}Return {{ after }} day{{ after|pluralize }} later.{% endif %}{% endwith %}
-                      It is taken from the deposit when the gown is returned, even if you pick it up later or return it earlier.
+                      {% if paid_over > 0 %}Charged even if you pick it up later or return it earlier.{% else %}It is taken from the deposit when the gown is returned, even if you pick it up later or return it earlier.{% endif %}
                     </p>
+                    {% if paid_over > 0 %}<p class="mt-2 text-[0.8125rem] font-semibold">The extra days cost more than the security deposit: the deposit covers part of it and PHP {{ paid_over|floatformat:"2g" }} over it is paid.</p>{% endif %}
                   </div>
                 {% endif %}
               </div>
               {% endif %}
+
+              {# New dates that cost more than the security deposit (reservations/date_requests.py): they are saved once this is paid. The email's button lands here. #}
+              <div id="pay-request" data-live-region="item-pay-request" class="scroll-mt-28">
+              {% if date_request %}
+                <div class="rounded-[6px] border-l-2 border-[#d92d20] bg-[#fef3f2] px-5 py-4 text-[#b42318]">
+                  <p class="text-[0.6875rem] font-semibold uppercase tracking-[0.1rem]">Payment needed for new dates</p>
+                  <p class="mt-2 text-sm text-secondary"><strong>{{ date_request.item.gown_name }}</strong>: {{ date_request_dates }}</p>
+                  <p class="mt-2 font-headline text-3xl font-bold text-[#1b1c1c]">PHP {{ date_request.amount|floatformat:"2g" }}</p>
+                  <p class="mt-1 text-[0.8125rem] leading-relaxed text-secondary/80">The new days cost this much more than your security deposit covers. Pay by <strong>{{ date_request.expires_at|date:"M j, g:i A" }}</strong>. Your dates stay as they are until it is paid.</p>
+                  {% if payment_cancelled %}<p class="mt-2 text-[0.8125rem] font-semibold" role="status">You left the payment page. Nothing was charged.</p>{% endif %}
+                  {% if online_pay %}
+                    <button type="button" data-pay-url="{% url 'gowns:date_pay_start' date_request.pk %}" data-label="Pay PHP {{ date_request.amount|floatformat:"2g" }}" onclick="payDateRequest(this)"
+                      class="mt-4 flex w-full items-center justify-center gap-2 rounded-[6px] bg-primary py-4 text-[0.75rem] font-bold uppercase tracking-[0.2rem] text-white transition-colors duration-300 hover:bg-secondary disabled:cursor-wait disabled:opacity-70">
+                      <span class="material-symbols-outlined text-sm">lock</span>
+                      <span class="pay-label">Pay PHP {{ date_request.amount|floatformat:"2g" }}</span>
+                    </button>
+                    <p class="mt-2 text-center text-[0.75rem] text-secondary/60">GCash, Maya or QR Ph. Your new dates are saved as soon as the payment arrives.</p>
+                  {% else %}
+                    <p class="mt-3 text-[0.8125rem] font-semibold">Please pay at the shop{% if site_phone %}, or call <a href="{{ site_phone_tel }}" class="underline underline-offset-4">{{ site_phone }}</a>{% endif %}.</p>
+                  {% endif %}
+                </div>
+              {% endif %}
+              </div>
 
               {% if variation == "pending" or variation == "accepted" %}
                 <p class="flex items-start gap-2 text-[0.8125rem] leading-relaxed text-secondary/70">
@@ -400,7 +424,7 @@
             <div class="mt-auto space-y-4">
               {% if reservation.can_upload_proof %}
                 <!-- Opens the "Upload your receipt" window (partials/proof_details_dialog.html): the reference number, the amount and the picture. -->
-                <button type="button" onclick="startProofUpload('{% url 'gowns:reservation_upload_proof' item.id %}', '{{ reservation.security_deposit|stringformat:"s" }}')"
+                <button type="button" onclick="startProofUpload('{% url 'gowns:reservation_upload_proof' item.id %}', '{{ pay_due|stringformat:"s" }}')"
                   class="w-full bg-white border border-[#dc2626]/40 text-[#dc2626] py-5 text-[0.75rem] font-bold uppercase tracking-[0.2rem] hover:bg-red-50 transition-colors duration-300 rounded-[6px] flex items-center justify-center gap-2">
                   <span class="material-symbols-outlined text-sm">upload</span>
                   Upload Proof of Payment
@@ -451,8 +475,9 @@
           <div class="max-w-2xl space-y-3 text-sm">
             <div class="flex items-center justify-between text-secondary/70"><span>Gown rental</span><span>PHP {{ money.rental|floatformat:"2g" }}</span></div>
             <div class="flex items-center justify-between text-secondary/70"><span>Security deposit</span><span>PHP {{ money.deposit|floatformat:"2g" }}</span></div>
+            {% if over_in_payments > 0 %}<div class="flex items-center justify-between text-secondary/70"><span>Extra days and fees over the deposit</span><span>PHP {{ over_in_payments|floatformat:"2g" }}</span></div>{% endif %}
             <div class="h-px w-full bg-black/5"></div>
-            <div class="flex items-center justify-between text-base font-semibold text-secondary"><span>Total to pay</span><span>PHP {{ money.total|floatformat:"2g" }}</span></div>
+            <div class="flex items-center justify-between text-base font-semibold text-secondary"><span>Total to pay</span><span>PHP {{ payments_total|floatformat:"2g" }}</span></div>
             <div class="flex items-center justify-between text-secondary/70"><span>Paid so far</span><span>PHP {{ money.received|floatformat:"2g" }}</span></div>
             <div class="flex items-center justify-between text-base font-semibold {% if money.balance_due > 0 %}text-[#dc2626]{% else %}text-emerald-700{% endif %}">
               <span>{% if money.balance_due > 0 %}Balance to pay at the shop{% else %}Nothing left to pay{% endif %}</span><span>PHP {{ money.balance_due|floatformat:"2g" }}</span>
@@ -492,11 +517,20 @@
           </div>
           {% endif %}
 
-          {% if money.deductions_total > 0 or money.all_returned or money.total_deduction > 0 %}
+          {% if money.cancelled and money.extra_credit > 0 %}
+          <div class="mt-8 max-w-2xl space-y-2 text-sm">
+            <p class="text-[0.6875rem] font-semibold uppercase tracking-[0.1rem] text-secondary/60">Money coming back to you</p>
+            <div class="flex items-center justify-between text-secondary/70"><span>Paid over your security deposit</span><span>PHP {{ money.extra_received|floatformat:"2g" }}</span></div>
+            {% if money.refunded > 0 %}<div class="flex items-center justify-between text-secondary/70"><span>Handed back to you</span><span>PHP {{ money.refunded|floatformat:"2g" }}</span></div>{% endif %}
+            <div class="h-px w-full bg-black/5"></div>
+            <div class="flex items-center justify-between font-semibold text-secondary"><span>Still to give you back</span><span>PHP {{ money.refund_available|floatformat:"2g" }}</span></div>
+            <p class="text-secondary/70">The booking was cancelled, so the security deposit is not refunded. What you paid over it for extra days is returned.</p>
+          </div>
+          {% elif money.deductions_total > 0 or money.all_returned or money.total_deduction > 0 %}
           <div class="mt-8 max-w-2xl space-y-2 text-sm">
             <p class="text-[0.6875rem] font-semibold uppercase tracking-[0.1rem] text-secondary/60">Your security deposit</p>
             <div class="flex items-center justify-between text-secondary/70"><span>Deposit paid</span><span>PHP {{ money.deposit_paid|floatformat:"2g" }}</span></div>
-            {% if money.extra_credit > 0 %}<div class="flex items-center justify-between text-secondary/70"><span>Extra charge you paid before</span><span>+ PHP {{ money.extra_received|floatformat:"2g" }}</span></div>{% endif %}
+            {% if money.extra_credit > 0 %}<div class="flex items-center justify-between text-secondary/70"><span>Extra charge you paid before</span><span>+ PHP {{ money.extra_received|floatformat:"2g" }}</span></div>{% elif paid_over > 0 %}<div class="flex items-center justify-between text-secondary/70"><span>Paid over the deposit</span><span>+ PHP {{ paid_over|floatformat:"2g" }}</span></div>{% endif %}
             {% if money.early_fee > 0 %}<div class="flex items-center justify-between text-secondary/70"><span>Early pick-up fee</span><span>- PHP {{ money.early_fee|floatformat:"2g" }}</span></div>{% endif %}
             {% if money.later_fee > 0 %}<div class="flex items-center justify-between text-secondary/70"><span>Later return fee</span><span>- PHP {{ money.later_fee|floatformat:"2g" }}</span></div>{% endif %}
             {% if money.change_fee > 0 %}<div class="flex items-center justify-between text-secondary/70"><span>Date change fee</span><span>- PHP {{ money.change_fee|floatformat:"2g" }}</span></div>{% endif %}
@@ -514,7 +548,7 @@
               <li class="flex flex-wrap items-center justify-between gap-3 border border-black/5 p-4 text-sm {% if p.is_void %}opacity-70{% endif %}">
                 <div>
                   <p class="font-semibold text-secondary"><span class="material-symbols-outlined align-middle text-base">receipt_long</span> {{ p.receipt_number }}{% if p.is_void %} <span class="ml-2 rounded bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">Voided</span>{% endif %}</p>
-                  <p class="text-xs text-secondary/60">{{ p.paid_at|date:"M j, Y" }} &middot; {% if p.direction == "Out" %}Deposit returned{% else %}{{ p.get_purpose_display }}{% endif %} &middot; {{ p.get_method_display }}</p>
+                  <p class="text-xs text-secondary/60">{{ p.paid_at|date:"M j, Y" }} &middot; {% if p.is_over_return %}Refund{% elif p.direction == "Out" %}Deposit returned{% else %}{{ p.get_purpose_display }}{% endif %} &middot; {{ p.get_method_display }}</p>
                   {% if p.is_void %}<p class="text-xs text-red-700">Voided: {{ p.void_reason }}</p>{% endif %}
                 </div>
                 <div class="flex items-center gap-4">
@@ -633,13 +667,19 @@
           {% if money.total_deduction > 0 %}
           <div class="rounded-[6px] border-l-2 border-[#d92d20] bg-[#fef3f2] px-3 py-2 text-[#b42318]">
             <p class="font-semibold">&minus; PHP {{ money.total_deduction|floatformat:2 }} off your security deposit</p>
-            {% if variation != "cancelled" and variation != "rejected" %}<p class="mt-1 text-[0.75rem]">{% if deposit_over %}PHP {{ deposit_over|floatformat:2 }} more than the deposit is paid at the shop.{% else %}Deposit back after the return: PHP {{ deposit_back|floatformat:2 }}{% endif %}</p>{% endif %}
+            {% if variation != "cancelled" and variation != "rejected" %}<p class="mt-1 text-[0.75rem]">{% if deposit_over %}PHP {{ deposit_over|floatformat:2 }} more than the deposit is paid at the shop.{% elif paid_over > 0 %}The part over the deposit is paid. Deposit back after the return: PHP {{ deposit_back|floatformat:2 }}{% else %}Deposit back after the return: PHP {{ deposit_back|floatformat:2 }}{% endif %}</p>{% endif %}
+          </div>
+          {% endif %}
+          {% if paid_over > 0 %}
+          <div class="flex items-center justify-between text-secondary/70">
+            <span>Extra Days Over Deposit</span>
+            <span>PHP {{ paid_over|floatformat:2 }}</span>
           </div>
           {% endif %}
           <div class="h-px w-full bg-black/5"></div>
           <div class="flex items-center justify-between text-base font-semibold text-secondary">
             <span>Total Amount</span>
-            <span>PHP {{ reservation.total_amount|floatformat:2 }}</span>
+            <span>PHP {{ total_with_over|floatformat:2 }}</span>
           </div>
         </div>
         <div class="mt-8 space-y-1">
@@ -846,7 +886,7 @@
       function cancelReservationItem(url, btn) {
         arabelaConfirm({
           title: 'Cancel reservation',
-          message: 'This cannot be undone, and repeated cancellations are recorded on your account.',
+          message: 'This cannot be undone, and repeated cancellations are recorded on your account.{% if paid_over > 0 %} The PHP {{ paid_over|floatformat:"2g" }} you paid over your security deposit will be returned to you.{% endif %}',
           confirmText: 'Cancel reservation',
           cancelText: 'Keep it',
           danger: true,
@@ -869,6 +909,39 @@
             });
         });
       }
+
+      // Pay for new dates: the server opens the payment page for exactly what was asked, and the browser goes there.
+      function payDateRequest(btn) {
+        var label = btn.querySelector('.pay-label');
+        function ready() { btn.disabled = false; if (label) label.textContent = btn.dataset.label; }
+        btn.disabled = true;
+        if (label) label.textContent = 'Opening the payment page...';
+        fetch(btn.dataset.payUrl, { method: 'POST', headers: { 'X-CSRFToken': getCsrfToken() } })
+          .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+          .then(function (result) {
+            if (result.ok && result.data.success) { window.location.href = result.data.checkout_url; return; }
+            var data = result.data || {};
+            if (data.signed_out) {
+              var signIn = function () { window.location.href = (data.login_url || '/accounts/login/') + '?next=' + encodeURIComponent(window.location.pathname); };
+              arabelaAlert({ title: 'You were signed out', message: data.error, danger: true }).then(signIn, signIn);
+              return;
+            }
+            ready();
+            arabelaAlert({ title: "Can't open the payment page", message: data.error || 'Please try again in a moment.', danger: true }).then(function () { window.location.reload(); });
+          })
+          .catch(function () {
+            ready();
+            arabelaAlert({ title: "Can't open the payment page", message: 'Check your connection and try again. Nothing was charged.', danger: true });
+          });
+      }
+      // Back from the payment page: the button works again.
+      window.addEventListener('pageshow', function () {
+        document.querySelectorAll('[data-pay-url]').forEach(function (btn) {
+          btn.disabled = false;
+          var label = btn.querySelector('.pay-label');
+          if (label) label.textContent = btn.dataset.label;
+        });
+      });
 
       // Upload a receipt later: a small window asks for the reference number and the amount typed from the receipt together with the
       // screenshot (partials/proof_details_dialog.html), because the server compares what was typed with the picture. When the server asks

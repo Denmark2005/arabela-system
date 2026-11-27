@@ -49,10 +49,14 @@
 <span class="font-label text-[0.625rem] tracking-[0.2em] uppercase text-secondary">Security Deposit</span>
 <span class="font-label text-[0.875rem] tabular-nums" id="selection-cart-deposit">₱ 0</span>
 </div>
-<!-- Days outside the free days: taken from the deposit when the gowns are returned (never added to the total). -->
+<!-- Days outside the free days: taken from the deposit when the gowns are returned. What they cost more than the deposit is paid with it. -->
 <div class="flex items-center justify-end gap-10 text-[#b42318]" id="selection-cart-deduction-row" hidden>
-<span class="font-label text-[0.625rem] tracking-[0.2em] uppercase font-semibold">Off your deposit after return</span>
+<span class="font-label text-[0.625rem] tracking-[0.2em] uppercase font-semibold" id="selection-cart-deduction-label">Off your deposit after return</span>
 <span class="font-label text-[0.875rem] font-semibold tabular-nums" id="selection-cart-deduction">₱ 0</span>
+</div>
+<div class="flex items-center justify-end gap-10 text-[#b42318]" id="selection-cart-over-row" hidden>
+<span class="font-label text-[0.625rem] tracking-[0.2em] uppercase font-semibold">Over your deposit, paid now</span>
+<span class="font-label text-[0.875rem] font-semibold tabular-nums" id="selection-cart-over">₱ 0</span>
 </div>
 </div>
 <div class="flex flex-col">
@@ -131,8 +135,11 @@ function renderCart() {
     cartTotalSpan.textContent = '₱ 0 PHP';
     const emptyDeduction = document.getElementById('selection-cart-deduction-row');
     if (emptyDeduction) emptyDeduction.hidden = true;
+    const emptyOver = document.getElementById('selection-cart-over-row');
+    if (emptyOver) emptyOver.hidden = true;
     return;
   }
+  const bagOver = !!window.arabelaOverDeposit && window.arabelaOverDeposit(cart) > 0;      // extra days that cost more than the bag's deposit
   cart.forEach((item, idx) => {
     const unitPrice = Number(item.price) || 0;
     const qty = Math.max(1, Number(item.qty) || 1);
@@ -156,7 +163,7 @@ function renderCart() {
             ${window.arabelaHasRentalDates(item)
               ? `<p class="text-[0.75rem] text-secondary tracking-widest uppercase">Rental: ${item.rental}</p>`
                 + (window.arabelaEventText(item) ? `<p class="text-[0.75rem] text-secondary tracking-widest uppercase">${window.arabelaEventText(item)}</p>` : '')
-                + (window.arabelaDeductionText(item, qty) ? `<p class="text-[0.75rem] font-semibold text-[#b42318]">&minus; ${window.arabelaDeductionText(item, qty)}</p>` : '')
+                + (window.arabelaDeductionText(item, qty, bagOver) ? `<p class="text-[0.75rem] font-semibold text-[#b42318]">${bagOver ? '' : '&minus; '}${window.arabelaDeductionText(item, qty, bagOver)}</p>` : '')
               : `<a href="${getProductDetailUrl(item, idx)}" class="inline-flex items-center gap-1 text-[0.75rem] font-semibold tracking-widest uppercase text-[#b45309] no-underline hover:underline underline-offset-4">
                    <span class="material-symbols-outlined" style="font-size: 0.9rem;">event</span>Select rental date
                  </a>`}
@@ -193,10 +200,18 @@ function renderCart() {
   // What the extra days take out of the deposit (reservation-flow.js works it out the same way checkout does).
   const extraFee = cart.reduce((sum, item) => sum + (window.arabelaHasRentalDates(item) ? window.arabelaExtraDays(item).fee * Math.max(1, Number(item.qty) || 1) : 0), 0);
   const deductionRow = document.getElementById('selection-cart-deduction-row');
+  const over = Math.max(0, extraFee - deposit);                 // booked days that cost more than the deposit: paid with it
   if (deductionRow) {
     deductionRow.hidden = !(extraFee > 0);
-    document.getElementById('selection-cart-deduction').textContent = '− ' + formatPeso(extraFee);
+    document.getElementById('selection-cart-deduction-label').textContent = over > 0 ? 'Extra days' : 'Off your deposit after return';
+    document.getElementById('selection-cart-deduction').textContent = (over > 0 ? '' : '− ') + formatPeso(extraFee);
   }
+  const overRow = document.getElementById('selection-cart-over-row');
+  if (overRow) {
+    overRow.hidden = !(over > 0);
+    document.getElementById('selection-cart-over').textContent = formatPeso(over);
+  }
+  cartTotalSpan.textContent = formatPeso(subtotal + deposit + over) + ' PHP';
 }
 function removeCartItem(idx) {
   let cart = JSON.parse(localStorage.getItem(CART_STORAGE_KEY) || '[]');

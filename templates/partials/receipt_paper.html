@@ -61,7 +61,25 @@
   <hr class="rc-rule">
   {% endif %}
 
-  {% if r.return %}
+  {% if r.return.cancelled %}
+    <div class="rc-row"><span>Paid over the deposit</span><span>&#8369;{{ r.return.extra_paid|floatformat:"2g" }}</span></div>
+    <div class="rc-sub">Booking cancelled. The security deposit (&#8369;{{ r.return.deposit_paid|floatformat:"2g" }}) is not refunded.</div>
+    <hr class="rc-rule">
+    <div class="rc-row rc-bold rc-big"><span>RETURNED NOW</span><span>&#8369;{{ r.return.returned_now|floatformat:"2g" }}</span></div>
+    <div class="rc-kv"><span>Returned by</span><span>{{ r.method }}</span></div>
+    {% if payment.provider and not payment.is_void %}<div class="rc-sub">Sent back to the account the customer paid with. It can take up to a day to show.</div>{% endif %}
+    {% if r.reference %}<div class="rc-kv"><span>GCash ref no.</span><span>{{ r.reference }}</span></div>{% endif %}
+    {% if r.return.returned_before and r.return.returned_before != "0.00" %}
+      <div class="rc-row"><span>Handed back before</span><span>&#8369;{{ r.return.returned_before|floatformat:"2g" }}</span></div>
+    {% endif %}
+    {% if r.return.still_to_return and r.return.still_to_return != "0.00" %}
+      <div class="rc-row"><span>Still to hand back</span><span>&#8369;{{ r.return.still_to_return|floatformat:"2g" }}</span></div>
+    {% endif %}
+    <hr class="rc-rule">
+    <p class="rc-note rc-bold">{{ r.return.why }}</p>
+    <hr class="rc-rule">
+    <p class="rc-note">Thank you.</p>
+  {% elif r.return %}
     {% if r.return.gowns %}
       <div class="rc-bold">GOWN RETURNED</div>
       {% for g in r.return.gowns %}
@@ -148,6 +166,7 @@
   {% else %}
     <div class="rc-row"><span>Gown rental</span><span>&#8369;{{ r.charges.rental|floatformat:"2g" }}</span></div>
     <div class="rc-row"><span>Security deposit</span><span>&#8369;{{ r.charges.deposit|floatformat:"2g" }}</span></div>
+    {% if r.charges.over %}<div class="rc-row"><span>Extra days over the deposit</span><span>&#8369;{{ r.charges.over|floatformat:"2g" }}</span></div>{% endif %}
     <div class="rc-row rc-bold"><span>TOTAL</span><span>&#8369;{{ r.charges.total|floatformat:"2g" }}</span></div>
     <hr class="rc-rule">
     {% if r.extra %}
@@ -216,6 +235,7 @@
         <div class="rc-row"><span>Deduction: {{ d.reason }}</span><span>-&#8369;{{ d.amount|floatformat:"2g" }}</span></div>
       {% endfor %}
       <div class="rc-row rc-bold"><span>TOTAL DEDUCTION</span><span>-&#8369;{{ r.deduct.total|floatformat:"2g" }}</span></div>
+      {% if r.deduct.paid_over %}<div class="rc-sub">&#8369;{{ r.deduct.paid_over|floatformat:"2g" }} was paid over the deposit and covers the part above it.</div>{% endif %}
       <div class="rc-row"><span>Deposit back after return</span><span>&#8369;{{ r.deduct.back|floatformat:"2g" }}</span></div>
       {% if r.deduct.over != "0.00" %}<div class="rc-sub">&#8369;{{ r.deduct.over|floatformat:"2g" }} more than the deposit: paid at the shop.</div>{% endif %}
       <hr class="rc-rule">
@@ -224,6 +244,7 @@
     <div class="rc-kv"><span>Method</span><span>{{ r.method }}</span></div>
     {% if r.reference %}<div class="rc-kv"><span>GCash ref no.</span><span>{{ r.reference }}</span></div>{% endif %}
     <div class="rc-row rc-bold rc-big"><span>Amount received</span><span>&#8369;{{ r.amount|floatformat:"2g" }}</span></div>
+    {% if r.extra_part %}<div class="rc-sub">Includes &#8369;{{ r.extra_part|floatformat:"2g" }} for the extra days over the deposit</div>{% endif %}
     {% if r.paid_before and r.paid_before != "0.00" %}
       <div class="rc-row"><span>Paid before</span><span>&#8369;{{ r.paid_before|floatformat:"2g" }}</span></div>
     {% endif %}

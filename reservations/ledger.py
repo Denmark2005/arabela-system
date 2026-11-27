@@ -18,6 +18,10 @@ The one rule set the Payments page, the printed receipts, the customer's booking
   * The fees and any manual deductions come out of the deposit. Refundable = deposit paid - fees - deductions. If they are
     MORE than the deposit, the extra is what the customer still owes ("extra owed"). An extra charge already paid that the fees
     no longer ask for (staff moved the dates back, a deduction was removed) goes back with the deposit ("extra credit").
+  * Bookings made since amounts over the deposit are paid right away (Reservation.pays_over_deposit): booked extra days that cost
+    more than the deposit are paid together with it (Payment.extra_part, "over with deposit"), a date change that goes over it is
+    paid before it happens (reservations/date_requests.py), and a CANCELLED booking gets what it paid over the deposit back (the
+    deposit itself is kept).
   * Balance still to pay = what is unpaid of the deposit and the rental + any extra owed.
 
 A booking made before the Payments page has no Payment rows. Until the one-time backfill (manage.py backfill_payments) gives it some, its
@@ -78,6 +82,21 @@ def money(value):
 def peso(value, *, sign=True):
     """'₱3,500.00' -- how receipts and the Payments page write an amount."""
     return f"{'₱' if sign else ''}{money(value):,.2f}"
+
+
+def over_deposit(fees, deposit):
+    """How much of `fees` the deposit does not cover (never below zero)."""
+    return max(money(fees) - money(deposit), ZERO)
+
+
+def booked_over_deposit(reservation, items=None):
+    """What a booking's BOOKED extra days cost over its security deposit, for a booking that pays that right away; 0 otherwise."""
+    if not reservation.pays_over_deposit:
+        return ZERO
+    items = list(reservation.items.all()) if items is None else items
+    rate = int(reservation.late_fee_per_day or 0)
+    days = sum(sum(booked_extra_days(item)) for item in items)
+    return over_deposit(days * rate, reservation.security_deposit)
 
 
 def counts_as_tracked(reservation):
@@ -238,6 +257,8 @@ def legacy_rows(reservation):
     if reservation.channel == Reservation.Channel.ONLINE:
         row(Payment.Purpose.DEPOSIT, Payment.Method.ONLINE_GCASH, deposit,
             reference=(reservation.proof_typed_reference or reservation.gcash_reference or "")[:20])
+        # booked extra days over the deposit were paid in that same GCash payment
+        row(Payment.Purpose.EXTRA, Payment.Method.ONLINE_GCASH, money(reservation.upfront_extra), note="Extra days over the deposit")
         if receipts:
             row(Payment.Purpose.BALANCE, Payment.Method.OLD, rental, note="Paid at the shop (receipt on file)")
     else:
@@ -250,6 +271,17 @@ def legacy_rows(reservation):
 
 
 # ---------------------------------------------------------------- the statement
+def payment_rows(payment):
+    """One stored payment as the rows it adds up as: its purpose, and -- when part of it paid extra days over the deposit
+    (Payment.extra_part) -- that part as an extra charge of its own."""
+    amount, part = money(payment.amount), money(payment.extra_part)
+    if part <= 0 or payment.direction != Payment.Direction.IN or payment.purpose == Payment.Purpose.EXTRA:
+        return [{"direction": payment.direction, "purpose": payment.purpose, "amount": amount}]
+    part = min(part, amount)
+    return [{"direction": payment.direction, "purpose": payment.purpose, "amount": amount - part},
+            {"direction": payment.direction, "purpose": Payment.Purpose.EXTRA, "amount": part}]
+
+
 class Statement:
     """Everything the money side of one booking adds up to. Plain attributes (Decimals); as_dict() gives the same as text for JSON."""
 
@@ -285,7 +317,7 @@ def statement(reservation, today=None):
     stored = list(reservation.payments.all())
     legacy = False
     if stored:
-        rows = [{"direction": p.direction, "purpose": p.purpose, "amount": money(p.amount)} for p in stored if not p.is_void]
+        rows = [row for p in stored if not p.is_void for row in payment_rows(p)]
     else:
         rows = [{"direction": r["direction"], "purpose": r["purpose"], "amount": r["amount"]} for r in legacy_rows(reservation)]
         legacy = bool(rows)
@@ -356,11 +388,18 @@ def statement(reservation, today=None):
     covered_when_paid = min(booked_fee, deposit_unpaid)
     overflow = max(against - deposit_paid - covered_when_paid, ZERO)
     extra_owed = max(overflow - extra_in, ZERO)
-    # An extra charge paid that is no longer needed is the customer's money: it goes back with the deposit. (A cancelled booking keeps what it has.)
-    extra_credit = ZERO if cancelled else max(extra_in - overflow, ZERO)
-    refundable_total = max(deposit_paid - against, ZERO) + extra_credit
     all_returned = bool(live) and all(i.stage == ReservationItem.Stage.RETURNED for i in live)
-    refund_available = max(refundable_total - refunded, ZERO) if (tracked and not cancelled and all_returned) else ZERO
+    if cancelled and reservation.pays_over_deposit:
+        # A cancelled booking keeps the DEPOSIT; what was paid over it (for days it now will not use) is the customer's and goes back.
+        extra_credit = extra_in
+        refundable_total = extra_credit
+        refund_available = max(refundable_total - refunded, ZERO) if tracked else ZERO
+    else:
+        # An extra charge paid that is no longer needed is the customer's money: it goes back with the deposit. (An older booking that was
+        # cancelled keeps what it has.)
+        extra_credit = ZERO if cancelled else max(extra_in - overflow, ZERO)
+        refundable_total = max(deposit_paid - against, ZERO) + extra_credit
+        refund_available = max(refundable_total - refunded, ZERO) if (tracked and not cancelled and all_returned) else ZERO
 
     balance_core = deposit_unpaid + rental_unpaid
     balance_due = balance_core + extra_owed
@@ -371,8 +410,12 @@ def statement(reservation, today=None):
     # A fee is still moving: an older booking's gown that has one is still out; a free-days booking's only while its gown is out past its return date.
     late_now = any(not line["back"] and (not line["free_days"] or line["overdue_days"] > 0) for line in late_lines)
     overdue_now = any(line["kind"] == OVERDUE_FEE and not line["back"] for line in fee_lines)          # a gown is out past its agreed return date
+    # Booked extra days over the deposit that have to come WITH the deposit (a booking that pays them right away, deposit not paid yet). Only
+    # the BOOKED days: an overdue fee is asked for as the extra charge it is.
+    over_with_deposit = (min(extra_owed, over_deposit(booked_fee, deposit_due))
+                         if (reservation.pays_over_deposit and deposit_unpaid > 0) else ZERO)
     if cancelled and tracked:
-        state = CANCELLED
+        state = REFUND if refund_available > 0 else CANCELLED
     elif balance_due > 0:
         state = BALANCE
     elif refund_available > 0:
@@ -396,7 +439,8 @@ def statement(reservation, today=None):
         overdue_days_total=sum(line["days"] for line in fee_lines if line["kind"] == OVERDUE_FEE),
         total_deduction=late_fee + deductions_total,                 # everything that comes out of the deposit: the date fees and the deductions
         deductions_total=deductions_total, deposit_used=min(deposit_paid, against), overflow=overflow, extra_received=extra_in, extra_credit=extra_credit,
-        extra_owed=extra_owed, refundable_total=refundable_total, refund_available=refund_available,
+        extra_owed=extra_owed, over_with_deposit=over_with_deposit, refundable_total=refundable_total, refund_available=refund_available,
+        pays_over_deposit=reservation.pays_over_deposit,
         all_returned=all_returned, balance_core=balance_core, balance_due=balance_due,
         state=state, state_label=STATE_LABELS[state],
     )

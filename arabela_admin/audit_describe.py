@@ -227,6 +227,42 @@ def item_change_dates(ctx):
     return _with_return_alert(info, item, "return date" in details)
 
 
+def item_request_payment(ctx):
+    item = _item(ctx.kwargs.get("item_id"))
+    row = ctx.data.get("request") or {}
+    return {"summary": f"sent a payment request of ₱{row.get('amount', '')} for new dates of {_item_text(item)}",
+            "target": _booking_target(item.reservation if item else None),
+            "details": {"new dates": row.get("dates", ""), "pay by": row.get("until", "")}}
+
+
+def _date_request(ctx, doing):
+    from reservations.models import DateChangeRequest
+    row = DateChangeRequest.objects.select_related("reservation__customer__profile", "item").filter(pk=ctx.kwargs.get("request_id")).first()
+    what = f"the ₱{row.amount:,.2f} payment request for {row.item.gown_name} on booking {row.reservation.reference_code}" if row else "a payment request"
+    return row, f"{doing} {what}"
+
+
+def date_request_resend(ctx):
+    row, text = _date_request(ctx, "sent again")
+    return {"summary": text, "target": _booking_target(row.reservation if row else None)}
+
+
+def date_request_cancel(ctx):
+    row, text = _date_request(ctx, "cancelled")
+    return {"summary": text, "target": _booking_target(row.reservation if row else None)}
+
+
+def date_request_cash(ctx):
+    row, text = _date_request(ctx, "took cash for")
+    return {"summary": f"{text}: the new dates are saved", "target": _booking_target(row.reservation if row else None),
+            "details": _keep(ctx.data, "amount", "receiptNumber")}
+
+
+def date_request_qr(ctx):
+    row, text = _date_request(ctx, "showed the QR code of")
+    return {"summary": text, "target": _booking_target(row.reservation if row else None), "details": _keep(ctx.data, "amount")}
+
+
 def item_change_return(ctx):
     item = _item(ctx.kwargs.get("item_id"))
     old = ctx.before.get("return", "")
@@ -727,7 +763,8 @@ def payment_record(ctx):
 def deposit_return(ctx):
     reservation = _reservation(ctx.kwargs.get("pk"))
     payment = ctx.data.get("payment") or {}
-    return {"summary": f"handed back ₱{payment.get('amount', '')} of the security deposit ({payment.get('method', '')}), receipt "
+    of_what = "paid over the security deposit" if payment.get("purposeLabel") == "Refund" else "of the security deposit"
+    return {"summary": f"handed back ₱{payment.get('amount', '')} {of_what} ({payment.get('method', '')}), receipt "
                        f"{payment.get('receiptNumber', '')}, on {_booking_text(reservation)}",
             "target": _booking_target(reservation), "sensitive": True,
             "details": {"receipt": payment.get("receiptNumber", ""), "method": payment.get("method", ""), "reference": payment.get("reference", "")}}

@@ -228,11 +228,12 @@ def start_payment(request):
     # One open payment page per customer. Going Back from the payment page and pressing Pay on a freshly loaded checkout (or on a second tab) would
     # otherwise leave the first page open and payable next to the new one. Every older open page is closed first; one that turns out to be paid
     # (or whose payment is still being turned into a booking) is shown to the customer instead of starting another.
-    for other in PaymentAttempt.objects.filter(customer=user, status=S.CREATED).order_by("id"):
+    for other in PaymentAttempt.objects.filter(customer=user, status=S.CREATED, date_change__isnull=True).order_by("id"):
         closed = cancel_attempt(other.pk)
         if closed is not None and closed.status in (S.PAID, S.BOOKED, S.REFUNDED, S.FLAGGED, S.HANDLED):
             return show_result(closed)
-    paying = PaymentAttempt.objects.filter(customer=user, status=S.PAID, paid_at__gte=timezone.now() - PAID_WAIT).order_by("-id").first()
+    paying = PaymentAttempt.objects.filter(
+        customer=user, status=S.PAID, paid_at__gte=timezone.now() - PAID_WAIT, date_change__isnull=True).order_by("-id").first()
     if paying is not None:
         return show_result(paying)
 
@@ -258,7 +259,13 @@ def start_payment(request):
         return _fail(problem[0], problem[1])
 
     rental_subtotal = sum((item["price"] for item in items), Decimal("0"))
-    amount = current_deposit if purpose == PaymentAttempt.Purpose.DEPOSIT else rental_subtotal + current_deposit
+    rate = late_fee.per_day()
+    # Booked days outside the free days that cost more than the deposit are paid now, with it.
+    over = ledger.over_deposit(checkout.extra_days_fee(items, rate), current_deposit)
+    over_refusal = checkout._over_changed(request, over)
+    if over_refusal is not None:
+        return over_refusal
+    amount = (current_deposit if purpose == PaymentAttempt.Purpose.DEPOSIT else rental_subtotal + current_deposit) + over
     if amount > min(MAX_ONLINE_AMOUNT, Decimal(gateway.max_amount())):
         return _fail("This booking is too large to pay online. Please pay at the shop, or choose the deposit only.", 400)
 
@@ -272,7 +279,8 @@ def start_payment(request):
         "details": details,
         "rental_subtotal": str(rental_subtotal),
         "security_deposit": str(current_deposit),
-        "late_fee_per_day": late_fee.per_day(),
+        "late_fee_per_day": rate,
+        "pays_over_deposit": True, "upfront_extra": str(over),
         "identity_check": getattr(identity.current_check_for(user), "pk", None),          # the verified ID this booking rests on (kept with the booking)
     }
     try:
@@ -287,6 +295,8 @@ def start_payment(request):
     return_path = reverse("gowns:payment_return", args=[attempt.token])
     cancel_path = reverse("gowns:payment_cancel", args=[attempt.token])
     what = "Security deposit" if purpose == PaymentAttempt.Purpose.DEPOSIT else "Gown rental and security deposit"
+    if over > 0:
+        what = f"{what} and extra days"
     gowns = ", ".join(i["gown_name"] for i in items)[:140]
     try:
         session = gateway.create_checkout_session(
@@ -420,6 +430,9 @@ def _make_booking(attempt_id):
 def _create_booking(attempt):
     """Make the confirmed booking and its payment for a paid attempt. Runs inside the caller's transaction; raises BookingUnavailable (before writing
     anything that matters) when a gown can no longer be booked."""
+    if attempt.date_change_id or (attempt.payload or {}).get("date_change"):
+        from gowns import date_payment                      # new dates that had to be paid first (a date change request)
+        return date_payment.record(attempt)
     if attempt.source == PaymentAttempt.Source.WALKIN:
         from gowns import walkin_payment                    # a walk-in customer paid on their phone from the shop's QR code
         return walkin_payment.create_booking(attempt)
@@ -461,6 +474,8 @@ def _create_booking(attempt):
         rental_subtotal=rental_subtotal, security_deposit=security_deposit, late_fee_per_day=int(payload["late_fee_per_day"]) if payload.get("late_fee_per_day") is not None else late_fee.per_day(),
         total_amount=rental_subtotal + security_deposit,
         identity_check=_identity_for(user, payload),
+        # An attempt opened before amounts over the deposit were paid at booking carries neither: that booking works the old way.
+        pays_over_deposit=bool(payload.get("pays_over_deposit")), upfront_extra=Decimal(payload.get("upfront_extra") or "0"),
     )
     for item in items:
         gown = item["matched_gown"]
@@ -524,7 +539,8 @@ def refund_attempt(attempt_id, reason):
         attempt.note = (reason or "")[:300]
         attempt.save(update_fields=["status", "refund_status", "refund_amount", "note"])
     how = gateway.CHANNEL_LABELS.get(attempt.channel, "account")
-    shop = attempt.source == PaymentAttempt.Source.SHOP          # a payment on an existing booking, made at the counter: tell that booking's customer
+    # A payment on an EXISTING booking (made at the counter, or for a date change): tell that booking's customer, and say it is about that booking.
+    shop = attempt.source == PaymentAttempt.Source.SHOP or bool(attempt.date_change_id or (attempt.payload or {}).get("date_change"))
     code = (attempt.payload or {}).get("code") or "your booking"
     who = attempt.reservation.customer if shop and attempt.reservation_id else attempt.customer
     try:
@@ -623,19 +639,51 @@ def booked_details(reservation, payment, attempt):
         },
         "gowns": gowns,
         "paid_with": way, "paid_on": f"{_day(when)}, {when.strftime('%I:%M %p').lstrip('0')}" if when else "",
-        "rental": f"{statement.rental:,.2f}", "deposit": f"{statement.deposit:,.2f}", "total": f"{statement.total:,.2f}",
+        "rental": f"{statement.rental:,.2f}", "deposit": f"{statement.deposit:,.2f}", "total": f"{statement.total + statement.extra_received:,.2f}",
         "paid": f"{money(attempt.paid_amount):,.2f}", "balance": f"{statement.balance_due:,.2f}", "owes": statement.balance_due > 0,
         "paid_in_full": attempt.purpose == PaymentAttempt.Purpose.FULL,
         # what comes out of the deposit when the gowns are back, and what comes back ("" when nothing is deducted)
         "deduction": f"{statement.total_deduction:,.2f}" if statement.total_deduction > 0 else "",
-        "deposit_back": f"{max(statement.deposit - statement.total_deduction, ledger.ZERO):,.2f}",
+        "deposit_back": f"{max(statement.deposit + statement.extra_received - statement.total_deduction, ledger.ZERO):,.2f}",
+        # booked extra days that cost more than the deposit, paid now ("" when none)
+        "over": f"{statement.extra_received:,.2f}" if statement.extra_received > 0 else "",
     }
+
+
+def _date_change_facts(attempt):
+    """What the return page needs to know when the payment is for a date change: the booking and where to go back to. None for any other."""
+    if not (attempt.date_change_id or (attempt.payload or {}).get("date_change")) or not attempt.reservation_id:
+        return None
+    reservation = attempt.reservation
+    item_id = attempt.date_change.item_id if attempt.date_change_id else None
+    item = reservation.items.filter(pk=item_id).first() or reservation.items.order_by("id").first()
+    out = {
+        "date_change": True, "reference_code": reservation.reference_code,
+        "booking_url": reverse("gowns:reservation_item_detail", args=[item.pk]) if item else reverse("gowns:orders"),
+    }
+    if item is not None:
+        out.update(gown=item.gown_name, pickup=_day(item.rental_date), return_date=_day(item.return_date))
+    return out
 
 
 def attempt_state(attempt, *, request=None):
     """What the customer's return page should say about an attempt, as plain JSON:
     {"state": "waiting" | "confirming" | "booked" | "refunded" | "flagged" | "ended", "message": ..., "reference_code": ..., "receipt_url": ...}"""
     S = PaymentAttempt.Status
+    about = _date_change_facts(attempt)
+    if about is not None:
+        if attempt.status == S.BOOKED:
+            payment = Payment.objects.filter(request_id=f"pm-{attempt.pk}").first()
+            return {
+                "state": "dates_changed", **about, "amount": f"{money(attempt.paid_amount):,.2f}", "test": not attempt.livemode,
+                "receipt_url": reverse("gowns:receipt_view", args=[payment.pk]) if payment else "",
+                "receipt_number": payment.receipt_number if payment else "",
+            }
+        if attempt.status == S.REFUNDED:
+            return {"state": "refunded", "message": attempt.note, "amount": f"{money(attempt.paid_amount):,.2f}", **about}
+        if attempt.status in (S.EXPIRED, S.CANCELLED):
+            return {"state": "ended", **about}
+        return {"state": {S.PAID: "confirming", S.FLAGGED: "flagged", S.HANDLED: "handled"}.get(attempt.status, "waiting"), **about}
     if attempt.status == S.BOOKED and attempt.reservation_id:
         reservation = attempt.reservation
         payment = reservation.payments.filter(provider__in=gateway.PROVIDERS, direction=Payment.Direction.IN).order_by("id").first()

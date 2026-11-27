@@ -77,9 +77,29 @@
       <h1 class="font-headline text-3xl md:text-5xl font-light tracking-tight text-primary leading-[1.1] mb-4">Confirming your payment.</h1>
       <h2 class="font-headline text-[0.7rem] md:text-[0.8rem] tracking-[0.3em] uppercase text-secondary/60 font-medium">Please keep this page open</h2>
       <p class="font-body text-base leading-relaxed font-light mt-10 text-primary max-w-lg mx-auto">
-        This only takes a moment. Your booking is made as soon as {{ payment_provider_label }} confirms the payment. You will not be charged twice.
+        This only takes a moment. {% if date_change_url %}Your new dates are saved{% else %}Your booking is made{% endif %} as soon as {{ payment_provider_label }} confirms the payment. You will not be charged twice.
       </p>
     </div>
+
+    {% if date_change_url %}
+    <!-- Paid for new dates: they are saved -->
+    <div data-pay-state="dates_changed" hidden>
+      <div class="inline-flex items-center justify-center w-20 h-20 rounded-full mb-8 animate-success-pop opacity-0" style="background-color: #22c55e;">
+        <span class="material-symbols-outlined text-4xl" style="color: #ffffff; font-weight: 500;">event_available</span>
+      </div>
+      <h1 class="font-headline text-3xl md:text-5xl font-light tracking-tight text-primary leading-[1.1] mb-4">Your new dates are saved.</h1>
+      <h2 class="font-headline text-[0.7rem] md:text-[0.8rem] tracking-[0.3em] uppercase text-secondary/60 font-medium">Payment received &middot; Booking <span data-pay-field="change_reference"></span></h2>
+      <p class="font-body text-base leading-relaxed font-light mt-10 text-primary max-w-lg mx-auto">
+        We received <b data-pay-field="change_amount"></b>. <b data-pay-field="change_gown"></b>: pick-up <b data-pay-field="change_pickup"></b>, return <b data-pay-field="change_return"></b>.
+        Your receipt <span data-pay-field="change_receipt"></span> is saved with your booking.
+      </p>
+      <p data-pay-field="change_testnote" hidden class="font-body text-[0.8rem] leading-relaxed text-secondary mt-4">This was a test payment. No real money was charged.</p>
+      <div class="flex flex-col items-center gap-8 mt-12">
+        <a href="{{ date_change_url }}" class="w-full md:w-64 px-10 py-5 bg-primary text-white text-[0.65rem] uppercase tracking-[0.3em] font-medium hover:bg-secondary transition-all duration-500 rounded-[6px] flex items-center justify-center no-underline text-center">View My Booking</a>
+        <a data-pay-field="change_receipt_link" href="#" hidden class="font-label text-[0.6rem] uppercase tracking-[0.3em] text-secondary hover:text-primary transition-colors border-b border-transparent hover:border-primary/20 pb-1">View Receipt</a>
+      </div>
+    </div>
+    {% endif %}
 
     <!-- Paid, booking made: the thank-you page -->
     <div data-pay-state="booked" hidden>
@@ -138,10 +158,10 @@
       <h1 class="font-headline text-3xl md:text-5xl font-light tracking-tight text-primary leading-[1.1] mb-4">Still waiting for {{ payment_provider_label }}.</h1>
       <h2 class="font-headline text-[0.7rem] md:text-[0.8rem] tracking-[0.3em] uppercase text-secondary/60 font-medium">Do not pay again</h2>
       <p class="font-body text-base leading-relaxed font-light mt-10 text-primary max-w-lg mx-auto">
-        If you already paid, your booking will be made on its own as soon as {{ payment_provider_label }} confirms it, and we will message you. If you did not finish paying, you can go back and try again.
+        If you already paid, {% if date_change_url %}your new dates will be saved{% else %}your booking will be made{% endif %} on its own as soon as {{ payment_provider_label }} confirms it, and we will message you. If you did not finish paying, you can go back and try again.
       </p>
       <div class="flex flex-col items-center gap-8 mt-12">
-        <a href="{{ orders_url }}" class="w-full md:w-64 px-10 py-5 bg-primary text-white text-[0.65rem] uppercase tracking-[0.3em] font-medium hover:bg-secondary transition-all duration-500 rounded-[6px] flex items-center justify-center no-underline text-center">View My Orders</a>
+        <a href="{% if date_change_url %}{{ date_change_url }}{% else %}{{ orders_url }}{% endif %}" class="w-full md:w-64 px-10 py-5 bg-primary text-white text-[0.65rem] uppercase tracking-[0.3em] font-medium hover:bg-secondary transition-all duration-500 rounded-[6px] flex items-center justify-center no-underline text-center">View My Orders</a>
         <button type="button" data-pay-retry class="font-label text-[0.6rem] uppercase tracking-[0.3em] text-secondary hover:text-primary transition-colors border-b border-transparent hover:border-primary/20 pb-1">Check again</button>
       </div>
     </div>
@@ -151,12 +171,12 @@
       <div class="inline-flex items-center justify-center w-20 h-20 rounded-full border mb-8 border-black/10">
         <span class="material-symbols-outlined text-4xl font-light text-secondary">undo</span>
       </div>
-      <h1 class="font-headline text-3xl md:text-5xl font-light tracking-tight text-primary leading-[1.1] mb-4">We could not reserve it.</h1>
+      <h1 class="font-headline text-3xl md:text-5xl font-light tracking-tight text-primary leading-[1.1] mb-4">{% if date_change_url %}Your dates were not changed.{% else %}We could not reserve it.{% endif %}</h1>
       <h2 class="font-headline text-[0.7rem] md:text-[0.8rem] tracking-[0.3em] uppercase text-secondary/60 font-medium">Your payment is going back to you</h2>
       <p class="font-body text-base leading-relaxed font-light mt-10 text-primary max-w-lg mx-auto" data-pay-field="refund_message"></p>
       <p class="font-body text-[0.8rem] leading-relaxed text-secondary mt-4">The full <b data-pay-field="refund_amount"></b> is being sent back to the account you paid with, usually within a day.</p>
       <div class="flex flex-col items-center gap-8 mt-12">
-        <a href="{{ checkout_url }}" class="w-full md:w-64 px-10 py-5 bg-primary text-white text-[0.65rem] uppercase tracking-[0.3em] font-medium hover:bg-secondary transition-all duration-500 rounded-[6px] flex items-center justify-center no-underline text-center">Choose Another Date</a>
+        <a href="{% if date_change_url %}{{ date_change_url }}{% else %}{{ checkout_url }}{% endif %}" class="w-full md:w-64 px-10 py-5 bg-primary text-white text-[0.65rem] uppercase tracking-[0.3em] font-medium hover:bg-secondary transition-all duration-500 rounded-[6px] flex items-center justify-center no-underline text-center">{% if date_change_url %}Back to My Booking{% else %}Choose Another Date{% endif %}</a>
         <a class="font-label text-[0.6rem] uppercase tracking-[0.3em] text-secondary hover:text-primary transition-colors border-b border-transparent hover:border-primary/20 pb-1" href="{% url 'gowns:homepage' %}">Back to Home</a>
       </div>
     </div>
@@ -169,7 +189,7 @@
       <h1 class="font-headline text-3xl md:text-5xl font-light tracking-tight text-primary leading-[1.1] mb-4">The shop will check this.</h1>
       <h2 class="font-headline text-[0.7rem] md:text-[0.8rem] tracking-[0.3em] uppercase text-secondary/60 font-medium">Do not pay again</h2>
       <p class="font-body text-base leading-relaxed font-light mt-10 text-primary max-w-lg mx-auto">
-        Your payment went through, but we need to check one thing before your booking is made. The shop has been told and will message you shortly. You will not be charged again.
+        Your payment went through, but we need to check one thing before {% if date_change_url %}your new dates are saved{% else %}your booking is made{% endif %}. The shop has been told and will message you shortly. You will not be charged again.
       </p>
       <div class="flex flex-col items-center gap-8 mt-12">
         <a href="{{ orders_url }}" class="w-full md:w-64 px-10 py-5 bg-primary text-white text-[0.65rem] uppercase tracking-[0.3em] font-medium hover:bg-secondary transition-all duration-500 rounded-[6px] flex items-center justify-center no-underline text-center">View My Orders</a>
@@ -198,9 +218,9 @@
       </div>
       <h1 class="font-headline text-3xl md:text-5xl font-light tracking-tight text-primary leading-[1.1] mb-4">Payment not completed.</h1>
       <h2 class="font-headline text-[0.7rem] md:text-[0.8rem] tracking-[0.3em] uppercase text-secondary/60 font-medium">Nothing was charged</h2>
-      <p class="font-body text-base leading-relaxed font-light mt-10 text-primary max-w-lg mx-auto">Your selection is still saved. You can go back and pay when you are ready.</p>
+      <p class="font-body text-base leading-relaxed font-light mt-10 text-primary max-w-lg mx-auto">{% if date_change_url %}Your dates stay as they are. You can pay from your booking while the request is open.{% else %}Your selection is still saved. You can go back and pay when you are ready.{% endif %}</p>
       <div class="flex flex-col items-center gap-8 mt-12">
-        <a href="{{ checkout_url }}" class="w-full md:w-64 px-10 py-5 bg-primary text-white text-[0.65rem] uppercase tracking-[0.3em] font-medium hover:bg-secondary transition-all duration-500 rounded-[6px] flex items-center justify-center no-underline text-center">Back to Checkout</a>
+        <a href="{% if date_change_url %}{{ date_change_url }}{% else %}{{ checkout_url }}{% endif %}" class="w-full md:w-64 px-10 py-5 bg-primary text-white text-[0.65rem] uppercase tracking-[0.3em] font-medium hover:bg-secondary transition-all duration-500 rounded-[6px] flex items-center justify-center no-underline text-center">{% if date_change_url %}Back to My Booking{% else %}Back to Checkout{% endif %}</a>
       </div>
     </div>
   </div>
@@ -269,8 +289,9 @@
         text.appendChild(mk('span', '', 'Return ' + g.return)); text.appendChild(document.createElement('br'));
         text.appendChild(mk('span', '', '\u20b1' + g.price));
         if (g.extra) {
+          var days = g.extra_days + ' extra day' + (g.extra_days === 1 ? '' : 's');
           text.appendChild(document.createElement('br'));
-          text.appendChild(mk('span', 'pay-deduct', '\u2212 \u20b1' + g.extra + ' off your deposit (' + g.extra_days + ' extra day' + (g.extra_days === 1 ? '' : 's') + ')'));
+          text.appendChild(mk('span', 'pay-deduct', d.over ? '\u20b1' + g.extra + ' for ' + days : '\u2212 \u20b1' + g.extra + ' off your deposit (' + days + ')'));
         }
         row.appendChild(text);
         list.appendChild(row);
@@ -279,12 +300,13 @@
       totals.textContent = '';
       totals.appendChild(line('Gown rental', '\u20b1' + d.rental));
       totals.appendChild(line('Security deposit', '\u20b1' + d.deposit));
+      if (d.over) totals.appendChild(line('Extra days over the deposit', '\u20b1' + d.over));
       totals.appendChild(line('Total', '\u20b1' + d.total, 'pay-total'));
       totals.appendChild(line('Paid now', '\u20b1' + d.paid));
       if (d.owes) totals.appendChild(line('Still to pay at the shop', '\u20b1' + d.balance));
       if (d.deduction) {
         // Booked days outside the free days: taken from the deposit when the gowns are back (nothing more was paid for them now).
-        totals.appendChild(line('Off your deposit after return', '\u2212 \u20b1' + d.deduction, 'pay-deduct'));
+        totals.appendChild(d.over ? line('Booked extra days', '\u20b1' + d.deduction, 'pay-deduct') : line('Off your deposit after return', '\u2212 \u20b1' + d.deduction, 'pay-deduct'));
         totals.appendChild(line('Deposit back after return', '\u20b1' + d.deposit_back));
       }
       box.hidden = false;
@@ -310,6 +332,20 @@
     }
 
     function apply(data) {
+      if (data.state === 'dates_changed') {
+        setText('change_reference', data.reference_code || '');
+        setText('change_amount', '\u20b1' + (data.amount || ''));
+        setText('change_gown', data.gown || '');
+        setText('change_pickup', data.pickup || '');
+        setText('change_return', data.return_date || '');
+        setText('change_receipt', data.receipt_number || '');
+        var cl = field('change_receipt_link'); if (cl && data.receipt_url) { cl.setAttribute('href', data.receipt_url); cl.hidden = false; }
+        var ct = field('change_testnote'); if (ct) ct.hidden = !data.test;
+        show('dates_changed');
+        return true;
+      }
+      // A payment for new dates never touches the bag or the checkout's countdown: those belong to another booking.
+      var isChange = !!data.date_change;
       if (data.state === 'booked') {
         setText('reference', data.reference_code || '');
         setText('amount', '₱' + (data.amount || ''));
@@ -326,15 +362,14 @@
         return true;
       }
       if (data.state === 'refunded') {
-        setText('refund_message', data.message || 'The gown you chose could not be reserved.');
+        setText('refund_message', data.message || (isChange ? 'The new dates could not be saved.' : 'The gown you chose could not be reserved.'));
         setText('refund_amount', '₱' + (data.amount || ''));
-        cleanUpTheBag();
-        endTheHoldBar();
+        if (!isChange) { cleanUpTheBag(); endTheHoldBar(); }
         show('refunded');
         return true;
       }
-      if (data.state === 'flagged') { endTheHoldBar(); show('flagged'); return true; }
-      if (data.state === 'handled') { endTheHoldBar(); show('handled'); return true; }
+      if (data.state === 'flagged') { if (!isChange) endTheHoldBar(); show('flagged'); return true; }
+      if (data.state === 'handled') { if (!isChange) endTheHoldBar(); show('handled'); return true; }
       if (data.state === 'ended') { show('ended'); return true; }
       return false;                  // waiting / confirming: keep asking
     }

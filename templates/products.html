@@ -681,7 +681,7 @@
             <span class="product-cal-tip-cap">Return</span>
           </div>
           <p class="mt-3 text-[0.75rem] leading-relaxed text-secondary">
-            Need the gown longer? Choose an earlier pick-up or a later return. Each extra day costs &#8369;<span data-fee-per-day>{{ site_late_fee_per_day }}</span> per gown, taken from your security deposit after the gown is returned.
+            Need the gown longer? Choose an earlier pick-up or a later return. Each extra day costs &#8369;<span data-fee-per-day>{{ site_late_fee_per_day }}</span> per gown, taken from your security deposit after the gown is returned. Days that cost more than the deposit: the part over it is paid when you reserve.
           </p>
 
           <div class="mt-4 flex items-center justify-between gap-3 flex-wrap">
@@ -1427,6 +1427,7 @@
     const FREE_BEFORE = (calData && Number(calData.freeBefore)) || 2;      // the free days: 2 before the event and 2 after it
     const FREE_AFTER = (calData && Number(calData.freeAfter)) || 2;
     const FEE_PER_DAY = calData && calData.feePerDay !== undefined ? Number(calData.feePerDay) || 0 : 200;   // the owner's fee per gown per day
+    const DEPOSIT_PER_GOWN = Number(document.body && document.body.dataset && document.body.dataset.depositPerGown) || 2000;   // the owner's deposit
     const pageLoadedAt = performance.now();
     document.querySelectorAll('[data-fee-per-day]').forEach(function (el) { el.textContent = FEE_PER_DAY.toLocaleString('en-PH'); });
 
@@ -1658,9 +1659,17 @@
         if (extra.before) parts.push('pick-up ' + daysWord(extra.before) + ' early');
         if (extra.after) parts.push('return ' + daysWord(extra.after) + ' later');
         const what = parts.join(' and ');
-        title = pesoText(extra.fee) + ' will be deducted from your security deposit';
-        text = what.charAt(0).toUpperCase() + what.slice(1) + ': ' + daysWord(extra.days) + ' × ' + pesoText(FEE_PER_DAY) + '. The free days are ' + freeText
-          + '. It is charged for the days you book, even if you pick up later or return earlier, and taken from the deposit when the gown is returned. Nothing extra is paid now.';
+        const how = what.charAt(0).toUpperCase() + what.slice(1) + ': ' + daysWord(extra.days) + ' × ' + pesoText(FEE_PER_DAY) + '. The free days are ' + freeText + '.';
+        // Days that cost more than this gown's deposit: the part over it is paid now, with the deposit.
+        const over = Math.max(0, extra.fee - DEPOSIT_PER_GOWN);
+        if (over > 0) {
+          title = 'You pay ' + pesoText(DEPOSIT_PER_GOWN + over) + ' now for this gown';
+          text = how + ' The extra days cost ' + pesoText(extra.fee) + ', more than the ' + pesoText(DEPOSIT_PER_GOWN) + ' deposit: you pay the deposit and the '
+            + pesoText(over) + ' over it when you reserve. It is charged for the days you book, even if you pick up later or return earlier.';
+        } else {
+          title = pesoText(extra.fee) + ' will be deducted from your security deposit';
+          text = how + ' It is charged for the days you book, even if you pick up later or return earlier, and taken from the deposit when the gown is returned. Nothing extra is paid now.';
+        }
       } else {
         title = 'No deduction: your days are free';
         text = 'The free days are ' + freeText + ' (2 days before and 2 days after your event).'

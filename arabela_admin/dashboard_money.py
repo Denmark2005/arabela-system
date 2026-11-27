@@ -18,6 +18,7 @@ from reservations.models import Payment, PaymentAttempt, Reservation, Reservatio
 LATEST = 5
 PICKUP_DAYS = 2             # "pick-ups with a balance" looks at today and the next 2 days
 LIVE_STATUSES = (Reservation.Status.CONFIRMED, Reservation.Status.ACTIVE, Reservation.Status.OVERDUE, Reservation.Status.RETURNED)
+CORE_PURPOSES = (Payment.Purpose.DEPOSIT, Payment.Purpose.FULL, Payment.Purpose.BALANCE)
 
 M = Payment.Method
 # How a payment was made, as a name and a colour class (the page's CSS knows gcash / maya / qrph / cash / other). Names only, no logos.
@@ -31,7 +32,7 @@ _METHOD_BADGE = {
 def _kind(payment):
     """(what happened, the purpose in small words)."""
     if payment.direction == Payment.Direction.OUT:
-        return "Deposit returned", ""
+        return "Refund" if payment.is_over_return else "Deposit returned", ""
     if payment.purpose == Payment.Purpose.EXTRA:
         return "Extra charge received", ""
     return "Payment received", payment.get_purpose_display()
@@ -143,19 +144,18 @@ def greeting(hour):
     return "Good evening"
 
 
-CORE_PURPOSES = (Payment.Purpose.DEPOSIT, Payment.Purpose.FULL, Payment.Purpose.BALANCE)
-
-
 def _money_rows(reservation):
-    """The booking's payments, oldest first: the same rows ledger.statement adds up (the recorded payments that are not voided; for an old booking that
+    """The booking's payments, oldest first: the same money ledger.statement adds up (the recorded payments that are not voided; for an old booking that
     has none, the ones ledger.legacy_rows derives from what it carries). Each is {"direction", "purpose", "amount", "paid_at", "method",
-    "payment" (the stored Payment, or None for an old one)}."""
+    "payment" (the stored Payment, or None for an old one), "over" (the part of a deposit payment that paid booked days over the deposit)}."""
     stored = sorted(reservation.payments.all(), key=lambda p: (p.paid_at, p.pk))
     if stored:
-        return [{"direction": p.direction, "purpose": p.purpose, "amount": ledger.money(p.amount), "paid_at": p.paid_at, "method": p.method, "payment": p}
+        return [{"direction": p.direction, "purpose": p.purpose, "amount": ledger.money(p.amount), "paid_at": p.paid_at, "method": p.method, "payment": p,
+                 "over": ledger.money(p.extra_part) if p.direction == Payment.Direction.IN and p.purpose in CORE_PURPOSES else ledger.ZERO}
                 for p in stored if not p.is_void]
     rows = ledger.legacy_rows(reservation)
-    return [{"direction": r["direction"], "purpose": r["purpose"], "amount": ledger.money(r["amount"]), "paid_at": r["paid_at"], "method": r["method"], "payment": None}
+    return [{"direction": r["direction"], "purpose": r["purpose"], "amount": ledger.money(r["amount"]), "paid_at": r["paid_at"], "method": r["method"], "payment": None,
+             "over": ledger.ZERO}
             for r in sorted(rows, key=lambda r: r["paid_at"])]
 
 
@@ -199,8 +199,9 @@ def money_between(start=None, end=None, today=None):
         # The part of the extra charges that goes back with the deposit (dates moved back after it was paid), taken off the latest ones first.
         give_back, not_kept = statement.extra_credit, {}
         for index in reversed(range(len(rows))):
-            if give_back > 0 and rows[index]["direction"] == Payment.Direction.IN and rows[index]["purpose"] == Payment.Purpose.EXTRA:
-                not_kept[index] = min(rows[index]["amount"], give_back)
+            paid_extra = rows[index]["amount"] if rows[index]["purpose"] == Payment.Purpose.EXTRA else rows[index]["over"]
+            if give_back > 0 and rows[index]["direction"] == Payment.Direction.IN and paid_extra > 0:
+                not_kept[index] = min(paid_extra, give_back)
                 give_back -= not_kept[index]
         for index, row in enumerate(rows):
             day = timezone.localtime(row["paid_at"]).date()
@@ -216,13 +217,16 @@ def money_between(start=None, end=None, today=None):
             elif row["purpose"] in CORE_PURPOSES:
                 deposit_before = min(received, deposit_due)
                 rental_before = min(max(received - deposit_due, zero), rental_due)
-                received += amount
+                core = amount - row["over"]                  # without the booked days over the deposit paid in the same payment
+                received += core
                 parts["deposit"] = min(received, deposit_due) - deposit_before
                 parts["rental"] = min(max(received - deposit_due, zero), rental_due) - rental_before
-                parts["other"] = amount - parts["deposit"] - parts["rental"]
+                parts["extra"] = row["over"]
+                parts["other"] = core - parts["deposit"] - parts["rental"]
                 if inside(day):
                     earned += parts["rental"]
                     collected += parts["deposit"]
+                    kept += row["over"] - not_kept.get(index, zero)
             else:
                 parts["other"] = amount
             if inside(day):

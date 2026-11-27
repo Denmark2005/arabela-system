@@ -246,7 +246,8 @@ def _content(kind, data, shop):
             subject=f"Your reservation {code} was cancelled",
             heading="Your reservation was cancelled",
             preheader="Your reservation was cancelled by Arabela.",
-            paragraphs=["Your reservation was cancelled by Arabela. Your security deposit is not refunded.",
+            paragraphs=["Your reservation was cancelled by Arabela. Your security deposit is not refunded."
+                        + (f" The {data['over_back']} you paid over it for extra days will be returned to you." if data.get("over_back") else ""),
                         f"If you would like to book again, {reach_us}"],
             note={"tone": "quiet", "title": "Why it was cancelled",
                   "text": data.get("reason") or "Please contact the shop for details."},
@@ -313,6 +314,8 @@ def _content(kind, data, shop):
             content["highlight"] = {"label": "Receipt no.", "value": data["receipt_number"]}
         if data.get("receipt_path"):
             content.update(button_label="View my receipt", button_path=data["receipt_path"])
+        elif data.get("button_path"):
+            content.update(button_label=data.get("button_label") or "View my reservation", button_path=data["button_path"])
     elif kind == GOWN_READY:
         content.update(
             subject=f"Your gown is ready for pick-up - {code}" if code else "Your gown is ready for pick-up",
@@ -352,6 +355,8 @@ def render_email(content, data, *, base_url=None, shop=None, inline_logo=False):
         if content["money"] and data.get("deduction"):
             rows.append({"label": "Off your deposit", "value": "- " + data["deduction"],
                          "sub": "Booked days outside the free days (2 before and 2 after your event), taken from the deposit when the gown is returned"})
+        if content["money"] and data.get("over"):
+            rows.append({"label": "Over your deposit", "value": data["over"], "sub": "Booked days that cost more than the deposit, paid with it"})
         if content["money"] and data.get("total"):
             rows.append({"label": "Total", "value": data["total"], "sub": ""})
 
@@ -392,13 +397,21 @@ def _reservation_data(reservation, text=""):
     from reservations import ledger
     rate = int(reservation.late_fee_per_day or 0)
     extra = sum(sum(ledger.booked_extra_days(item)) for item in kept if item.stage != item.Stage.CANCELLED) * rate
+    # A booking that pays what is over the deposit when booking: that part is shown on its own, not as coming out of the deposit.
+    over = reservation.upfront_extra if reservation.pays_over_deposit else 0
+    if over:
+        extra = min(extra, int(reservation.security_deposit))
+    from reservations import cancellation
+    back = cancellation.over_back(reservation) if reservation.status == reservation.Status.CANCELLED else 0
     return {
         "first_name": _first_name(reservation.customer_name),
         "reference_code": reservation.reference_code,
         "items": items,
         "deposit": _peso(reservation.security_deposit),
         "deduction": _peso(extra) if extra > 0 else "",
-        "total": _peso(reservation.total_amount),
+        "over": _peso(over) if over else "",
+        "over_back": _peso(back) if back else "",
+        "total": _peso(reservation.total_amount + (over or 0)),
         "text": text,
     }
 

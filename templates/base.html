@@ -894,11 +894,12 @@
           : `<p class="text-[0.6875rem] text-on-secondary-container mt-1">Size: ${window.arabelaSizeLabel(item.size)}</p>`;
         // The event (the free days count from it) and what the extra days take out of the deposit, both worked out by reservation-flow.js.
         const eventText = dated && window.arabelaEventText ? window.arabelaEventText(item) : '';
-        const deductText = dated && window.arabelaDeductionText ? window.arabelaDeductionText(item, qty) : '';
+        const bagOver = !!window.arabelaOverDeposit && window.arabelaOverDeposit(cart) > 0;      // extra days that cost more than the bag's deposit
+        const deductText = dated && window.arabelaDeductionText ? window.arabelaDeductionText(item, qty, bagOver) : '';
         const rentalLine = dated
           ? `<p class="text-[0.6875rem] text-on-secondary-container mt-1">Rental: ${item.rental}</p>`
             + (eventText ? `<p class="text-[0.6875rem] text-on-secondary-container">${attrEscapeCart(eventText)}</p>` : '')
-            + (deductText ? `<p class="mt-0.5 text-[0.6875rem] font-semibold text-[#b42318]">&minus; ${attrEscapeCart(deductText)}</p>` : '')
+            + (deductText ? `<p class="mt-0.5 text-[0.6875rem] font-semibold text-[#b42318]">${bagOver ? '' : '&minus; '}${attrEscapeCart(deductText)}</p>` : '')
           : `<a href="${editUrl}" class="mt-1 inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-[#b45309] no-underline hover:underline underline-offset-4">
                <span class="material-symbols-outlined" style="font-size: 0.85rem;">event</span>Select rental date
              </a>`;

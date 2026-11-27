@@ -34,7 +34,7 @@ from reservations import gateway
 from reservations import identity as reservation_identity
 from reservations import ledger as reservation_ledger
 from reservations import owner_check as reservation_owner_check
-from reservations.models import CancelRequest, IdentityCheck, Payment, PaymentAttempt, Reservation, ReservationItem
+from reservations.models import CancelRequest, DateChangeRequest, IdentityCheck, Payment, PaymentAttempt, Reservation, ReservationItem
 
 # What each part of the bell is drawn from. The page includes these templates; the live feed
 # renders the same ones and hands the HTML to the script to swap in.
@@ -405,7 +405,8 @@ def build_items(user):
     # until someone sends it back or marks it handled on the Payments page's Online payments tab.
     for attempt in PaymentAttempt.objects.filter(PaymentAttempt.attention_filter()).order_by("-created_at")[:10]:
         refund_failed = attempt.status == PaymentAttempt.Status.REFUNDED
-        unmade = "paid online but the payment is not recorded yet:" if attempt.source == PaymentAttempt.Source.SHOP else "paid online but has no booking yet:"
+        existing = attempt.source == PaymentAttempt.Source.SHOP or attempt.date_change_id          # the booking was there already
+        unmade = "paid online but the payment is not recorded yet:" if existing else "paid online but has no booking yet:"
         items.append(_item(
             key=f"online:{attempt.id}",
             kind="payment",
@@ -442,6 +443,53 @@ def build_items(user):
             url=reverse("arabela_admin:payments") + "?" + urlencode({"open": reservation.id}),
             when=failed.voided_at,
             sort=failed.voided_at,
+        ))
+
+    # --- Date change requests (reservations/date_requests.py): paid online, or not paid in time. Both leave the bell after 3 days. -------
+    recent = timezone.now() - timedelta(days=3)
+    finished = (
+        DateChangeRequest.objects.filter(status__in=(DateChangeRequest.Status.APPLIED, DateChangeRequest.Status.EXPIRED), finished_at__gte=recent)
+        .select_related("reservation__customer__profile", "item", "payment").order_by("-finished_at")[:10]
+    )
+    for row in finished:
+        paid = row.status == DateChangeRequest.Status.APPLIED
+        if paid and (row.payment is None or not row.payment.provider):
+            continue                                       # cash taken at the counter: staff did that themselves
+        reservation = row.reservation
+        items.append(_item(
+            key=f"datereq:{row.id}",
+            kind="payment",
+            level="info" if paid else "warning",
+            actor=reservation.display_customer_name,
+            text=(f"paid ₱{row.amount:,.2f}: the new dates are saved on" if paid else f"did not pay ₱{row.amount:,.2f} in time: the old dates stay on"),
+            subject=reservation.reference_code,
+            module="Active Reservations",
+            url=reverse("arabela_admin:active_reservations") + "?" + urlencode({"search": reservation.reference_code}),
+            when=row.finished_at,
+            sort=row.finished_at,
+        ))
+
+    # --- Money to give back to a cancelled booking (what it paid over the deposit) --------------------------------------------------------
+    cancelled = (
+        Reservation.objects.filter(status=Reservation.Status.CANCELLED, pays_over_deposit=True, reviewed_at__isnull=False, payments__isnull=False,
+                                   updated_at__gte=timezone.now() - timedelta(days=60))
+        .distinct().select_related("customer__profile").prefetch_related("items", "payments", "deductions", "receipt_records")[:20]
+    )
+    for reservation in cancelled:
+        back = reservation_ledger.statement(reservation).refund_available
+        if back <= 0:
+            continue
+        items.append(_item(
+            key=f"overback:{reservation.id}",
+            kind="payment",
+            level="warning",
+            actor=reservation.display_customer_name,
+            text=f"is owed ₱{back:,.2f} back (paid over the deposit) on the cancelled booking",
+            subject=reservation.reference_code,
+            module="Payments",
+            url=reverse("arabela_admin:payments") + "?" + urlencode({"open": reservation.id}),
+            when=reservation.updated_at,
+            sort=reservation.updated_at,
         ))
 
     # --- Calls to make: bookings with no website account ---------------------------

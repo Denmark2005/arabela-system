@@ -221,7 +221,7 @@
             <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[9999px] border-[1.5px] border-primary"><span data-pay-dot class="h-2.5 w-2.5 rounded-[9999px] bg-primary"></span></span>
             <span class="min-w-0 flex-1">
               <span class="block font-medium text-sm text-on-surface">Pay Security Deposit Only</span>
-              <span class="block mt-1 text-[0.8rem] text-secondary leading-relaxed">Pay the deposit now. The rental fee (<span id="pay-rest-amount">&#8369;0</span>) is paid at the shop.</span>
+              <span class="block mt-1 text-[0.8rem] text-secondary leading-relaxed">Pay the deposit<span id="pay-over-note" class="font-semibold text-[#b42318]"></span> now. The rental fee (<span id="pay-rest-amount">&#8369;0</span>) is paid at the shop.</span>
             </span>
             <span id="pay-amount-deposit" class="shrink-0 font-headline text-sm font-semibold text-on-surface tabular-nums">&#8369;0</span>
           </label>
@@ -545,13 +545,17 @@
         var payRequestId = newPayRequestId();
         function pesoText(n) { return '\u20b1' + (Number(n) || 0).toLocaleString('en-PH', { maximumFractionDigits: 2 }); }
         // The order summary tells this page its totals (static/js/reservation-flow.js setTotals): the two choices and the button show what each costs.
-        window.onReservationTotals = function (subtotal, deposit, total) {
+        window.onReservationTotals = function (subtotal, deposit, total, itemCount, over) {
             if (!PAYMONGO) return;
+            // Booked days that cost more than the deposit are paid now, with either choice.
+            var extra = Number(over) || 0;
             var pay = function (id, value) { var el = document.getElementById(id); if (el) el.textContent = pesoText(value); };
-            pay('pay-amount-deposit', deposit);
-            pay('pay-amount-full', Number(subtotal || 0) + Number(deposit || 0));
+            pay('pay-amount-deposit', (Number(deposit) || 0) + extra);
+            pay('pay-amount-full', Number(subtotal || 0) + Number(deposit || 0) + extra);
             pay('pay-rest-amount', subtotal);
-            window.arabelaPayTotals = { deposit: Number(deposit) || 0, full: (Number(subtotal) || 0) + (Number(deposit) || 0) };
+            var note = document.getElementById('pay-over-note');
+            if (note) note.textContent = extra > 0 ? ' and the ' + pesoText(extra) + ' for the extra days over it' : '';
+            window.arabelaPayTotals = { deposit: (Number(deposit) || 0) + extra, full: (Number(subtotal) || 0) + (Number(deposit) || 0) + extra };
             if (typeof window.arabelaRefreshPayLabel === 'function') window.arabelaRefreshPayLabel();
         };
         var LOCKED_TITLE = 'Your account is temporarily locked';
@@ -822,7 +826,7 @@
                 }
             }
             if (details && amountInput) {
-                var dueNow = Number((readReservationPayload() || {}).deposit) || 0;
+                var dueNow = (Number((readReservationPayload() || {}).deposit) || 0) + (Number(window.arabelaCheckoutOver) || 0);      // with any booked days over the deposit
                 var amountMessage = details.amountProblem(amountInput.value, dueNow);
                 var amountWrap = amountInput.closest('.relative');
                 if (amountMessage && amountWrap) {
@@ -950,9 +954,9 @@
                 return;
             }
             if (err && err.data && err.data.extra_fee_changed) {
-                // The owner changed the fee for the extra days while this page was open: reload so the order summary shows the new amount.
+                // The fee for the extra days (or what is over the deposit) is not what this page showed: reload so the order summary shows it.
                 var again = function () { window.location.reload(); };
-                arabelaAlert({ title: 'The extra-day fee changed', message: err.data.error, danger: true }).then(again, again);
+                arabelaAlert({ title: 'The amount changed', message: err.data.error, danger: true }).then(again, again);
                 return;
             }
             if (err && err.data && err.data.signed_out) {
@@ -1033,6 +1037,7 @@
             formData.append('expected_user', (document.body && document.body.dataset && document.body.dataset.userKey) || '');
             formData.append('expected_deposit', String((Number(payload.itemCount) || 0) * (Number(document.body.dataset.depositPerGown) || 2000)));
             formData.append('expected_extra_fee', String(Number(window.arabelaCheckoutExtraFee) || 0));
+            formData.append('expected_over', String(Number(window.arabelaCheckoutOver) || 0));
             formData.append('pay_option', chosen ? chosen.value : 'deposit');
             formData.append('request_id', payRequestId);
             formData.append('first_name', document.getElementById('first_name').value.trim());
@@ -1235,6 +1240,7 @@
                     // The deposit the customer saw on this page: when the owner changed it meanwhile the server says so instead of charging another amount.
                     formData.append('expected_deposit', String((Number(payload.itemCount) || 0) * (Number(document.body.dataset.depositPerGown) || 2000)));
                     formData.append('expected_extra_fee', String(Number(window.arabelaCheckoutExtraFee) || 0));
+                    formData.append('expected_over', String(Number(window.arabelaCheckoutOver) || 0));
                     formData.append('total_amount', payload.total || 0);
                     formData.append('first_name', document.getElementById('first_name').value.trim());
                     formData.append('last_name', document.getElementById('last_name').value.trim());

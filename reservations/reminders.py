@@ -33,6 +33,7 @@ from django.utils import timezone
 
 from accounts.models import CustomerMessage
 
+from . import ledger
 from .models import Reservation, ReservationItem, ReservationStatusEvent, ReminderRun
 
 # How long a gown may sit overdue before the customer is reminded again. Daily nagging
@@ -79,6 +80,8 @@ EVENT_LABELS = {
     RETURN_TODAY: 'Reminder sent: return due today',
     OVERDUE: 'Reminder sent: return is overdue',
 }
+# The one-time mark that an overdue notice also said the late fees are now more than the security deposit.
+OVER_DEPOSIT_LABEL = 'Reminder sent: late fees are more than the deposit'
 
 _MESSAGE_CATEGORIES = {
     PICKUP_TOMORROW: CustomerMessage.Category.RESERVATION_REMINDER,
@@ -270,7 +273,7 @@ def find_due_reminders(today=None):
     sent_map = {}
     history = ReservationStatusEvent.objects.filter(
         item_id__in=[item.id for item in candidates],
-        label__in=list(EVENT_LABELS.values()),
+        label__in=list(EVENT_LABELS.values()) + [OVER_DEPOSIT_LABEL],
     ).values_list('item_id', 'label', 'occurred_at')
     for item_id, label, occurred_at in history:
         occurred_on = timezone.localtime(occurred_at).date()
@@ -283,7 +286,23 @@ def find_due_reminders(today=None):
         kind = _due_kind(item, today)
         if kind and not _already_sent(kind, item.id, sent_map, today):
             due.append((item, kind))
+        elif (kind == OVERDUE and (item.id, OVER_DEPOSIT_LABEL) not in sent_map
+              and late_fee_warning(item.reservation, today)):
+            due.append((item, kind))            # the late fees have just passed the deposit: said at once, not at the next three-day notice
     return due
+
+
+def late_fee_warning(reservation, today):
+    """The sentence an overdue notice adds once the late fees are more than the security deposit (a booking that pays amounts over the
+    deposit right away), or ''."""
+    if not reservation.pays_over_deposit:
+        return ''
+    booking = Reservation.objects.prefetch_related('items', 'payments', 'deductions', 'receipt_records').get(pk=reservation.pk)
+    statement = ledger.statement(booking, today)
+    if statement.overdue_fee <= 0 or statement.extra_owed <= 0:
+        return ''
+    return (f"Your late fees are now more than your security deposit: {ledger.peso(statement.extra_owed)} to pay at the shop "
+            "when you return the gown.")
 
 
 def _sort_key(item):
@@ -338,6 +357,11 @@ def send_reminder_group(items, kind, today=None):
             items = overdue_now
     items = sorted(items, key=_sort_key)
     body = _group_body_for(kind, items, today)
+    warning = late_fee_warning(reservation, today) if kind == OVERDUE else ''
+    if warning:
+        # before the "Reference: ..." ending, which is how an overdue notice is found again (_open_overdue_message)
+        ending = f"Reference: {reservation.reference_code}."
+        body = body.replace(ending, f"{warning} {ending}")
 
     with transaction.atomic():
         message = _open_overdue_message(reservation) if kind == OVERDUE else None
@@ -364,6 +388,9 @@ def send_reminder_group(items, kind, today=None):
                     f"Could not record the reminder sent for item {item.id}; "
                     f"rolling the message back rather than risk re-sending it daily."
                 )
+            if warning and ReservationStatusEvent.record(
+                    reservation, OVER_DEPOSIT_LABEL, item=item, detail=warning, actor=ReservationStatusEvent.Actor.SYSTEM) is None:
+                raise RuntimeError(f"Could not record the late fee warning for item {item.id}.")
 
 
 def send_reminder(item, kind, today=None):

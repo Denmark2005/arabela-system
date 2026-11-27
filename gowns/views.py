@@ -49,7 +49,8 @@ from gowns.models import (
 from gowns import availability, deposit, design_details, late_fee, proof_image, receipt_check, receipt_tries, reservation_limits, typed_payment
 from gowns.photos import GRID_WIDTH, PAGE_WIDTH, THUMB_WIDTH, sized
 from gowns.size_guides import size_guide_for
-from reservations import gateway, identity, ledger, reminders, timeline
+from reservations import date_changes, date_requests, gateway, identity, ledger, reminders, timeline
+from reservations import cancellation
 from reservations.models import Payment, ProofRejection, Reservation, ReservationItem, ReservationStatusEvent
 
 
@@ -632,6 +633,13 @@ def _find_available_unit(gown_name, rental_date, return_date, *, gown_slug="", s
         ).values_list("gown_id", flat=True)
     )
 
+    # Days held while a date change waits for payment are taken like a booking (reservations/date_requests.py).
+    busy.update(
+        date_changes.held_requests(candidate_ids)
+        .filter(hold_start__lte=return_date + timedelta(days=rest_days), hold_end__gte=rental_date)
+        .values_list("gown_id", flat=True)
+    )
+
     if rest_days:
         # The gown rests `rest_days` days after the return. Those days may overlap a staff block (it is being cleaned anyway)
         # but must never run into another customer's booking, or the next person would get it without its cleaning time.
@@ -796,6 +804,25 @@ def _extra_fee_changed(request, items):
         "error": (f"The fee for each day outside the free days is now ₱{rate:,} per gown, so ₱{int(now_amount):,} will come out of your "
                   "security deposit. Please check your order summary and try again."),
     }, status=409)
+
+
+def _over_changed(request, over):
+    """None, or the 409 answer when booked days cost more than the security deposit (`over`, paid now with it) and the checkout page did not show
+    that amount (POST "expected_over")."""
+    raw = (request.POST.get("expected_over") or "").strip()
+    try:
+        shown = Decimal(raw) if raw else None
+    except InvalidOperation:
+        shown = None
+    if (shown is None and over <= 0) or shown == over:
+        return None
+    if shown is None:
+        message = (f"Your booked days cost ₱{over:,.2f} more than the security deposit, so that amount is now paid with it. "
+                   "Please reload this page, check your order summary and try again. Nothing was booked or charged.")
+    else:
+        message = (f"The amount over your security deposit is now ₱{over:,.2f}. Please check your order summary and try again. "
+                   "Nothing was booked or charged.")
+    return JsonResponse({"success": False, "extra_fee_changed": True, "late_fee_per_day": late_fee.per_day(), "error": message}, status=409)
 
 
 def extra_days_fee(items, rate):
@@ -1454,6 +1481,13 @@ def reservation_submit(request):
     fee_refusal = _extra_fee_changed(request, parsed_items)
     if fee_refusal is not None:
         return fee_refusal
+    # Booked days outside the free days that cost more than the deposit are paid now, with it.
+    rate = late_fee.per_day()
+    over = ledger.over_deposit(extra_days_fee(parsed_items, rate), current_deposit)
+    over_refusal = _over_changed(request, over)
+    if over_refusal is not None:
+        return over_refusal
+    pay_now = current_deposit + over
 
     profile, _ = UserProfile.objects.get_or_create(user=request.user)
     typed_first_name = (request.POST.get("first_name") or "").strip()
@@ -1490,7 +1524,7 @@ def reservation_submit(request):
     # What the customer typed from their GCash app: the 13-digit reference number and the amount they paid. Only the FORMAT is checked here (no
     # database); the amount must be at least the deposit that is due, which the server works out itself above. A box that needs fixing is
     # answered at once and is never counted against the account (gowns/typed_payment.py).
-    typed_reference, typed_amount, typed_refusal = _typed_details_or_refuse(request, due=current_deposit)
+    typed_reference, typed_amount, typed_refusal = _typed_details_or_refuse(request, due=pay_now)
     if typed_refusal is not None:
         return typed_refusal
 
@@ -1513,7 +1547,7 @@ def reservation_submit(request):
     # The receipt check: BEFORE anything is booked (and before any database lock is taken, because reading the picture takes a few seconds).
     # A refused receipt books nothing and holds no dates.
     verdict, refusal_response = _check_proof_or_refuse(
-        request, clean_proof, expected_amount=current_deposit, started_at=_hold_started_at(request),
+        request, clean_proof, expected_amount=pay_now, started_at=_hold_started_at(request),
     )
     if refusal_response is not None:
         return refusal_response
@@ -1593,8 +1627,9 @@ def reservation_submit(request):
             payment_proof_url=payment_proof_url,
             rental_subtotal=rental_subtotal,
             security_deposit=security_deposit,
-            late_fee_per_day=late_fee.per_day(),            # the booking keeps the late fee it was made with, like the deposit
+            late_fee_per_day=rate,                          # the booking keeps the late fee it was made with, like the deposit
             total_amount=total_amount,
+            pays_over_deposit=True, upfront_extra=over,
             identity_check=identity.current_check_for(request.user),
             **{**_verdict_fields(verdict), "gcash_reference": (verdict.reference or typed_reference)[:20], **typed_columns},
         )
@@ -1720,7 +1755,11 @@ def reservation_item_detail(request, item_id):
         ReservationItem.objects.select_related('reservation', 'gown'),
         id=item_id, reservation__customer=request.user,
     )
+    date_requests.expire_due()                  # a request whose time ran out closes (and a payment made in time is saved) before the page is drawn
+    item.refresh_from_db()
     reservation = item.reservation
+    reservation.refresh_from_db()
+    date_request = date_requests.waiting(reservation.pk)
     # The picture of the gown that was RESERVED: the gown's own photo while it is in the catalog, else the picture saved on this booking when it was
     # made. A gown that was deleted and has no saved picture shows no picture at all (the page says so) -- never another gown's.
     live_photo = item.gown.photo_url if item.gown_id else ""
@@ -1733,6 +1772,12 @@ def reservation_item_detail(request, item_id):
     rate = int(reservation.late_fee_per_day or 0)
     extra_days = early + later + change
     item_fee = {"early": early, "later": later, "change": change, "days": extra_days, "rate": rate, "amount": Decimal(extra_days * rate)}
+    # A booking that pays what is over its security deposit right away: what it paid over it (before the shop checks a screenshot booking, what it
+    # said it paid), and what it still owes over it.
+    paid_over = Decimal("0")
+    if reservation.pays_over_deposit:
+        paid_over = money.extra_received if money.tracked else (reservation.upfront_extra if reservation.payment_proof_url else Decimal("0"))
+    owed_over = money.extra_owed if reservation.pays_over_deposit else Decimal("0")
     return render(
         request,
         'reservation_item_detail.html',
@@ -1757,10 +1802,20 @@ def reservation_item_detail(request, item_id):
             "item_fee": item_fee,
             # What comes back of the deposit once the booked days outside the free days (and any other fees) are taken from it.
             "deposit_back": max(money.deposit + money.extra_received - money.total_deduction, Decimal("0")),
-            "deposit_over": max(money.total_deduction - money.deposit - money.extra_received, Decimal("0")),
+            "deposit_over": max(money.total_deduction - money.deposit - max(money.extra_received, paid_over), Decimal("0")),
+            "paid_over": paid_over,
+            "total_with_over": reservation.total_amount + paid_over,
+            "payments_total": money.total + paid_over + owed_over,
+            "over_in_payments": paid_over + owed_over,
+            "pay_due": reservation.security_deposit + reservation.upfront_extra,          # what a receipt uploaded later has to show
             # The day the security deposit was settled -- only once nothing is left to hand back or to pay.
             "deposit_settled_on": ledger.deposit_returned_day(reservation, money) if ledger.is_settled(reservation, money) else None,
             "receipts": _customer_receipts(reservation),
+            # New dates the shop asked the customer to pay for first (reservations/date_requests.py), when one is waiting.
+            "date_request": date_request,
+            "date_request_dates": date_requests.new_dates_text(date_request) if date_request else "",
+            "online_pay": gateway.enabled(),
+            "payment_cancelled": request.GET.get("payment") == "cancelled",
         },
     )
 
@@ -1829,6 +1884,9 @@ def reservation_item_cancel(request, item_id):
     # The automatic 5-day rest after each gown's rental goes too: a cancelled booking never had a rental to rest from, so those
     # days must be bookable again right away (rejecting and the shop's own Cancel already do the same).
     GownUnavailability.objects.filter(auto_for_item__reservation=reservation).delete()
+    # A date change still waiting for payment is no longer needed, and what was paid over the deposit goes back.
+    date_requests.close(reservation.pk, note="The booking was cancelled.", tell_customer=False)
+    cancellation.tell_over_back(reservation)
 
     # Repeat cancellations auto-flag the account for admin review (see
     # accounts.services.CANCELLATION_FLAG_THRESHOLD). No-op below the threshold.
@@ -1862,7 +1920,8 @@ def reservation_upload_proof(request, item_id):
         return JsonResponse({"success": False, "error": error}, status=400)
 
     # The same typed reference number and amount as at checkout (format first, then a reference already on another booking, then the picture).
-    typed_reference, typed_amount, typed_refusal = _typed_details_or_refuse(request, due=reservation.security_deposit)
+    pay_now = reservation.security_deposit + reservation.upfront_extra      # the deposit and any booked days over it
+    typed_reference, typed_amount, typed_refusal = _typed_details_or_refuse(request, due=pay_now)
     if typed_refusal is not None:
         return typed_refusal
     used_refusal = _typed_reference_used_or_refuse(request, typed_reference, reservation)
@@ -1871,7 +1930,7 @@ def reservation_upload_proof(request, item_id):
 
     # The same receipt check as at checkout; here the booking already exists, so "when the booking started" is when it was made.
     verdict, refusal_response = _check_proof_or_refuse(
-        request, clean_proof, expected_amount=reservation.security_deposit, started_at=reservation.created_at, reservation=reservation,
+        request, clean_proof, expected_amount=pay_now, started_at=reservation.created_at, reservation=reservation,
     )
     if refusal_response is not None:
         return refusal_response
@@ -2052,6 +2111,8 @@ def messages_view(request):
     unread_ids = [m.id for m in message_list if not m.is_read]
     if unread_ids:
         CustomerMessage.objects.filter(id__in=unread_ids).update(is_read=True)
+    # A request to pay for new dates that is still open: its newest message carries the Pay button.
+    date_requests.add_pay_buttons(request.user, message_list)
     # An overdue notice whose gowns have all come back is shown as "Returned" instead of a red warning.
     closed = reminders.closed_overdue_notices(request.user, message_list)
     for m in message_list:
