@@ -763,11 +763,19 @@ def payment_record(ctx):
 def deposit_return(ctx):
     reservation = _reservation(ctx.kwargs.get("pk"))
     payment = ctx.data.get("payment") or {}
-    of_what = "paid over the security deposit" if payment.get("purposeLabel") == "Refund" else "of the security deposit"
+    of_what = "as a refund" if payment.get("purposeLabel") == "Refund" else "of the security deposit"
     return {"summary": f"handed back ₱{payment.get('amount', '')} {of_what} ({payment.get('method', '')}), receipt "
                        f"{payment.get('receiptNumber', '')}, on {_booking_text(reservation)}",
             "target": _booking_target(reservation), "sensitive": True,
             "details": {"receipt": payment.get("receiptNumber", ""), "method": payment.get("method", ""), "reference": payment.get("reference", "")}}
+
+
+def deposit_exception(ctx):
+    reservation = _reservation(ctx.kwargs.get("pk"))
+    give = bool(ctx.body.get("give")) if isinstance(ctx.body, dict) else False
+    words = "will give back the security deposit too" if give else "keeps the security deposit again"
+    return {"summary": f"{words} on the cancelled {_booking_text(reservation)}", "target": _booking_target(reservation), "sensitive": True,
+            "details": _keep(ctx.body, "reason")}
 
 
 def deduction_add(ctx):

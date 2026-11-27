@@ -545,7 +545,7 @@ class ActiveReservationsButtonTests(GownBase):
     def test_the_confirm_window_has_the_simple_modes(self):
         self.booking(gowns=2)
         html = self.page()
-        for text in ("Cancel this gown?", "Keep gown", "no refund is given", "Cancel gown", "cb-code-wrap", "To confirm, type"):
+        for text in ("Cancel this gown?", "Keep gown", "no longer charged", "Cancel gown", "cb-code-wrap", "To confirm, type"):
             self.assertIn(text, html)
 
 

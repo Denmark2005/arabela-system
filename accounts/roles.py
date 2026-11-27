@@ -4,7 +4,7 @@ Two kinds of admin account (UserProfile.Role):
   * Owner -- everything (a superuser is always an owner), plus Staff Management, the Audit Log, Categories, tag colors and the shop settings;
   * Staff -- the daily work: gowns, New Booking, approving/rejecting new bookings, pick-ups and returns, receipts, reminders.
 
-On top of the daily work the owner can allow each staff account any of four sensitive actions (PERMISSIONS below), one by one in
+On top of the daily work the owner can allow each staff account any of the sensitive actions in PERMISSIONS below, one by one in
 Staff Management. A staff account without a permission never sees its button, and the server refuses the request anyway.
 
 There used to be a Manager role. It is gone from the screens; an old Manager row that has not been converted yet (the data migration
@@ -41,6 +41,11 @@ PERMISSIONS = {
         "label": "Void receipts and add deductions",
         "help": "Void a Payment Receipt that was recorded by mistake, and take an amount off a customer's security deposit (damage, a stain). Both change money, so they stay with the owner unless allowed here.",
         "verb": "void receipts or add deductions",
+    },
+    "return_money": {
+        "label": "Return money to customers",
+        "help": "Hand money back to a customer in cash, online or by the shop's GCash: the security deposit after a return, and the refund of a cancelled booking or gown. Without it, staff can see what is due but can't return it.",
+        "verb": "return money to customers",
     },
 }
 PERMISSION_KEYS = tuple(PERMISSIONS)

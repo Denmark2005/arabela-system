@@ -6,12 +6,11 @@ Only a gown nobody has picked up yet can be cancelled. Two ways:
   * one or more GOWNS (cancel_gowns_by_staff) -- for a booking where some gowns went out or were returned and the rest never
     got collected. The cancelled gowns stop holding anything, and the booking carries on with the others. When the last gown
     left in a booking is cancelled, the whole booking becomes Cancelled, exactly as if it had been cancelled whole.
-The security deposit is NOT refunded when a whole booking is cancelled -- the booking stays on record as Cancelled with that written
-on it, so when the customer phones the shop, staff can open the record and see that the deposit was already paid. What a booking paid OVER
-the deposit (booked extra days, a paid date change -- Reservation.pays_over_deposit) does go back (reservations/ledger.py). When only some
-gowns are cancelled the deposit stays on the booking and is settled with the gowns that really went out (Reservation.deposit_returned_on).
-
-No new database columns: who cancelled, when and why are read back from the booking's own status log (ReservationStatusEvent)."""
+The refund rule (reservations/ledger.py): when a whole booking is cancelled the shop keeps the SECURITY DEPOSIT and everything else the
+customer paid (rental, extra days) is to be given back from the Payments page (Reservation.refunds_rental); the owner may give the deposit
+back too. When only some gowns are cancelled, their rental is no longer counted and any of it already paid goes back
+(ReservationItem.rental_dropped); the deposit stays on the booking and is settled with the gowns that really went out
+(Reservation.deposit_returned_on). Who cancelled, when and why are read back from the booking's own status log (ReservationStatusEvent)."""
 from django.db import transaction
 from django.utils import timezone
 from django.utils.formats import date_format
@@ -105,14 +104,20 @@ def can_cancel_gowns(reservation):
     )
 
 
-def over_back(reservation):
-    """The money a CANCELLED booking gets back: what it paid over its security deposit and has not been given yet (0 for most)."""
-    if not reservation.pays_over_deposit:
-        return ledger.ZERO
+def _with_money(reservation):
+    """The booking with everything a statement reads: itself when a list page already loaded it, else read fresh (one booking)."""
     loaded = getattr(reservation, "_prefetched_objects_cache", {})
-    # A list page already holds everything the statement reads; anything else is read fresh (one booking).
-    booking = reservation if {"items", "payments", "deductions", "receipt_records"} <= set(loaded) else (
-        Reservation.objects.prefetch_related("items", "payments", "deductions", "receipt_records").get(pk=reservation.pk))
+    if {"items", "payments", "deductions", "receipt_records"} <= set(loaded):
+        return reservation
+    return Reservation.objects.prefetch_related("items", "payments", "deductions", "receipt_records").get(pk=reservation.pk)
+
+
+def money_back(reservation):
+    """The money a CANCELLED booking is still to get back: everything paid besides the security deposit (rental, extra days), and the deposit
+    too when the owner gives it back; an older cancelled booking only what it paid over the deposit. 0 for most."""
+    if not (reservation.pays_over_deposit or reservation.refunds_rental):
+        return ledger.ZERO
+    booking = _with_money(reservation)
     if booking.status != Reservation.Status.CANCELLED:
         return ledger.ZERO
     statement = ledger.statement(booking)
@@ -122,15 +127,87 @@ def over_back(reservation):
     return booking.upfront_extra if booking.payment_proof_url else ledger.ZERO
 
 
-def tell_over_back(reservation):
-    """After the CUSTOMER cancelled: the message about what was paid over the deposit, when there is any."""
-    amount = over_back(reservation)
+def back_if_cancelled(reservation):
+    """For a booking the customer or the shop may still cancel: (what would be returned, the deposit that would stay with the shop)."""
+    booking = _with_money(reservation)
+    statement = ledger.statement(booking)
+    if statement.tracked:
+        return max(statement.received - statement.deposit_paid - statement.refunded, ledger.ZERO), statement.deposit_paid
+    if not booking.payment_proof_url:
+        return ledger.ZERO, ledger.ZERO
+    return booking.upfront_extra, booking.security_deposit          # a screenshot payment the shop has not checked yet
+
+
+def money_story(reservation, statement, *, customer=False):
+    """For a CANCELLED booking: one row per kind of money, in plain words -- what happened to the rental, the extra days and the deposit.
+    `customer`: the words the customer reads. Each row: {"label", "amount", "note", "tone"} (tone: due, done, kept, muted)."""
+    if not statement.cancelled:
+        return []
+    rows = []
+    back_word = "Coming back to you" if customer else "To give back"
+    done_word = "Returned to you" if customer else "Returned"
+    kept_word = "Kept by the shop (not refunded)" if customer else "Kept by the shop"
+    left = statement.refunded                       # handed back goes against the rental first, then the extra days, then the deposit
+
+    def share(amount):
+        nonlocal left
+        part = min(left, amount)
+        left -= part
+        return part
+
+    def row(label, amount, note, tone):
+        rows.append({"label": label, "amount": f"{amount:,.2f}", "note": note, "tone": tone})
+
+    def returning(label, amount, extra=""):
+        done = share(amount)
+        if done >= amount:
+            row(label, amount, done_word + extra, "done")
+        else:
+            row(label, amount, back_word + extra + (f" ({ledger.peso(done)} returned)" if done > 0 else ""), "due")
+
+    paid_rental = max(statement.received - statement.extra_received - statement.deposit_paid, ledger.ZERO)
+    full_rental = ledger.rental_due(reservation)
+    if paid_rental > 0 and statement.refunds_rental:
+        returning("Gown rental paid", paid_rental)
+    elif paid_rental > 0:
+        row("Gown rental paid", paid_rental, "Please contact the shop" if customer else "Cancelled before refunds: handled at the shop", "muted")
+    if full_rental > paid_rental:
+        unpaid = full_rental - paid_rental
+        row("Gown rental not paid", unpaid, "Nothing to pay" if customer else "Will not be collected", "muted")
+    if statement.extra_received > 0:
+        if statement.refunds_rental or reservation.pays_over_deposit:
+            returning("Extra days paid", statement.extra_received)
+        else:
+            row("Extra days paid", statement.extra_received, kept_word, "kept")
+    if statement.deposit_paid > 0:
+        if statement.deposit_back_too:
+            returning("Security deposit", statement.deposit_paid, " (the shop's fault)")
+        else:
+            row("Security deposit", statement.deposit_paid, kept_word, "kept")
+    elif statement.deposit > 0:
+        row("Security deposit", statement.deposit, "Not paid", "muted")
+    return rows
+
+
+def rental_back_if_gowns_cancelled(statement, items):
+    """How much MORE rental would have to be returned if these gowns of a running booking were cancelled (their rental stops counting)."""
+    price = sum((ledger.money(item.rental_price) for item in items), ledger.ZERO)
+    paid = statement.received - statement.extra_received - statement.deposit
+    before = max(paid - statement.rental, ledger.ZERO)
+    after = max(paid - max(statement.rental - price, ledger.ZERO), ledger.ZERO)
+    return after - before
+
+
+def tell_money_back(reservation):
+    """After the CUSTOMER cancelled: the message about what comes back to them, when there is anything."""
+    amount = money_back(reservation)
     if amount <= 0 or not reservation.has_account:
         return
+    how = "the shop will send it back" if reservation.reviewed_at else "please contact the shop"
     CustomerMessage.objects.create(
         recipient_id=reservation.customer_id, category=CustomerMessage.Category.PAYMENT,
-        body=(f"You cancelled {reservation.reference_code}. The security deposit is not refunded. The {ledger.peso(amount)} you paid over it "
-              "for extra days will be returned to you: please contact the shop."))
+        body=(f"You cancelled {reservation.reference_code}. The security deposit is not refunded. The {ledger.peso(amount)} you paid besides "
+              f"it will be returned to you: {how}."))
 
 
 def _release_gowns(items):
@@ -148,7 +225,8 @@ def _cancel_whole(reservation, items, *, staff_name, reason_key, note):
     caller's transaction, with the booking row locked."""
     reason = REASONS[reason_key]
     reservation.status = Reservation.Status.CANCELLED
-    reservation.save(update_fields=["status", "updated_at"])
+    reservation.refunds_rental = True          # the shop keeps the deposit; everything else paid goes back (reservations/ledger.py)
+    reservation.save(update_fields=["status", "refunds_rental", "updated_at"])
 
     shop_reason = reason[0] + (f" - {note}" if note else "")
     customer_reason = reason[1] or note
@@ -163,7 +241,7 @@ def _cancel_whole(reservation, items, *, staff_name, reason_key, note):
     _release_gowns(items)
     # A date change still waiting for payment is no longer needed.
     date_requests.close(reservation.pk, note="The booking was cancelled.", tell_customer=False)
-    back = over_back(reservation)
+    back = money_back(reservation)
 
     # A booking recorded for a walk-in with no website account has nobody to message: staff tell them in person or by phone.
     if reservation.has_account:
@@ -175,7 +253,7 @@ def _cancel_whole(reservation, items, *, staff_name, reason_key, note):
                 f"Your reservation {reservation.reference_code} ({gowns}) was cancelled by Arabela"
                 + (f". {customer_reason}" if customer_reason else ".")
                 + " Your security deposit is not refunded."
-                + (f" The {ledger.peso(back)} you paid over it for extra days will be returned to you." if back > 0 else "")
+                + (f" The {ledger.peso(back)} you paid besides it will be returned to you." if back > 0 else "")
                 + " If you would like to book again, please contact the shop."
             ),
         )
@@ -272,13 +350,16 @@ def cancel_gowns_by_staff(reservation_id, item_ids, *, staff_name, reason_key, n
         all_items = list(reservation.items.select_related("gown").order_by("rental_date", "id"))
         chosen = _gowns_to_cancel(all_items, item_ids)
 
+        before = ledger.statement(_with_money(reservation))
+        rental_back = rental_back_if_gowns_cancelled(before, chosen)
         claimed = ReservationItem.objects.filter(
             id__in=[item.id for item in chosen], stage=ReservationItem.Stage.PICKUP,
-        ).update(stage=ReservationItem.Stage.CANCELLED, updated_at=timezone.now())
+        ).update(stage=ReservationItem.Stage.CANCELLED, rental_dropped=True, updated_at=timezone.now())
         if claimed != len(chosen):
             raise CannotCancel("A gown in this booking changed while you were working. Please refresh the page.", 409)
         for item in chosen:
             item.stage = ReservationItem.Stage.CANCELLED
+            item.rental_dropped = True
 
         remaining = [item for item in all_items if item.stage != ReservationItem.Stage.CANCELLED]
         if not remaining:
@@ -304,12 +385,19 @@ def cancel_gowns_by_staff(reservation_id, item_ids, *, staff_name, reason_key, n
             date_requests.close(reservation.pk, note="That gown was cancelled.", item_ids=[item.id for item in chosen])
 
             if reservation.has_account:
+                price = sum((ledger.money(item.rental_price) for item in chosen), ledger.ZERO)
+                if rental_back > 0:
+                    about_money = f"The {ledger.peso(rental_back)} rental you paid for it will be returned to you. "
+                elif price > 0 and before.tracked:
+                    about_money = f"You no longer pay its {ledger.peso(price)} rental. "
+                else:
+                    about_money = ""
                 CustomerMessage.objects.create(
                     recipient=reservation.customer,
                     category=CustomerMessage.Category.GENERAL,
                     body=(
                         f"Arabela cancelled {_join_names(item.gown_name for item in chosen)} from your reservation "
-                        f"{reservation.reference_code}. {customer_reason} The rest of your reservation is unchanged. "
+                        f"{reservation.reference_code}. {customer_reason} The rest of your reservation is unchanged. {about_money}"
                         "If you have any questions about your payment, please contact the shop."
                     ),
                 )
@@ -332,9 +420,10 @@ def cancel_gowns_by_staff(reservation_id, item_ids, *, staff_name, reason_key, n
 def deposit_line(reservation):
     """The plain sentence staff read on a cancelled booking about the deposit."""
     if reservation.reviewed_at:
-        back = over_back(reservation)
+        back = money_back(reservation)
+        fate = (f"The owner gives it back: {reservation.deposit_refund_reason}." if reservation.deposit_refund_reason else "It is not refunded.")
         return (f"Deposit {_peso(reservation.security_deposit)} was paid and verified on {_day(reservation.reviewed_at)}. "
-                "It is not refunded." + (f" {_peso(back)} paid over it still has to be given back (Payments)." if back > 0 else ""))
+                f"{fate}" + (f" {_peso(back)} still has to be given back (Payments)." if back > 0 else ""))
     return "Cancelled before the payment was verified."
 
 

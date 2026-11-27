@@ -1427,6 +1427,7 @@
                               data-gowns="{{ r.cancel_gowns }}"
                               data-event="{{ r.cancel_event_text }}"
                               data-deposit="&#8369;{{ r.security_deposit|floatformat:'2g' }}"
+                              data-back="{{ r.cancel_back }}"
                               data-reason="{{ r.cancel_default_reason }}">{% if admin_perms.cancel_bookings %}Cancel booking{% else %}Request cancellation{% endif %}</button>
                             {% endif %}
                             {% if r.show_cancel_unpicked and not r.cancel_request or r.show_cancel_unpicked and admin_perms.cancel_bookings %}
@@ -1435,7 +1436,7 @@
                                  page loaded is refused instead of cancelled by surprise. -->
                             <button type="button" class="cb-open-btn{% if r.unpicked_urgent %} cb-open-btn--urgent{% endif %}"
                               title="Cancel the {{ r.unpicked_count }} gowns nobody picked up. Gowns that went out or came back are not touched."
-                              data-mode="gowns" data-ids="{{ r.unpicked_ids }}"
+                              data-mode="gowns" data-ids="{{ r.unpicked_ids }}" data-back="{{ r.unpicked_back }}"
                               {% if admin_perms.cancel_bookings %}data-url="{% url 'arabela_admin:reservation_cancel_gowns' r.id %}"{% else %}data-request="1" data-url="{% url 'arabela_admin:cancel_request_create' r.id %}"{% endif %}
                               data-ref="{{ r.reference_code }}"
                               data-customer="{{ r.display_customer_name }}"
@@ -1551,7 +1552,7 @@
                                  Opens the small confirm window in partials/cancel_booking.html. -->
                             <button type="button" class="cb-open-btn cb-open-btn--small{% if item.cancel_urgent %} cb-open-btn--urgent{% endif %}"
                               title="{% if item.cancel_urgent %}The event date has passed and this gown was never picked up{% else %}Cancel just this gown{% endif %}"
-                              data-mode="gown" data-ids="{{ item.id }}"
+                              data-mode="gown" data-ids="{{ item.id }}" data-back="{{ item.cancel_back }}"
                               {% if admin_perms.cancel_bookings %}data-url="{% url 'arabela_admin:reservation_cancel_gowns' r.id %}"{% else %}data-request="1" data-url="{% url 'arabela_admin:cancel_request_create' r.id %}"{% endif %}
                               data-ref="{{ r.reference_code }}"
                               data-customer="{{ r.display_customer_name }}"

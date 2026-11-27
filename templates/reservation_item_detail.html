@@ -471,18 +471,46 @@
         {% endcomment %}
         <section class="mt-20 border-t border-black/5 pt-16" id="payments" data-live-region="item-payments">
           <h2 class="mb-3 font-headline text-2xl font-extrabold tracking-tight text-[#1b1c1c] md:text-3xl">Payments &amp; Receipts</h2>
-          <p class="mb-8 max-w-2xl text-sm leading-relaxed text-secondary/70">What you have paid for {{ reservation.reference_code }}, what is left to pay at the shop, and your Payment Receipts.</p>
+          <p class="mb-8 max-w-2xl text-sm leading-relaxed text-secondary/70">What you have paid for {{ reservation.reference_code }}, {% if money.cancelled %}what comes back to you{% else %}what is left to pay at the shop{% endif %}, and your Payment Receipts.</p>
+          {% if money.cancelled %}
+          <!-- A cancelled booking: nothing more is asked; each kind of money says what happens to it. -->
+          <div class="max-w-2xl space-y-3 text-sm">
+            <p class="text-[0.6875rem] font-semibold uppercase tracking-[0.1rem] text-secondary/60">{% if money.refund_available > 0 or money.refunded > 0 %}Money coming back to you{% else %}Your payments{% endif %}</p>
+            {% for m in money_rows %}
+              <div class="flex items-start justify-between gap-4 text-secondary/70">
+                <span>{{ m.label }}<span class="mt-0.5 block text-xs font-semibold {% if m.tone == 'due' %}text-amber-700{% elif m.tone == 'done' %}text-emerald-700{% else %}text-secondary/60{% endif %}">{{ m.note }}</span></span>
+                <span class="whitespace-nowrap">PHP {{ m.amount }}</span>
+              </div>
+            {% empty %}
+              <p class="text-secondary/70">Nothing was paid on this booking.</p>
+            {% endfor %}
+            <div class="h-px w-full bg-black/5"></div>
+            <div class="flex items-center justify-between text-secondary/70"><span>Paid so far</span><span>PHP {{ money.received|floatformat:"2g" }}</span></div>
+            <div class="flex items-center justify-between text-secondary/70"><span>Returned to you</span><span>PHP {{ money.refunded|floatformat:"2g" }}</span></div>
+            <div class="flex items-center justify-between text-base font-semibold text-secondary"><span>Still coming back to you</span><span>PHP {{ money.refund_available|floatformat:"2g" }}</span></div>
+            {% if money.refund_available > 0 %}<p class="text-secondary/70">The shop will return it to you.{% if site_phone %} Questions? Call <a href="{{ site_phone_tel }}" class="underline underline-offset-4">{{ site_phone }}</a>.{% endif %}</p>{% endif %}
+          </div>
+          {% else %}
           <div class="max-w-2xl space-y-3 text-sm">
             <div class="flex items-center justify-between text-secondary/70"><span>Gown rental</span><span>PHP {{ money.rental|floatformat:"2g" }}</span></div>
             <div class="flex items-center justify-between text-secondary/70"><span>Security deposit</span><span>PHP {{ money.deposit|floatformat:"2g" }}</span></div>
             {% if over_in_payments > 0 %}<div class="flex items-center justify-between text-secondary/70"><span>Extra days and fees over the deposit</span><span>PHP {{ over_in_payments|floatformat:"2g" }}</span></div>{% endif %}
             <div class="h-px w-full bg-black/5"></div>
             <div class="flex items-center justify-between text-base font-semibold text-secondary"><span>Total to pay</span><span>PHP {{ payments_total|floatformat:"2g" }}</span></div>
-            <div class="flex items-center justify-between text-secondary/70"><span>Paid so far</span><span>PHP {{ money.received|floatformat:"2g" }}</span></div>
+            <div class="flex items-center justify-between text-secondary/70"><span>Paid so far</span><span>PHP {{ money.paid_net|floatformat:"2g" }}</span></div>
             <div class="flex items-center justify-between text-base font-semibold {% if money.balance_due > 0 %}text-[#dc2626]{% else %}text-emerald-700{% endif %}">
               <span>{% if money.balance_due > 0 %}Balance to pay at the shop{% else %}Nothing left to pay{% endif %}</span><span>PHP {{ money.balance_due|floatformat:"2g" }}</span>
             </div>
           </div>
+          {% if money.rental_dropped > 0 %}
+          <div class="mt-8 max-w-2xl space-y-2 text-sm">
+            <p class="text-[0.6875rem] font-semibold uppercase tracking-[0.1rem] text-secondary/60">Cancelled gown</p>
+            <div class="flex items-center justify-between text-secondary/70"><span>Its rental (not charged)</span><span class="line-through">PHP {{ money.rental_dropped|floatformat:"2g" }}</span></div>
+            {% if money.rental_returned > 0 %}<div class="flex items-center justify-between text-secondary/70"><span>Rental returned to you</span><span>PHP {{ money.rental_returned|floatformat:"2g" }}</span></div>{% endif %}
+            {% if money.rental_to_return > 0 %}<div class="flex items-center justify-between font-semibold text-secondary"><span>Rental coming back to you</span><span>PHP {{ money.rental_to_return|floatformat:"2g" }}</span></div>{% endif %}
+          </div>
+          {% endif %}
+          {% endif %}
 
           {% if money.extra_days_fee > 0 %}
           <div class="mt-8 max-w-2xl border-l-2 border-amber-300 bg-amber-50/50 p-6 text-sm text-secondary">
@@ -517,15 +545,7 @@
           </div>
           {% endif %}
 
-          {% if money.cancelled and money.extra_credit > 0 %}
-          <div class="mt-8 max-w-2xl space-y-2 text-sm">
-            <p class="text-[0.6875rem] font-semibold uppercase tracking-[0.1rem] text-secondary/60">Money coming back to you</p>
-            <div class="flex items-center justify-between text-secondary/70"><span>Paid over your security deposit</span><span>PHP {{ money.extra_received|floatformat:"2g" }}</span></div>
-            {% if money.refunded > 0 %}<div class="flex items-center justify-between text-secondary/70"><span>Handed back to you</span><span>PHP {{ money.refunded|floatformat:"2g" }}</span></div>{% endif %}
-            <div class="h-px w-full bg-black/5"></div>
-            <div class="flex items-center justify-between font-semibold text-secondary"><span>Still to give you back</span><span>PHP {{ money.refund_available|floatformat:"2g" }}</span></div>
-            <p class="text-secondary/70">The booking was cancelled, so the security deposit is not refunded. What you paid over it for extra days is returned.</p>
-          </div>
+          {% if money.cancelled %}
           {% elif money.deductions_total > 0 or money.all_returned or money.total_deduction > 0 %}
           <div class="mt-8 max-w-2xl space-y-2 text-sm">
             <p class="text-[0.6875rem] font-semibold uppercase tracking-[0.1rem] text-secondary/60">Your security deposit</p>
@@ -537,7 +557,7 @@
             <div class="flex items-center justify-between text-secondary/70"><span>Overdue fee</span><span>- PHP {{ money.overdue_fee|floatformat:"2g" }}</span></div>
             <div class="flex items-center justify-between text-secondary/70"><span>Deductions</span><span>- PHP {{ money.deductions_total|floatformat:"2g" }}</span></div>
             <div class="h-px w-full bg-black/5"></div>
-            <div class="flex items-center justify-between font-semibold text-secondary"><span>{% if money.refunded > 0 %}Handed back to you{% else %}To get back{% endif %}</span><span>PHP {% if money.refunded > 0 %}{{ money.refunded|floatformat:"2g" }}{% else %}{{ money.refundable_total|floatformat:"2g" }}{% endif %}</span></div>
+            <div class="flex items-center justify-between font-semibold text-secondary"><span>{% if money.deposit_given > 0 %}Handed back to you{% else %}To get back{% endif %}</span><span>PHP {% if money.deposit_given > 0 %}{{ money.deposit_given|floatformat:"2g" }}{% else %}{{ money.deposit_refundable|floatformat:"2g" }}{% endif %}</span></div>
           </div>
           {% endif %}
 
@@ -886,7 +906,7 @@
       function cancelReservationItem(url, btn) {
         arabelaConfirm({
           title: 'Cancel reservation',
-          message: 'This cannot be undone, and repeated cancellations are recorded on your account.{% if paid_over > 0 %} The PHP {{ paid_over|floatformat:"2g" }} you paid over your security deposit will be returned to you.{% endif %}',
+          message: 'This cannot be undone, and repeated cancellations are recorded on your account.{{ cancel_note|escapejs }}',
           confirmText: 'Cancel reservation',
           cancelText: 'Keep it',
           danger: true,

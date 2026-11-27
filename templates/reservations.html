@@ -488,7 +488,7 @@
                   {% endif %}
                   {% if can_cancel %}
                   <button type="button" aria-label="Cancel reservation" class="inline-flex h-8 w-8 items-center justify-center rounded-[9999px] text-secondary/50 transition-colors hover:bg-red-50 hover:text-[#dc2626]"
-                    onclick="event.stopPropagation(); cancelReservationItem('{% url 'gowns:reservation_item_cancel' item.id %}', this)">
+                    data-money-note="{{ reservation.cancel_note }}" onclick="event.stopPropagation(); cancelReservationItem('{% url 'gowns:reservation_item_cancel' item.id %}', this)">
                     <span class="material-symbols-outlined" style="font-size: 1.15rem;">delete</span>
                   </button>
                   {% endif %}
@@ -809,7 +809,7 @@
       function cancelReservationItem(url, btn) {
         arabelaConfirm({
           title: 'Cancel reservation',
-          message: 'This cannot be undone, and repeated cancellations are recorded on your account.',
+          message: 'This cannot be undone, and repeated cancellations are recorded on your account.' + (btn.getAttribute('data-money-note') || ''),
           confirmText: 'Cancel reservation',
           cancelText: 'Keep it',
           danger: true,

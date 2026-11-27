@@ -247,7 +247,7 @@ def _content(kind, data, shop):
             heading="Your reservation was cancelled",
             preheader="Your reservation was cancelled by Arabela.",
             paragraphs=["Your reservation was cancelled by Arabela. Your security deposit is not refunded."
-                        + (f" The {data['over_back']} you paid over it for extra days will be returned to you." if data.get("over_back") else ""),
+                        + (f" The {data['over_back']} you paid besides it will be returned to you." if data.get("over_back") else ""),
                         f"If you would like to book again, {reach_us}"],
             note={"tone": "quiet", "title": "Why it was cancelled",
                   "text": data.get("reason") or "Please contact the shop for details."},
@@ -258,7 +258,8 @@ def _content(kind, data, shop):
             subject=f"A gown in your reservation {code} was cancelled",
             heading="A gown in your reservation was cancelled",
             preheader="Arabela cancelled part of your reservation. The rest is unchanged.",
-            paragraphs=[f"Arabela cancelled part of your reservation {code}. The rest of your reservation is unchanged.",
+            paragraphs=[f"Arabela cancelled part of your reservation {code}. The rest of your reservation is unchanged."
+                        + (f" The {data['rental_back']} rental you paid for the cancelled gown will be returned to you." if data.get("rental_back") else ""),
                         f"If you have any questions, including about your payment, {reach_us}"],
             note={"tone": "quiet", "title": "What was cancelled",
                   "text": data.get("reason") or "Please contact the shop for details."},
@@ -402,7 +403,10 @@ def _reservation_data(reservation, text=""):
     if over:
         extra = min(extra, int(reservation.security_deposit))
     from reservations import cancellation
-    back = cancellation.over_back(reservation) if reservation.status == reservation.Status.CANCELLED else 0
+    back = cancellation.money_back(reservation) if reservation.status == reservation.Status.CANCELLED else 0
+    # Rental paid for a gown the shop cancelled while the booking carries on: still to be returned.
+    rental_back = (ledger.statement(reservation).rental_to_return
+                   if reservation.status != reservation.Status.CANCELLED and any(i.rental_dropped for i in every) else 0)
     return {
         "first_name": _first_name(reservation.customer_name),
         "reference_code": reservation.reference_code,
@@ -411,6 +415,7 @@ def _reservation_data(reservation, text=""):
         "deduction": _peso(extra) if extra > 0 else "",
         "over": _peso(over) if over else "",
         "over_back": _peso(back) if back else "",
+        "rental_back": _peso(rental_back) if rental_back else "",
         "total": _peso(reservation.total_amount + (over or 0)),
         "text": text,
     }

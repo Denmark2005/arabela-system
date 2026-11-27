@@ -1068,11 +1068,14 @@ def _deposit_state(reservation, live_items, today):
             notes.append(f"{back} of {len(live_items)} gowns back")
         else:
             notes.append("Gown not back yet")
+        if statement.rental_to_return > 0:
+            notes.append(f"{ledger.peso(statement.rental_to_return)} rental of a cancelled gown to give back (Payments)")
         if statement.deposit_unpaid > 0:
             notes.append(f"{ledger.peso(statement.deposit_unpaid)} of the deposit is not paid yet")
     elif statement.refund_available > 0:
         state = "Return due"
-        notes.append(f"{ledger.peso(statement.refund_available)} to hand back")
+        rental_part = f" ({ledger.peso(statement.rental_to_return)} of it rental of a cancelled gown)" if statement.rental_to_return > 0 else ""
+        notes.append(f"{ledger.peso(statement.refund_available)} to hand back{rental_part}")
         if statement.deposit_used > 0:
             notes.append(f"{ledger.peso(statement.deposit_used)} kept for fees or deductions")
     else:
@@ -1081,7 +1084,7 @@ def _deposit_state(reservation, live_items, today):
         if handed_back:
             when = timezone.localtime(max(p.paid_at for p in handed_back)).date()
             how = " and ".join(methods)
-            notes.append(f"{ledger.peso(statement.refunded)} handed back" + (f" ({how})" if how else ""))
+            notes.append(f"{ledger.peso(statement.refunded - statement.rental_returned)} handed back" + (f" ({how})" if how else ""))
         elif statement.deposit_paid <= 0:
             notes.append("No deposit was paid")
         else:
@@ -1092,7 +1095,8 @@ def _deposit_state(reservation, live_items, today):
         "extra_days_fee": statement.extra_days_fee,
         "extra_back": statement.extra_received if statement.extra_credit > 0 else Decimal("0"),    # an extra charge paid before that goes back too
         "deductions": statement.deductions_total,
-        "handed_back": statement.refunded, "to_hand_back": statement.refund_available,
+        # the DEPOSIT's own figures: rental returned for a cancelled gown is not part of the deposit
+        "handed_back": statement.refunded - statement.rental_returned, "to_hand_back": statement.refund_available - statement.rental_to_return,
     }
 
 
@@ -1370,9 +1374,11 @@ def _deposit_status(reservation, money):
     if reservation.status == Reservation.Status.PENDING:
         return "Awaiting verification" if reservation.payment_proof_url else "Not paid"
     if reservation.status == Reservation.Status.CANCELLED:
-        # Approved before it was cancelled = the payment was verified and the deposit is kept (not refunded).
+        # Approved before it was cancelled = the payment was verified and the deposit is kept (not refunded), unless the owner gives it back.
         if not reservation.reviewed_at:
             return "Never verified"
+        if money.deposit_back_too:
+            return "Return due" if money.refund_available > 0 else "Returned"
         return "Paid, not refunded" if money.deposit_paid > 0 else "Not paid yet"
     return "Not held"
 
@@ -1381,11 +1387,18 @@ def _payment_words(reservation, money):
     """The payment line of All Bookings' details window: what is still owed while anything is, else where the payment stands (Reservation.payment_state)."""
     if money.tracked and not money.cancelled and money.balance_due > 0:
         return f"Balance {_peso(money.balance_due)} to pay"
+    if money.tracked and money.refund_available > 0 and (money.cancelled or money.rental_to_return > 0):
+        return f"{_peso(money.refund_available)} to give back"
     return reservation.payment_state
 
 
 def _peso(amount):
     return f"₱{amount:,.2f}"
+
+
+def _amount_or_blank(amount):
+    """'8,000.00', or '' when there is nothing."""
+    return f"{amount:,.2f}" if amount > 0 else ""
 
 
 def _id_badge(reservation, owner):
@@ -1496,14 +1509,17 @@ def reservation_records_view(request):
             # later bookings) -- that one's payment proof is reviewed on Payment
             # Verification instead, which already reads this exact ?search= param.
             "depositLink": (
-                reverse("arabela_admin:security_deposits") + "?" + urlencode({"search": r.reference_code})
+                reverse("arabela_admin:payments") + "?" + urlencode({"open": r.id})
+                if r.status == Reservation.Status.CANCELLED and money.refund_available > 0
+                else reverse("arabela_admin:security_deposits") + "?" + urlencode({"search": r.reference_code})
                 if r.status in _SCHEDULED_STATUSES
                 else reverse("arabela_admin:payment_verification") + "?" + urlencode({"search": r.reference_code})
                 if deposit_status in ("Awaiting verification", "Paid, not refunded")
                 else ""
             ),
             "depositLinkLabel": (
-                "Open in Security Deposits" if r.status in _SCHEDULED_STATUSES
+                "Give the money back in Payments" if r.status == Reservation.Status.CANCELLED and money.refund_available > 0
+                else "Open in Security Deposits" if r.status in _SCHEDULED_STATUSES
                 else "Open in Payment Verification" if deposit_status == "Awaiting verification"
                 else "See the payment in Payment Verification" if deposit_status == "Paid, not refunded"
                 else ""
@@ -1793,6 +1809,8 @@ def active_reservations_view(request):
             reservation.state = "confirmed"
         reservation.can_cancel = reservation_cancellation.can_cancel(reservation, booking_items)
         if reservation.can_cancel:
+            # what the cancel window says goes back: everything paid besides the security deposit
+            reservation.cancel_back = _amount_or_blank(money.received - money.deposit_paid - money.refunded)
             event = min(i.effective_event_date for i in live_items)
             reservation.cancel_event_text = _event_when_text(event, today)
             reservation.cancel_urgent = (event - today).days < 0   # the event is over and the gown was never collected
@@ -1815,6 +1833,7 @@ def active_reservations_view(request):
                 item.cancel_event_text = _event_when_text(item.effective_event_date, today)
                 item.cancel_urgent = item.effective_event_date < today
                 item.cancel_default_reason = "no_show" if item.rental_date < today else "customer_asked"
+                item.cancel_back = _amount_or_blank(reservation_cancellation.rental_back_if_gowns_cancelled(money, [item]))
         reservation.show_cancel_unpicked = gown_cancel_ok and len(waiting) >= 2 and not reservation.can_cancel
         if reservation.show_cancel_unpicked:
             first_event = min(i.effective_event_date for i in waiting)
@@ -1823,6 +1842,7 @@ def active_reservations_view(request):
             reservation.unpicked_names = ", ".join(i.gown_name for i in waiting)
             reservation.unpicked_event_text = _event_when_text(first_event, today)
             reservation.unpicked_urgent = first_event < today
+            reservation.unpicked_back = _amount_or_blank(reservation_cancellation.rental_back_if_gowns_cancelled(money, waiting))
             reservation.unpicked_default_reason = (
                 "no_show" if any(i.rental_date < today for i in waiting) else "customer_asked"
             )

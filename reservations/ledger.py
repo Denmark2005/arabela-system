@@ -22,6 +22,10 @@ The one rule set the Payments page, the printed receipts, the customer's booking
     more than the deposit are paid together with it (Payment.extra_part, "over with deposit"), a date change that goes over it is
     paid before it happens (reservations/date_requests.py), and a CANCELLED booking gets what it paid over the deposit back (the
     deposit itself is kept).
+  * The refund rule (bookings cancelled since it: Reservation.refunds_rental): the shop keeps the security deposit and gives back
+    everything else that was paid, rental included. The owner may also give the deposit back (Reservation.deposit_refund_reason).
+    A single gown cancelled while the booking carries on (ReservationItem.rental_dropped): its rental is no longer counted, and any
+    of it already paid is to be given back at once. Rental given back is marked on the payment (Payment.rental_part).
   * Balance still to pay = what is unpaid of the deposit and the rental + any extra owed.
 
 A booking made before the Payments page has no Payment rows. Until the one-time backfill (manage.py backfill_payments) gives it some, its
@@ -275,7 +279,9 @@ def payment_rows(payment):
     """One stored payment as the rows it adds up as: its purpose, and -- when part of it paid extra days over the deposit
     (Payment.extra_part) -- that part as an extra charge of its own."""
     amount, part = money(payment.amount), money(payment.extra_part)
-    if part <= 0 or payment.direction != Payment.Direction.IN or payment.purpose == Payment.Purpose.EXTRA:
+    if payment.direction == Payment.Direction.OUT:
+        return [{"direction": payment.direction, "purpose": payment.purpose, "amount": amount, "rental": money(payment.rental_part)}]
+    if part <= 0 or payment.purpose == Payment.Purpose.EXTRA:
         return [{"direction": payment.direction, "purpose": payment.purpose, "amount": amount}]
     part = min(part, amount)
     return [{"direction": payment.direction, "purpose": payment.purpose, "amount": amount - part},
@@ -308,11 +314,15 @@ def statement(reservation, today=None):
     today = today or timezone.localdate()
     tracked = counts_as_tracked(reservation)
     cancelled = reservation.status == Reservation.Status.CANCELLED
-    deposit_due, rental = money(reservation.security_deposit), rental_due(reservation)
+    deposit_due, full_rental = money(reservation.security_deposit), rental_due(reservation)
     rate = int(reservation.late_fee_per_day or 0)
 
     items = list(reservation.items.all())
     live = [i for i in items if i.stage != ReservationItem.Stage.CANCELLED]
+    # A gown cancelled while the booking carried on (the refund rule): its rental is no longer counted. A cancelled booking shows all of its rental.
+    dropped = ZERO if cancelled else min(full_rental, sum(
+        (money(i.rental_price) for i in items if i.rental_dropped and i.stage == ReservationItem.Stage.CANCELLED), ZERO))
+    rental = full_rental - dropped
 
     stored = list(reservation.payments.all())
     legacy = False
@@ -326,6 +336,7 @@ def statement(reservation, today=None):
     core_in = sum((r["amount"] for r in rows if r["direction"] == Payment.Direction.IN and r["purpose"] in core_purposes), ZERO)
     extra_in = sum((r["amount"] for r in rows if r["direction"] == Payment.Direction.IN and r["purpose"] == Payment.Purpose.EXTRA), ZERO)
     refunded = sum((r["amount"] for r in rows if r["direction"] == Payment.Direction.OUT), ZERO)
+    rental_returned = sum((r.get("rental", ZERO) for r in rows if r["direction"] == Payment.Direction.OUT), ZERO)
 
     # Money covers the deposit first, then the rental.
     deposit_paid = min(core_in, deposit_due)
@@ -389,8 +400,18 @@ def statement(reservation, today=None):
     overflow = max(against - deposit_paid - covered_when_paid, ZERO)
     extra_owed = max(overflow - extra_in, ZERO)
     all_returned = bool(live) and all(i.stage == ReservationItem.Stage.RETURNED for i in live)
-    if cancelled and reservation.pays_over_deposit:
-        # A cancelled booking keeps the DEPOSIT; what was paid over it (for days it now will not use) is the customer's and goes back.
+    refund_rule = cancelled and reservation.refunds_rental
+    deposit_back_too = refund_rule and bool(reservation.deposit_refund_reason)
+    deposit_refundable = deposit_given = deposit_available = rental_to_return = ZERO
+    if refund_rule:
+        # Cancelled under the refund rule: the shop keeps the deposit (unless the owner gave it back too); everything else paid is returned.
+        paid_for_rental = max(core_in - deposit_paid, ZERO)
+        extra_credit = extra_in
+        refundable_total = paid_for_rental + extra_in + (deposit_paid if deposit_back_too else ZERO)
+        refund_available = max(refundable_total - refunded, ZERO) if tracked else ZERO
+        rental_to_return = min(max(paid_for_rental - rental_returned, ZERO), refund_available)
+    elif cancelled and reservation.pays_over_deposit:
+        # Cancelled before the refund rule: it keeps the DEPOSIT; what was paid over it (for days it will not use) goes back.
         extra_credit = extra_in
         refundable_total = extra_credit
         refund_available = max(refundable_total - refunded, ZERO) if tracked else ZERO
@@ -398,8 +419,19 @@ def statement(reservation, today=None):
         # An extra charge paid that is no longer needed is the customer's money: it goes back with the deposit. (An older booking that was
         # cancelled keeps what it has.)
         extra_credit = ZERO if cancelled else max(extra_in - overflow, ZERO)
-        refundable_total = max(deposit_paid - against, ZERO) + extra_credit
-        refund_available = max(refundable_total - refunded, ZERO) if (tracked and not cancelled and all_returned) else ZERO
+        deposit_refundable = max(deposit_paid - against, ZERO) + extra_credit
+        # Rental already paid for a gown that was cancelled since (the booking carries on) goes back at once; the deposit once every gown is back.
+        rental_excess = max(core_in - deposit_due - rental, ZERO) if (dropped > 0 and not cancelled) else ZERO
+        refundable_total = deposit_refundable + rental_excess
+        deposit_given = max(refunded - rental_returned, ZERO)
+        if tracked and not cancelled:
+            rental_to_return = max(rental_excess - rental_returned, ZERO)
+        deposit_available = max(deposit_refundable - deposit_given, ZERO) if (tracked and not cancelled and all_returned) else ZERO
+        refund_available = deposit_available + rental_to_return
+    # What the shop keeps of a cancelled booking's money.
+    kept = ZERO
+    if cancelled:
+        kept = max(core_in + extra_in - (refundable_total if (refund_rule or reservation.pays_over_deposit) else refunded), ZERO)
 
     balance_core = deposit_unpaid + rental_unpaid
     balance_due = balance_core + extra_owed
@@ -428,7 +460,7 @@ def statement(reservation, today=None):
     return Statement(
         tracked=tracked, legacy=legacy, cancelled=cancelled,
         rental=rental, deposit=deposit_due, total=rental + deposit_due,
-        received=core_in + extra_in, refunded=refunded,
+        received=core_in + extra_in, refunded=refunded, paid_net=core_in + extra_in - rental_returned,
         deposit_paid=deposit_paid, rental_paid=rental_paid, deposit_unpaid=deposit_unpaid, rental_unpaid=rental_unpaid,
         late_rate=Decimal(rate), late_lines=late_lines, late_days_total=sum(line["days"] for line in late_lines), late_fee=late_fee,
         late_now=late_now, overdue_now=overdue_now, fee_lines=fee_lines, change_fee=change_fee, overdue_fee=overdue_fee,
@@ -442,7 +474,10 @@ def statement(reservation, today=None):
         extra_owed=extra_owed, over_with_deposit=over_with_deposit, refundable_total=refundable_total, refund_available=refund_available,
         pays_over_deposit=reservation.pays_over_deposit,
         all_returned=all_returned, balance_core=balance_core, balance_due=balance_due,
-        state=state, state_label=STATE_LABELS[state],
+        # the refund rule: cancelled gowns' rental no longer counted, rental still to give back, what the shop keeps of a cancelled booking
+        rental_dropped=dropped, rental_returned=rental_returned, rental_to_return=rental_to_return, refunds_rental=refund_rule,
+        deposit_back_too=deposit_back_too, deposit_refundable=deposit_refundable, deposit_given=deposit_given, deposit_available=deposit_available, kept=kept,
+        state=state, state_label="Cancelled" if (state == CANCELLED and deposit_back_too) else STATE_LABELS[state],
     )
 
 

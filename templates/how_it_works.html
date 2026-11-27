@@ -113,14 +113,14 @@
           <div class="lg:col-span-7 flex items-center justify-center bg-surface-container-low h-[220px] md:h-[300px]">
             <div class="text-center p-12">
               <span class="material-symbols-outlined text-6xl text-primary mb-6" data-icon="task_alt">task_alt</span>
-              <p class="font-label text-[0.6875rem] uppercase tracking-[0.3em] text-on-surface-variant">Admin Verification</p>
+              <p class="font-label text-[0.6875rem] uppercase tracking-[0.3em] text-on-surface-variant">{% if paymongo_enabled %}Confirmed Automatically{% else %}Admin Verification{% endif %}</p>
             </div>
           </div>
           <div class="lg:col-span-5 pl-0 lg:pl-12">
             <span class="font-label text-[0.6875rem] uppercase tracking-[0.15em] text-on-secondary-container mb-6 block">STEP FOUR</span>
-            <h2 class="font-headline text-3xl md:text-4xl font-bold uppercase tracking-tight mb-8">WAIT FOR CONFIRMATION</h2>
+            <h2 class="font-headline text-3xl md:text-4xl font-bold uppercase tracking-tight mb-8">{% if paymongo_enabled %}YOUR BOOKING IS CONFIRMED{% else %}WAIT FOR CONFIRMATION{% endif %}</h2>
             <p class="font-body text-on-surface-variant leading-[1.6] text-sm md:text-base max-w-md">
-              Once the admin verifies your GCash payment, your reservation status will be updated and the gown will be officially <span class="font-semibold text-primary">Reserved</span> under your account. Your Order Summary &amp; Receipt — reachable from Reservations — becomes your official record, showing the amount breakdown and the payment proof you uploaded.
+              {% if paymongo_enabled %}As soon as your payment is received, your booking is confirmed and the gown is officially <span class="font-semibold text-primary">Reserved</span> under your account. Your Order Summary &amp; Receipt — reachable from Reservations — is your official record, with a numbered receipt for every payment.{% else %}Once the admin verifies your GCash payment, your reservation status will be updated and the gown will be officially <span class="font-semibold text-primary">Reserved</span> under your account. Your Order Summary &amp; Receipt — reachable from Reservations — becomes your official record, showing the amount breakdown and the payment proof you uploaded.{% endif %}
             </p>
           </div>
         </section>
@@ -131,7 +131,7 @@
             <span class="font-label text-[0.6875rem] uppercase tracking-[0.15em] text-on-secondary-container mb-6 block">STEP FIVE</span>
             <h2 class="font-headline text-3xl md:text-4xl font-bold uppercase tracking-tight mb-8">PAY THE FULL RENTAL AMOUNT</h2>
             <p class="font-body text-on-surface-variant leading-[1.6] text-sm md:text-base max-w-md">
-              The remaining full rental amount is paid separately when you visit the shop or via GCash on the day of pickup.
+              {% if paymongo_enabled %}If you paid only the deposit, the rental is paid at the shop on pick-up day, in cash or by scanning the shop's QR code (GCash, Maya or QR Ph). If you paid in full online, there is nothing more to pay.{% else %}The remaining full rental amount is paid separately when you visit the shop or via GCash on the day of pickup.{% endif %}
             </p>
           </div>
           <div class="lg:col-span-7 order-1 lg:order-2 h-[220px] md:h-[300px] flex items-center justify-center border border-outline-variant/20">

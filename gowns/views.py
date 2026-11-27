@@ -1719,11 +1719,14 @@ def confirmation(request):
 @login_required(login_url='accounts:login')
 def orders(request):
     profile, _ = UserProfile.objects.get_or_create(user=request.user)
-    reservations = (
+    reservations = list(
         request.user.reservations
-        .prefetch_related('items')
+        .prefetch_related('items', 'payments', 'deductions', 'receipt_records')
         .order_by('-created_at')
     )
+    for reservation in reservations:
+        if any(item.can_customer_cancel for item in reservation.items.all()):
+            reservation.cancel_note = _cancel_money_note(reservation)
     profile.reservations_last_seen_at = timezone.now()
     profile.save(update_fields=["reservations_last_seen_at"])
     return render(
@@ -1731,6 +1734,17 @@ def orders(request):
         'reservations.html',
         {"display_name": profile.display_name, "reservations": reservations},
     )
+
+
+def _cancel_money_note(reservation):
+    """What the "Cancel reservation?" question says about money: the deposit that stays with the shop and what comes back."""
+    back, kept = cancellation.back_if_cancelled(reservation)
+    if not reservation.reviewed_at:                    # a screenshot payment the shop has not checked yet
+        return f" The PHP {back:,.2f} you paid over the security deposit will be returned to you: please contact the shop." if back > 0 else ""
+    note = f" Your PHP {kept:,.2f} security deposit is not refunded." if kept > 0 else ""
+    if back > 0:
+        note += f" The PHP {back:,.2f} you paid besides it will be returned to you."
+    return note
 
 
 def _variation_for(reservation, item):
@@ -1816,6 +1830,9 @@ def reservation_item_detail(request, item_id):
             "date_request_dates": date_requests.new_dates_text(date_request) if date_request else "",
             "online_pay": gateway.enabled(),
             "payment_cancelled": request.GET.get("payment") == "cancelled",
+            "cancel_note": _cancel_money_note(reservation) if item.can_customer_cancel else "",
+            # a cancelled booking: what happened to each kind of money, in the customer's words
+            "money_rows": cancellation.money_story(reservation, money, customer=True),
         },
     )
 
@@ -1857,7 +1874,8 @@ def reservation_item_cancel(request, item_id):
 
     reservation = item.reservation
     reservation.status = Reservation.Status.CANCELLED
-    reservation.save(update_fields=["status", "updated_at"])
+    reservation.refunds_rental = True          # the shop keeps the deposit; everything else paid goes back (reservations/ledger.py)
+    reservation.save(update_fields=["status", "refunds_rental", "updated_at"])
     # Reservation-wide, not per-item: cancelling one item cancels the whole booking
     # (see ReservationItem.can_customer_cancel), so the event must not be filed under
     # the single gown the customer happened to click Cancel on.
@@ -1884,9 +1902,9 @@ def reservation_item_cancel(request, item_id):
     # The automatic 5-day rest after each gown's rental goes too: a cancelled booking never had a rental to rest from, so those
     # days must be bookable again right away (rejecting and the shop's own Cancel already do the same).
     GownUnavailability.objects.filter(auto_for_item__reservation=reservation).delete()
-    # A date change still waiting for payment is no longer needed, and what was paid over the deposit goes back.
+    # A date change still waiting for payment is no longer needed, and everything paid besides the deposit goes back.
     date_requests.close(reservation.pk, note="The booking was cancelled.", tell_customer=False)
-    cancellation.tell_over_back(reservation)
+    cancellation.tell_money_back(reservation)
 
     # Repeat cancellations auto-flag the account for admin review (see
     # accounts.services.CANCELLATION_FLAG_THRESHOLD). No-op below the threshold.

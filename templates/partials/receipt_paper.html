@@ -61,9 +61,20 @@
   <hr class="rc-rule">
   {% endif %}
 
-  {% if r.return.cancelled %}
-    <div class="rc-row"><span>Paid over the deposit</span><span>&#8369;{{ r.return.extra_paid|floatformat:"2g" }}</span></div>
-    <div class="rc-sub">Booking cancelled. The security deposit (&#8369;{{ r.return.deposit_paid|floatformat:"2g" }}) is not refunded.</div>
+  {% if r.return.cancelled or r.return.rental_only %}
+    {% if r.return.rental_only %}
+      <div class="rc-bold">CANCELLED GOWN</div>
+      <div class="rc-sub">{{ r.return.gowns_cancelled }}</div>
+    {% elif r.return.refund_rule %}
+      <div class="rc-bold">BOOKING CANCELLED</div>
+      {% if r.return.rental_paid and r.return.rental_paid != "0.00" %}<div class="rc-row"><span>Gown rental paid</span><span>&#8369;{{ r.return.rental_paid|floatformat:"2g" }}</span></div>{% endif %}
+      {% if r.return.extra_paid and r.return.extra_paid != "0.00" %}<div class="rc-row"><span>Extra days paid</span><span>&#8369;{{ r.return.extra_paid|floatformat:"2g" }}</span></div>{% endif %}
+      <div class="rc-row"><span>Security deposit</span><span>&#8369;{{ r.return.deposit_paid|floatformat:"2g" }}</span></div>
+      <div class="rc-sub">{% if r.return.deposit_back %}Returned too (the shop's fault){% else %}Kept by the shop (not refunded){% endif %}</div>
+    {% else %}
+      <div class="rc-row"><span>Paid over the deposit</span><span>&#8369;{{ r.return.extra_paid|floatformat:"2g" }}</span></div>
+      <div class="rc-sub">Booking cancelled. The security deposit (&#8369;{{ r.return.deposit_paid|floatformat:"2g" }}) is not refunded.</div>
+    {% endif %}
     <hr class="rc-rule">
     <div class="rc-row rc-bold rc-big"><span>RETURNED NOW</span><span>&#8369;{{ r.return.returned_now|floatformat:"2g" }}</span></div>
     <div class="rc-kv"><span>Returned by</span><span>{{ r.method }}</span></div>
@@ -146,8 +157,12 @@
     {% for d in r.return.deductions %}
       <div class="rc-sub">{{ d.reason }}: -&#8369;{{ d.amount|floatformat:"2g" }}</div>
     {% endfor %}
+    {% if r.return.rental_part %}
+      <div class="rc-row"><span>Rental of cancelled gown</span><span>+&#8369;{{ r.return.rental_part|floatformat:"2g" }}</span></div>
+      <div class="rc-sub">{{ r.return.gowns_cancelled }}</div>
+    {% endif %}
     <hr class="rc-rule">
-    <div class="rc-row rc-bold rc-big"><span>DEPOSIT RETURNED</span><span>&#8369;{{ r.return.returned_now|floatformat:"2g" }}</span></div>
+    <div class="rc-row rc-bold rc-big"><span>{% if r.return.rental_part %}RETURNED NOW{% else %}DEPOSIT RETURNED{% endif %}</span><span>&#8369;{{ r.return.returned_now|floatformat:"2g" }}</span></div>
     <div class="rc-kv"><span>Returned by</span><span>{{ r.method }}</span></div>
     {% if payment.provider and r.return.why and not payment.is_void %}<div class="rc-sub">Sent back to the account the customer paid with. It can take up to a day to show.</div>{% endif %}
     {% if r.reference %}<div class="rc-kv"><span>GCash ref no.</span><span>{{ r.reference }}</span></div>{% endif %}
@@ -165,6 +180,7 @@
     <p class="rc-note">Thank you for renting with us.</p>
   {% else %}
     <div class="rc-row"><span>Gown rental</span><span>&#8369;{{ r.charges.rental|floatformat:"2g" }}</span></div>
+    {% if r.charges.dropped %}<div class="rc-sub">{{ r.charges.dropped_gowns }} cancelled: its &#8369;{{ r.charges.dropped|floatformat:"2g" }} rental is not charged</div>{% endif %}
     <div class="rc-row"><span>Security deposit</span><span>&#8369;{{ r.charges.deposit|floatformat:"2g" }}</span></div>
     {% if r.charges.over %}<div class="rc-row"><span>Extra days over the deposit</span><span>&#8369;{{ r.charges.over|floatformat:"2g" }}</span></div>{% endif %}
     <div class="rc-row rc-bold"><span>TOTAL</span><span>&#8369;{{ r.charges.total|floatformat:"2g" }}</span></div>

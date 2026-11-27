@@ -40,7 +40,7 @@ from django.views.decorators.http import require_http_methods
 from accounts.audit import audited
 from gowns import counter_payment, late_fee, online_checkout, typed_payment
 from gowns.models import SiteSettings
-from reservations import gateway, ledger, payments
+from reservations import cancellation, gateway, ledger, payments
 from reservations.models import Deduction, Payment, PaymentAttempt, Reservation, ReservationItem
 
 from . import audit_describe
@@ -80,11 +80,14 @@ def _gown_text(items):
 
 def _deposit_text(s):
     if s.cancelled:
+        kept = "Deposit returned (cancelled)" if s.deposit_back_too else "Deposit kept (cancelled)"
         if s.refund_available > 0:
-            return f"Kept (cancelled), give back {_php(s.refund_available)} paid over it"
+            return f"{kept}, give back {_php(s.refund_available)}"
         if s.refunded > 0:
-            return f"Kept (cancelled), {_php(s.refunded)} paid over it returned"
-        return "Kept (cancelled)"
+            return f"{kept}, {_php(s.refunded)} returned"
+        return kept
+    if s.rental_to_return > 0:
+        return f"Give back {_php(s.rental_to_return)} rental"
     if s.deposit_unpaid > 0:
         return "Not paid yet"
     if s.refunded > 0 and s.refund_available <= 0 and s.all_returned:
@@ -172,7 +175,12 @@ def _detail(reservation, request):
         "s": stmt,
         "peso": {k: f"{getattr(s, k):,.2f}" for k in ("rental", "deposit", "total", "received", "refunded", "deposit_paid", "rental_paid", "late_fee",
                                                        "early_fee", "later_fee", "change_fee", "overdue_fee", "deductions_total", "total_deduction",
-                                                       "refundable_total", "refund_available", "balance_due", "extra_owed", "extra_received")},
+                                                       "refundable_total", "refund_available", "balance_due", "extra_owed", "extra_received",
+                                                       "rental_dropped", "rental_returned", "rental_to_return", "kept",
+                                                       "deposit_given", "deposit_available", "deposit_refundable", "paid_net")},
+        # what happened to the money of a cancelled booking (or cancelled gown), in words the window shows
+        "money": cancellation.money_story(reservation, s),
+        "depositReason": reservation.deposit_refund_reason,
         "feeLines": [{**{k: l[k] for k in ("kind", "label", "gown", "days", "back", "growing", "booked", "agreed", "due", "returned", "pickup", "free_from", "free_until", "until")},
                       "rate": f"{l['rate']:,.0f}", "amount": f"{l['amount']:,.2f}"} for l in s.fee_lines],
         "choices": payments.choices(s),
@@ -216,6 +224,7 @@ def _detail_for(reservation_id, request):
         return None
     data = _detail(booking, request)
     data["canVoid"] = _can(request, "void_receipts")
+    data["canReturnMoney"] = _can(request, "return_money")      # the owner, or staff the owner allowed (the server refuses anyone else)
     data["isOwner"] = _is_owner(request)
     return data
 
@@ -266,26 +275,51 @@ def payment_record_view(request, pk):
 @require_http_methods(["POST"])
 @audited("payment.return_deposit", "Payments", audit_describe.deposit_return, sensitive=True)
 def deposit_return_view(request, pk):
-    if not _is_admin_staff(request):
-        return JsonResponse({"error": "Unauthorized"}, status=401)
+    """Money handed back to a customer (the deposit, or the refund of a cancelled booking or gown): the owner, or staff the owner allowed."""
+    refused = _permission_error(request, "return_money")
+    if refused:
+        return refused
     data = _body(request)
     if data is None:
         return JsonResponse({"error": "Invalid request."}, status=400)
+    method = str(data.get("method") or "")
     try:
-        if str(data.get("method") or "") == "PayMongo":
+        if method == "PayMongo":
             # Sent back automatically, through PayMongo, to the account the customer paid with.
             payment = payments.return_deposit_online(
                 reservation_id=pk, amount=_amount(data.get("amount")), note=str(data.get("note") or ""), user=request.user,
                 request_id=str(data.get("request_id") or ""))
-        elif str(data.get("method") or "") == Payment.Method.CASH:
+        elif method in (Payment.Method.CASH, Payment.Method.GCASH):
+            # Cash at the counter, or sent from the shop's own GCash (its 13-digit reference number is kept).
             payment = payments.return_deposit(
-                reservation_id=pk, amount=_amount(data.get("amount")), method=Payment.Method.CASH,
+                reservation_id=pk, amount=_amount(data.get("amount")), method=method, reference=str(data.get("reference") or ""),
                 note=str(data.get("note") or ""), user=request.user, request_id=str(data.get("request_id") or ""))
         else:
-            return JsonResponse({"error": "Choose Cash or Pay online. If this page has been open for a while, refresh it."}, status=400)
+            return JsonResponse({"error": "Choose Cash, the shop's GCash or Pay online. If this page has been open for a while, refresh it."}, status=400)
     except payments.PaymentError as exc:
         return _fail(exc)
     return _answer(pk, request, payment=_payment_json(payment, request))
+
+
+@require_http_methods(["POST"])
+@audited("payment.deposit_exception", "Payments", audit_describe.deposit_exception, sensitive=True)
+def deposit_exception_view(request, pk):
+    """The OWNER gives a cancelled booking's security deposit back too (the shop's fault, {"reason"}), or keeps it again ({"reason": ""})."""
+    if not _is_admin_staff(request):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+    if not _is_owner(request):
+        return JsonResponse({"error": "Only the owner can give back a cancelled booking's security deposit."}, status=403)
+    data = _body(request)
+    if data is None:
+        return JsonResponse({"error": "Invalid request."}, status=400)
+    reason = str(data.get("reason") or "").strip()
+    if data.get("give") and not reason:
+        return JsonResponse({"error": "Please write why the deposit goes back."}, status=400)
+    try:
+        payments.set_deposit_return(reservation_id=pk, reason=reason if data.get("give") else "", user=request.user)
+    except payments.PaymentError as exc:
+        return _fail(exc)
+    return _answer(pk, request)
 
 
 # ---------------------------------------------------------------- "Pay online": a QR code for what the booking owes
@@ -579,6 +613,7 @@ def payment_online_view(request):
     return render(request, "arabela_admin/payments.html", {
         "page": "payments", "mode": "online", "attempts": page, "q": q, "show": show, "online_attention": online_attention_count(),
         "payment_provider": gateway.label(), "paymongo_mode": gateway.mode(), "paymongo_demo": gateway.is_demo(), "is_owner": _is_owner(request), "can_void": _can(request, "void_receipts"),
+        "can_return": _can(request, "return_money"),
     })
 
 
@@ -592,7 +627,7 @@ def _online_attempt(attempt_id):
 @require_http_methods(["POST"])
 @audited("payment.online_refund", "Payments", audit_describe.online_refund, sensitive=True)
 def payment_online_refund_view(request, attempt_id):
-    refused = _permission_error(request, "void_receipts")
+    refused = _permission_error(request, "return_money")
     if refused:
         return refused
     attempt = _online_attempt(attempt_id)

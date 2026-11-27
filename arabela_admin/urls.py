@@ -49,6 +49,7 @@ from .identity_views import (
 from .payments_views import (
     deduction_add_view,
     deduction_void_view,
+    deposit_exception_view,
     deposit_return_view,
     late_fee_setting_update_view,
     payment_detail_view,
@@ -267,6 +268,7 @@ urlpatterns = [
     path("api/payments/pay/<str:token>/status/", payment_pay_status_view, name="payment_pay_status"),
     path("api/payments/pay/<str:token>/cancel/", payment_pay_cancel_view, name="payment_pay_cancel"),
     path("api/payments/booking/<int:pk>/return-deposit/", deposit_return_view, name="deposit_return"),
+    path("api/payments/booking/<int:pk>/deposit-back/", deposit_exception_view, name="deposit_exception"),
     path("api/payments/booking/<int:pk>/deduction/", deduction_add_view, name="deduction_add"),
     path("api/payments/<int:payment_id>/void/", payment_void_view, name="payment_void"),
     path("api/payments/<int:payment_id>/send/", receipt_send_view, name="payment_send"),

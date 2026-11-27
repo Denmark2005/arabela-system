@@ -39,6 +39,9 @@ METHODS = (Payment.Method.CASH, Payment.Method.GCASH)
 PAYMENT_EVENT = "Payment received"
 RETURN_EVENT = "Security deposit returned"
 OVER_RETURN_EVENT = "Payment over the deposit returned"          # a cancelled booking: what was paid over the deposit goes back
+REFUND_EVENT = "Money returned"                                  # the refund rule: a cancelled booking, or the rental of a cancelled gown
+DEPOSIT_BACK_EVENT = "Security deposit will be returned"         # the owner gives the deposit back too (the cancel was the shop's fault)
+DEPOSIT_KEPT_EVENT = "Security deposit kept"
 CANCELLED_KEEPS = "A cancelled booking keeps its deposit, so there is nothing to give back."
 SETTLED_EVENT = "Security deposit settled"          # accounts.customer_emails.EVENT_KINDS emails it under the same words
 SETTLED_DETAIL = "Your security deposit has been settled. This reservation is complete."
@@ -183,7 +186,30 @@ def _return_reason(before, after):
             return "No fees and no deductions: the security deposit is returned in full."
         return f"No fees and no deductions: the whole {peso(after.deposit_paid)} security deposit goes back to the customer."
     parts = fee_words(after.change_fee, after.overdue_fee, after.early_fee, after.later_fee) + ([f"{peso(taken)} of deductions"] if taken > 0 else [])
-    return f"The {peso(after.deposit_paid)} security deposit{extra} less {_listed(parts)} leaves {peso(after.refundable_total)} to give back."
+    return f"The {peso(after.deposit_paid)} security deposit{extra} less {_listed(parts)} leaves {peso(after.deposit_refundable)} to give back."
+
+
+def _cancelled_names(reservation):
+    """The gowns cancelled under the refund rule while the booking carried on ("Gown A and Gown B")."""
+    return _listed([i.gown_name for i in reservation.items.all() if i.rental_dropped and i.stage == i.Stage.CANCELLED]) or "a cancelled gown"
+
+
+def _cancel_return(before, after, payment):
+    """The receipt's refund part for a CANCELLED booking."""
+    paid_for_rental = max(money(after.received) - money(after.extra_received) - money(after.deposit_paid), ZERO)
+    if not after.refunds_rental:
+        why = (f"The booking was cancelled. The security deposit is not refunded; the {peso(after.extra_received)} paid over it for "
+               "extra days goes back to the customer.")
+    elif after.deposit_back_too:
+        why = "The booking was cancelled because of the shop, so everything paid goes back to the customer, the security deposit included."
+    else:
+        why = "The booking was cancelled. The shop keeps the security deposit; everything else paid goes back to the customer."
+    return {
+        "cancelled": True, "refund_rule": after.refunds_rental, "deposit_paid": f"{after.deposit_paid:.2f}", "deposit_back": after.deposit_back_too,
+        "extra_paid": f"{after.extra_received:.2f}", "rental_paid": f"{paid_for_rental:.2f}",
+        "returned_before": f"{before.refunded:.2f}", "returned_now": f"{money(payment.amount):.2f}",
+        "still_to_return": f"{after.refund_available:.2f}", "why": why,
+    }
 
 
 def _working(reservation, after):
@@ -233,22 +259,27 @@ def _snapshot(reservation, payment, before, after, *, served_by):
         "balance_after": f"{after.balance_due:.2f}",
     }
     if payment.purpose == Payment.Purpose.DEPOSIT_RETURN and after.cancelled:
-        # A cancelled booking: the deposit is kept; only what was paid over it goes back.
+        snap["title"] = "REFUND"
+        snap["purpose_label"] = "Refund"
+        snap["return"] = _cancel_return(before, after, payment)
+    elif payment.purpose == Payment.Purpose.DEPOSIT_RETURN and 0 < money(payment.amount) <= money(before.rental_to_return):
+        # Only the rental of a gown cancelled from a booking that carries on: a refund of its own, nothing about the deposit.
+        names = _cancelled_names(reservation)
         snap["title"] = "REFUND"
         snap["purpose_label"] = "Refund"
         snap["return"] = {
-            "cancelled": True, "deposit_paid": f"{after.deposit_paid:.2f}", "extra_paid": f"{after.extra_received:.2f}",
-            "returned_before": f"{before.refunded:.2f}", "returned_now": f"{money(payment.amount):.2f}",
-            "still_to_return": f"{after.refund_available:.2f}",
-            "why": (f"The booking was cancelled. The security deposit is not refunded; the {peso(after.extra_received)} paid over it for "
-                    "extra days goes back to the customer."),
+            "rental_only": True, "gowns_cancelled": names, "returned_before": f"{before.rental_returned:.2f}",
+            "returned_now": f"{money(payment.amount):.2f}", "still_to_return": f"{after.rental_to_return:.2f}",
+            "why": f"{names} was cancelled from this booking, so the rental paid for it goes back to the customer.",
         }
     elif payment.purpose == Payment.Purpose.DEPOSIT_RETURN:
         snap["return"] = {
+            **({"rental_part": f"{money(payment.rental_part):.2f}", "gowns_cancelled": _cancelled_names(reservation)}
+               if money(payment.rental_part) > 0 else {}),
             "deposit_paid": f"{after.deposit_paid:.2f}",
             "extra_paid": f"{after.extra_received if after.extra_credit > 0 else ZERO:.2f}",     # an extra charge paid before that goes back too
             **_working(reservation, after),
-            "returned_before": f"{before.refunded:.2f}",
+            "returned_before": f"{before.refunded - before.rental_returned:.2f}",       # the deposit handed back before (not a gown's rental)
             "returned_now": f"{money(payment.amount):.2f}",
             "still_to_return": f"{after.refund_available:.2f}",
             "gowns": _return_gowns(reservation),
@@ -267,6 +298,8 @@ def _snapshot(reservation, payment, before, after, *, served_by):
             "over": f"{max(after.total_deduction - after.deposit - after.extra_received, ZERO):.2f}",
             "paid_over": f"{after.extra_received:.2f}" if after.extra_received > 0 else "",
         }
+    if payment.direction == Payment.Direction.IN and money(before.rental_dropped) > 0:
+        snap["charges"] = {**snap["charges"], "dropped": f"{before.rental_dropped:.2f}", "dropped_gowns": _cancelled_names(reservation)}
     if payment.direction == Payment.Direction.IN and money(payment.extra_part) > 0:
         snap["extra_part"] = f"{money(payment.extra_part):.2f}"          # of the amount received: booked extra days over the deposit
     if (reservation.pays_over_deposit and payment.direction == Payment.Direction.IN and payment.purpose != Payment.Purpose.EXTRA
@@ -401,6 +434,14 @@ def _notice_text(payment):
     if payment.direction == Payment.Direction.OUT:
         later = " It can take up to a day to show in your account." if payment.provider in gateway.PROVIDERS else ""
         if _is_over_return(payment):
+            back = (payment.snapshot or {}).get("return") or {}
+            if back.get("rental_only"):
+                return (f"The {peso(payment.amount)} rental you paid for {back.get('gowns_cancelled', 'a cancelled gown')} on {code} was returned "
+                        f"({how}), because it was cancelled. Receipt {payment.receipt_number}.{later}")
+            if back.get("refund_rule"):
+                kept = " The security deposit is included." if back.get("deposit_back") else ""
+                return (f"{peso(payment.amount)} of your cancelled reservation {code} was returned to you ({how}).{kept} "
+                        f"Receipt {payment.receipt_number}.{later}")
             return (f"The {peso(payment.amount)} you paid over the security deposit for {code} was returned ({how}), because the booking was "
                     f"cancelled. Receipt {payment.receipt_number}.{later}")
         working = ""
@@ -418,6 +459,10 @@ def _notice_text(payment):
             also = f" and the {peso(more)} extra charge you paid before" if more > 0 else ""
             working = (f" Your {peso(paid)} deposit{also} less {_listed(parts)} comes to {peso(max(paid + more - late - taken, money(0)))}."
                        " The receipt shows the details.")
+        rental = money(payment.rental_part)
+        if rental > 0:          # one payment that also gave back the rental of a cancelled gown
+            return (f"{peso(payment.amount)} for {code} was returned ({how}): your security deposit and {peso(rental)} rental of "
+                    f"{gone.get('gowns_cancelled', 'a cancelled gown')}. Receipt {payment.receipt_number}.{later}")
         return f"Your security deposit of {peso(payment.amount)} for {code} was returned ({how}). Receipt {payment.receipt_number}.{working}{later}"
     snapshot = payment.snapshot or {}
     balance = snapshot.get("balance_after")
@@ -726,31 +771,41 @@ def record_online_booking_payment(*, reservation, purpose, amount, channel, prov
 
 # ---------------------------------------------------------------- the deposit handed back
 def _before_return(reservation, amount):
-    """The statement of a booking (its row locked) from which `amount` may be handed back now, or PaymentError. A running booking: the
-    deposit, once every gown is back. A cancelled booking keeps its deposit: only what was paid over it goes back."""
+    """The statement of a booking (its row locked) from which `amount` may be handed back now, or PaymentError. A running booking: the rental of
+    a cancelled gown at once, and the deposit once every gown is back. A cancelled booking: what its refund rule says (an older one keeps its
+    deposit, only what was paid over it goes back)."""
     cancelled = reservation.status == Reservation.Status.CANCELLED
-    if not ledger.counts_as_tracked(reservation) or (cancelled and not reservation.pays_over_deposit):
+    if not ledger.counts_as_tracked(reservation) or (cancelled and not (reservation.pays_over_deposit or reservation.refunds_rental)):
         raise PaymentError(CANCELLED_KEEPS, status=409)
     ensure_rows(reservation)
     before = ledger.statement(_fresh(reservation.pk))
     if cancelled:
         if before.refund_available <= 0:
-            raise PaymentError(CANCELLED_KEEPS, status=409)
+            raise PaymentError("Nothing is left to hand back on this booking." if before.refunds_rental else CANCELLED_KEEPS, status=409)
         if amount > before.refund_available:
-            raise PaymentError(f"Only {peso(before.refund_available)} can be handed back (what was paid over the deposit).")
+            what = "" if before.refunds_rental else " (what was paid over the deposit)"
+            raise PaymentError(f"Only {peso(before.refund_available)} can be handed back{what}.")
         return before
-    if not before.all_returned:
-        raise PaymentError("The deposit can be handed back once every gown of the booking is returned.", status=409)
     if before.refund_available <= 0:
+        if not before.all_returned:
+            raise PaymentError("The deposit can be handed back once every gown of the booking is returned.", status=409)
         raise PaymentError("There is no deposit left to hand back on this booking.", status=409)
     if amount > before.refund_available:
-        raise PaymentError(f"Only {peso(before.refund_available)} can be handed back (the deposit less the fees and deductions).")
+        if not before.all_returned:
+            raise PaymentError(f"Only {peso(before.refund_available)} can be handed back now (the rental of the cancelled gown). The deposit "
+                               "goes back once every gown is returned.", status=409)
+        what = "" if before.rental_to_return > 0 else " (the deposit less the fees and deductions)"
+        raise PaymentError(f"Only {peso(before.refund_available)} can be handed back{what}.")
     return before
 
 
 def _return_event(reservation, payment, how):
     """The history line of money handed back."""
-    if _is_over_return(payment):
+    back = (payment.snapshot or {}).get("return") or {}
+    if back.get("rental_only") or back.get("refund_rule"):
+        what = f"rental paid for {back.get('gowns_cancelled')}" if back.get("rental_only") else "of the cancelled booking"
+        _event(reservation, REFUND_EVENT, f"{peso(payment.amount)} {what} was {how}. Receipt {payment.receipt_number}.")
+    elif _is_over_return(payment):
         _event(reservation, OVER_RETURN_EVENT, f"{peso(payment.amount)} paid over the security deposit was {how}. Receipt {payment.receipt_number}.")
     else:
         _event(reservation, RETURN_EVENT, f"{peso(payment.amount)} of the security deposit was {how}. Receipt {payment.receipt_number}.")
@@ -783,6 +838,7 @@ def return_deposit(*, reservation_id, amount, method, reference="", note="", use
             reservation=reservation, direction=Payment.Direction.OUT, purpose=Payment.Purpose.DEPOSIT_RETURN, method=method, amount=amount,
             reference=digits, paid_at=now, recorded_by=user if getattr(user, "pk", None) else None, recorded_by_name=served_by, note=note,
             request_id=request_id, receipt_number=ReceiptSequence.next_number(timezone.localtime(now).year),
+            rental_part=min(amount, before.rental_to_return),
         )
         after = ledger.statement(_fresh(reservation.pk))
         payment.snapshot = _snapshot(reservation, payment, before, after, served_by=served_by)
@@ -812,24 +868,56 @@ def _online_payments(reservation, direction):
 
 def _deposit_sources(reservation):
     """The online payments money can be sent back to, the best one first. A running booking: those that covered the security deposit
-    ("Deposit" or "Paid in full"), and -- a booking that pays amounts over the deposit right away -- its online extra payments after them.
-    A cancelled booking of that kind (only money paid over the deposit goes back): only the payments that carried such money."""
+    ("Deposit" or "Paid in full"), and -- a booking that pays amounts over the deposit right away -- its online extra payments after them;
+    when the rental of a cancelled gown is to go back, the rental payments first. A booking cancelled under the refund rule: every online
+    payment, the ones that carried no deposit first. An older cancelled booking (only money paid over the deposit goes back): only the
+    payments that carried such money."""
     online = [p for p in _online_payments(reservation, Payment.Direction.IN) if p.provider_ref]
     deposits = [p for p in online if p.purpose in (Payment.Purpose.DEPOSIT, Payment.Purpose.FULL)]
+    extras = [p for p in online if p.purpose == Payment.Purpose.EXTRA]
+    balances = [p for p in online if p.purpose == Payment.Purpose.BALANCE]
+    full = [p for p in deposits if p.purpose == Payment.Purpose.FULL]
+    deposit_only = [p for p in deposits if p.purpose == Payment.Purpose.DEPOSIT]
+    if reservation.status == Reservation.Status.CANCELLED:
+        if reservation.refunds_rental:
+            return extras + balances + full + deposit_only
+        return extras + [p for p in deposits if money(p.extra_part) > 0] if reservation.pays_over_deposit else deposits
+    if _has_dropped_gown(reservation):
+        return balances + full + deposit_only + extras
     if not reservation.pays_over_deposit:
         return deposits
-    extras = [p for p in online if p.purpose == Payment.Purpose.EXTRA]
-    if reservation.status == Reservation.Status.CANCELLED:
-        return extras + [p for p in deposits if money(p.extra_part) > 0]
     return deposits + extras
 
 
+def _has_dropped_gown(reservation):
+    return any(i.rental_dropped for i in reservation.items.all())
+
+
+def _deposit_held_back(reservation, source):
+    """The part of this payment that paid the security deposit (money covers the deposit first, in the order it came in)."""
+    left = money(reservation.security_deposit)
+    core = (Payment.Purpose.DEPOSIT, Payment.Purpose.FULL, Payment.Purpose.BALANCE)
+    paid = sorted((p for p in reservation.payments.all() if p.direction == Payment.Direction.IN and not p.is_void and p.purpose in core),
+                  key=lambda p: (p.paid_at, p.pk))
+    for payment in paid:
+        part = min(left, money(payment.amount) - money(payment.extra_part))
+        if payment.pk == source.pk:
+            return part
+        left -= part
+    return Decimal("0")
+
+
 def _room_left(reservation, source, sources):
-    """How much more can be sent back to this online payment: what it came to (a cancelled booking: the part over the deposit it carried)
-    less what was already sent back to it. A refund saved before refunds named their payment counts against the first one."""
+    """How much more can be sent back to this online payment: what it came to (a cancelled booking: less the deposit it carried, unless the
+    deposit goes back too; an older cancelled booking: only the part over the deposit it carried) less what was already sent back to it. A
+    refund saved before refunds named their payment counts against the first one."""
     amount = money(source.amount)
     if reservation.status == Reservation.Status.CANCELLED and source.purpose != Payment.Purpose.EXTRA:
-        amount = money(source.extra_part)
+        if reservation.refunds_rental:
+            if not reservation.deposit_refund_reason:
+                amount -= _deposit_held_back(reservation, source)
+        else:
+            amount = money(source.extra_part)
     already = Decimal("0")
     for refund in _online_payments(reservation, Payment.Direction.OUT):
         named = (refund.snapshot or {}).get("refund_of")
@@ -870,9 +958,9 @@ def _why_not(reservation, source, sources, amount, now):
 
 
 def _online_part(reservation, amount, now):
-    """For money that came in SEPARATE online payments (a booking that pays amounts over the deposit right away), when no single one can take
-    all of `amount`: the most that one of them can take now, so it goes back in parts. 0 when none can take any."""
-    if not reservation.pays_over_deposit:
+    """For money that came in SEPARATE online payments (a booking that pays amounts over the deposit right away, a cancelled booking or
+    gown), when no single one can take all of `amount`: the most that one of them can take now, so it goes back in parts. 0 when none can."""
+    if not (reservation.pays_over_deposit or reservation.refunds_rental or _has_dropped_gown(reservation)):
         return Decimal("0")
     sources = _deposit_sources(reservation)
     for source in sources:
@@ -894,6 +982,8 @@ def online_refund_choice(reservation, statement, now=None):
         return cash("Online refunds are switched off, so the deposit is handed back in cash.")
     sources = _deposit_sources(reservation)
     if not sources:
+        if reservation.status == Reservation.Status.CANCELLED or statement.rental_to_return > 0:
+            return cash("This money was not paid online, so hand it back in cash or send it from the shop's GCash.")
         return cash("The deposit was not paid online, so it is handed back in cash. Money can only be sent back online to a payment that was made online.")
     now = now or timezone.now()
     amount = statement.refund_available if statement.refund_available > 0 else money(sources[0].amount)
@@ -961,13 +1051,14 @@ def return_deposit_online(*, reservation_id, amount, note="", user=None, request
             reservation=reservation, direction=Payment.Direction.OUT, purpose=Payment.Purpose.DEPOSIT_RETURN, method=source.method, amount=amount, reference="",
             paid_at=now, recorded_by=user if getattr(user, "pk", None) else None, recorded_by_name=served_by, note=note, request_id=request_id,
             provider=gateway.name(), provider_ref="", receipt_number=ReceiptSequence.next_number(timezone.localtime(now).year),
+            rental_part=min(amount, before.rental_to_return),
         )
         after = ledger.statement(_fresh(reservation.pk))
         payment.snapshot = {**_snapshot(reservation, payment, before, after, served_by=served_by), "refund_of": source.pk}
         payment.save(update_fields=["snapshot"])
         code, paid_ref = reservation.reference_code, source.provider_ref
 
-    what = "Payment over the deposit returned" if _is_over_return(payment) else "Security deposit return"
+    what = "Refund" if _is_over_return(payment) else "Security deposit return"
     try:
         refund = gateway.create_refund(payment_id=paid_ref, amount=amount, note=f"{what} for {code}")
     except gateway.GatewayError as exc:
@@ -1008,9 +1099,10 @@ def on_online_refund_updated(refund_id, status):
                                       detail=f"{gateway.label()} could not send {peso(locked.amount)} back (receipt {locked.receipt_number}). Hand the deposit back another way.",
                                       actor=ReservationStatusEvent.Actor.SYSTEM, staff_only=True)
         if reservation.customer_id:
-            notify_user(reservation.customer, f"We could not send your security deposit of {peso(locked.amount)} for {reservation.reference_code} back automatically. "
+            what = "payment" if payment.is_over_return else "security deposit"
+            notify_user(reservation.customer, f"We could not send your {what} of {peso(locked.amount)} for {reservation.reference_code} back automatically. "
                                               "The shop will hand it back to you. Please contact the shop if you have a question.",
-                        subject="We will hand your security deposit back at the shop", heading="Your security deposit")
+                        subject=f"We will hand your {what} back at the shop", heading=f"Your {what}")
         sync_settled(reservation.pk, quiet=True, actor=ReservationStatusEvent.Actor.SYSTEM, reopens=True)
     return True
 
@@ -1038,12 +1130,12 @@ def add_deduction(*, reservation_id, amount, reason, user=None, request_id="", n
             recorded_by_name=staff_display_name(user) if user is not None else "", request_id=request_id, created_at=now,
         )
         after = ledger.statement(_fresh(reservation.pk))
-        if after.refunded > after.refundable_total:
+        if after.refunded > after.refundable_total or after.deposit_given > after.deposit_refundable:
             raise PaymentError("The deposit was already handed back. Void the deposit return receipt first, then add the deduction.", status=409)
         _event(reservation, DEDUCTION_EVENT, f"{peso(amount)} was taken off the security deposit: {reason}.")
         _notify(reservation, None,
                 f"{peso(amount)} was taken off the security deposit of {reservation.reference_code}: {reason}. "
-                f"Deposit to get back: {peso(after.refundable_total)}.",
+                f"Deposit to get back: {peso(after.deposit_refundable)}.",
                 subject=f"A deduction on your security deposit - {reservation.reference_code}", heading="A deduction on your security deposit")
         sync_settled(reservation.pk, quiet=True, reopens=True)
     return deduction
@@ -1072,7 +1164,9 @@ def void_payment(*, payment_id, reason, user=None, now=None):
         payment.voided_at = now
         payment.save(update_fields=["status", "void_reason", "voided_by", "voided_by_name", "voided_at"])
         after = ledger.statement(_fresh(reservation.pk))
-        if after.refunded > after.refundable_total:
+        if after.refunded > after.refundable_total or (not after.cancelled and after.deposit_given > after.deposit_refundable):
+            if after.cancelled or after.rental_to_return > 0 or after.rental_returned > 0:
+                raise PaymentError("The money was already handed back out of this payment. Void the return receipt first.", status=409)
             raise PaymentError("The deposit was already handed back out of this money. Void the deposit return receipt first.", status=409)
         _event(reservation, VOID_EVENT, f"Receipt {payment.receipt_number} ({peso(payment.amount)}) was voided: {reason}.")
         _notify(reservation, payment, _notice_text(payment), subject=_subject(payment), heading=_heading(payment))
@@ -1103,6 +1197,40 @@ def void_deduction(*, deduction_id, reason, user=None, now=None):
                 subject=f"A deduction was removed - {reservation.reference_code}", heading="A deduction was removed")
         sync_settled(reservation.pk, quiet=True, reopens=True)
     return deduction
+
+
+# ---------------------------------------------------------------- the owner gives a cancelled booking's deposit back too
+def set_deposit_return(*, reservation_id, reason, user=None):
+    """The owner (the views check that) gives the security deposit of a booking cancelled under the refund rule back too, because the cancel was
+    the shop's fault (`reason`, required) -- or, with no reason, keeps it again while none of it has been handed back."""
+    with transaction.atomic():
+        reservation = _lock(reservation_id)
+        if reservation.status != Reservation.Status.CANCELLED or not reservation.refunds_rental or not ledger.counts_as_tracked(reservation):
+            raise PaymentError("Only a booking cancelled from now on, after it was approved, can have its deposit given back.", status=409)
+        ensure_rows(reservation)
+        reason = (reason or "").strip()
+        if reason:
+            reason = _clean_reason(reason, what="reason for giving the deposit back")
+            if reservation.deposit_refund_reason:
+                raise PaymentError("The deposit is already set to be given back. Please refresh the page.", status=409)
+            if ledger.statement(_fresh(reservation.pk)).deposit_paid <= 0:
+                raise PaymentError("No security deposit was paid on this booking.", status=409)
+        elif not reservation.deposit_refund_reason:
+            raise PaymentError("The deposit is already kept. Please refresh the page.", status=409)
+        Reservation.objects.filter(pk=reservation.pk).update(deposit_refund_reason=reason[:REASON_MAX], updated_at=timezone.now())
+        after = ledger.statement(_fresh(reservation.pk))
+        if after.refunded > after.refundable_total:
+            raise PaymentError("The deposit was already handed back. Void that refund receipt first.", status=409)
+        deposit = peso(after.deposit_paid)
+        if reason:
+            _event(reservation, DEPOSIT_BACK_EVENT, f"The {deposit} security deposit will be returned too: {reason}.")
+            _notify(reservation, None, f"The shop will also return your {deposit} security deposit for {reservation.reference_code}: {reason}.",
+                    subject=f"Your security deposit will be returned - {reservation.reference_code}", heading="Your security deposit")
+        else:
+            _event(reservation, DEPOSIT_KEPT_EVENT, f"The {deposit} security deposit stays with the shop.")
+            _notify(reservation, None, f"A correction on {reservation.reference_code}: the {deposit} security deposit is not refunded.",
+                    subject=f"Your security deposit - {reservation.reference_code}", heading="Your security deposit")
+    return after
 
 
 # ---------------------------------------------------------------- printing

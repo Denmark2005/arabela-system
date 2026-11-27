@@ -272,7 +272,7 @@ def _cancelled_gowns(period):
 
 def _no_money():
     zero = ledger.ZERO
-    return {"income": zero, "by_booking": {}, "kept": zero, "collected": zero, "returned": zero, "payments": []}
+    return {"income": zero, "by_booking": {}, "kept": zero, "collected": zero, "returned": zero, "rental_back": zero, "payments": []}
 
 
 def _payment_line(entry):
@@ -338,7 +338,8 @@ def build(period, items, *, today, held):
     owing_total = sum(owing.values(), ledger.ZERO)
     return {
         "period": period, "listed": listed,
-        "income": money["income"], "income_bookings": len(money["by_booking"]), "kept": money["kept"],
+        "income": money["income"], "income_bookings": sum(1 for value in money["by_booking"].values() if value > 0), "kept": money["kept"],
+        "rental_back": money["rental_back"],
         "held": held, "collected": money["collected"], "returned": money["returned"],
         "rentals": len(listed), "by_status": [{"status": s, "count": n, "dot": rental_history.DOTS[rental_history.LOOK[s][0]]} for s, n in counts.items() if n],
         "status_counts": counts, "cancelled": _cancelled_gowns(period),
@@ -380,6 +381,8 @@ def explain(report, filtered=False):
     kind = report["period"].kind_label.lower()
     first = (f"Rental income counts the money on the day it was paid; the rentals are chosen by their {kind} day, so the two can differ. "
              "Security deposits are never income.")
+    if report.get("rental_back"):
+        first += f" PHP {amount_text(report['rental_back'])} of rental given back in these dates (cancellations) is taken off."
     rentals = "all rentals in these dates" + (" (not only the filtered list)" if filtered else "")
     income = amount_text(report["income"])
     if report["income"] == report["listed_value"]:

@@ -356,15 +356,17 @@ class NoTypedGCashTests(Base):
     def post(self, name, args, body):
         return self.client.post(reverse(f"arabela_admin:{name}", args=args), data=json.dumps(body), content_type="application/json")
 
-    def test_a_payment_and_a_deposit_return_take_cash_or_online_only(self):
+    def test_a_payment_takes_cash_or_online_only_and_a_return_also_the_shops_gcash(self):
         booking = self.booking(stage=ReservationItem.Stage.RETURNED, returned_on=-2, ret=-2, pickup=-6)
         response = self.post("payment_record", [booking.pk], {"purpose": P.FULL, "amount": "5500", "method": "GCash", "reference": "5046933479702"})
         self.assertEqual(response.status_code, 400)
         self.assertIn("Cash or Pay online", response.json()["error"])
         self.cash(booking, P.FULL, "5500")
-        response = self.post("deposit_return", [booking.pk], {"amount": "2000", "method": "GCash", "reference": "5046933479702"})
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(self.post("deposit_return", [booking.pk], {"amount": "2000", "method": "Cash"}).status_code, 200)
+        UserProfile.objects.filter(user=self.staff).update(permissions="return_money")          # the owner allowed this staff to return money
+        self.assertEqual(self.post("deposit_return", [booking.pk], {"amount": "500", "method": "GCash"}).status_code, 400)      # needs its number
+        response = self.post("deposit_return", [booking.pk], {"amount": "500", "method": "GCash", "reference": "5046933479702"})
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(self.post("deposit_return", [booking.pk], {"amount": "1500", "method": "Cash"}).status_code, 200)
 
     def test_new_booking_refuses_typed_gcash(self):
         from reservations import staff_booking
@@ -396,9 +398,10 @@ class NoTypedGCashTests(Base):
         self.assertNotIn('value="GCash"', new_booking)
         self.assertNotIn("nb-ref", new_booking)
         self.assertIn('name="pm-rec-method" value="Online"', payments_page)
-        for page in (new_booking, payments_page):
-            self.assertNotIn("GCash reference", page)
-        self.assertNotIn('name="pm-ret-method" value="GCash"', payments_page)
+        self.assertNotIn("GCash reference", new_booking)
+        self.assertEqual(payments_page.count("GCash reference"), 1)           # only where money is handed back from the shop's own GCash
+        self.assertIn('name="pm-ret-method" value="GCash"', payments_page)
+        self.assertNotIn('name="pm-rec-method" value="GCash"', payments_page)
         with override_settings(XENDIT_SECRET_KEY="", PAYMENT_PROVIDER="xendit"):
             self.assertNotIn('name="pm-rec-method" value="Online"', self.client.get(reverse("arabela_admin:payments")).content.decode())
 

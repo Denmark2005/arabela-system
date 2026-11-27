@@ -87,6 +87,11 @@ class Reservation(models.Model):
     pays_over_deposit = models.BooleanField(default=False, db_default=False)
     # What was due over the security deposit at the moment of booking (paid together with the deposit or the whole booking).
     upfront_extra = models.DecimalField(max_digits=10, decimal_places=2, default=0, db_default=0)
+    # Set when a booking is cancelled under the refund rule: the shop keeps the security deposit and gives back everything else the customer paid
+    # (rental and extra days), from the Payments page. False = not cancelled, or cancelled before the rule (it stays as it was settled).
+    refunds_rental = models.BooleanField(default=False, db_default=False)
+    # Only the OWNER can write it, on such a cancelled booking: why the deposit goes back too (the cancel was the shop's fault). Empty = the deposit is kept.
+    deposit_refund_reason = models.CharField(max_length=200, blank=True, default='', db_default='')
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     notes = models.TextField(blank=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
@@ -746,6 +751,9 @@ class ReservationItem(models.Model):
     ready_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
     ready_for = models.DateField(null=True, blank=True)
     ready_told_for = models.DateField(null=True, blank=True)
+    # A gown the shop cancelled while the booking carried on (under the refund rule): its rental is no longer counted, and rental already paid for it
+    # is given back. False = not cancelled, or cancelled before the rule (its rental stays counted).
+    rental_dropped = models.BooleanField(default=False, db_default=False)
     # Bumped on every save (creation + every staff stage/date edit) -- lets the
     # customer's "new activity" badge tell freshly-changed items apart from ones
     # they've already seen, without a separate read/unread table.
@@ -1173,6 +1181,8 @@ class Payment(models.Model):
     # The part of `amount` that paid booked extra days over the deposit, received together with the deposit (or the whole booking). It counts
     # as an extra charge, never as deposit or rental (reservations/ledger.py). 0 for every other payment.
     extra_part = models.DecimalField(max_digits=10, decimal_places=2, default=0, db_default=0)
+    # Money handed back (direction Out): the part of it that is gown rental (a cancelled booking or gown). It comes off the Rental Income.
+    rental_part = models.DecimalField(max_digits=10, decimal_places=2, default=0, db_default=0)
     # The GCash reference number (digits only) when the method is GCash; empty for cash.
     reference = models.CharField(max_length=20, blank=True, default='')
     # NULL (not '') for a legacy row, so the unique rule below allows any number of them.
@@ -1214,8 +1224,9 @@ class Payment(models.Model):
 
     @property
     def is_over_return(self):
-        """Money given back to a CANCELLED booking: what it paid over its security deposit, not the deposit."""
-        return self.purpose == self.Purpose.DEPOSIT_RETURN and bool(((self.snapshot or {}).get('return') or {}).get('cancelled'))
+        """A REFUND rather than a deposit handed back: money given back to a CANCELLED booking, or only the rental of a cancelled gown."""
+        back = (self.snapshot or {}).get('return') or {}
+        return self.purpose == self.Purpose.DEPOSIT_RETURN and bool(back.get('cancelled') or back.get('rental_only'))
 
     @property
     def title(self):

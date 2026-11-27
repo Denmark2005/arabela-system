@@ -41,7 +41,7 @@ class Base(TestCase):
         cls.staff = User.objects.create_user("oa_staff", "staff@gmail.com", "x", is_staff=True, first_name="Maria", last_name="Cruz")
         UserProfile.objects.update_or_create(user=cls.staff, defaults={"role": UserProfile.Role.STAFF})
         cls.allowed = User.objects.create_user("oa_allowed", "allowed@gmail.com", "x", is_staff=True)
-        UserProfile.objects.update_or_create(user=cls.allowed, defaults={"role": UserProfile.Role.STAFF, "permissions": "void_receipts"})
+        UserProfile.objects.update_or_create(user=cls.allowed, defaults={"role": UserProfile.Role.STAFF, "permissions": "void_receipts,return_money"})
         cls.ana = User.objects.create_user("oa_ana", "ana@gmail.com", "x", first_name="Ana")
         cls.gown = Gown.objects.create(gown_id="Wedding Gown-OA-001", name="Admin Online Gown", category=Gown.Category.WEDDING_GOWN, color_name="White",
                                        color_code="WH", size=Gown.Size.MEDIUM, rental_price=Decimal("3500"), status=Gown.Status.AVAILABLE)
@@ -126,6 +126,17 @@ class OnlineTabTests(Base):
         self.assertEqual((refund.status_code, handled.status_code), (403, 403))
         flagged.refresh_from_db()
         self.assertEqual(flagged.status, PaymentAttempt.Status.FLAGGED)
+        self.assertEqual(self.fake.refunds, {})
+
+    def test_the_void_permission_alone_does_not_send_money_back(self):
+        flagged = attempt(self.ana, status=PaymentAttempt.Status.FLAGGED, provider_payment_id="pay_v", paid_amount=Decimal("2000"), paid_at=timezone.now())
+        UserProfile.objects.filter(user=self.allowed).update(permissions="void_receipts")
+        self.client.force_login(self.allowed)
+        table = table_of(self.client.get(reverse("arabela_admin:payment_online")).content.decode())
+        self.assertIn('data-online-action="handled"', table)
+        self.assertNotIn('data-online-action="refund"', table)
+        refund = self.client.post(reverse("arabela_admin:payment_online_refund", args=[flagged.id]), data="{}", content_type="application/json")
+        self.assertEqual(refund.status_code, 403)
         self.assertEqual(self.fake.refunds, {})
 
     def test_the_owner_and_an_allowed_staff_member_can_send_the_money_back(self):

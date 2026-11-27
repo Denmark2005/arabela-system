@@ -222,6 +222,7 @@ class RecordingTests(Base):
     def test_handing_the_deposit_back(self):
         booking = make_booking(stage=ReservationItem.Stage.RETURNED, ret=-6, returned_on=-3)
         self.record(booking, P.FULL, "5500")
+        UserProfile.objects.filter(user=self.staff).update(permissions="return_money")          # the owner allowed it
         self.as_user(self.staff)
         too_much = self.post("deposit_return", {"amount": "1500", "method": "Cash"}, pk=booking.pk)
         self.assertEqual(too_much.status_code, 400)
@@ -278,10 +279,20 @@ class WhoMayDoWhatTests(Base):
             self.assertTrue(line.sensitive, action)
         self.assertIn("voided receipt", AuditLog.objects.get(action="payment.void").summary)
 
-    def test_everyone_on_the_staff_can_record_print_and_hand_back(self):
+    def test_handing_money_back_needs_the_return_money_permission(self):
         booking = self.booking_back()
         self.as_user(self.staff)
-        self.assertEqual(self.post("deposit_return", {"amount": "2000", "method": "Cash"}, pk=booking.pk).status_code, 200)
+        refused = self.post("deposit_return", {"amount": "2000", "method": "Cash"}, pk=booking.pk)
+        self.assertEqual(refused.status_code, 403)
+        self.assertIn("return money to customers", refused.json()["error"])
+        self.assertFalse(Payment.objects.filter(direction=Payment.Direction.OUT).exists())
+        self.assertTrue(AuditLog.objects.filter(action="payment.return_deposit", outcome="refused").exists())
+        for user in (self.owner, self.manager):
+            self.as_user(user)
+            self.assertEqual(self.post("deposit_return", {"amount": "500", "method": "Cash"}, pk=booking.pk).status_code, 200, user.username)
+        UserProfile.objects.filter(user=self.staff).update(permissions="return_money")
+        self.as_user(self.staff)
+        self.assertEqual(self.post("deposit_return", {"amount": "1000", "method": "Cash"}, pk=booking.pk).status_code, 200)
 
 
 class SendAgainTests(Base):

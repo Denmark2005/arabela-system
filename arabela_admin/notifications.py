@@ -469,27 +469,34 @@ def build_items(user):
             sort=row.finished_at,
         ))
 
-    # --- Money to give back to a cancelled booking (what it paid over the deposit) --------------------------------------------------------
-    cancelled = (
-        Reservation.objects.filter(status=Reservation.Status.CANCELLED, pays_over_deposit=True, reviewed_at__isnull=False, payments__isnull=False,
-                                   updated_at__gte=timezone.now() - timedelta(days=60))
+    # --- Money to give back: a cancelled booking, or the rental of a gown cancelled from a running one (one question to the database) -----
+    owed_back = (
+        Reservation.objects.filter(
+            Q(Q(pays_over_deposit=True) | Q(refunds_rental=True), status=Reservation.Status.CANCELLED,
+              updated_at__gte=timezone.now() - timedelta(days=60))
+            | Q(status__in=_SCHEDULED_STATUSES, items__rental_dropped=True),
+            reviewed_at__isnull=False, payments__isnull=False)
         .distinct().select_related("customer__profile").prefetch_related("items", "payments", "deductions", "receipt_records")[:20]
     )
-    for reservation in cancelled:
-        back = reservation_ledger.statement(reservation).refund_available
+    for reservation in owed_back:
+        statement = reservation_ledger.statement(reservation)
+        cancelled = reservation.status == Reservation.Status.CANCELLED
+        back = statement.refund_available if cancelled else statement.rental_to_return
         if back <= 0:
             continue
+        when = reservation.updated_at if cancelled else max(i.updated_at for i in reservation.items.all() if i.rental_dropped)
         items.append(_item(
-            key=f"overback:{reservation.id}",
+            key=f"{'overback' if cancelled else 'rentalback'}:{reservation.id}",
             kind="payment",
             level="warning",
             actor=reservation.display_customer_name,
-            text=f"is owed ₱{back:,.2f} back (paid over the deposit) on the cancelled booking",
+            text=(f"is owed ₱{back:,.2f} back on the cancelled booking" if cancelled
+                  else f"is owed ₱{back:,.2f} back (rental of a cancelled gown) on"),
             subject=reservation.reference_code,
             module="Payments",
             url=reverse("arabela_admin:payments") + "?" + urlencode({"open": reservation.id}),
-            when=reservation.updated_at,
-            sort=reservation.updated_at,
+            when=when,
+            sort=when,
         ))
 
     # --- Calls to make: bookings with no website account ---------------------------

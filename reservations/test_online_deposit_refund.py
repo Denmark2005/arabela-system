@@ -10,7 +10,7 @@ from django.test import Client, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import CustomerMessage
+from accounts.models import CustomerMessage, UserProfile
 from arabela_admin import test_online_payments_admin as helpers
 from reservations import ledger, payments, paymongo
 from reservations.models import Deduction, Payment, ReservationItem, ReservationStatusEvent
@@ -216,7 +216,8 @@ class RefundThroughThePaymentsPageTests(Base):
     def test_the_booking_window_offers_it_and_the_form_sends_it(self):
         booking = self.returned_booking()
         self.age_payment(booking, 2)
-        self.client.force_login(self.staff)                                               # everyday staff can hand a deposit back
+        self.client.force_login(self.staff)                                               # staff the owner allowed to return money
+        UserProfile.objects.update_or_create(user=self.staff, defaults={"role": UserProfile.Role.STAFF, "permissions": "return_money"})
         detail = self.client.get(reverse("arabela_admin:payment_detail", args=[booking.pk])).json()
         self.assertEqual(detail["onlineRefund"], {"offered": True, "available": True, "label": "GCash", "reason": ""})
         response = self.client.post(reverse("arabela_admin:deposit_return", args=[booking.pk]), data=json.dumps(

@@ -122,10 +122,21 @@
     var confirmBtn = $('cb-confirm'), keepBtn = $('cb-keep');
     var current = null, busy = false, lastFocus = null;
 
-    var WARN_BOOKING = 'The deposit is <strong>not refunded</strong> — the booking stays on record as Cancelled with that written on it. The gown is released, the customer is told by message and email, and this can’t be undone.';
-    var WARN_GOWN = 'Only this gown is cancelled — the rest of the booking carries on. The gown is released, the customer is told by message and email, and <strong>no refund is given</strong>. This can’t be undone.';
     var WARN_REQUEST = 'Nothing is cancelled yet. The owner will see your request and decide. Until then the booking stays exactly as it is.';
-    var WARN_GOWNS = 'Only these gowns are cancelled — the rest of the booking carries on. The gowns are released, the customer is told by message and email, and <strong>no refund is given</strong>. This can’t be undone.';
+    // The money part of each warning; `back` is the amount to return ('' when there is nothing), worked out by the server.
+    function warnText(kind, back) {
+      var money = '<strong>&#8369;' + back + '</strong>';
+      if (kind === 'booking') {
+        return 'The security deposit is <strong>not refunded</strong>: the shop keeps it. '
+          + (back ? money + ' that was paid besides it goes back to the customer (it shows as <strong>Refund due</strong> in Payments). ' : 'Nothing else was paid, so there is nothing to give back. ')
+          + 'The gown is released, the customer is told by message and email, and this can’t be undone.';
+      }
+      var one = kind === 'gown';
+      return 'Only ' + (one ? 'this gown is' : 'these gowns are') + ' cancelled. The rest of the booking carries on. '
+        + (one ? 'Its' : 'Their') + ' rental is <strong>no longer charged</strong>. '
+        + (back ? money + ' of rental already paid goes back to the customer (it shows as <strong>Refund due</strong> in Payments). ' : '')
+        + 'The security deposit stays on the booking. ' + (one ? 'The gown is' : 'The gowns are') + ' released, the customer is told by message and email, and this can’t be undone.';
+    }
 
     function csrf() {
       var input = document.querySelector('input[name="csrfmiddlewaretoken"]');
@@ -186,7 +197,8 @@
       $('cb-warn').classList.toggle('cb-warn--soft', current.request);
       confirmBtn.classList.toggle('cb-btn--danger', !current.request);
       confirmBtn.classList.toggle('cb-btn--primary', current.request);
-      $('cb-warn').innerHTML = current.request ? WARN_REQUEST : (wholeBooking ? WARN_BOOKING : (single ? WARN_GOWN : WARN_GOWNS));
+      var back = (btn.getAttribute('data-back') || '').replace(/[^0-9.,]/g, '');
+      $('cb-warn').innerHTML = current.request ? WARN_REQUEST : warnText(wholeBooking ? 'booking' : (single ? 'gown' : 'gowns'), back);
       if (current.request) {
         $('cb-title').textContent = wholeBooking ? 'Ask the owner to cancel this booking?' : (single ? 'Ask the owner to cancel this gown?' : 'Ask the owner to cancel these gowns?');
         $('cb-lead').textContent = 'Check the details below, then send your request.';
@@ -315,7 +327,7 @@
       if (action === 'approve') {
         window.adminConfirm({
           title: 'Approve this cancellation?',
-          message: who + ' asked to cancel ' + what + ' on ' + ref + '. Approving cancels it now, the customer is told by message and email, and the deposit is not refunded.',
+          message: who + ' asked to cancel ' + what + ' on ' + ref + '. Approving cancels it now and the customer is told by message and email. The security deposit of a cancelled booking is not refunded; anything else paid for what is cancelled goes back to the customer.',
           confirmText: 'Approve and cancel', danger: true,
         }).then(function (ok) {
           if (!ok) { return; }

@@ -517,12 +517,12 @@ class CancelledBookingTests(OverBase):
         reservation = self.booked([self.dated(ret=13)], expected_over="200")
         response = self.client.post(reverse("gowns:reservation_item_cancel", args=[reservation.items.get().pk]))
         self.assertEqual(response.status_code, 200, response.content)
-        self.assertIn("₱200.00 you paid over it", CustomerMessage.objects.latest("id").body)
+        self.assertIn("₱200.00 you paid besides it", CustomerMessage.objects.latest("id").body)
         s = self.statement(reservation)
         self.assertEqual((s.state, s.refund_available, s.extra_credit, s.balance_due, s.deposit_paid), (ledger.REFUND, D("200"), D("200"), D("0"), D("2000")))
         self.assertEqual(dashboard_money.money_between()["kept"], D("0"))
         listed = self.admin.get(reverse("arabela_admin:payments")).content.decode()
-        self.assertIn("give back ₱200.00 paid over it", listed)
+        self.assertIn("Deposit kept (cancelled), give back ₱200.00", listed)
         with self.assertRaises(payments.PaymentError):
             payments.return_deposit(reservation_id=reservation.pk, amount=D("2000"), method=Payment.Method.CASH, user=self.staff)
         with override_settings(PAYMONGO_AUTO_REFUND=True):
@@ -532,7 +532,7 @@ class CancelledBookingTests(OverBase):
         s = self.statement(reservation)
         self.assertEqual((s.state, s.refund_available), (ledger.CANCELLED, D("0")))
         paper = self.client.get(reverse("gowns:receipt_view", args=[payment.pk])).content.decode()
-        for words in ("REFUND", "is not refunded", "RETURNED NOW", "&#8369;200.00"):
+        for words in ("REFUND", "Kept by the shop (not refunded)", "RETURNED NOW", "&#8369;200.00"):
             self.assertIn(words, paper)
         with self.assertRaises(payments.PaymentError):
             payments.return_deposit(reservation_id=reservation.pk, amount=D("1"), method=Payment.Method.CASH, user=self.staff)
@@ -614,7 +614,7 @@ class CancelledBookingTests(OverBase):
         if response.status_code == 403:                               # staff need the owner's permission here
             from reservations import cancellation
             cancellation.cancel_by_staff(reservation.pk, staff_name="Owner", reason_key="customer_asked", note="", typed_code=reservation.reference_code)
-        self.assertIn("The ₱200.00 you paid over it for extra days will be returned to you", CustomerMessage.objects.latest("id").body)
+        self.assertIn("The ₱200.00 you paid besides it will be returned to you", CustomerMessage.objects.latest("id").body)
 
     def test_an_older_cancelled_booking_keeps_everything(self):
         reservation = self.old_booking()

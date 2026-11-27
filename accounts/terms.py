@@ -17,8 +17,8 @@ from django.utils.formats import date_format
 
 from accounts.models import UserProfile
 
-TERMS_UPDATED_ON = date(2026, 11, 27)        # amounts over the deposit are paid right away; paid date changes (customers agree once more)
-TERMS_UPDATED_TIME = time(20, 11)
+TERMS_UPDATED_ON = date(2026, 11, 27)        # a cancelled booking keeps the deposit and returns the rest; wording matches online payment
+TERMS_UPDATED_TIME = time(23, 45)
 
 
 def label():
