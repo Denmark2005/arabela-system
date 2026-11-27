@@ -400,6 +400,9 @@
     @media (prefers-reduced-motion: reduce) {
       .cart-qty-limit-hint { transition: none; }
     }
+    /* A gown card pressed with the mouse keeps the browser's focus, so the next key press (even Shift) drew a black outline round it.
+       The outline is hidden for that card only (marked by the script near the end of this page); reaching a card with Tab still shows it. */
+    [data-pressed-by-mouse]:focus-visible { outline: none; }
   </style>
 
   {% block extra_head %}{% endblock %}
@@ -1830,6 +1833,24 @@
         updateCartTotals();
       }
     });
+  </script>
+
+  <!-- Marks a gown card (or its + button) pressed with the mouse, for the [data-pressed-by-mouse] style above. Focus, clicking, dragging
+       and the keyboard behave as before: only the outline is hidden, and Tab clears the marks. -->
+  <script>
+    (function () {
+      const MARK = 'data-pressed-by-mouse';
+      document.addEventListener('mousedown', function (event) {
+        const card = event.target.closest && event.target.closest('a[href*="/products/"]');
+        if (!card) return;
+        const button = event.target.closest('button');
+        (button && card.contains(button) ? button : card).setAttribute(MARK, '');
+      }, true);
+      document.addEventListener('keydown', function (event) {
+        if (event.key !== 'Tab') return;
+        document.querySelectorAll('[' + MARK + ']').forEach(function (element) { element.removeAttribute(MARK); });
+      }, true);
+    })();
   </script>
 
   {% if request.user.is_authenticated %}
