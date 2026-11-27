@@ -150,8 +150,12 @@ def garment(photo):
     return soft, box
 
 
-def fit_to_front(view_data, front_data):
-    """The side or back photo redrawn to match the front photo, as JPEG bytes. Raises CannotFit when either photo can't be used."""
+def fit_to_front(view_data, front_data, spans=None):
+    """The side or back photo redrawn to match the front photo, as JPEG bytes. Raises CannotFit when either photo can't be used.
+
+    Normally the whole garment is made as tall as the front's. When one photo shows a mannequin head or a stand that the other doesn't, that
+    would shrink the dress, so `spans` can name the two stretches to match instead: ((front top, front bottom), (view top, view bottom)),
+    each as a share of its picture's height."""
     front = open_photo(front_data)
     view = open_photo(view_data)
     if not is_plain(front):
@@ -164,11 +168,20 @@ def fit_to_front(view_data, front_data):
     pad = 2 + view.width // 400
     cut = (max(0, left - pad), max(0, top - pad), min(view.width, right + pad), min(view.height, bottom + pad))
     piece = clean.crop(cut)
-    scale = (front_bottom - front_top) / (bottom - top)
+    target, start, end = (front_top, front_bottom), top, bottom                    # what in the view is matched to what in the front
+    if spans:
+        target = tuple(share * front.height for share in spans[0])
+        start, end = (share * view.height for share in spans[1])
+    scale = (target[1] - target[0]) / (end - start)
     scale = min(scale, front.width / piece.width)                                  # a very wide view is at most as wide as the picture
+    if spans:
+        scale = min(scale, front.height / piece.height)                            # ... and a head or stand outside the stretch stays inside it
     piece = piece.resize((max(1, round(piece.width * scale)), max(1, round(piece.height * scale))), Image.LANCZOS)
     x = round((front_left + front_right) / 2 - ((left + right) / 2 - cut[0]) * scale)
-    y = round(front_top - (top - cut[1]) * scale)
+    x = max(0, min(x, front.width - piece.width))                                  # a wide view beside an off-centre front moves in, never cut
+    y = round(target[0] - (start - cut[1]) * scale)
+    if spans:
+        y = max(0, min(y, front.height - piece.height))
     canvas = Image.new("RGB", front.size, WHITE)
     canvas.paste(piece, (x, y))
     out = BytesIO()

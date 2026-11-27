@@ -16,7 +16,7 @@ from django.urls import reverse
 from PIL import Image, ImageDraw
 
 from gowns import design_details, photos, view_fit
-from gowns.management.commands.add_gown_views import SUITS
+from gowns.management.commands.add_gown_views import BY_THE_DRESS, MOTHER_GOWNS, SUITS
 from gowns.models import Gown
 
 IN_MEMORY = {**settings.STORAGES, "default": {"BACKEND": "django.core.files.storage.InMemoryStorage"}}
@@ -103,6 +103,47 @@ class FitToFrontTests(SimpleTestCase):
         left, top, right, bottom = self.box(out)
         self.assertAlmostEqual(right - left, 260, delta=12)
         self.assertLess(max(out.getpixel((right - 20, top + 60))), 250)
+
+    def test_a_wide_view_beside_an_off_centre_front_is_moved_in_not_cut(self):
+        front = picture((600, 1000), (240, 200, 590, 780))                  # the front sits to the right
+        out = self.fitted(picture((600, 1000), (10, 200, 590, 780)), front)  # a train makes this view almost as wide as the picture
+        left, _, right, _ = out.convert("L").point(lambda v: 255 if v < 128 else 0).getbbox()
+        self.assertAlmostEqual(right - left, 580, delta=8)                   # all of it is there
+        self.assertGreaterEqual(left, 0)
+        self.assertLess(right, 599)
+
+    def with_head(self, dress, head):
+        """A dress in `dress` with a mannequin head in `head` just above it."""
+        image = Image.new("RGB", (600, 1000), (255, 255, 255))
+        draw = ImageDraw.Draw(image)
+        draw.rectangle(dress, fill=(30, 30, 40))
+        draw.rectangle(head, fill=(120, 100, 90))
+        data = BytesIO()
+        image.save(data, "PNG")
+        return data.getvalue()
+
+    def dress_rows(self, image):
+        box = image.convert("L").point(lambda v: 255 if v < 60 else 0).getbbox()
+        return box[1], box[3]
+
+    def test_named_stretches_match_the_dress_when_only_the_view_has_a_head(self):
+        view = self.with_head((200, 300, 400, 900), (270, 150, 330, 296))
+        whole = Image.open(BytesIO(view_fit.fit_to_front(view, FRONT))).convert("RGB")
+        top, bottom = self.dress_rows(whole)
+        self.assertLess(bottom - top, 500)                                   # matching the whole figure shrinks the dress ...
+        named = Image.open(BytesIO(view_fit.fit_to_front(view, FRONT, ((0.2, 0.78), (0.3, 0.9))))).convert("RGB")
+        top, bottom = self.dress_rows(named)
+        self.assertAlmostEqual(top, 200, delta=5)                            # ... naming the dress keeps it the front's size and place
+        self.assertAlmostEqual(bottom, 780, delta=5)
+        self.assertAlmostEqual(view_fit.garment(named)[1][1], 55, delta=8)   # with the head still above it
+
+    def test_named_stretches_never_push_anything_off_the_picture(self):
+        view = self.with_head((200, 100, 400, 700), (270, 702, 330, 960))     # a stand far below the dress
+        out = Image.open(BytesIO(view_fit.fit_to_front(view, FRONT, ((0.2, 0.8), (0.1, 0.7))))).convert("RGB")
+        left, top, right, bottom = out.convert("L").point(lambda v: 255 if v < 200 else 0).getbbox()
+        self.assertGreaterEqual(top, 0)
+        self.assertLess(bottom, 1000)
+        self.assertAlmostEqual((bottom - top) / (right - left), 860 / 200, delta=0.12)          # nothing of it was cut away
 
     def test_a_see_through_png_becomes_white(self):
         image = Image.new("RGBA", (600, 1000), (0, 0, 0, 0))
@@ -295,6 +336,62 @@ class AddGownViewsCommandTests(TestCase):
             call_command("add_gown_views", f"--folder={self.folder.name}", "--design=Nothing 1", stdout=StringIO())
         with self.assertRaisesMessage(CommandError, "There is no folder"):
             call_command("add_gown_views", "--folder=Z:/nowhere", stdout=StringIO())
+
+    def test_wedding_gowns_are_matched_by_number_and_a_wide_side_is_not_swapped(self):
+        front = default_storage.url(default_storage.save("gown_photos/wed.jpg", ContentFile(FRONT)))
+        for number, size in ((1, Gown.Size.MEDIUM), (2, Gown.Size.LARGE)):
+            gown("Wedding Gown 7", number=number, size=size, category=Gown.Category.WEDDING_GOWN, front=front)
+        folder = Path(self.folder.name) / "Gown_07"
+        folder.mkdir()
+        (folder / "Gown_07_Side.png").write_bytes(picture((400, 700), (40, 40, 360, 690), fmt="PNG"))      # a train: wider than the back
+        (folder / "Gown_07_Back.png").write_bytes(picture((400, 700), (160, 40, 240, 690), fmt="PNG"))
+        out = StringIO()
+        call_command("add_gown_views", "--wedding", f"--folder={self.folder.name}", "--design=wedding gown 7", stdout=out)
+        self.assertIn("Wedding Gown 7: side and back uploaded to 2 gown(s)", out.getvalue())
+        self.assertIn("1 wedding gown design(s) got side/back photos", out.getvalue())
+        self.assertNotIn("wrong way round", out.getvalue())
+        sides = set(Gown.objects.filter(name="Wedding Gown 7").values_list("side_photo_url", "back_photo_url"))
+        self.assertEqual(len(sides), 1)
+        side, back = sides.pop()
+        side_box, back_box = view_fit.garment(self.stored(side))[1], view_fit.garment(self.stored(back))[1]
+        self.assertGreater(side_box[2] - side_box[0], back_box[2] - back_box[0])
+        self.assertEqual(self.urls(), [("", ""), ("", "")])                                                 # the suit was left alone
+
+    def test_mother_gowns_follow_the_order_of_their_names_and_three_are_matched_by_the_dress(self):
+        self.assertEqual(len(MOTHER_GOWNS), 30)
+        self.assertEqual(list(MOTHER_GOWNS), sorted(MOTHER_GOWNS))
+        self.assertTrue(set(BY_THE_DRESS) <= set(MOTHER_GOWNS))
+        self.assertEqual((MOTHER_GOWNS[0], MOTHER_GOWNS[25], MOTHER_GOWNS[29]),
+                         ("Beige Mother Gown 1", "Rose Gold Mother Gown 2", "Silver Mother Gown 4"))
+        front = default_storage.url(default_storage.save("gown_photos/mother.jpg", ContentFile(FRONT)))
+        for number, name in enumerate(("Beige Mother Gown 1", "Rose Gold Mother Gown 2"), start=1):
+            gown(name, number=number, category=Gown.Category.MOTHER_GOWN, front=front)
+        for folder_number in (1, 26):
+            folder = Path(self.folder.name) / f"Mother_Gown_{folder_number:02d}"
+            folder.mkdir()
+            for view in ("Side", "Back"):
+                (folder / f"Mother_Gown_{folder_number:02d}_{view}.png").write_bytes(picture((400, 700), (120, 40, 280, 690), fmt="PNG"))
+        out = StringIO()
+        with patch("gowns.view_fit.fit_to_front", wraps=view_fit.fit_to_front) as fit:
+            call_command("add_gown_views", "--mother", f"--folder={self.folder.name}", "--design=Beige Mother Gown 1",
+                         "--design=Rose Gold Mother Gown 2", stdout=out)
+        self.assertIn("2 mother gown design(s) got side/back photos", out.getvalue())
+        spans = [call.args[2] for call in fit.call_args_list]
+        self.assertEqual(spans, [None, None, BY_THE_DRESS["Rose Gold Mother Gown 2"]["side"], BY_THE_DRESS["Rose Gold Mother Gown 2"]["back"]])
+        for unit in Gown.objects.filter(category=Gown.Category.MOTHER_GOWN):
+            self.assertTrue(unit.side_photo_url and unit.back_photo_url, unit.name)
+        self.assertEqual(self.urls(), [("", ""), ("", "")])                                                 # the suit was left alone
+
+    def test_wedding_gowns_without_pictures_or_listings_are_left_as_they_were(self):
+        gown("Wedding Gown 19", number=1, category=Gown.Category.WEDDING_GOWN, front="https://p.test/front.jpg")
+        out = StringIO()
+        with patch("gowns.photos.read", return_value=FRONT):
+            call_command("add_gown_views", "--wedding", f"--folder={self.folder.name}", stdout=out)
+        self.assertIn("Wedding Gown 19: no Side picture in Gown_19", out.getvalue())
+        self.assertIn("Wedding Gown 1: no gown with this name in the Wedding Gown category, skipped", out.getvalue())
+        self.assertIn("0 wedding gown design(s) got side/back photos; 28 left as they were.", out.getvalue())
+        with self.assertRaisesMessage(CommandError, "Not one of the 23 suits: Wedding Gown 7"):
+            call_command("add_gown_views", f"--folder={self.folder.name}", "--design=Wedding Gown 7", stdout=StringIO())
 
     def test_an_unreadable_front_skips_the_design(self):
         Gown.objects.filter(name=COAT).update(photo_url="/media/gown_photos/gone.jpg")
