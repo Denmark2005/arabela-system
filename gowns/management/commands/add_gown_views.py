@@ -1,21 +1,25 @@
 """python live.py add_gown_views --design "Coat Sequence Black, Green & Gray 1"
 python live.py add_gown_views --wedding
 python live.py add_gown_views --mother
+python live.py add_gown_views --ball
 
-Gives gowns their side and back photos: the suits, or with --wedding / --mother the wedding or mother gowns. For each design it takes the two
+Gives gowns their side and back photos: the suits, or with --wedding / --mother / --ball the wedding, mother or ball gowns. For each design it takes the two
 pictures from that set's folder, matches them to the design's front photo (the same height on a white picture of the same size,
 gowns/view_fit.py), uploads them and sets them on every size of the design. The front photo is never changed. A design that already has a view
 keeps it (--replace uploads it again).
 
     --wedding         the wedding gowns instead of the suits
     --mother          the mother gowns instead of the suits
+    --ball            the ball gowns (Ball Gown Tulle) instead of the suits
     --design NAME     only this design (can be repeated); without it, the whole set
     --dry-run         report what would happen: nothing is uploaded or saved
     --preview FOLDER  also write the matched pictures there, to look at them
     --folder FOLDER   where the pictures are. Suits: Downloads\\Arabela Suits\\views, one Suit_NN folder per suit.
                       Wedding gowns: Downloads\\Arabela Wedding Gowns\\views, one Gown_NN folder per gown (Gown_07 is Wedding Gown 7).
                       Mother gowns: Downloads\\Arabela Mother Gowns\\views, one Mother_Gown_NN folder per gown, numbered in the order of
-                      the names (01 is Beige Mother Gown 1, 30 is Silver Mother Gown 4)."""
+                      the names (01 is Beige Mother Gown 1, 30 is Silver Mother Gown 4).
+                      Ball gowns: Downloads\Arabela Ball Gowns\views, one Ball_Gown_NN folder per gown, numbered in the order of the
+                      names (01 is Beige Ball Gown Tulle 1, 50 is Yellow and Black Ball Gown Tulle 1); each folder has a name.txt."""
 from pathlib import Path
 from typing import NamedTuple
 
@@ -40,6 +44,11 @@ WEDDING_GOWNS = tuple(f"Wedding Gown {number}" for number in range(1, 29))
 MOTHER_GOWNS = tuple(f"{colour} Mother Gown {number}" for colour, count in (
     ("Beige", 3), ("Blue", 3), ("Champagne", 3), ("Emerald Green", 3), ("Gold", 6), ("Navy Blue", 1), ("Pink", 4), ("Purple", 1),
     ("Rose Gold", 2), ("Silver", 4)) for number in range(1, count + 1))
+BALL_GOWNS = tuple(f"{colour} Ball Gown Tulle {number}" for colour, count in (
+    ("Beige", 1), ("Black", 1), ("Black and Beige", 1), ("Dusty Blue", 1), ("Emerald Green", 2), ("Green", 2), ("Light Blue", 3),
+    ("Light Green", 2), ("Light Pink", 1), ("Light Purple", 1), ("Light Yellow", 1), ("Navy Blue", 1), ("Old Rose", 3), ("Peach", 1),
+    ("Pink", 5), ("Pink and Beige", 1), ("Pink and Gray", 2), ("Pink and Light Blue", 3), ("Purple", 2), ("Red", 7), ("Red and Black", 1),
+    ("White", 3), ("Yellow", 4), ("Yellow and Black", 1)) for number in range(1, count + 1))
 # These pictures show a mannequin head or a stand in one view and not in the front, so matching the whole figure would shrink the dress. They are
 # matched by where the dress starts and ends instead (view_fit.fit_to_front, spans): ((front top, bottom), (view top, bottom)), as shares of
 # each picture's height, read off these designs' present photos.
@@ -65,6 +74,8 @@ WEDDING_SET = PictureSet(Gown.Category.WEDDING_GOWN, WEDDING_GOWNS, "Gown", Path
                          "wedding gown", False)
 MOTHER_SET = PictureSet(Gown.Category.MOTHER_GOWN, MOTHER_GOWNS, "Mother_Gown", Path.home() / "Downloads" / "Arabela Mother Gowns" / "views",
                         "mother gown", False)
+BALL_SET = PictureSet(Gown.Category.BALL_GOWN_TULLE, BALL_GOWNS, "Ball_Gown", Path.home() / "Downloads" / "Arabela Ball Gowns" / "views",
+                      "ball gown", False)
 
 
 def _shape(data):
@@ -74,12 +85,13 @@ def _shape(data):
 
 
 class Command(BaseCommand):
-    help = "Uploads the suits' (or the wedding or mother gowns') side and back photos, matched to each front photo."
+    help = "Uploads the suits' (or the wedding, mother or ball gowns') side and back photos, matched to each front photo."
 
     def add_arguments(self, parser):
         which = parser.add_mutually_exclusive_group()
         which.add_argument("--wedding", action="store_true")
         which.add_argument("--mother", action="store_true")
+        which.add_argument("--ball", action="store_true")
         parser.add_argument("--folder")
         parser.add_argument("--design", action="append", default=[])
         parser.add_argument("--dry-run", action="store_true")
@@ -87,7 +99,8 @@ class Command(BaseCommand):
         parser.add_argument("--preview")
 
     def handle(self, *args, **options):
-        pictures = WEDDING_SET if options["wedding"] else MOTHER_SET if options["mother"] else SUIT_SET
+        pictures = next((chosen for flag, chosen in (("wedding", WEDDING_SET), ("mother", MOTHER_SET), ("ball", BALL_SET)) if options[flag]),
+                        SUIT_SET)
         folder = Path(options["folder"] or pictures.folder)
         if not folder.is_dir():
             raise CommandError(f"There is no folder {folder}. Point --folder at the folder holding {pictures.prefix}_01 ... "

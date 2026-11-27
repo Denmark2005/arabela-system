@@ -16,7 +16,7 @@ from django.urls import reverse
 from PIL import Image, ImageDraw
 
 from gowns import design_details, photos, view_fit
-from gowns.management.commands.add_gown_views import BY_THE_DRESS, MOTHER_GOWNS, SUITS
+from gowns.management.commands.add_gown_views import BALL_GOWNS, BY_THE_DRESS, MOTHER_GOWNS, SUITS
 from gowns.models import Gown
 
 IN_MEMORY = {**settings.STORAGES, "default": {"BACKEND": "django.core.files.storage.InMemoryStorage"}}
@@ -380,6 +380,26 @@ class AddGownViewsCommandTests(TestCase):
         self.assertEqual(spans, [None, None, BY_THE_DRESS["Rose Gold Mother Gown 2"]["side"], BY_THE_DRESS["Rose Gold Mother Gown 2"]["back"]])
         for unit in Gown.objects.filter(category=Gown.Category.MOTHER_GOWN):
             self.assertTrue(unit.side_photo_url and unit.back_photo_url, unit.name)
+        self.assertEqual(self.urls(), [("", ""), ("", "")])                                                 # the suit was left alone
+
+    def test_ball_gowns_follow_the_order_of_their_names_and_a_missing_side_still_gets_the_back(self):
+        self.assertEqual(len(BALL_GOWNS), 50)
+        self.assertEqual(list(BALL_GOWNS), sorted(BALL_GOWNS))
+        self.assertEqual((BALL_GOWNS[0], BALL_GOWNS[-1]), ("Beige Ball Gown Tulle 1", "Yellow and Black Ball Gown Tulle 1"))
+        number = BALL_GOWNS.index("Pink Ball Gown Tulle 3") + 1
+        front = default_storage.url(default_storage.save("gown_photos/ball.jpg", ContentFile(FRONT)))
+        gown("Pink Ball Gown Tulle 3", number=1, category=Gown.Category.BALL_GOWN_TULLE, front=front)
+        folder = Path(self.folder.name) / f"Ball_Gown_{number:02d}"
+        folder.mkdir()
+        (folder / "name.txt").write_text("Pink Ball Gown Tulle 3", encoding="utf-8")
+        (folder / f"Ball_Gown_{number:02d}_Back.png").write_bytes(picture((400, 700), (120, 40, 280, 690), fmt="PNG"))
+        out = StringIO()
+        call_command("add_gown_views", "--ball", f"--folder={self.folder.name}", "--design=Pink Ball Gown Tulle 3", stdout=out)
+        self.assertIn(f"no Side picture in Ball_Gown_{number:02d}", out.getvalue())
+        self.assertIn("1 ball gown design(s) got side/back photos", out.getvalue())
+        unit = Gown.objects.get(name="Pink Ball Gown Tulle 3")
+        self.assertEqual(unit.side_photo_url, "")
+        self.assertTrue(unit.back_photo_url)
         self.assertEqual(self.urls(), [("", ""), ("", "")])                                                 # the suit was left alone
 
     def test_wedding_gowns_without_pictures_or_listings_are_left_as_they_were(self):
