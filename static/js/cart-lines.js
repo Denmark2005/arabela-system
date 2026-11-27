@@ -6,7 +6,7 @@
    payment receipt were filled in.
 
    The rules, kept in ONE place so the product page, the drawer, the selection page and checkout cannot disagree:
-     * the same gown + size + dates is ONE row; "more than one" is its quantity (capped at how many units exist);
+     * the same gown + size + dates (pick-up, return and event) is ONE row; "more than one" is its quantity (capped at how many units exist);
      * a bag never holds more of a gown (in one size) than exists, whatever the dates -- each gown takes its own unit.
 
    Pure functions only (no page, no storage), so they can be tested on their own (gowns/test_cart_lines.py). */
@@ -19,9 +19,13 @@
         var t = text(item && item.size).replace(/^Size:\s*/i, '').trim();
         return t === '-' ? '' : t;
     }
+    // The dates of a row: "pick-up - return" and the event day. Two rows with the same pick-up and return but different events are
+    // different rows (the free days, and so the deposit deduction, are counted from the event).
     function rentalOf(item) {
         var t = text(item && item.rental);
-        return t === '-' ? '' : t;
+        if (t === '-') t = '';
+        var e = text(item && item.event);
+        return e && t ? t + '|' + e : t;
     }
     function collectionOf(item) { return item && item.collection ? text(item.collection) : 'wedding'; }
     function nameOf(item) { return (item && item.name) || 'Untitled'; }

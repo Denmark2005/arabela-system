@@ -114,6 +114,15 @@
       0%, 100% { box-shadow: inset 0 0 0 1px rgba(180, 83, 9, 0.22); }
       50% { box-shadow: inset 0 0 0 2px rgba(180, 83, 9, 0.55); }
     }
+    /* The deposit deduction for days outside the free days: the red line of the order summary (a light red band, like the shop's other
+       money warnings), and what comes back. It springs in once, the same way the summary's other notes do. */
+    .res-deduction { padding: 0.75rem 0.85rem; border-radius: 8px; border-left: 2px solid #d92d20; background-color: #fef3f2; color: #b42318; }
+    .res-deduction[hidden] { display: none; }
+    .res-deduction #reservation-deduction-note { color: rgba(180, 35, 24, 0.85); }
+    .res-deduction .res-deduction-back { border-top: 1px dashed rgba(180, 35, 24, 0.25); }
+    .res-deduction.is-in { animation: res-deduction-in 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+    @keyframes res-deduction-in { from { opacity: 0; transform: translateY(-6px) scale(0.985); } to { opacity: 1; transform: none; } }
+    .res-item-deduct { background-color: #fef3f2; color: #b42318; }
     #reservation-date-warning { border-left: 2px solid #b45309; background-color: rgba(180, 83, 9, 0.07); }
     #reservation-lockout-notice { border-left: 2px solid #b91c1c; background-color: rgba(185, 28, 28, 0.06); }
     #confirm-rental-btn[disabled] { opacity: 0.45; cursor: not-allowed; }
@@ -126,6 +135,7 @@
       .res-item-row:hover { transform: none; }
       .res-item-edit { opacity: 0.75; transition: none; }
       .res-item-row--needs-date { animation: none; }
+      .res-deduction.is-in { animation: none; }
     }
   </style>
 {% endblock %}
@@ -334,9 +344,22 @@
           <div class="flex justify-between items-start text-sm gap-4">
             <div class="flex flex-col">
               <span class="text-secondary">Security Deposit</span>
-              <span class="text-[0.75rem] text-secondary/70 mt-0.5">(Fully refundable upon return)</span>
+              <span id="reservation-deposit-note" class="text-[0.75rem] text-secondary/70 mt-0.5">(Fully refundable upon return)</span>
             </div>
-            <span id="reservation-security-deposit" class="font-medium text-on-surface tabular-nums">₱ 0</span>
+            <span id="reservation-security-deposit" class="shrink-0 whitespace-nowrap font-medium text-on-surface tabular-nums">₱ 0</span>
+          </div>
+          <!-- Days outside the free days (2 before and 2 after the event): taken from the deposit when the gown is returned, never added to what
+               is paid now. Filled by static/js/reservation-flow.js (showDeduction); hidden when every gown is booked inside its free days. -->
+          <div id="reservation-deduction" class="res-deduction" hidden>
+            <div class="flex flex-col min-w-0 text-sm">
+              <span id="reservation-deduction-label" class="font-semibold"></span>
+              <span id="reservation-deduction-note" class="text-[0.75rem] mt-0.5 leading-relaxed"></span>
+            </div>
+            <div class="mt-2.5 pt-2.5 flex justify-between items-center text-sm gap-4 res-deduction-back">
+              <span class="text-secondary">Deposit back after the return</span>
+              <span id="reservation-deposit-back" class="font-medium text-on-surface tabular-nums"></span>
+            </div>
+            <p id="reservation-extra-owed" class="mt-1.5 text-[0.75rem] font-semibold" hidden></p>
           </div>
         </div>
 
@@ -375,6 +398,9 @@
           </button>
 
           <p class="text-center mt-4 text-[0.75rem] text-secondary leading-relaxed">
+            Check your dates before you book. After booking they can only be changed by calling Arabela{% if site_phone %} at <a class="underline underline-offset-4 hover:text-on-surface whitespace-nowrap" href="{{ site_phone_tel }}">{{ site_phone }}</a>{% endif %} with your booking number.
+          </p>
+          <p class="text-center mt-2 text-[0.75rem] text-secondary leading-relaxed">
             By placing this order, you agree to our
             <a class="underline underline-offset-4 hover:text-on-surface" href="{% url 'gowns:terms_and_conditions' %}">Rental Terms</a>
             and Authenticity Guarantee.
@@ -469,7 +495,7 @@
 
     <p class="mt-6 rounded-[8px] bg-gray-50 px-4 py-3 text-center text-[0.75rem] text-secondary leading-relaxed">This is a security deposit. You get it back when you return the gown.</p>
 
-    <p class="mt-4 text-center text-[0.75rem] text-secondary">Need help?{% if site_facebook_url %} Message us on <a href="{{ site_facebook_url }}" target="_blank" rel="noopener" class="font-semibold text-on-surface underline underline-offset-2">Facebook</a>{% endif %}{% if site_phone %}{% if site_facebook_url %} or call{% else %} Call{% endif %} <a href="tel:{{ site_phone_tel }}" class="font-semibold text-on-surface underline underline-offset-2">{{ site_phone }}</a>{% endif %}.</p>
+    <p class="mt-4 text-center text-[0.75rem] text-secondary">Need help?{% if site_facebook_url %} Message us on <a href="{{ site_facebook_url }}" target="_blank" rel="noopener" class="font-semibold text-on-surface underline underline-offset-2">Facebook</a>{% endif %}{% if site_phone %}{% if site_facebook_url %} or call{% else %} Call{% endif %} <a href="{{ site_phone_tel }}" class="font-semibold text-on-surface underline underline-offset-2">{{ site_phone }}</a>{% endif %}.</p>
   </div>
 </div>
 
@@ -593,7 +619,9 @@
                         size: stripSizePrefix(it.size),
                         rental_price: it.unitPrice || 0,
                         rental_date: dates.start,
-                        return_date: dates.end
+                        return_date: dates.end,
+                        // The event chosen on the gown page ('' for a line from a bag saved before it was kept): the free days count from it.
+                        event_date: it.event || ''
                     });
                 }
             }
@@ -921,6 +949,12 @@
                 arabelaAlert({ title: 'The deposit changed', message: err.data.error, danger: true }).then(redo, redo);
                 return;
             }
+            if (err && err.data && err.data.extra_fee_changed) {
+                // The owner changed the fee for the extra days while this page was open: reload so the order summary shows the new amount.
+                var again = function () { window.location.reload(); };
+                arabelaAlert({ title: 'The extra-day fee changed', message: err.data.error, danger: true }).then(again, again);
+                return;
+            }
             if (err && err.data && err.data.signed_out) {
                 // The sign-in ended while this page was open: nothing was booked. Sign in again and come back to this page.
                 var signIn = function () { window.location.href = (err.data.login_url || '/accounts/login/') + '?next=' + encodeURIComponent(window.location.pathname); };
@@ -998,6 +1032,7 @@
             formData.append('items', JSON.stringify(submitItems));
             formData.append('expected_user', (document.body && document.body.dataset && document.body.dataset.userKey) || '');
             formData.append('expected_deposit', String((Number(payload.itemCount) || 0) * (Number(document.body.dataset.depositPerGown) || 2000)));
+            formData.append('expected_extra_fee', String(Number(window.arabelaCheckoutExtraFee) || 0));
             formData.append('pay_option', chosen ? chosen.value : 'deposit');
             formData.append('request_id', payRequestId);
             formData.append('first_name', document.getElementById('first_name').value.trim());
@@ -1199,6 +1234,7 @@
                     formData.append('security_deposit', payload.deposit || 0);
                     // The deposit the customer saw on this page: when the owner changed it meanwhile the server says so instead of charging another amount.
                     formData.append('expected_deposit', String((Number(payload.itemCount) || 0) * (Number(document.body.dataset.depositPerGown) || 2000)));
+                    formData.append('expected_extra_fee', String(Number(window.arabelaCheckoutExtraFee) || 0));
                     formData.append('total_amount', payload.total || 0);
                     formData.append('first_name', document.getElementById('first_name').value.trim());
                     formData.append('last_name', document.getElementById('last_name').value.trim());

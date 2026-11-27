@@ -418,7 +418,8 @@
       data-home-url="{% url 'gowns:homepage' %}"
       data-cart-fetch-url="{% url 'gowns:cart_fetch' %}"
       data-cart-save-url="{% url 'gowns:cart_save' %}"
-      data-deposit-per-gown="{{ site_deposit_per_gown|default:2000 }}"{% if terms_needed %}
+      data-deposit-per-gown="{{ site_deposit_per_gown|default:2000 }}"
+      data-late-fee-per-day="{{ site_late_fee_per_day|default:200 }}"{% if terms_needed %}
       data-terms-needed="true"{% endif %}>
 
 {% csrf_token %}
@@ -785,7 +786,7 @@
     // sameCartLine() does, for merging -- there's no unique per-line id, only this
     // tuple, and cart lines are never deduplicated any other way in this codebase.
     function _cartLineIdentity(item) {
-      return [item && item.id, item && item.name, item && item.collection, item && item.size, item && item.rental]
+      return [item && item.id, item && item.name, item && item.collection, item && item.size, item && item.rental, item && item.event]
         .map(function (v) { return v || ''; }).join('|');
     }
 
@@ -891,13 +892,18 @@
                <span class="material-symbols-outlined" style="font-size: 0.85rem;">straighten</span>Select size
              </a></p>`
           : `<p class="text-[0.6875rem] text-on-secondary-container mt-1">Size: ${window.arabelaSizeLabel(item.size)}</p>`;
+        // The event (the free days count from it) and what the extra days take out of the deposit, both worked out by reservation-flow.js.
+        const eventText = dated && window.arabelaEventText ? window.arabelaEventText(item) : '';
+        const deductText = dated && window.arabelaDeductionText ? window.arabelaDeductionText(item, qty) : '';
         const rentalLine = dated
           ? `<p class="text-[0.6875rem] text-on-secondary-container mt-1">Rental: ${item.rental}</p>`
+            + (eventText ? `<p class="text-[0.6875rem] text-on-secondary-container">${attrEscapeCart(eventText)}</p>` : '')
+            + (deductText ? `<p class="mt-0.5 text-[0.6875rem] font-semibold text-[#b42318]">&minus; ${attrEscapeCart(deductText)}</p>` : '')
           : `<a href="${editUrl}" class="mt-1 inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-[#b45309] no-underline hover:underline underline-offset-4">
                <span class="material-symbols-outlined" style="font-size: 0.85rem;">event</span>Select rental date
              </a>`;
         return `
-          <div class="cart-line cart-reveal flex gap-4 group" data-index="${index}" data-unit-price="${unitPrice}" data-rental="${item.rental || ''}" data-id="${attrEscapeCart(item.id)}" data-collection="${attrEscapeCart(item.collection)}">
+          <div class="cart-line cart-reveal flex gap-4 group" data-index="${index}" data-unit-price="${unitPrice}" data-rental="${item.rental || ''}" data-event="${attrEscapeCart(item.event || '')}" data-id="${attrEscapeCart(item.id)}" data-collection="${attrEscapeCart(item.collection)}">
             <a href="${editUrl}" class="w-24 h-32 bg-white overflow-hidden shrink-0 block">
               <img alt="${item.name || 'Selection item'}" class="w-full h-full object-cover" style="clip-path: inset(1px 0 0 1px);" src="${item.img || ''}" />
             </a>

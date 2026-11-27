@@ -76,4 +76,4 @@ class CooldownTests(TestCase):
         plans = response.context["calendar_data"]["plans"]["M"]
         self.assertEqual(plans[(self.event + timedelta(days=7)).isoformat()], "booked")           # last rest day
         first_free = (self.event + timedelta(days=8)).isoformat()                                   # event Oct 20 -> Oct 28
-        self.assertEqual(plans[first_free], [first_free, 1])                                        # same-day pick-up
+        self.assertEqual(plans[first_free][:2], [first_free, 1])                                    # same-day pick-up

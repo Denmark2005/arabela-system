@@ -19,16 +19,43 @@
   .terms-delay-100 { transition-delay: 100ms; }
   .terms-delay-200 { transition-delay: 200ms; }
   .terms-delay-300 { transition-delay: 300ms; }
+  /* "On this page": the sections as quick links, so a customer finds the rule they want without reading everything. */
+  .terms-toc { margin: 0 auto 3rem; padding: 1.1rem 1.25rem; border: 1px solid rgba(11, 12, 12, 0.08); border-radius: 8px; background: #fbfaf9; }
+  .terms-toc-title { margin: 0 0 0.65rem; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: #615e57; }
+  .terms-toc ol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.35rem 1.25rem; margin: 0; padding: 0; list-style: none; counter-reset: toc; }
+  .terms-toc li { counter-increment: toc; font-size: 0.85rem; line-height: 1.5; }
+  .terms-toc a { color: #43413c; text-decoration: none; transition: color 0.2s ease; }
+  .terms-toc a::before { content: counter(toc, decimal-leading-zero); margin-right: 0.55rem; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em; color: #9a958c; }
+  .terms-toc a:hover { color: #0b0c0c; text-decoration: underline; text-underline-offset: 4px; }
+  #terms-page .terms-sec { scroll-margin-top: 7rem; }
+  @media (max-width: 560px) { .terms-toc ol { grid-template-columns: minmax(0, 1fr); } }
 </style>
 {% endblock %}
 
 {% block content %}
 <section id="terms-page" class="max-w-[760px] mx-auto">
-  <header class="text-center mb-14 terms-reveal">
+  <header class="text-center mb-10 terms-reveal">
     <h1 class="font-headline text-4xl md:text-5xl font-bold tracking-tight text-on-surface">Terms of service</h1>
+    {% if terms_label %}<p class="mt-4 text-[0.75rem] uppercase tracking-[0.16em] text-secondary">Last updated {{ terms_label }}</p>{% endif %}
   </header>
 
-  <div class="space-y-14 text-on-surface-variant leading-8 text-[0.95rem] font-body">
+  <nav class="terms-toc terms-reveal" aria-label="Sections of the Terms and Conditions">
+    <p class="terms-toc-title">On this page</p>
+    <ol>
+      <li><a href="#terms-agreement">Rental Agreement</a></li>
+      <li><a href="#terms-dates">Your Rental Dates</a></li>
+      <li><a href="#terms-extra">Extra Days and Late Returns</a></li>
+      <li><a href="#terms-changes">Changing Your Dates</a></li>
+      <li><a href="#terms-deposit">Security Deposit</a></li>
+      <li><a href="#terms-condition">Damage, Loss and Laundry</a></li>
+      <li><a href="#terms-cancel">Rental Fee and Cancellation</a></li>
+      <li><a href="#terms-fitting">Size and Fitting</a></li>
+      <li><a href="#terms-account">Account, Status and Receipts</a></li>
+      <li><a href="#terms-payment">Payment Methods</a></li>
+    </ol>
+  </nav>
+
+  <div class="text-on-surface-variant leading-8 text-[0.95rem] font-body">
     {% include "partials/terms_body.html" with reveal=True %}
   </div>
 </section>

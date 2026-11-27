@@ -86,7 +86,7 @@
     {% endif %}
 
     <p class="qr-note" id="qr-note">When you are done, close this tab to go back to your reservation.</p>
-    <p class="qr-help">Need help?{% if site_facebook_url %} Message us on <a href="{{ site_facebook_url }}" target="_blank" rel="noopener">Facebook</a>{% endif %}{% if site_phone %}{% if site_facebook_url %} or call{% else %} Call{% endif %} <a href="tel:{{ site_phone_tel }}">{{ site_phone }}</a>{% endif %}.</p>
+    <p class="qr-help">Need help?{% if site_facebook_url %} Message us on <a href="{{ site_facebook_url }}" target="_blank" rel="noopener">Facebook</a>{% endif %}{% if site_phone %}{% if site_facebook_url %} or call{% else %} Call{% endif %} <a href="{{ site_phone_tel }}">{{ site_phone }}</a>{% endif %}.</p>
   </main>
 
   <script>

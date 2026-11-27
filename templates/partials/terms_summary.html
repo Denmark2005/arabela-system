@@ -1,28 +1,37 @@
 {% comment %}
-The short version at the top of the Terms pop-up (partials/terms_gate.html): the five things customers most often get surprised by,
-in plain words, before the full text. Keep it in step with partials/terms_body.html -- if a deposit, a fee or a rule changes there, change it here too.
+The short version at the top of the Terms pop-up (partials/terms_gate.html): the things customers most often get surprised by, in plain words,
+before the full text. Keep it in step with partials/terms_body.html -- if a deposit, a fee or a rule changes there, change it here too.
+The amounts follow the owner's settings (gowns/context_processors.py).
 {% endcomment %}
 <div class="ara-terms__keys">
-  <p class="ara-terms__keys-title">The 5 things that matter most</p>
+  <p class="ara-terms__keys-title">The 7 things that matter most</p>
   <ol class="ara-terms__keys-list">
     <li>
       <span class="ara-terms__num" aria-hidden="true">1</span>
-      <p><strong>Security deposit.</strong> {{ site_deposit_php_short }} for every booking, paid by GCash. You get all of it back when the gown is returned on time and in good condition.</p>
+      <p><strong>Security deposit.</strong> {{ site_deposit_php_short }} for every gown. It comes back to you after the return, less any fees and damage.</p>
     </li>
     <li>
       <span class="ara-terms__num" aria-hidden="true">2</span>
-      <p><strong>Damaged gown.</strong> Our staff check it, and the cost of the repair is deducted from your security deposit.</p>
+      <p><strong>Free days.</strong> 2 days before your event, the event day, and 2 days after it. Pick-up and return on these days cost nothing.</p>
     </li>
     <li>
       <span class="ara-terms__num" aria-hidden="true">3</span>
-      <p><strong>Lost gown.</strong> The amount to be deducted depends on the gown. We agree on it with you at the shop.</p>
+      <p><strong>Extra days.</strong> An earlier pick-up or a later return costs {{ site_late_fee_php_short }} per gown per day, taken from your deposit. It is charged for the dates you book, even if unused.</p>
     </li>
     <li>
       <span class="ara-terms__num" aria-hidden="true">4</span>
-      <p><strong>Late return.</strong> Php 200 for every day after the allowed return date, deducted from your deposit.</p>
+      <p><strong>Late return.</strong> {{ site_late_fee_php_short }} per gown for every day after your booked return date, taken from your deposit.</p>
     </li>
     <li>
       <span class="ara-terms__num" aria-hidden="true">5</span>
+      <p><strong>Changing dates.</strong> Call the shop{% if site_phone %} at {{ site_phone }}{% endif %} with your booking number. Dates cannot be changed on the website.</p>
+    </li>
+    <li>
+      <span class="ara-terms__num" aria-hidden="true">6</span>
+      <p><strong>Damaged or lost gown.</strong> The repair cost is taken from your deposit. For a lost gown, the amount depends on the gown and is agreed with you at the shop.</p>
+    </li>
+    <li>
+      <span class="ara-terms__num" aria-hidden="true">7</span>
       <p><strong>Cancelling a confirmed booking.</strong> Once a booking is confirmed, its security deposit is not refunded.</p>
     </li>
   </ol>

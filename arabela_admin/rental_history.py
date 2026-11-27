@@ -140,7 +140,10 @@ def _event(status, item, today):
     """The customer's event day, the day first booked when it was changed, and a warning while it sits outside the rental days of a booking staff can
     still change (Active Reservations has the "Set new event date" button then)."""
     event = item.effective_event_date
-    original = item.original_return_date - timedelta(days=2) if item.original_return_date else None
+    if item.uses_free_days:
+        original = item.free_return_date - timedelta(days=2)          # the event first booked: its free days are counted from it
+    else:
+        original = item.original_return_date - timedelta(days=2) if item.original_return_date else None
     flag = ""
     if status in (WAITING, OUT_NOW, OVERDUE):
         if event < item.rental_date:
@@ -151,13 +154,15 @@ def _event(status, item, today):
 
 
 def _fees(status, item, today):
-    """The fees of this gown for the dates as they stand, as Active Reservations shows them: [{"label", "amount", "kind"}]. A gown nobody picked up is never charged."""
+    """The fees of this gown for the dates as they stand, as Active Reservations shows them: [{"label", "amount", "kind"}]. A gown nobody picked up is
+    charged only a free-days booking's booked extra days (the gown was kept for them)."""
     rate = int(item.reservation.late_fee_per_day or 0)
-    if rate <= 0 or status == MISSED:
+    if rate <= 0 or (status == MISSED and not item.uses_free_days):
         return []
-    planned, overdue = ledger.planned_late_days(item, today), ledger.overdue_days(item, today)
+    counts = ledger.fee_days(item, today, planned=True)
     rows = []
-    for kind, days in ((ledger.CHANGE_FEE, planned - overdue), (ledger.OVERDUE_FEE, overdue)):
+    for kind in ledger.FEE_KINDS:
+        days = counts[kind]
         if days > 0:
             rows.append({"label": ledger.FEE_LABELS[kind], "amount": ledger.peso(days * rate), "kind": kind})
     return rows

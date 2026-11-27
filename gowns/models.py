@@ -462,7 +462,8 @@ class GownSlugSequence(models.Model):
 
 
 # After every rental the gown rests for this many days starting the day after its return date (checking, washing, repairs).
-# The return is 2 days after the event, so the gown is off the market for 2 + COOLDOWN_DAYS = 7 days after the event.
+# A return on a free day is 2 days after the event, so the gown is off the market for 2 + COOLDOWN_DAYS = 7 days after the event; a later return
+# chosen by the customer rests it after that day instead.
 # One number used by checkout (gowns.views.reservation_submit) and by the admin's return/reschedule
 # (arabela_admin.views._resync_cooldown_block), so they can never disagree.
 COOLDOWN_DAYS = 5
@@ -696,7 +697,7 @@ class SiteSettings(models.Model):
     manager_gcash_qr_url = models.URLField(max_length=500, blank=True, default='', db_default='')
     manager_gcash_holder = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
     gcash_active = models.CharField(max_length=10, default='owner', db_default='owner')
-    # What the owner asks as the security deposit for EACH gown (whole pesos, 1 to 10,000). One setting that the checkout, the walk-in
+    # What the owner asks as the security deposit for EACH gown (whole pesos, 2,000 to 10,000). One setting that the checkout, the walk-in
     # booking, the page scripts, the Terms/FAQ wording and the AI chat all read. A booking keeps the deposit it was made with
     # (Reservation.security_deposit), so changing this only affects NEW bookings. db_default: an older deployment sharing this
     # database can still insert a row.

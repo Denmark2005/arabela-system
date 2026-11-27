@@ -29,7 +29,7 @@ from arabela_admin.views import (
     _require_admin_staff,
     _staff_display_name,
 )
-from gowns import availability, deposit, online_checkout, typed_payment, walkin_payment
+from gowns import availability, deposit, late_fee, online_checkout, typed_payment, walkin_payment
 from gowns.models import TAG_COLOR_HEX, Gown, SiteSettings
 from gowns.photos import sized
 from reservations import didit, gateway, identity, ledger, staff_booking
@@ -171,7 +171,17 @@ def _check_payload(gown, result, *, now, tag_colors, with_extras=True):
         "nextFree": "",
         "nextFreeText": "",
         "alternatives": [],
+        # A customer who takes the gown earlier than 2 days before the event pays for those days out of the deposit (reservations/ledger.py).
+        "extraDays": 0, "extraFee": 0, "extraText": "",
     }
+    if result["ok"] and result["pickup"]:
+        early, _later = availability.extra_days(result["event"], result["pickup"], result["return_date"])
+        rate = late_fee.per_day()
+        if early > 0 and rate > 0:
+            free_from = availability.free_days(result["event"])[0]
+            payload.update(extraDays=early, extraFee=early * rate, extraText=(
+                f"Early pick-up fee: {early} day{'s' if early != 1 else ''} × ₱{rate:,} = ₱{early * rate:,}, taken from the security deposit "
+                f"when the gown is returned (the free days start {_day(free_from)})."))
     if with_extras and not result["ok"] and result["reason"] in ("booked", "rest"):
         nxt = availability.next_free_event(gown, result["event"], now=now)
         payload["nextFree"] = nxt.isoformat() if nxt else ""

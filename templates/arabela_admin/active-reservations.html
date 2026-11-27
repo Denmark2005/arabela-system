@@ -1318,7 +1318,7 @@
                         {% if r.gown_count > 1 %}<span class="ar-count-pill" title="{{ r.gown_count }} gowns in this booking" aria-label="{{ r.gown_count }} gowns in this booking"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0"/></svg>{{ r.gown_count }}</span>{% endif %}
                         {% if r.state == 'overdue' %}<span class="ar-num ar-num--overdue" title="{{ r.overdue_days }} day{{ r.overdue_days|pluralize }} overdue" aria-label="{{ r.overdue_days }} day{{ r.overdue_days|pluralize }} overdue">{{ r.overdue_days }}</span>{% endif %}
                         {% if r.balance_due > 0 %}<a class="ar-bal-chip" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Still to pay at the shop. Open it in Payments." @click.stop>Balance &#8369;{{ r.balance_text }}</a>{% endif %}
-                        {% if r.change_fee_planned > 0 %}<a class="ar-feechip" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Date change fee: &#8369;{{ r.late_fee_per_day }} a day for each day the return date was moved ({{ r.change_days_planned }} day{{ r.change_days_planned|pluralize }}). It comes out of the security deposit. Click to open it in Payments." @click.stop>Date change fee &#8369;{{ r.change_fee_planned|floatformat:'-2g' }}</a>{% endif %}{% if r.overdue_fee_planned > 0 %}<a class="ar-feechip ar-feechip--over" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Overdue fee: &#8369;{{ r.late_fee_per_day }} a day for each day past the return date ({{ r.overdue_days_planned }} day{{ r.overdue_days_planned|pluralize }}). It comes out of the security deposit. Click to open it in Payments." @click.stop>Overdue fee &#8369;{{ r.overdue_fee_planned|floatformat:'-2g' }}</a>{% endif %}{% if r.late_fee_planned > 0 and r.fee_over_deposit > 0 %}<span class="ar-feeover" title="The fees and deductions are more than the security deposit: the customer pays this extra.">&#8369;{{ r.fee_over_deposit|floatformat:'-2g' }} over the deposit</span>{% endif %}
+                        {% if r.extra_days_fee_planned > 0 %}<a class="ar-feechip" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Extra days: &#8369;{{ r.late_fee_per_day }} a day for each booked day outside the free days (2 days before and 2 days after the event): {{ r.extra_days_planned }} day{{ r.extra_days_planned|pluralize }}. Charged even if the days are not used. It comes out of the security deposit. Click to open it in Payments." @click.stop>Extra days &#8369;{{ r.extra_days_fee_planned|floatformat:'-2g' }}</a>{% endif %}{% if r.change_fee_planned > 0 %}<a class="ar-feechip" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Date change fee: &#8369;{{ r.late_fee_per_day }} a day for each day the return date was moved ({{ r.change_days_planned }} day{{ r.change_days_planned|pluralize }}). It comes out of the security deposit. Click to open it in Payments." @click.stop>Date change fee &#8369;{{ r.change_fee_planned|floatformat:'-2g' }}</a>{% endif %}{% if r.overdue_fee_planned > 0 %}<a class="ar-feechip ar-feechip--over" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Overdue fee: &#8369;{{ r.late_fee_per_day }} a day for each day past the return date ({{ r.overdue_days_planned }} day{{ r.overdue_days_planned|pluralize }}). It comes out of the security deposit. Click to open it in Payments." @click.stop>Overdue fee &#8369;{{ r.overdue_fee_planned|floatformat:'-2g' }}</a>{% endif %}{% if r.late_fee_planned > 0 and r.fee_over_deposit > 0 %}<span class="ar-feeover" title="The fees and deductions are more than the security deposit: the customer pays this extra.">&#8369;{{ r.fee_over_deposit|floatformat:'-2g' }} over the deposit</span>{% endif %}
                       </div>
                       <div class="ar-phone-cell">
                         {% if r.phone %}<a href="tel:{{ r.phone }}" class="ar-phone" title="Call the customer" @click.stop>{{ r.phone }}</a>{% else %}<span class="ar-none">&mdash;</span>{% endif %}
@@ -1447,7 +1447,7 @@
                             {% if item.note_remarks or item.picked_up_on or item.late_fee_planned > 0 or item.event_off %}
                             <div class="ar-facts" data-item-remarks="{{ item.id }}">
                               {% if item.event_off %}<span class="ar-evnote">The event date ({{ item.effective_event_date|date:"M j" }}) is {% if item.effective_event_date < item.rental_date %}before the pick-up ({{ item.rental_date|date:"M j" }}){% else %}after the return ({{ item.return_date|date:"M j" }}){% endif %}. Set the new event date.</span>{% endif %}
-                              {% if item.change_fee_planned > 0 %}<a class="ar-feeline" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Open this booking in Payments">Date change fee &#8369;{{ item.change_fee_planned|floatformat:'-2g' }} &middot; {{ item.change_days_planned }} day{{ item.change_days_planned|pluralize }} &times; &#8369;{{ r.late_fee_per_day }}{% if item.late_fee_kind == 'planned' %} if it comes back {{ item.return_date|date:"M j" }}{% elif item.late_fee_kind == 'back' and not item.overdue_days_planned %} (it came back {{ item.returned_on|date:"M j" }}){% else %}, return moved to {{ item.return_date|date:"M j" }}{% endif %} &middot; comes out of the security deposit &rsaquo;</a>{% endif %}{% if item.overdue_fee_planned > 0 %}<a class="ar-feeline ar-feeline--over" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Open this booking in Payments">Overdue fee &#8369;{{ item.overdue_fee_planned|floatformat:'-2g' }} &middot; {{ item.overdue_days_planned }} day{{ item.overdue_days_planned|pluralize }} &times; &#8369;{{ r.late_fee_per_day }}{% if item.late_fee_kind == 'back' %} (it came back {{ item.returned_on|date:"M j" }}){% else %} so far, growing each day it is out{% endif %} &middot; comes out of the security deposit &rsaquo;</a>{% endif %}
+                              {% if item.early_fee_planned > 0 %}<a class="ar-feeline" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Open this booking in Payments">Early pick-up fee &#8369;{{ item.early_fee_planned|floatformat:'-2g' }} &middot; {{ item.early_days_planned }} day{{ item.early_days_planned|pluralize }} &times; &#8369;{{ r.late_fee_per_day }}, picked up {{ item.rental_date|date:"M j" }} (free from {{ item.free_pickup_date|date:"M j" }}) &middot; comes out of the security deposit &rsaquo;</a>{% endif %}{% if item.later_fee_planned > 0 %}<a class="ar-feeline" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Open this booking in Payments">Later return fee &#8369;{{ item.later_fee_planned|floatformat:'-2g' }} &middot; {{ item.later_days_planned }} day{{ item.later_days_planned|pluralize }} &times; &#8369;{{ r.late_fee_per_day }}, return {{ item.later_until|date:"M j" }} (free until {{ item.free_return_date|date:"M j" }}) &middot; comes out of the security deposit &rsaquo;</a>{% endif %}{% if item.change_fee_planned > 0 %}<a class="ar-feeline" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Open this booking in Payments">Date change fee &#8369;{{ item.change_fee_planned|floatformat:'-2g' }} &middot; {{ item.change_days_planned }} day{{ item.change_days_planned|pluralize }} &times; &#8369;{{ r.late_fee_per_day }}{% if item.late_fee_kind == 'planned' and not item.uses_free_days %} if it comes back {{ item.return_date|date:"M j" }}{% elif item.late_fee_kind == 'back' and not item.overdue_days_planned %} (it came back {{ item.returned_on|date:"M j" }}){% else %}, return moved to {{ item.return_date|date:"M j" }}{% endif %} &middot; comes out of the security deposit &rsaquo;</a>{% endif %}{% if item.overdue_fee_planned > 0 %}<a class="ar-feeline ar-feeline--over" href="{% url 'arabela_admin:payments' %}?open={{ r.id }}" title="Open this booking in Payments">Overdue fee &#8369;{{ item.overdue_fee_planned|floatformat:'-2g' }} &middot; {{ item.overdue_days_planned }} day{{ item.overdue_days_planned|pluralize }} &times; &#8369;{{ r.late_fee_per_day }}{% if item.late_fee_kind == 'back' %} (it came back {{ item.returned_on|date:"M j" }}){% else %} so far, growing each day it is out{% endif %} &middot; comes out of the security deposit &rsaquo;</a>{% endif %}
                               {% for remark in item.note_remarks %}<span class="inline-flex items-center rounded-full px-2 py-0.5 text-theme-xs font-medium {% if remark.tone == 'warning' %}bg-warning-50 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400{% elif remark.tone == 'success' %}bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-500{% elif remark.tone == 'primary' %}bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400{% elif remark.tone == 'danger' %}bg-error-50 text-error-700 dark:bg-error-500/15 dark:text-error-500{% else %}bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400{% endif %}">{{ remark.text }}</span>{% endfor %}
                               {% if item.picked_up_on %}<span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-theme-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">Picked up {{ item.picked_up_on|date:"M j" }}</span>{% endif %}
                             </div>
@@ -1469,7 +1469,7 @@
                               <button type="button" class="resv-change-date-btn ar-ib ar-lb" title="Change pick-up date" aria-label="Change the pick-up date of {{ item.gown_name }}"
                                 data-kind="pickup" data-item-id="{{ item.id }}" data-event-day="{{ item.effective_event_date|date:'Y-m-d' }}"
                                 data-orig-pickup="{{ item.scheduled_pickup|date:'Y-m-d' }}" data-orig-return="{{ item.scheduled_return|date:'Y-m-d' }}"
-                                data-rest="{% if item.has_rest %}1{% else %}0{% endif %}" data-rate="{{ r.late_fee_per_day }}"
+                                data-rest="{% if item.has_rest %}1{% else %}0{% endif %}" data-rate="{{ r.late_fee_per_day }}" data-free-pickup="{{ item.free_pickup_date|date:'Y-m-d' }}" data-free-return="{{ item.free_return_date|date:'Y-m-d' }}" data-return-floor="{{ item.return_floor|date:'Y-m-d' }}"
                                 data-deposit-paid="{{ r.fee_deposit_paid|floatformat:'2u' }}" data-deposit="{{ r.fee_deposit_basis|floatformat:'2u' }}" data-fee-others="{{ item.fee_others|floatformat:'2u' }}"
                                 data-current="{{ item.rental_date|date:'Y-m-d' }}"
                                 data-original="{{ item.scheduled_pickup|date:'Y-m-d' }}"
@@ -1480,9 +1480,9 @@
                               <button type="button" class="resv-change-date-btn ar-ib ar-lb" title="Change return date" aria-label="Change the return date of {{ item.gown_name }}"
                                 data-kind="return" data-item-id="{{ item.id }}" data-out="{% if item.stage != 'Pick-up' %}1{% else %}0{% endif %}" data-event-day="{{ item.effective_event_date|date:'Y-m-d' }}"
                                 data-orig-pickup="{{ item.scheduled_pickup|date:'Y-m-d' }}" data-orig-return="{{ item.scheduled_return|date:'Y-m-d' }}"
-                                data-rest="{% if item.has_rest %}1{% else %}0{% endif %}" data-rate="{{ r.late_fee_per_day }}"
+                                data-rest="{% if item.has_rest %}1{% else %}0{% endif %}" data-rate="{{ r.late_fee_per_day }}" data-free-pickup="{{ item.free_pickup_date|date:'Y-m-d' }}" data-free-return="{{ item.free_return_date|date:'Y-m-d' }}" data-return-floor="{{ item.return_floor|date:'Y-m-d' }}"
                                 data-deposit-paid="{{ r.fee_deposit_paid|floatformat:'2u' }}" data-deposit="{{ r.fee_deposit_basis|floatformat:'2u' }}" data-fee-others="{{ item.fee_others|floatformat:'2u' }}"
-                                data-current="{{ item.return_date|date:'Y-m-d' }}"
+                                data-changes="{{ item.return_changes|length }}" data-current="{{ item.return_date|date:'Y-m-d' }}"
                                 data-original="{{ item.scheduled_return|date:'Y-m-d' }}"
                                 data-rental="{{ item.rental_date|date:'Y-m-d' }}"
                                 data-return="{{ item.return_date|date:'Y-m-d' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M10.5 14l2.5 2-2.5 2"/></svg>Change return date</button>
@@ -1491,7 +1491,7 @@
                               <!-- The pick-up was moved past the event day (before the new event date was asked for): staff set it here. -->
                               <button type="button" class="resv-change-date-btn ar-ib ar-lb ar-warn" title="Set new event date" aria-label="Set the new event date of {{ item.gown_name }}"
                                 data-kind="event" data-item-id="{{ item.id }}" data-event-day="{{ item.effective_event_date|date:'Y-m-d' }}"
-                                data-rate="{{ r.late_fee_per_day }}" data-rental="{{ item.rental_date|date:'Y-m-d' }}" data-return="{{ item.return_date|date:'Y-m-d' }}"
+                                data-rate="{{ r.late_fee_per_day }}" data-free-pickup="{{ item.free_pickup_date|date:'Y-m-d' }}" data-free-return="{{ item.free_return_date|date:'Y-m-d' }}" data-return-floor="{{ item.return_floor|date:'Y-m-d' }}" data-rental="{{ item.rental_date|date:'Y-m-d' }}" data-return="{{ item.return_date|date:'Y-m-d' }}"
                                 data-orig-pickup="{{ item.scheduled_pickup|date:'Y-m-d' }}" data-orig-return="{{ item.scheduled_return|date:'Y-m-d' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M12 13.5v3M12 19h.01"/></svg>Set new event date</button>
                               {% endif %}
                               {% if r.has_account %}
@@ -1805,13 +1805,15 @@
     //   'pickup': the customer wants a different pick-up day -- EARLIER or LATER, any free day from today up to PICKUP_MAX_DAYS ahead. A day after the
     //             current return date also needs a new return date, so the calendar goes on to the 'return' step and Save waits for it. A day after the
     //             event date also needs a new event date: the 'event' step comes next, and Save waits for it.
-    //   'return': days after the current return date only (there is no early return), from the pick-up date on.
+    //   'return': a later day, or an earlier one again (a date saved by mistake, or fewer days) -- never before the free return day of a free-days
+    //             booking or the return first booked of an older one, never before the pick-up, the event or today.
     //   'event':  a day from the (new) pick-up to the (new) return -- after a pick-up moved past the event, or on its own ("Set new event date").
     //             The event date never changes any fee.
     // A day is only clickable if the gown is free for the WHOLE stretch the booking would then cover -- the same overlap test the server runs
     // (_schedule_conflict) -- and, for a return, if the gown's REST days after it (while it still has its rest block) stay clear of a later booking.
     // Days that are taken are faded and say who has the gown. The server decides everything again; this only greys out what it would refuse.
-    // The fee never depends on the pick-up: it counts the days after the ORIGINAL return date, so the return step shows what the chosen day costs (a date change fee).
+    // The fee (feeFor): a free-days booking pays for every day outside its free days, so both the pick-up and the return steps show it; an older booking's
+    // fee never depends on the pick-up: it counts the days after the ORIGINAL return date, so its return step shows what the chosen day costs.
     var REST_DAYS = {{ cooldown_days }};
     var PICKUP_MAX_DAYS = {{ pickup_max_days }};
     var RETURN_MAX_DAYS = {{ return_max_days }};
@@ -1870,9 +1872,16 @@
         return { ok: true, why: '' };
       }
       var from = state.newPickup || state.curPickup;
-      if (iso <= state.curReturn) return { ok: false, why: '' };
+      if (iso === state.curReturn) return { ok: false, why: '' };
       if (iso < TODAY) return { ok: false, why: 'Already passed' };
       if (iso < from) return { ok: false, why: 'Before the pick-up date' };
+      // Earlier is allowed too (a date saved by mistake, a customer who needs fewer days) -- but never before the free return day (a free-days
+      // booking: returning by then is free) or, for an older booking, before the return first booked; and never before the event date.
+      if (state.returnFloor && iso < state.returnFloor) {
+        return { ok: false, why: state.freeReturn ? 'Returning by ' + fmtShort(state.freeReturn) + ' is free, so the return stays on or after it'
+                                                  : 'Not before the return first booked (' + fmtShort(state.returnFloor) + ')' };
+      }
+      if (state.curEvent && iso < state.curEvent && !needsEvent(state, state.newPickup)) return { ok: false, why: 'Before the event date (' + fmtShort(state.curEvent) + ')' };
       if (iso > state.lastReturn) return { ok: false, why: 'Too far away' };
       h = holdClash(state, from, iso);
       if (h) return { ok: false, why: h.label + ' has this gown ' + fmtShort(h.start) + ' – ' + fmtShort(h.end) };
@@ -1888,12 +1897,21 @@
         // earlier: the days the booking now ALSO holds; later: the days it GIVES UP (free for other customers)
         return state.chosen < state.curPickup ? [state.chosen, shiftIso(state.curPickup, -1)] : [state.curPickup, shiftIso(state.chosen, -1)];
       }
-      return [shiftIso(state.curReturn, 1), state.chosen];
+      // later: the days the booking now ALSO holds; earlier: the days it GIVES UP
+      return state.chosen > state.curReturn ? [shiftIso(state.curReturn, 1), state.chosen] : [shiftIso(state.chosen, 1), state.curReturn];
     }
 
-    // What a chosen return day costs: the days after the ORIGINAL return date, at the booking's rate -- and how much of it is more than the deposit.
-    function feeFor(state, returnIso) {
-      var days = Math.max(0, diffDays(returnIso, state.origReturn));
+    // What the dates cost after the change, at the booking's rate -- and how much of it is more than the deposit.
+    //   free-days booking (state.freeReturn): every day outside its free days -- the pick-up before them and the return after them;
+    //   older booking: the days after the ORIGINAL return date (the date change fee; moving the pick-up never costs anything).
+    function feeFor(state, returnIso, pickupIso) {
+      var days;
+      if (state.freeReturn && state.freePickup) {
+        var pickup = pickupIso || state.curPickup;
+        days = Math.max(0, diffDays(state.freePickup, pickup)) + Math.max(0, diffDays(returnIso, state.freeReturn));
+      } else {
+        days = Math.max(0, diffDays(returnIso, state.origReturn));
+      }
       var amount = days * state.rate;
       return { days: days, amount: amount, over: Math.max(0, state.feeOthers + amount - state.deposit) };
     }
@@ -1928,9 +1946,17 @@
           + (st.curEvent ? ', event ' + fmtShort(st.curEvent) : '')
           + '. Pick any free day, earlier or later (up to ' + PICKUP_MAX_DAYS + ' days from today).';
       } else if (st.newPickup) {
-        sub.textContent = 'New pick-up: ' + fmtLong(st.newPickup) + '. The return must be after the current return date (' + fmtShort(st.curReturn) + ').';
+        sub.textContent = 'New pick-up: ' + fmtLong(st.newPickup) + '. Choose the return date for it (on or after ' + fmtShort(st.newPickup) + ').';
       } else {
-        sub.textContent = 'Customer needs it longer. Currently ' + fmtLong(st.curReturn) + (st.origReturn !== st.curReturn ? ' (originally ' + fmtShort(st.origReturn) + ')' : '') + '.';
+        sub.textContent = 'Currently ' + fmtLong(st.curReturn) + (st.origReturn !== st.curReturn ? ' (originally ' + fmtShort(st.origReturn) + ')' : '')
+          + '. Pick a later day, or an earlier one to undo a change' + (st.returnFloor ? ' (not before ' + fmtShort(st.returnFloor) + ')' : '') + '.';
+      }
+      if (st.freeReturn && st.freePickup && st.rate > 0) {
+        var freeLine = document.createElement('p');
+        freeLine.className = 'mb-2 text-theme-xs text-gray-500 dark:text-gray-400';
+        freeLine.textContent = 'Free days: ' + fmtShort(st.freePickup) + ' to ' + fmtShort(st.freeReturn) + '. Each day outside them costs ' + pesos(st.rate) + ', taken from the security deposit.';
+        root.appendChild(sub);
+        sub = freeLine;
       }
       root.appendChild(sub);
 
@@ -1964,7 +1990,7 @@
         cell.dataset.day = iso;                              // every day knows its date (taken days too); only free days get the clickable class below
         var style = 'height:28px;border-radius:6px;font-size:0.8125rem;';
         var inRange = range && iso >= range[0] && iso <= range[1];
-        var givesUp = st.kind === 'pickup' && st.chosen && st.chosen > st.curPickup;
+        var givesUp = (st.kind === 'pickup' && st.chosen && st.chosen > st.curPickup) || (st.kind === 'return' && !st.newPickup && st.chosen && st.chosen < st.curReturn);
         var current = st.kind === 'event' ? st.curEvent : (st.kind === 'pickup' ? st.curPickup : st.curReturn);
         if (iso === st.chosen) style += colors.strong;
         else if (st.kind === 'return' && st.newPickup && iso === st.newPickup) style += CAL_COLORS.pickup.strong;
@@ -1994,7 +2020,7 @@
 
       var legend = document.createElement('p');
       legend.className = 'mt-2 text-theme-xs text-gray-400';
-      legend.textContent = st.kind === 'event' ? 'Orange ring: pick-up. Blue ring: return.' : 'Faded, crossed-out days are taken — hover one to see why.';
+      legend.textContent = st.kind === 'event' ? 'Orange ring: pick-up. Blue ring: return.' : 'Faded, crossed-out days can’t be chosen — hover one to see why.';
       root.appendChild(legend);
 
       var actions = document.createElement('div');
@@ -2009,21 +2035,25 @@
         return el;
       }
 
-      function feeSummary(returnDay) {
+      // The fee the dates come to after this change (see feeFor): a free-days booking's extra days, an older booking's date change fee.
+      function feeSummary(returnDay, pickupDay) {
         if (st.rate <= 0) return;
-        var fee = feeFor(st, returnDay);
+        var fee = feeFor(st, returnDay, pickupDay);
+        var free = !!(st.freeReturn && st.freePickup);
         var feeBox = document.createElement('div');
         feeBox.className = 'mt-1.5 rounded-md px-2 py-1.5';
         feeBox.style.cssText = CAL_COLORS.pickup.soft;
         if (fee.days > 0) {
-          addLine(feeBox, 'Date change fee: ' + plural(fee.days) + ' × ' + pesos(st.rate) + ' = ' + pesos(fee.amount), true);
+          addLine(feeBox, (free ? 'Extra days after this change: ' : 'Date change fee: ') + plural(fee.days) + ' × ' + pesos(st.rate) + ' = ' + pesos(fee.amount), true);
+          if (free) addLine(feeBox, 'Days outside the free days (' + fmtShort(st.freePickup) + ' to ' + fmtShort(st.freeReturn) + ') are charged even if they are not used.', false);
           if (st.out && st.curReturn < TODAY) addLine(feeBox, 'This gown is overdue now. Moving the return turns those days into the date change fee.', false);
           addLine(feeBox, (st.depositPaid > 0
             ? 'It comes out of the security deposit (' + pesos(st.depositPaid) + ' paid).'
             : 'It comes out of the security deposit (' + pesos(st.deposit) + ') once it is paid.')
             + (fee.over > 0 ? ' That is ' + pesos(fee.over) + ' more than the deposit, so the customer pays the extra.' : ''), false);
         } else {
-          addLine(feeBox, 'No date change fee: the return is not past the original return date.', true);
+          addLine(feeBox, free ? 'No extra days: the dates are inside the free days (' + fmtShort(st.freePickup) + ' to ' + fmtShort(st.freeReturn) + ').'
+                               : 'No date change fee: the return is not past the original return date.', true);
         }
         root.appendChild(feeBox);
       }
@@ -2038,9 +2068,9 @@
           if (st.newPickup) addLine(box, 'Pick-up moves to ' + fmtLong(st.newPickup), true);
           if (st.newReturn) addLine(box, 'Return moves to ' + fmtLong(st.newReturn), true);
           addLine(box, 'Event moves to ' + fmtLong(st.chosen), true);
-          addLine(box, 'The event date never changes any fee.', false);
+          addLine(box, 'The event date never changes any fee' + (st.freeReturn ? ' (the free days stay the ones first booked).' : '.'), false);
           root.appendChild(box);
-          if (st.newReturn) feeSummary(st.newReturn);
+          if (st.newReturn || (st.newPickup && st.freeReturn)) feeSummary(st.newReturn || st.curReturn, st.newPickup || st.curPickup);
           button('Save', SAVE);
         } else if (st.kind === 'pickup') {
           var n = diffDays(st.origPickup, st.chosen);
@@ -2049,8 +2079,10 @@
           else if (st.chosen <= st.curReturn) addLine(box, 'The days from ' + fmtShort(st.curPickup) + ' to ' + fmtShort(shiftIso(st.chosen, -1)) + ' are free again for other customers.', false);
           else addLine(box, 'This is after the current return date (' + fmtShort(st.curReturn) + '), so the return date has to move too. Choose it next.', false);
           if (needsEvent(st, st.chosen)) addLine(box, 'This is after the event date (' + fmtShort(st.curEvent) + '), so choose the new event date too.', false);
-          if (st.rate > 0) addLine(box, 'Moving the pick-up adds no fee: the date change fee counts only the days after the original return date (' + fmtShort(st.origReturn) + ').', false);
+          if (st.rate > 0 && !st.freeReturn) addLine(box, 'Moving the pick-up adds no fee: the date change fee counts only the days after the original return date (' + fmtShort(st.origReturn) + ').', false);
           root.appendChild(box);
+          // A free-days booking: a pick-up before the free days is charged (the return stays as it is unless it is changed next).
+          if (st.freeReturn && st.chosen <= st.curReturn) feeSummary(st.curReturn, st.chosen);
           if (st.chosen > st.curReturn) {
             button('Choose the return date ›', 'resv-cal-next ' + NEXT);
           } else {
@@ -2061,11 +2093,14 @@
         } else {
           var late = diffDays(st.chosen, st.origReturn);
           if (st.newPickup) addLine(box, 'Pick-up moves to ' + fmtLong(st.newPickup), true);
-          addLine(box, 'Return moves to ' + fmtLong(st.chosen) + ' · ' + (late > 0 ? plural(late) + ' after the original return date (' + fmtShort(st.origReturn) + ')' : 'not later than the original return date'), !st.newPickup);
+          addLine(box, 'Return moves to ' + fmtLong(st.chosen) + ' · ' + (late > 0 ? plural(late) + ' after the original return date (' + fmtShort(st.origReturn) + ')'
+            : (late === 0 ? 'the return date originally booked' : plural(-late) + ' before the original return date (' + fmtShort(st.origReturn) + ')')), !st.newPickup);
+          if (!st.newPickup && st.chosen < st.curReturn) addLine(box, 'The days from ' + fmtShort(shiftIso(st.chosen, 1)) + ' to ' + fmtShort(st.curReturn) + ' are given back.', false);
           if (st.hasRest) addLine(box, 'The gown rests ' + fmtShort(shiftIso(st.chosen, 1)) + ' – ' + fmtShort(shiftIso(st.chosen, REST_DAYS)) + ' after the return. Customers cannot pick those days unless an admin releases them.', false);
           if (needsEvent(st, st.newPickup)) addLine(box, 'The new pick-up is after the event date (' + fmtShort(st.curEvent) + '), so choose the new event date next.', false);
+          if ((st.changes || 0) >= 2) addLine(box, 'This return date was already changed ' + st.changes + ' times. From the third change the owner is told who changed it.', false);
           root.appendChild(box);
-          feeSummary(st.chosen);
+          feeSummary(st.chosen, st.newPickup || st.curPickup);
           if (needsEvent(st, st.newPickup)) button('Choose the new event date ›', 'resv-cal-event-next ' + NEXT);
           else button('Save', SAVE);
         }
@@ -2136,7 +2171,9 @@
         rate: parseInt(d.rate || '0', 10) || 0, depositPaid: parseFloat(d.depositPaid || '0') || 0, deposit: parseFloat(d.deposit || '0') || 0,
         feeOthers: parseFloat(d.feeOthers || '0') || 0,
         lastPickup: shiftIso(TODAY, PICKUP_MAX_DAYS), lastReturn: shiftIso(TODAY, RETURN_MAX_DAYS),
-        curEvent: d.eventDay || null, newPickup: null, newReturn: null, eventFrom: null, chosen: null, month: start.slice(0, 7)
+        curEvent: d.eventDay || null, newPickup: null, newReturn: null, eventFrom: null, chosen: null, month: start.slice(0, 7),
+        // a free-days booking: its free days (each day outside them is charged); the earliest day the return may go back to; how often it was moved
+        freePickup: d.freePickup || '', freeReturn: d.freeReturn || '', returnFloor: d.returnFloor || '', changes: parseInt(d.changes || '0', 10) || 0
       };
       openRowPopover(btn, '<div id="resv-cal" style="width: 300px;"></div>');
       renderCalendar();
@@ -2150,7 +2187,8 @@
       if (st.kind === 'pickup') { body.pickup = st.chosen; }
       else if (st.kind === 'return') { if (st.newPickup) body.pickup = st.newPickup; body['return'] = st.chosen; }
       else { if (st.newPickup) body.pickup = st.newPickup; if (st.newReturn) body['return'] = st.newReturn; body.event = st.chosen; }
-      var fee = body['return'] && st.rate > 0 ? feeFor(st, body['return']) : null;
+      var free = !!(st.freeReturn && st.freePickup);
+      var fee = st.rate > 0 && (body['return'] || (free && body.pickup)) ? feeFor(st, body['return'] || st.curReturn, body.pickup || st.curPickup) : null;
       postJson('/admin-panel/api/reservation-items/' + st.itemId + '/change-dates/', body)
         .then(function () {
           closeRowPopover();
@@ -2160,7 +2198,8 @@
           else if (body['return']) said.push('The return is now ' + fmtLong(body['return']) + '.');
           if (body.event) said.push('The event date is now ' + fmtLong(body.event) + '.');
           var text = said.join(' ');
-          if (fee && fee.days > 0) text += ' Date change fee: ' + plural(fee.days) + ' × ' + pesos(st.rate) + ' = ' + pesos(fee.amount) + ', taken from the security deposit.';
+          if (fee && fee.days > 0) text += (free ? ' Extra days now: ' : ' Date change fee: ') + plural(fee.days) + ' × ' + pesos(st.rate) + ' = ' + pesos(fee.amount) + ', taken from the security deposit.';
+          else if (fee && free) text += ' No extra days: nothing is taken from the security deposit for the dates.';
           var changed = ['pickup', 'return', 'event'].filter(function (k) { return !!body[k]; });
           return adminAlert({
             title: changed.length > 1 ? 'Dates changed' : (body.event ? 'Event date changed' : (body.pickup ? 'Pick-up date changed' : 'Return date changed')),

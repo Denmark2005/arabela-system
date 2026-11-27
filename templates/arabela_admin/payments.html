@@ -1325,7 +1325,7 @@
                     <div class="pm-amt" data-label="Paid">&#8369;{{ r.stmt.received|floatformat:"2g" }}</div>
                     <div class="pm-amt pm-bal{% if r.stmt.balance_due > 0 %} is-due{% endif %}" data-label="Balance">&#8369;{{ r.stmt.balance_due|floatformat:"2g" }}</div>
                     <div class="pm-dep" data-label="Deposit">{{ r.deposit_text }}</div>
-                    <div class="pm-stat" data-label="Status"><span class="pm-chip pm-chip--{{ r.stmt.state }}">{{ r.stmt.state_label }}</span>{% if r.stmt.late_now %}{% if r.stmt.change_fee %}<span class="pm-chip pm-chip--change" title="{{ r.stmt.change_days_total }} day{{ r.stmt.change_days_total|pluralize }} the return was moved, so far">Date&nbsp;change &#8369;{{ r.stmt.change_fee|floatformat:"0g" }}</span>{% endif %}{% if r.stmt.overdue_fee %}<span class="pm-chip pm-chip--late" title="{{ r.stmt.overdue_days_total }} day{{ r.stmt.overdue_days_total|pluralize }} overdue">Overdue &#8369;{{ r.stmt.overdue_fee|floatformat:"0g" }}</span>{% endif %}{% endif %}</div>
+                    <div class="pm-stat" data-label="Status"><span class="pm-chip pm-chip--{{ r.stmt.state }}">{{ r.stmt.state_label }}</span>{% if r.stmt.extra_days_fee %}<span class="pm-chip pm-chip--change" title="{{ r.stmt.early_days_total|add:r.stmt.later_days_total }} booked day{{ r.stmt.early_days_total|add:r.stmt.later_days_total|pluralize }} outside the free days: taken from the security deposit">Extra&nbsp;days &#8369;{{ r.stmt.extra_days_fee|floatformat:"0g" }}</span>{% endif %}{% if r.stmt.late_now %}{% if r.stmt.change_fee %}<span class="pm-chip pm-chip--change" title="{{ r.stmt.change_days_total }} day{{ r.stmt.change_days_total|pluralize }} the return was moved, so far">Date&nbsp;change &#8369;{{ r.stmt.change_fee|floatformat:"0g" }}</span>{% endif %}{% if r.stmt.overdue_fee %}<span class="pm-chip pm-chip--late" title="{{ r.stmt.overdue_days_total }} day{{ r.stmt.overdue_days_total|pluralize }} overdue">Overdue &#8369;{{ r.stmt.overdue_fee|floatformat:"0g" }}</span>{% endif %}{% endif %}</div>
                     <div class="pm-chev" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 5l5 5-5 5"/></svg></div>
                   </div>
                 </div>
@@ -1520,7 +1520,7 @@
                         <div class="pm-l"><span>Security deposit<small x-text="d.s.deposit_unpaid === '0.00' ? 'paid' : 'not paid yet'"></small></span><b x-text="peso(d.peso.deposit)"></b></div>
                         <div class="pm-l is-total"><span>Total</span><b x-text="peso(d.peso.total)"></b></div>
                         <template x-for="(l, li) in d.feeLines" :key="'fee' + li">
-                          <div class="pm-l pm-minus"><span><span x-text="l.label + ': ' + l.gown"></span><small x-text="l.days + ' day' + (l.days === 1 ? '' : 's') + ' x ' + peso(l.rate) + (l.kind === 'change' ? ', return moved to ' + l.agreed : '') + (l.growing ? ', so far (still out)' : '')"></small></span><b x-text="'-' + peso(l.amount)"></b></div>
+                          <div class="pm-l pm-minus"><span><span x-text="l.label + ': ' + l.gown"></span><small x-text="l.days + ' day' + (l.days === 1 ? '' : 's') + ' x ' + peso(l.rate) + (l.kind === 'early' ? ', picked up ' + l.pickup + ' (free from ' + l.free_from + ')' : '') + (l.kind === 'later' ? ', return ' + l.until + ' (free until ' + l.free_until + ')' : '') + (l.kind === 'change' ? ', return moved to ' + l.agreed : '') + (l.growing ? ', so far (still out)' : '')"></small></span><b x-text="'-' + peso(l.amount)"></b></div>
                         </template>
                         <template x-for="x in d.deductions" :key="'ded' + x.id">
                           <div class="pm-l pm-minus" :class="x.void ? 'is-void' : ''">
@@ -1528,6 +1528,8 @@
                             <span style="display: flex; align-items: center; gap: .5rem;"><b x-text="'-' + peso(x.amount)"></b><button type="button" class="pm-b pm-b--small pm-b--danger" x-show="d.canVoid && !x.void" @click="startVoid('deduction', x.id, 'the ' + peso(x.amount) + ' deduction')">Remove</button></span>
                           </div>
                         </template>
+                        <div class="pm-l pm-minus" x-show="d.s.total_deduction !== '0.00'"><span>Total deduction<small>taken from the security deposit</small></span><b x-text="'-' + peso(d.peso.total_deduction)"></b></div>
+                        <div class="pm-l" x-show="d.s.extra_credit !== '0.00'"><span>Extra charge paid before<small>the fees no longer need it, so it goes back with the deposit</small></span><b x-text="'+' + peso(d.peso.extra_received)"></b></div>
                         <div class="pm-l is-total" x-show="d.s.deposit_paid !== '0.00'"><span>Deposit to hand back<small x-text="d.s.all_returned ? (d.s.refunded !== '0.00' ? peso(d.peso.refunded) + ' already handed back' : 'every gown is back') : 'once every gown is back'"></small></span><b x-text="peso(d.s.all_returned ? d.peso.refund_available : d.peso.refundable_total)"></b></div>
                         <div class="pm-l pm-minus" x-show="d.s.extra_owed !== '0.00'"><span>Still owed beyond the deposit<small>the fees and deductions are more than the deposit</small></span><b x-text="peso(d.peso.extra_owed)"></b></div>
                       </div>
@@ -1621,8 +1623,9 @@
                       <!-- The working, so staff (and the customer standing there) can see why it is this amount: the deposit, what comes off it, and what goes back. -->
                       <div class="pm-lines" aria-label="How the amount to hand back is worked out">
                         <div class="pm-l"><span>Security deposit paid</span><b x-text="peso(d.peso.deposit_paid)"></b></div>
+                        <div class="pm-l" x-show="d.s.extra_credit !== '0.00'"><span>Extra charge paid before<small>the fees no longer need it</small></span><b x-text="'+' + peso(d.peso.extra_received)"></b></div>
                         <template x-for="(l, li) in d.feeLines" :key="'rfee' + li">
-                          <div class="pm-l pm-minus"><span><span x-text="l.label + ': ' + l.gown"></span><small x-text="l.days + ' day' + (l.days === 1 ? '' : 's') + ' x ' + peso(l.rate) + (l.kind === 'change' ? ' (booked to return ' + l.booked + ', moved to ' + l.agreed + ')' : ' (it was due back ' + l.agreed + ')')"></small></span><b x-text="'-' + peso(l.amount)"></b></div>
+                          <div class="pm-l pm-minus"><span><span x-text="l.label + ': ' + l.gown"></span><small x-text="l.days + ' day' + (l.days === 1 ? '' : 's') + ' x ' + peso(l.rate) + (l.kind === 'early' ? ' (picked up ' + l.pickup + ', free from ' + l.free_from + ')' : l.kind === 'later' ? ' (return ' + l.until + ', free until ' + l.free_until + ')' : l.kind === 'change' ? ' (booked to return ' + l.booked + ', moved to ' + l.agreed + ')' : ' (it was due back ' + l.agreed + ')')"></small></span><b x-text="'-' + peso(l.amount)"></b></div>
                         </template>
                         <template x-for="x in d.deductions.filter(function (z) { return !z.void; })" :key="'rded' + x.id">
                           <div class="pm-l pm-minus"><span>Deduction: <span x-text="x.reason"></span></span><b x-text="'-' + peso(x.amount)"></b></div>
@@ -1902,12 +1905,15 @@
           var d = this.d, s = d.s, parts = [];
           var whole = this.retNumber() === Number(String(d.peso.refund_available).replace(/,/g, ''));
           if (!whole || s.refunded !== '0.00') { return ''; }
-          if (s.late_fee === '0.00' && s.deductions_total === '0.00') { return ' That is the whole deposit: no fees and no deductions.'; }
+          var extra = s.extra_credit !== '0.00' ? ' and the ' + this.peso(d.peso.extra_received) + ' extra charge paid before' : '';
+          if (s.late_fee === '0.00' && s.deductions_total === '0.00') { return ' That is the whole deposit' + extra + ': no fees and no deductions.'; }
+          if (s.early_fee && s.early_fee !== '0.00') { parts.push(this.peso(d.peso.early_fee) + ' early pick-up fee'); }
+          if (s.later_fee && s.later_fee !== '0.00') { parts.push(this.peso(d.peso.later_fee) + ' later return fee'); }
           if (s.change_fee !== '0.00') { parts.push(this.peso(d.peso.change_fee) + ' date change fee'); }
           if (s.overdue_fee !== '0.00') { parts.push(this.peso(d.peso.overdue_fee) + ' overdue fee'); }
           if (s.deductions_total !== '0.00') { parts.push(this.peso(d.peso.deductions_total) + ' of deductions'); }
           var list = parts.length > 2 ? parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1] : parts.join(' and ');
-          return ' That is the ' + this.peso(d.peso.deposit_paid) + ' deposit less the ' + list + '.';
+          return ' That is the ' + this.peso(d.peso.deposit_paid) + ' deposit' + extra + ' less the ' + list + '.';
         },
         deduct: function () {
           this.run('ded', this.url(DEDUCT, this.d.id), { amount: this.ded.amount, reason: this.ded.reason, request_id: this.ded.rid }, 'Deduction added. The customer has been told.');

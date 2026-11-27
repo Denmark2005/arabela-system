@@ -1,5 +1,6 @@
 """Front, side and back photos: matching a view to its front (gowns/view_fit.py), the design sharing them, the product page's Front / Side /
 Back pictures, and the add_gown_views command."""
+import re
 import tempfile
 from decimal import Decimal
 from io import BytesIO, StringIO
@@ -226,7 +227,7 @@ class ProductPageViewTests(TestCase):
             self.assertIn(f"f_auto,q_auto,c_limit,w_240/v1/gown_photos/{key}.jpg", html)          # the small picture
             self.assertIn(f"f_auto,q_auto,c_limit,w_1600/v1/gown_photos/{key}.jpg", html)         # the big one
         self.assertEqual(html.count('class="w-full h-full object-cover pv-view'), 3)
-        self.assertEqual(html.count('aria-pressed="true"'), 1)
+        self.assertEqual(len(re.findall(r'data-view-button="[a-z]+" aria-pressed="true"', html)), 1)      # one photo is the chosen one
         self.assertIn("document.getElementById('product-stage')", html)
 
     def test_the_views_come_from_any_size_of_the_design(self):

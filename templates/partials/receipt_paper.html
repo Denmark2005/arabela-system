@@ -54,7 +54,9 @@
   {% if not r.return.gowns %}
   {% for g in r.gowns %}
     <div>{{ g.name }}{% if g.size %} ({{ g.size }}){% endif %}</div>
+    {% if g.event %}<div class="rc-sub">Event {{ g.event }}</div>{% endif %}
     <div class="rc-sub">Pick-up {{ g.pickup }} &nbsp; Return {{ g.return }}</div>
+    {% if g.planned %}<div class="rc-sub">Planned return {{ g.planned }} (free until {{ g.return }})</div>{% endif %}
   {% endfor %}
   <hr class="rc-rule">
   {% endif %}
@@ -77,7 +79,26 @@
       <div class="rc-bold">SECURITY DEPOSIT</div>
     {% endif %}
     <div class="rc-row"><span>Security deposit paid</span><span>&#8369;{{ r.return.deposit_paid|floatformat:"2g" }}</span></div>
+    {% if r.return.extra_paid and r.return.extra_paid != "0.00" %}
+      <div class="rc-row"><span>Extra charge paid before</span><span>+&#8369;{{ r.return.extra_paid|floatformat:"2g" }}</span></div>
+    {% endif %}
     {% if r.fee_names %}
+      {% if r.return.early_fee and r.return.early_fee != "0.00" %}
+        <div class="rc-row"><span>Early pick-up fee</span><span>-&#8369;{{ r.return.early_fee|floatformat:"2g" }}</span></div>
+        {% for l in r.return.fee_lines %}{% if l.kind == "early" %}
+          <div class="rc-sub">{{ l.gown }}</div>
+          <div class="rc-sub">{{ l.days }} day{{ l.days|pluralize }} x &#8369;{{ l.rate }} = &#8369;{{ l.amount|floatformat:"2g" }}</div>
+          <div class="rc-sub">Pick-up {{ l.pickup }}, free from {{ l.free_from }}</div>
+        {% endif %}{% endfor %}
+      {% endif %}
+      {% if r.return.later_fee and r.return.later_fee != "0.00" %}
+        <div class="rc-row"><span>Later return fee</span><span>-&#8369;{{ r.return.later_fee|floatformat:"2g" }}</span></div>
+        {% for l in r.return.fee_lines %}{% if l.kind == "later" %}
+          <div class="rc-sub">{{ l.gown }}</div>
+          <div class="rc-sub">{{ l.days }} day{{ l.days|pluralize }} x &#8369;{{ l.rate }} = &#8369;{{ l.amount|floatformat:"2g" }}</div>
+          <div class="rc-sub">Return {{ l.until }}, free until {{ l.free_until }}</div>
+        {% endif %}{% endfor %}
+      {% endif %}
       {% if r.return.change_fee != "0.00" %}
         <div class="rc-row"><span>Date change fee</span><span>-&#8369;{{ r.return.change_fee|floatformat:"2g" }}</span></div>
         {% for l in r.return.fee_lines %}{% if l.kind == "change" %}
@@ -132,6 +153,22 @@
     {% if r.extra %}
       <div class="rc-bold">WHY THIS IS OWED</div>
       {% if r.fee_names %}
+        {% if r.extra.early_fee and r.extra.early_fee != "0.00" %}
+          <div class="rc-row"><span>Early pick-up fee</span><span>&#8369;{{ r.extra.early_fee|floatformat:"2g" }}</span></div>
+          {% for l in r.extra.fee_lines %}{% if l.kind == "early" %}
+            <div class="rc-sub">{{ l.gown }}</div>
+            <div class="rc-sub">{{ l.days }} day{{ l.days|pluralize }} x &#8369;{{ l.rate }} = &#8369;{{ l.amount|floatformat:"2g" }}</div>
+            <div class="rc-sub">Pick-up {{ l.pickup }}, free from {{ l.free_from }}</div>
+          {% endif %}{% endfor %}
+        {% endif %}
+        {% if r.extra.later_fee and r.extra.later_fee != "0.00" %}
+          <div class="rc-row"><span>Later return fee</span><span>&#8369;{{ r.extra.later_fee|floatformat:"2g" }}</span></div>
+          {% for l in r.extra.fee_lines %}{% if l.kind == "later" %}
+            <div class="rc-sub">{{ l.gown }}</div>
+            <div class="rc-sub">{{ l.days }} day{{ l.days|pluralize }} x &#8369;{{ l.rate }} = &#8369;{{ l.amount|floatformat:"2g" }}</div>
+            <div class="rc-sub">Return {{ l.until }}, free until {{ l.free_until }}</div>
+          {% endif %}{% endfor %}
+        {% endif %}
         {% if r.extra.change_fee != "0.00" %}
           <div class="rc-row"><span>Date change fee</span><span>&#8369;{{ r.extra.change_fee|floatformat:"2g" }}</span></div>
           {% for l in r.extra.fee_lines %}{% if l.kind == "change" %}
@@ -167,6 +204,22 @@
       <div class="rc-row rc-bold"><span>Over the deposit</span><span>&#8369;{{ r.extra.over|floatformat:"2g" }}</span></div>
       <hr class="rc-rule">
     {% endif %}
+    {% if r.deduct %}
+      {# A booking with days outside its free days (or other fees): what comes out of the deposit when the gowns are back, and what comes back. #}
+      <div class="rc-bold">FROM THE DEPOSIT AFTER RETURN</div>
+      {% for l in r.deduct.fee_lines %}
+        <div class="rc-row"><span>{{ l.label }}</span><span>-&#8369;{{ l.amount|floatformat:"2g" }}</span></div>
+        <div class="rc-sub">{{ l.gown }}: {{ l.days }} day{{ l.days|pluralize }} x &#8369;{{ l.rate }}</div>
+        <div class="rc-sub">{% if l.kind == "early" %}Pick-up {{ l.pickup }}, free from {{ l.free_from }}{% elif l.kind == "later" %}Return {{ l.until }}, free until {{ l.free_until }}{% elif l.kind == "change" %}Booked return {{ l.booked }}, moved to {{ l.agreed }}{% else %}Due back {{ l.agreed }}{% endif %}</div>
+      {% endfor %}
+      {% for d in r.deduct.deductions %}
+        <div class="rc-row"><span>Deduction: {{ d.reason }}</span><span>-&#8369;{{ d.amount|floatformat:"2g" }}</span></div>
+      {% endfor %}
+      <div class="rc-row rc-bold"><span>TOTAL DEDUCTION</span><span>-&#8369;{{ r.deduct.total|floatformat:"2g" }}</span></div>
+      <div class="rc-row"><span>Deposit back after return</span><span>&#8369;{{ r.deduct.back|floatformat:"2g" }}</span></div>
+      {% if r.deduct.over != "0.00" %}<div class="rc-sub">&#8369;{{ r.deduct.over|floatformat:"2g" }} more than the deposit: paid at the shop.</div>{% endif %}
+      <hr class="rc-rule">
+    {% endif %}
     <div class="rc-bold">PAID NOW: {{ r.purpose_label }}</div>
     <div class="rc-kv"><span>Method</span><span>{{ r.method }}</span></div>
     {% if r.reference %}<div class="rc-kv"><span>GCash ref no.</span><span>{{ r.reference }}</span></div>{% endif %}
@@ -185,8 +238,9 @@
     {% if r.extra %}
     <p class="rc-note">{% if r.fee_names %}The fees and deductions{% else %}The late fee and deductions{% endif %} were more than the security deposit. This receipt is for the part the deposit did not cover.</p>
     {% else %}
-    <p class="rc-note">The deposit is returned when the gown is back on time and in good condition.{% if r.late_rate and r.late_rate != "0" %}{% if r.fee_names %} Overdue or moved return: &#8369;{{ r.late_rate }} a day for each gown, taken from the deposit.{% else %} Late return: &#8369;{{ r.late_rate }} a day for each gown, taken from the deposit.{% endif %}{% endif %}</p>
+    <p class="rc-note">The deposit is returned when the gown is back on time and in good condition.{% if r.late_rate and r.late_rate != "0" %}{% if r.free_days %} 2 days before and 2 days after the event are free; each other booked day, or a day overdue: &#8369;{{ r.late_rate }} for each gown, taken from the deposit.{% elif r.fee_names %} Overdue or moved return: &#8369;{{ r.late_rate }} a day for each gown, taken from the deposit.{% else %} Late return: &#8369;{{ r.late_rate }} a day for each gown, taken from the deposit.{% endif %}{% endif %}</p>
     {% endif %}
+    {% if r.change_dates_note %}<p class="rc-note">To change your dates, call {{ r.shop.name }}{% if r.shop.phone %} at {{ r.shop.phone }}{% endif %} with booking {{ r.booking }}.</p>{% endif %}
     <p class="rc-note rc-bold">Thank you!</p>
   {% endif %}
   {% if payment.is_void %}

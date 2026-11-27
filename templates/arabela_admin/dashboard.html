@@ -132,6 +132,8 @@
     .qv-tot { font-size: 0.8125rem; font-weight: 500; color: #667085; }
     .qv-day { font-size: .8125rem; color: #475467; white-space: nowrap; font-variant-numeric: tabular-nums; }
     .dark .qv-day { color: #d0d5dd; }
+    .qv-extra { display: block; margin-top: .1rem; font-size: .8125rem; font-weight: 600; color: #b54708; }
+    .dark .qv-extra { color: #fdb022; }
     .qv-line .ar-ref b { white-space: nowrap; }
     .qv-who { display: flex; flex-direction: column; min-width: 0; }
     .qv-sub { margin-top: .1rem; font-size: 0.8125rem; color: #667085; overflow-wrap: anywhere; }
@@ -1457,7 +1459,7 @@
                       <div class="qv-amt" data-label="Deposit paid" title="The security deposit the customer sent by GCash">{% with bd=r.payment_breakdown %}{% if bd %}{{ bd.headline }}{% else %}&#8369;{{ r.total_amount|floatformat:'-2g' }} <span class="qv-tot">total</span>{% endif %}{% endwith %}</div>
                       {# The booking's first pick-up and last return (a multi-gown booking can differ per gown): the same window Active Reservations and All Bookings show. #}
                       <div class="qv-day qv-pick" data-label="Pick-up">{% if r.qv_pickup %}{{ r.qv_pickup|date:"M j, Y" }}{% else %}&mdash;{% endif %}</div>
-                      <div class="qv-day qv-ret" data-label="Return">{% if r.qv_return %}{{ r.qv_return|date:"M j, Y" }}{% else %}&mdash;{% endif %}</div>
+                      <div class="qv-day qv-ret" data-label="Return">{% if r.qv_return %}{{ r.qv_return|date:"M j, Y" }}{% else %}&mdash;{% endif %}{% if r.qv_extra %}<span class="qv-extra" title="Booked days outside the free days: taken from the security deposit when the gown is returned">&#8369;{{ r.qv_extra|floatformat:'-2g' }} off deposit</span>{% endif %}</div>
                       <div class="qv-date" data-label="Submitted" title="Sent {{ r.created_at|date:'M j, Y, g:i A' }}">{{ r.created_at|date:"M j" }}</div>
                       <div class="qv-acts">
                         <button type="button" @click="openReceiptModal = true; receiptPreview = { name: '{{ r.display_customer_name|escapejs }}', bookedAs: '{{ r.booked_as_name|escapejs }}', reservation: '{{ r.reference_code|escapejs }}', reference: '{{ r.payment_method|default:"&mdash;"|escapejs }}', amount: '&#8369;{{ r.total_amount|floatformat:'-2g' }}', date: '{{ r.created_at|date:"M j, Y" }}', status: status, proofUrl: '{{ r.payment_proof_url|escapejs }}', receipts: JSON.parse('{{ r.receipts_json|escapejs }}'), breakdown: JSON.parse('{{ r.payment_breakdown_json|escapejs }}'), gcashRef: '{{ r.gcash_reference|escapejs }}', refInfo: JSON.parse('{{ r.reference_info_json|escapejs }}'), gcashDup: '{{ dup|escapejs }}' }" class="ar-ib" title="View proof" aria-label="View proof of {{ r.display_customer_name }}, {{ r.reference_code }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>

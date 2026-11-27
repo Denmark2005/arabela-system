@@ -139,6 +139,11 @@
       .ar-tag { display: inline-flex; align-items: center; gap: .35rem; font-size: 0.8125rem; color: #667085; }
       .ar-gdates { display: inline-flex; align-items: center; gap: .4rem; font-size: .8125rem; color: #475467; white-space: nowrap; }
       .dark .ar-gdates { color: #98a2b3; }
+      /* A gown with an event day and days outside its free days: the three facts wrap instead of pushing the line wide. */
+      .ar-gdates.is-extra { flex-wrap: wrap; row-gap: .15rem; white-space: normal; }
+      .ar-gdates.is-extra > span { white-space: nowrap; }
+      .ar-gdates .ar-gxtra { color: #b54708; font-weight: 500; }
+      .dark .ar-gdates .ar-gxtra { color: #fdb022; }
       .ar-chg { display: inline-flex; color: #b54708; }
       .dark .ar-chg { color: #fdb022; }
       .ar-chg svg { width: .9rem; height: .9rem; }

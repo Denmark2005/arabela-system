@@ -318,9 +318,14 @@ def record_booking(*, recorded_by, is_owner, staff_name, channel, name, phone, a
                     size=gown.size,
                     rental_price=gown.rental_price,
                     rental_date=line["pickup"],
+                    event_date=line["event"],
                     return_date=line["return_date"],
                     original_rental_date=line["pickup"],
                     original_return_date=line["return_date"],
+                    # The free days (2 before the event, 2 after it), like a website booking: a customer who takes the gown earlier than
+                    # them pays the early pick-up fee out of the deposit (reservations/ledger.py).
+                    free_pickup_date=availability.free_days(line["event"])[0],
+                    free_return_date=availability.free_days(line["event"])[1],
                     stage=ReservationItem.Stage.RESERVED if line["takes_now"] else ReservationItem.Stage.PICKUP,
                     picked_up_on=line["pickup"] if line["takes_now"] else None,
                 )

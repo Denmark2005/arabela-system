@@ -377,10 +377,10 @@ class EndpointLineTests(AuditBase):
 
     def test_changing_the_deposit_keeps_the_old_and_new_amount(self):
         before = SiteSettings.load().security_deposit_per_gown
-        self.assertEqual(self.post("deposit_setting_update", user=self.owner, body={"amount": 1500}).status_code, 200)
+        self.assertEqual(self.post("deposit_setting_update", user=self.owner, body={"amount": 2500}).status_code, 200)
         row = AuditLog.objects.get(action="settings.deposit")
         self.assertEqual((row.category, row.sensitive, row.actor_role), ("Settings", True, "Owner"))
-        self.assertEqual(row.details["deposit per gown"], [before, 1500])
+        self.assertEqual(row.details["deposit per gown"], [before, 2500])
 
     def test_changing_a_staff_members_permissions_keeps_before_and_after(self):
         target = make_staff("au_target", ["delete_gowns"], first="Tess", last="Target")

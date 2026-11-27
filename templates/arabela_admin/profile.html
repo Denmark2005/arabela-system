@@ -1846,7 +1846,7 @@
                 .dark .gc-btn--dark { background: #101828; color: #fff; }
                 .gc-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; margin-top: 1.25rem; }
                 .gc-msg { font-size: 0.8125rem; font-weight: 500; }
-                /* the "Test amount" chip beside the Security deposit title (amber is the page's own warning colour, with a dark twin) */
+                /* a small amber chip beside a card title (the page's own warning colour, with a dark twin) */
                 .gc-chip { display: inline-flex; align-items: center; margin-left: .6rem; padding: .1rem .35rem .1rem .65rem; border-radius: 999px; background: #fffaeb; font-size: 0.8125rem; font-weight: 600; color: #b54708; }
                 .dark .gc-chip { background: rgba(247,144,9,.16); color: #fdb022; }
                 .gc-chip .ht-tip { margin-left: .3rem; }
@@ -2103,7 +2103,10 @@
                       var m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
                       return m ? decodeURIComponent(m[1]) : '';
                     },
-                    get isTest() { return String(this.saved) !== '2000'; },
+                    // The shop's floor: the deposit can be raised, never set below 2,000 (the server refuses it too).
+                    min: {{ site_deposit_min_per_gown|default:2000 }}, max: {{ site_deposit_max_per_gown|default:10000 }},
+                    get tooLow() { return this.amount !== '' && Number(this.amount) < this.min; },
+                    get tooHigh() { return this.amount !== '' && Number(this.amount) > this.max; },
                     get perGown() { return Number(this.amount) > 0 ? Number(this.amount) : 0; },
                     peso(n) { return '\u20b1' + Number(n).toLocaleString('en-US'); },
                     save() {
@@ -2123,23 +2126,24 @@
                 };
               </script>
               <div x-data="depositCard()" data-amount="{{ site_deposit_per_gown }}" class="p-5 border border-gray-200 rounded-2xl dark:border-gray-800 lg:p-6" style="margin-top: 1.5rem;">
-                <h4 class="flex items-center text-lg font-semibold text-gray-800 dark:text-white/90">Security deposit<details class="ht-tip"><summary aria-label="About the security deposit" title="About the security deposit">?</summary><div class="ht-tip-pop">What customers pay by GCash for each gown they book. It is the same everywhere: the bag, the checkout, the payment page, the Terms and FAQ wording, the AI chat and the walk-in New Booking. A booking keeps the deposit it was made with, so changing this only affects new bookings.</div></details><span x-show="isTest" x-cloak class="gc-chip">Test amount<details class="ht-tip"><summary aria-label="About the test amount" title="About the test amount">?</summary><div class="ht-tip-pop">The normal deposit is &#8369;2,000, so set it back before real customers book.</div></details></span></h4>
+                <h4 class="flex items-center text-lg font-semibold text-gray-800 dark:text-white/90">Security deposit<details class="ht-tip"><summary aria-label="About the security deposit" title="About the security deposit">?</summary><div class="ht-tip-pop">What customers pay by GCash for each gown they book. It is the same everywhere: the bag, the checkout, the payment page, the Terms and FAQ wording, the AI chat and the walk-in New Booking. A booking keeps the deposit it was made with, so changing this only affects new bookings. It can be raised, but never set below &#8369;2,000.</div></details></h4>
                 <div style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 1rem; margin-top: 1.1rem;">
                   <div style="min-width: 220px; flex: 1; max-width: 340px;">
                     <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Deposit for each gown (pesos)</label>
-                    <input type="text" inputmode="numeric" x-model="amount" @input="amount = amount.replace(/[^0-9]/g, '').slice(0, 5)" maxlength="5" placeholder="2000" aria-label="Security deposit per gown in pesos, from 1 to 10,000"
+                    <input type="text" inputmode="numeric" x-model="amount" @input="amount = amount.replace(/[^0-9]/g, '').slice(0, 5)" maxlength="5" placeholder="2000" aria-label="Security deposit per gown in pesos, from 2,000 to 10,000"
                            class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90" />
                   </div>
                   <div style="display: flex; align-items: center; gap: .75rem;">
-                    <button type="button" @click="save()" :disabled="busy || !amount" :style="(busy || !amount) ? 'opacity: 0.6; cursor: not-allowed;' : ''"
+                    <button type="button" @click="save()" :disabled="busy || !amount || tooLow || tooHigh" :style="(busy || !amount || tooLow || tooHigh) ? 'opacity: 0.6; cursor: not-allowed;' : ''"
                             class="flex justify-center rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs hover:bg-black dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
                             x-text="busy ? 'Saving...' : 'Save Deposit'"></button>
                     <p x-show="msg" x-cloak x-text="msg" class="text-xs font-medium" :class="ok ? 'text-success-700 dark:text-success-500' : 'text-error-600 dark:text-error-500'"></p>
                   </div>
                 </div>
-                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">Whole pesos, from 1 to 10,000. For example, 5 gowns at <span x-text="peso(perGown || 0)"></span> each is <span x-text="peso(perGown * 5)"></span>.</p>
+                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">Whole pesos, from 2,000 to 10,000. The deposit can be raised, but never set below &#8369;2,000. For example, 5 gowns at <span x-text="peso(perGown || 0)"></span> each is <span x-text="peso(perGown * 5)"></span>.</p>
+                <p x-show="tooLow || tooHigh" x-cloak class="mt-1 text-xs font-medium text-error-600 dark:text-error-500" x-text="tooLow ? 'The deposit cannot be lower than ' + peso(min) + ' per gown.' : 'The deposit can be at most ' + peso(max) + ' per gown.'"></p>
               </div>
-              <!-- Overdue / date change fee per gown per day: taken from the customer's security deposit (Payments page, receipts). Owner-only; the endpoint enforces that too.
+              <!-- Extra day / overdue fee per gown per day: taken from the customer's security deposit (Payments page, receipts). Owner-only; the endpoint enforces that too.
                    Applies to NEW bookings only: every booking keeps the rate it was made with. 0 means no fee. -->
               <script>
                 window.lateFeeCard = function () {
@@ -2160,7 +2164,7 @@
                       }).then((res) => res.json().then((data) => ({ ok: res.ok, data: data }))).then((r) => {
                         this.busy = false;
                         this.ok = !!(r.ok && r.data.success);
-                        if (this.ok) { this.saved = String(r.data.amount); this.amount = this.saved; this.msg = Number(r.data.amount) === 0 ? 'Saved. New bookings have no overdue or date change fee.' : 'Saved. New bookings are charged ' + this.peso(r.data.amount) + ' per gown for each day overdue or moved.'; }
+                        if (this.ok) { this.saved = String(r.data.amount); this.amount = this.saved; this.msg = Number(r.data.amount) === 0 ? 'Saved. New bookings have no extra-day or overdue fee.' : 'Saved. New bookings are charged ' + this.peso(r.data.amount) + ' per gown for each extra or overdue day.'; }
                         else { this.msg = r.data.error || 'Could not save.'; }
                       }).catch(() => { this.busy = false; this.ok = false; this.msg = 'Network error. Please try again.'; });
                     }
@@ -2168,11 +2172,11 @@
                 };
               </script>
               <div x-data="lateFeeCard()" data-amount="{{ site_late_fee_per_day }}" class="p-5 border border-gray-200 rounded-2xl dark:border-gray-800 lg:p-6" style="margin-top: 1.5rem;">
-                <h4 class="flex items-center text-lg font-semibold text-gray-800 dark:text-white/90">Overdue &amp; date change fee<details class="ht-tip"><summary aria-label="About this fee" title="About this fee">?</summary><div class="ht-tip-pop">What a customer is charged for EACH gown for every day after the return date they booked: a date change fee for the days the return date is moved, and an overdue fee for any days after that. It comes out of their security deposit, and the Payments page and the printed receipts show it. A booking keeps the fee it was made with, so changing this only affects new bookings. Enter 0 for no fee.</div></details></h4>
+                <h4 class="flex items-center text-lg font-semibold text-gray-800 dark:text-white/90">Extra day &amp; overdue fee<details class="ht-tip"><summary aria-label="About this fee" title="About this fee">?</summary><div class="ht-tip-pop">What a customer is charged for EACH gown, per day: every booked day outside the free days (2 days before and 2 days after the event: an early pick-up or a later return, including dates staff change) and every day overdue after the return date. It comes out of their security deposit, and the Payments page and the printed receipts show it. A booking keeps the fee it was made with, so changing this only affects new bookings. Enter 0 for no fee.</div></details></h4>
                 <div style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 1rem; margin-top: 1.1rem;">
                   <div style="min-width: 220px; flex: 1; max-width: 340px;">
                     <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Fee for each gown, each day (pesos)</label>
-                    <input type="text" inputmode="numeric" x-model="amount" @input="amount = amount.replace(/[^0-9]/g, '').slice(0, 5)" maxlength="5" placeholder="200" aria-label="Overdue and date change fee per gown per day in pesos, from 0 to 10,000"
+                    <input type="text" inputmode="numeric" x-model="amount" @input="amount = amount.replace(/[^0-9]/g, '').slice(0, 5)" maxlength="5" placeholder="200" aria-label="Extra day and overdue fee per gown per day in pesos, from 0 to 10,000"
                            class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90" />
                   </div>
                   <div style="display: flex; align-items: center; gap: .75rem;">
@@ -2182,7 +2186,7 @@
                     <p x-show="msg" x-cloak x-text="msg" class="text-xs font-medium" :class="ok ? 'text-success-700 dark:text-success-500' : 'text-error-600 dark:text-error-500'"></p>
                   </div>
                 </div>
-                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">Whole pesos, from 0 to 10,000. For example, 3 days overdue at <span x-text="peso(Number(amount) || 0)"></span> a day is <span x-text="peso((Number(amount) || 0) * 3)"></span> for one gown.</p>
+                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">Whole pesos, from 0 to 10,000. For example, 3 extra days at <span x-text="peso(Number(amount) || 0)"></span> a day is <span x-text="peso((Number(amount) || 0) * 3)"></span> for one gown.</p>
               </div>
               <!-- Valid ID rule: a customer's valid ID has to be verified before they pay online, and before a walk-in booking is saved. Owner-only; the endpoint enforces that too. -->
               <script>

@@ -1,13 +1,14 @@
 """The security deposit the owner asks for each gown -- ONE setting, read everywhere.
 
-`SiteSettings.security_deposit_per_gown` (whole pesos, 1 to 10,000, default 2,000) is what the checkout charges, what the walk-in booking
+`SiteSettings.security_deposit_per_gown` (whole pesos, 2,000 to 10,000, default 2,000) is what the checkout charges, what the walk-in booking
 adds, what the bag / selection / checkout pages show, what the FAQ, How It Works and Terms say, and what the AI chat tells customers.
-A booking keeps the deposit it was made with (Reservation.security_deposit), so changing the setting only affects NEW bookings.
+The owner may raise it but never set it below 2,000 (the shop's own floor). A booking keeps the deposit it was made with
+(Reservation.security_deposit), so changing the setting only affects NEW bookings.
 """
 from decimal import Decimal
 
 DEFAULT_PER_GOWN = 2000
-MIN_PER_GOWN = 1
+MIN_PER_GOWN = 2000
 MAX_PER_GOWN = 10000
 
 

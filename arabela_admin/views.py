@@ -208,6 +208,8 @@ def dashboard_view(request):
     # All Bookings show). Read from the items prefetched above, so it costs no query per row.
     for booking in quick_verify_reservations:
         booking.qv_pickup, booking.qv_return = _reservation_window(list(booking.items.all()))
+        # What the booked days outside the free days take out of the deposit (free-days bookings), said under the return day.
+        booking.qv_extra = sum((i.extra_days_fee for i in booking.items.all() if i.stage != ReservationItem.Stage.CANCELLED), Decimal("0"))
     _attach_duplicate_codes(quick_verify_reservations)
     pending_total = Reservation.objects.filter(status=Reservation.Status.PENDING).count()
 
@@ -368,7 +370,11 @@ def _original_event_date(item):
     recovers the same day the same way for the exact reason given there: return is always
     exactly event + 2, whereas pick-up sometimes gets clamped to today for a booking made
     less than 2 days out (see clampedPickup), so only return round-trips reliably. Falls
-    back to the current effective event date for the rare legacy row missing that field."""
+    back to the current effective event date for the rare legacy row missing that field.
+    A free-days booking (the customer chose the event, the pick-up and the return) keeps its
+    first event exactly: 2 days before its free return day."""
+    if item.uses_free_days:
+        return item.free_return_date - timedelta(days=2)
     if item.original_return_date:
         return item.original_return_date - timedelta(days=2)
     return _event_date(item)
@@ -628,6 +634,27 @@ def _schedule_conflict(item, rental_date, return_date, rest_days=0):
             f"don't overlap."
         )
     return None
+
+
+def _return_floor(item):
+    """The earliest day staff may move a gown's return to (besides today and its pick-up): a free-days booking -- the end of its free days (2 days after
+    the event first booked: returning by then costs nothing, and the gown is kept until then anyway); an older booking -- the return date the
+    customer first booked (so a later return saved by mistake can be undone, but nothing earlier than what was booked)."""
+    if item.uses_free_days:
+        return item.free_return_date
+    return item.original_return_date or item.return_date
+
+
+def _extra_days_words(item):
+    """A free-days gown's deduction in words for its history line ("Extra days now: 4 x P200 = P800, taken from the security deposit."), or ''."""
+    if not item.uses_free_days:
+        return ""
+    early, later, change = reservation_ledger.booked_extra_days(item)
+    days = early + later + change
+    rate = int(item.reservation.late_fee_per_day or 0)
+    if days <= 0 or rate <= 0:
+        return " No extra days: nothing is taken from the security deposit for the dates."
+    return f" Extra days now: {days} × ₱{rate:,} = ₱{days * rate:,}, taken from the security deposit."
 
 
 def _resync_cooldown_block(item, base_date):
@@ -1146,6 +1173,8 @@ def _deposit_state(reservation, live_items, today):
     return {
         "state": state, "kind": _DEPOSIT_KINDS[state], "notes": notes, "when": when, "how": how,
         "paid": statement.deposit_paid, "late_fee": statement.late_fee, "change_fee": statement.change_fee, "overdue_fee": statement.overdue_fee,
+        "extra_days_fee": statement.extra_days_fee,
+        "extra_back": statement.extra_received if statement.extra_credit > 0 else Decimal("0"),    # an extra charge paid before that goes back too
         "deductions": statement.deductions_total,
         "handed_back": statement.refunded, "to_hand_back": statement.refund_available,
     }
@@ -1743,12 +1772,22 @@ def active_reservations_view(request):
             # today when the gown is out and already past it), read as a date change fee (the days the return was moved) and an overdue fee (the days past the agreed
             # date). Display only; the Payments page keeps working out the real, so-far figure.
             rate = int(reservation.late_fee_per_day or 0)
-            item.late_days_planned = reservation_ledger.planned_late_days(item, today)
+            # One count for every fee (reservations/ledger.fee_days): a free-days booking's early pick-up and later return days as well.
+            planned_days = reservation_ledger.fee_days(item, today, planned=True)
+            item.early_days_planned = planned_days[reservation_ledger.EARLY_FEE]
+            item.later_days_planned = planned_days[reservation_ledger.LATER_FEE]
+            item.change_days_planned = planned_days[reservation_ledger.CHANGE_FEE]
+            item.overdue_days_planned = planned_days[reservation_ledger.OVERDUE_FEE]
+            item.late_days_planned = sum(planned_days.values())
             item.late_fee_planned = Decimal(item.late_days_planned * rate)
-            item.overdue_days_planned = reservation_ledger.overdue_days(item, today)
-            item.change_days_planned = item.late_days_planned - item.overdue_days_planned
+            item.early_fee_planned = Decimal(item.early_days_planned * rate)
+            item.later_fee_planned = Decimal(item.later_days_planned * rate)
             item.change_fee_planned = Decimal(item.change_days_planned * rate)
             item.overdue_fee_planned = Decimal(item.overdue_days_planned * rate)
+            # What the change-date calendar needs: the free days (a free-days booking) and the earliest day the return may go back to.
+            item.return_floor = _return_floor(item)
+            # The day the later return days run up to: the return date, or the day first booked when staff moved it further (that part is a date change).
+            item.later_until = min(item.return_date, item.scheduled_return)
             if item.stage == ReservationItem.Stage.RETURNED:
                 item.late_fee_kind = "back"
             elif item.stage in reservation_ledger.OUT_STAGES and item.return_date and today > item.return_date:
@@ -1814,6 +1853,10 @@ def active_reservations_view(request):
         reservation.overdue_fee_planned = sum((i.overdue_fee_planned for i in booking_items), Decimal("0"))
         reservation.change_days_planned = sum(i.change_days_planned for i in booking_items)
         reservation.overdue_days_planned = sum(i.overdue_days_planned for i in booking_items)
+        reservation.early_fee_planned = sum((i.early_fee_planned for i in booking_items), Decimal("0"))
+        reservation.later_fee_planned = sum((i.later_fee_planned for i in booking_items), Decimal("0"))
+        reservation.extra_days_fee_planned = reservation.early_fee_planned + reservation.later_fee_planned
+        reservation.extra_days_planned = sum(i.early_days_planned + i.later_days_planned for i in booking_items)
         # Measured against the deposit paid -- or, when nothing is paid yet (a walk-in that pays at pick-up), the deposit the booking was made with:
         # the fee comes out of it once it is paid, so an unpaid deposit never makes every fee look "over the deposit".
         reservation.fee_deposit_paid = money.deposit_paid
@@ -3986,10 +4029,14 @@ def _change_item_dates(request, item_id, want_pickup, want_return, want_event=No
 
     Pick-up (want_pickup): the gown must still be waiting for pick-up; any day from today up to PICKUP_MAX_DAYS_AHEAD days ahead, earlier OR later than before.
     A pick-up that ends up after the current return date needs a new return date in the same request.
-    Return (want_return): later only (there is no early return), never a day that has passed.
+    Return (want_return): later, or earlier again (a date saved by mistake, or a customer who asks for fewer days) -- never a day that has passed, never
+    before the pick-up, and never before the day the free days end (a free-days booking: 2 days after the event first booked) or, for an older booking,
+    before the return date the customer first booked. Every saved return change is kept on the gown (return_changes): from the third one the Audit Log
+    line is marked important for the owner (arabela_admin/audit_describe.py).
     Never: a day another booking or a block holds this gown. When the RETURN moves, the gown's rest days after it must also stay clear of a later booking, and the
     gown's rest block (its cooldown) moves to sit right after the new return -- unless staff already released it, which is respected and never undone.
-    The fee is always counted from the ORIGINAL return date (reservations/ledger.py): a later return is a date change fee.
+    The fees follow the dates (reservations/ledger.py): a free-days booking pays for every day outside its free days (an earlier pick-up, a later return),
+    so moving a date moves the fee up or down; an older booking counts from its ORIGINAL return date (a later return is a date change fee).
     Event (want_event): the customer's event day stays as they chose it, except when it is no longer between the pick-up and the return: a pick-up moved
     past it must come with the new event day, and a booking already like that can be given one on its own. The event day never changes any fee."""
     item, error = _load_open_item(request, item_id)
@@ -3997,7 +4044,8 @@ def _change_item_dates(request, item_id, want_pickup, want_return, want_event=No
         return error
     if item.gown_id:
         list(Gown.objects.select_for_update().filter(id=item.gown_id))          # one change at a time per gown
-    item.refresh_from_db(fields=["stage", "rental_date", "return_date", "original_rental_date", "original_return_date", "event_date", "overdue_date", "picked_up_on", "returned_on"])
+    item.refresh_from_db(fields=["stage", "rental_date", "return_date", "original_rental_date", "original_return_date", "event_date", "overdue_date", "picked_up_on", "returned_on",
+                                 "free_pickup_date", "free_return_date", "planned_return_date", "return_changes"])
     if item.stage in (ReservationItem.Stage.RETURNED, ReservationItem.Stage.CANCELLED):
         return JsonResponse({"error": "This gown just changed (it may have been returned or cancelled). Please refresh the page."}, status=409)
     if want_pickup is None and want_return is None and want_event is None:
@@ -4017,12 +4065,16 @@ def _change_item_dates(request, item_id, want_pickup, want_return, want_event=No
         if want_pickup > last_pickup:
             return JsonResponse({"error": f"The pick-up can be moved up to {PICKUP_MAX_DAYS_AHEAD} days from today (until {last_pickup:%b %d, %Y})."}, status=400)
     if want_return is not None:
-        if want_return <= old_return:
-            return JsonResponse({
-                "error": f"The new return date must be later than the current one ({old_return:%b %d, %Y}). There is no early return.",
-            }, status=400)
+        if want_return == old_return:
+            return JsonResponse({"error": f"The return is already on {want_return:%b %d, %Y}. Choose a different day."}, status=400)
         if want_return < today:
             return JsonResponse({"error": "The new return date can't be a day that has already passed."}, status=400)
+        base = _return_floor(item)
+        if want_return < base:
+            return JsonResponse({"error": (
+                f"The return can't be before {base:%b %d, %Y}: returning by then is free (2 days after the event the customer booked)."
+                if item.uses_free_days else
+                f"The return can't be moved before the date the customer first booked ({base:%b %d, %Y}).")}, status=400)
         if want_return > today + timedelta(days=RETURN_MAX_DAYS_AHEAD):
             return JsonResponse({"error": "That return date is too far away. Please choose a nearer day."}, status=400)
 
@@ -4045,6 +4097,10 @@ def _change_item_dates(request, item_id, want_pickup, want_return, want_event=No
     elif want_pickup is not None and final_pickup > old_event:
         return JsonResponse({
             "error": f"The new pick-up ({final_pickup:%b %d, %Y}) is after the event date ({old_event:%b %d, %Y}). Choose the new event date too.",
+        }, status=400)
+    elif want_return is not None and final_return < old_event:
+        return JsonResponse({
+            "error": f"The new return ({final_return:%b %d, %Y}) is before the event date ({old_event:%b %d, %Y}). Choose the new event date too.",
         }, status=400)
 
     if item.gown_id and (want_pickup is not None or want_return is not None):
@@ -4070,7 +4126,14 @@ def _change_item_dates(request, item_id, want_pickup, want_return, want_event=No
             item.original_return_date = old_return
         item.return_date = want_return
         item.overdue_date = want_return
-        fields += ["return_date", "overdue_date", "original_return_date"]
+        # The day the customer once said they would come (1 day after the event) no longer means anything once staff set the return.
+        item.planned_return_date = None
+        # Who moved the return, from what to what: the third change (and every one after) is shown to the owner as important.
+        item.return_changes = list(item.return_changes or []) + [{
+            "from": old_return.isoformat(), "to": want_return.isoformat(), "by": staff_display_name(request.user),
+            "at": timezone.now().isoformat(timespec="seconds"),
+        }]
+        fields += ["return_date", "overdue_date", "original_return_date", "planned_return_date", "return_changes"]
     item.save(update_fields=fields)
     if want_return is not None and item.gown_id:
         _resync_cooldown_block(item, want_return)                 # the rest days move with the return
@@ -4086,16 +4149,18 @@ def _change_item_dates(request, item_id, want_pickup, want_return, want_event=No
             how = f"{_plural_days(-days_early)} later than originally booked"
         ReservationStatusEvent.record(
             item.reservation, f"{item.gown_name} pick-up date changed", item=item,
-            detail=f"Pick-up moved {'back ' if want_pickup > old_pickup else ''}from {old_pickup:%b %d} to {want_pickup:%b %d, %Y} at the customer's request ({how}).",
+            detail=(f"Pick-up moved {'back ' if want_pickup > old_pickup else ''}from {old_pickup:%b %d} to {want_pickup:%b %d, %Y} at the customer's request ({how})."
+                    + ("" if want_return is not None else _extra_days_words(item))),
             actor=ReservationStatusEvent.Actor.STAFF,
         )
     if want_return is not None:
+        if want_return > old_return:
+            how = f"{_plural_days(max(days_late, 0))} later than originally booked"
+        else:
+            how = f"{_plural_days((old_return - want_return).days)} earlier than before"
         ReservationStatusEvent.record(
             item.reservation, f"{item.gown_name} return date changed", item=item,
-            detail=(
-                f"Return moved from {old_return:%b %d} to {want_return:%b %d, %Y} at the customer's request "
-                f"({_plural_days(max(days_late, 0))} later than originally booked)."
-            ),
+            detail=f"Return moved from {old_return:%b %d} to {want_return:%b %d, %Y} at the customer's request ({how})." + _extra_days_words(item),
             actor=ReservationStatusEvent.Actor.STAFF,
         )
     if want_event is not None:
@@ -5583,8 +5648,8 @@ def gcash_active_update_view(request):
 @require_http_methods(["POST"])
 @audited('settings.deposit', 'Settings', audit_describe.deposit_setting, sensitive=True, before=audit_describe.before_settings)
 def deposit_setting_update_view(request):
-    """Save the security deposit asked for each gown (whole pesos, 1 to 10,000). Owner only. It applies to NEW bookings: every booking keeps the
-    deposit it was made with."""
+    """Save the security deposit asked for each gown (whole pesos, 2,000 to 10,000: the owner may raise it, never lower it below 2,000). Owner only.
+    It applies to NEW bookings: every booking keeps the deposit it was made with."""
     if not _is_admin_staff(request):
         return JsonResponse({"error": "Unauthorized"}, status=401)
     if not _is_owner(request):
@@ -5598,7 +5663,8 @@ def deposit_setting_update_view(request):
     amount = deposit.clean(data.get("amount"))
     if amount is None:
         return JsonResponse(
-            {"error": f"Enter a whole number of pesos from {deposit.MIN_PER_GOWN} to {deposit.MAX_PER_GOWN:,}, like 2000."}, status=400,
+            {"error": f"Enter a whole number of pesos from {deposit.MIN_PER_GOWN:,} to {deposit.MAX_PER_GOWN:,}, like 2000. "
+                      f"The deposit can be raised, but never set below ₱{deposit.MIN_PER_GOWN:,}."}, status=400,
         )
     settings_obj = SiteSettings.load()
     settings_obj.security_deposit_per_gown = amount

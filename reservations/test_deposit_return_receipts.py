@@ -214,9 +214,10 @@ class OnlineReturnTests(online_helpers.Base):
         booking = self.booked("deposit", "gcash")
         today = timezone.localdate()
         Reservation.objects.filter(pk=booking.pk).update(late_fee_per_day=200)
+        # A booking made before the free-days rule (no free days): its fee counts from the return first booked, as these tests describe.
         ReservationItem.objects.filter(reservation=booking).update(
             stage=ReservationItem.Stage.RETURNED, original_return_date=today + timedelta(days=booked_back), return_date=today + timedelta(days=moved_to),
-            returned_on=today + timedelta(days=came_back))
+            returned_on=today + timedelta(days=came_back), free_pickup_date=None, free_return_date=None)
         return Reservation.objects.get(pk=booking.pk)
 
     def refund(self, booking, amount):

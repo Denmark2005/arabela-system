@@ -110,6 +110,58 @@
         return parts.length === 2 && !!parts[0].trim() && !!parts[1].trim();
     };
 
+    // ---- the free days and what the chosen days take out of the deposit ------------------------------------------
+    // The same arithmetic the server books with (gowns/availability.py extra_days, reservations/ledger.py): 2 days before the event and 2 days
+    // after it are free; every booked day outside them costs the owner's fee per gown per day (written on the page by base.html), taken from
+    // the security deposit when the gown is returned. A row from a bag saved before the event was kept has no event: it was always booked
+    // inside the free days, so it costs nothing.
+    var FREE_BEFORE = 2;
+    var FREE_AFTER = 2;
+    var FEE_PER_DAY = (function () {
+        var raw = body && body.dataset ? body.dataset.lateFeePerDay : undefined;
+        var n = Number(raw);
+        return raw !== undefined && raw !== '' && n >= 0 ? n : 200;
+    })();
+    window.arabelaFeePerDay = function () { return FEE_PER_DAY; };
+
+    function parseMdy(text) {
+        var bits = String(text || '').trim().split('/');
+        if (bits.length !== 3) return null;
+        var d = new Date(Number(bits[2]), Number(bits[0]) - 1, Number(bits[1]));
+        return isNaN(d.getTime()) || !Number(bits[0]) || !Number(bits[1]) || !Number(bits[2]) ? null : d;
+    }
+    function dayNumber(d) { return Math.round(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000); }
+    function shortDay(d) { return d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''; }
+
+    // -> { event, pickup, ret (Dates or null), before, after, days, fee (pesos for ONE gown), freeFrom, freeUntil (text) }
+    window.arabelaExtraDays = function (item) {
+        var none = { event: null, pickup: null, ret: null, before: 0, after: 0, days: 0, fee: 0, freeFrom: '', freeUntil: '' };
+        var parts = String((item && item.rental) || '').split(' - ');
+        if (parts.length !== 2) return none;
+        var pickup = parseMdy(parts[0]);
+        var ret = parseMdy(parts[1]);
+        var event = parseMdy(item && item.event);
+        if (!pickup || !ret) return none;
+        if (!event) return Object.assign({}, none, { pickup: pickup, ret: ret });
+        var before = Math.max(0, (dayNumber(event) - FREE_BEFORE) - dayNumber(pickup));
+        var after = Math.max(0, dayNumber(ret) - (dayNumber(event) + FREE_AFTER));
+        var freeFrom = new Date(event.getFullYear(), event.getMonth(), event.getDate() - FREE_BEFORE);
+        var freeUntil = new Date(event.getFullYear(), event.getMonth(), event.getDate() + FREE_AFTER);
+        return { event: event, pickup: pickup, ret: ret, before: before, after: after, days: before + after,
+                 fee: (before + after) * FEE_PER_DAY, freeFrom: shortDay(freeFrom), freeUntil: shortDay(freeUntil) };
+    };
+    // Short words for a row's dates: "Event Dec 15", and the deduction ("₱800 off your deposit (4 extra days)") or ''.
+    window.arabelaEventText = function (item) {
+        var info = window.arabelaExtraDays(item);
+        return info.event ? 'Event ' + shortDay(info.event) : '';
+    };
+    window.arabelaDeductionText = function (item, qty) {
+        var info = window.arabelaExtraDays(item);
+        var copies = Math.max(1, Number(qty) || 1);
+        if (!info.days || !info.fee) return '';
+        return formatPesoInt(info.fee * copies) + ' off your deposit (' + info.days + ' extra day' + (info.days === 1 ? '' : 's') + (copies > 1 ? ' × ' + copies + ' gowns' : '') + ')';
+    };
+
     // Display label for a size that was never chosen. products.html seeds the
     // sentinel '-' and the quick-add paths in base.html default to it too, so
     // both that and an empty string mean "not chosen yet".
@@ -285,7 +337,8 @@
             (a.name || 'Untitled') === (b.name || 'Untitled') &&
             aCol === bCol &&
             normCartSize(a.size) === normCartSize(b.size) &&
-            normCartRental(a.rental) === normCartRental(b.rental)
+            normCartRental(a.rental) === normCartRental(b.rental) &&
+            normCartRental(a.event) === normCartRental(b.event)
         );
     }
 
@@ -402,7 +455,7 @@
     // so re-clicking Proceed on an unchanged cart never nags with the swap dialog.
     function sameSelection(itemsA, itemsB) {
         if (!Array.isArray(itemsA) || !Array.isArray(itemsB) || itemsA.length !== itemsB.length) return false;
-        function keyOf(it) { return [it.id, it.name, it.size, it.rental, it.qty].join('|'); }
+        function keyOf(it) { return [it.id, it.name, it.size, it.rental, it.event || '', it.qty].join('|'); }
         var a = itemsA.map(keyOf).sort();
         var b = itemsB.map(keyOf).sort();
         for (var i = 0; i < a.length; i++) {
@@ -535,6 +588,8 @@
                 qty: qty,
                 lineTotal: lineTotal,
                 rental: rental,
+                // The event day: the free days (and what comes out of the deposit) are counted from it.
+                event: row.getAttribute('data-event') || '',
                 // Carried through so the Order Summary can link each row back to
                 // its gown page. base.html's renderCartDrawer writes these; without
                 // them there is no valid product URL to rebuild later.
@@ -678,6 +733,41 @@
             if (typeof window.onReservationTotals === 'function') window.onReservationTotals(subtotal, deposit, total, itemCount);
         }
 
+        // The days outside the free days come out of the deposit when the gowns are returned (never added to what is paid now): the red
+        // line under the deposit, and what comes back. window.arabelaCheckoutExtraFee is what the page sends as the amount it showed.
+        function showDeduction(list, deposit) {
+            var fee = 0;
+            var days = 0;
+            (list || []).forEach(function (it) {
+                if (!window.arabelaHasRentalDates(it)) return;
+                var info = window.arabelaExtraDays(it);
+                var copies = Math.max(1, Number(it.qty) || 1);
+                fee += info.fee * copies;
+                days += info.days * copies;
+            });
+            window.arabelaCheckoutExtraFee = fee;
+            var refundNote = document.getElementById('reservation-deposit-note');
+            if (refundNote) refundNote.textContent = fee > 0 ? '(Refundable upon return, less the deduction below)' : '(Fully refundable upon return)';
+            var box = document.getElementById('reservation-deduction');
+            if (!box) return;
+            if (!(fee > 0)) { box.hidden = true; return; }
+            var back = Math.max(0, deposit - fee);
+            var owed = Math.max(0, fee - deposit);
+            var put = function (id, text) { var el = document.getElementById(id); if (el) el.textContent = text; };
+            put('reservation-deduction-label', '− ' + formatPesoInt(fee) + ' off your security deposit');
+            put('reservation-deduction-note', days + ' extra day' + (days === 1 ? '' : 's') + ' outside the free days, ' + formatPesoInt(FEE_PER_DAY)
+                + ' each. Taken from the deposit when the gown is returned, even if you pick up later or return earlier.');
+            put('reservation-deposit-back', formatPesoSummary(back));
+            var owedEl = document.getElementById('reservation-extra-owed');
+            if (owedEl) {
+                owedEl.hidden = !(owed > 0);
+                owedEl.textContent = owed > 0 ? 'The deduction is more than the deposit: ' + formatPesoInt(owed) + ' more is paid at the shop.' : '';
+            }
+            var wasHidden = box.hidden;
+            box.hidden = false;
+            if (wasHidden) { box.classList.remove('is-in'); void box.offsetWidth; box.classList.add('is-in'); }
+        }
+
         var data = null;
         if (raw) {
             try {
@@ -693,6 +783,7 @@
             root.innerHTML =
                 '<p class="text-sm text-secondary">No items in your selection. Return to the shop and add pieces first.</p>';
             setTotals(0, 0, 0, 0);
+            showDeduction([], 0);
             var confirmBtn = document.getElementById('confirm-rental-btn');
             if (confirmBtn) confirmBtn.disabled = true;
             if (holdIsAlive()) {
@@ -724,21 +815,30 @@
 
             // The date line is the whole point of this row: either it states the
             // rental window, or it is the control that goes and sets one.
+            var info = window.arabelaExtraDays(it);
             var dateLine = dated
                 ? '<p class="mt-1 flex items-center gap-1.5 text-[0.75rem] text-secondary">'
                     + '<span class="material-symbols-outlined" style="font-size: 0.9rem;">calendar_today</span>'
-                    + escapeHtml(it.rental)
+                    + escapeHtml(info.pickup && info.ret ? shortDay(info.pickup) + ' – ' + info.ret.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : it.rental)
                     + (editUrl ? '<span class="res-item-edit text-[0.6875rem] font-medium underline underline-offset-4">Change</span>' : '')
                     + '</p>'
                 : '<span class="mt-1 inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-[#b45309]">'
                     + '<span class="material-symbols-outlined" style="font-size: 0.9rem;">event</span>'
                     + (editUrl ? 'Set rental date &rarr;' : 'Rental date needed')
                     + '</span>';
-            // The day the gown is collected is the first date of the window; it can only be collected 1 PM - 5 PM.
+            // The event, and the day the gown is collected (the first date of the window; only 1 PM - 5 PM).
             var pickupLine = dated
-                ? '<p class="mt-0.5 text-[0.6875rem] text-secondary/80">Pick-up '
-                    + escapeHtml(String(it.rental).split(' - ')[0]) + ', 1:00 PM to 5:00 PM only</p>'
+                ? '<p class="mt-0.5 text-[0.6875rem] text-secondary/80">'
+                    + (info.event ? 'Event ' + escapeHtml(shortDay(info.event)) + ' &middot; ' : '')
+                    + 'Pick-up ' + escapeHtml(info.pickup ? shortDay(info.pickup) : String(it.rental).split(' - ')[0]) + ', 1:00 PM to 5:00 PM only</p>'
                 : '';
+            // Days outside the free days: what this gown takes out of the deposit when it is returned (never added to what is paid now).
+            var deduction = dated ? window.arabelaDeductionText(it, it.qty) : '';
+            if (deduction) {
+                pickupLine += '<p class="mt-1 inline-flex items-center gap-1 rounded-[4px] px-1.5 py-0.5 text-[0.6875rem] font-semibold res-item-deduct">'
+                    + '<span class="material-symbols-outlined" style="font-size: 0.85rem;">remove_circle</span>'
+                    + '&minus; ' + escapeHtml(deduction) + '</p>';
+            }
 
             // A gown that comes in several sizes and has none chosen: the size line is the control that goes and chooses one.
             var sizeLine = lacksSize
@@ -785,6 +885,7 @@
         // The saved selection remembers the deposit it was made with; the checkout always shows what the owner asks NOW.
         var liveDeposit = (Number(data.itemCount) || 0) * DEPOSIT_PER_ITEM;
         setTotals(data.subtotal, liveDeposit, (Number(data.subtotal) || 0) + liveDeposit, data.itemCount);
+        showDeduction(items, liveDeposit);
 
         // Tell the page which gowns still block checkout (no dates, or a size still to choose), so Confirm Rental can be
         // held back up front instead of failing after the form and the upload.

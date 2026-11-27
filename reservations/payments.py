@@ -26,7 +26,7 @@ from django.utils import timezone
 
 from accounts.roles import staff_display_name
 from reservations import gateway, ledger
-from reservations.ledger import money, peso
+from reservations.ledger import ZERO, money, peso
 from reservations.models import Deduction, Payment, ReceiptSequence, Reservation, ReservationStatusEvent
 
 logger = logging.getLogger(__name__)
@@ -127,14 +127,25 @@ def _day(value):
 
 
 def _gown_lines(reservation):
+    """The gowns a receipt lists: pick-up and return, and -- a free-days booking -- the event and the return the customer planned (1 day after the
+    event, when they chose that: they may still bring it until the return date for free)."""
     items = list(reservation.items.all())
     kept = [i for i in items if i.stage != i.Stage.CANCELLED] or items
-    return [{"name": i.gown_name, "size": i.size, "pickup": _day(i.rental_date), "return": _day(i.return_date)} for i in kept]
+    lines = []
+    for i in kept:
+        line = {"name": i.gown_name, "size": i.size, "pickup": _day(i.rental_date), "return": _day(i.return_date)}
+        if i.uses_free_days:
+            line["event"] = _day(i.effective_event_date)
+            if i.shown_return_date != i.return_date:
+                line["planned"] = _day(i.shown_return_date)
+        lines.append(line)
+    return lines
 
 
-def fee_words(change_fee, overdue_fee):
-    """["the ₱1,400.00 date change fee", "the ₱400.00 overdue fee"]: the fees a sentence names, only those above zero."""
-    return ([f"the {peso(change_fee)} date change fee"] if change_fee > 0 else []) + ([f"the {peso(overdue_fee)} overdue fee"] if overdue_fee > 0 else [])
+def fee_words(change_fee, overdue_fee, early_fee=0, later_fee=0):
+    """["the ₱400.00 early pick-up fee", "the ₱1,400.00 date change fee", ...]: the fees a sentence names, only those above zero."""
+    named = (("early pick-up fee", early_fee), ("later return fee", later_fee), ("date change fee", change_fee), ("overdue fee", overdue_fee))
+    return [f"the {peso(amount)} {name}" for name, amount in named if amount and amount > 0]
 
 
 def _listed(parts):
@@ -159,12 +170,16 @@ def _return_gowns(reservation):
 def _return_reason(before, after):
     """The plain sentence under a deposit return receipt: why the customer gets this amount and not the whole deposit."""
     late, taken = after.late_fee, after.deductions_total
+    # An extra charge paid before that the fees no longer ask for goes back too (ledger.extra_credit).
+    extra = f" and the {peso(after.extra_received)} extra charge paid before" if after.extra_credit > 0 else ""
     if late <= 0 and taken <= 0:
+        if extra:
+            return f"No fees and no deductions: the whole {peso(after.deposit_paid)} security deposit{extra} go back to the customer."
         if before.refunded <= 0 and after.refund_available <= 0:
             return "No fees and no deductions: the security deposit is returned in full."
         return f"No fees and no deductions: the whole {peso(after.deposit_paid)} security deposit goes back to the customer."
-    parts = fee_words(after.change_fee, after.overdue_fee) + ([f"{peso(taken)} of deductions"] if taken > 0 else [])
-    return f"The {peso(after.deposit_paid)} security deposit less {_listed(parts)} leaves {peso(after.refundable_total)} to give back."
+    parts = fee_words(after.change_fee, after.overdue_fee, after.early_fee, after.later_fee) + ([f"{peso(taken)} of deductions"] if taken > 0 else [])
+    return f"The {peso(after.deposit_paid)} security deposit{extra} less {_listed(parts)} leaves {peso(after.refundable_total)} to give back."
 
 
 def _working(reservation, after):
@@ -174,8 +189,10 @@ def _working(reservation, after):
                         "returned": l.get("returned", ""), "back": l["back"]} for l in after.late_lines],
         "late_fee": f"{after.late_fee:.2f}",
         # the same money under its two names (reservations/ledger.py): what the receipt prints
-        "fee_lines": [{**{k: l[k] for k in ("kind", "gown", "days", "back", "booked", "agreed", "due", "returned")}, "rate": f"{l['rate']:.0f}",
-                       "amount": f"{l['amount']:.2f}"} for l in after.fee_lines],
+        "fee_lines": [{**{k: l[k] for k in ("kind", "label", "gown", "days", "back", "booked", "agreed", "due", "returned", "pickup", "return", "free_from", "free_until", "until")},
+                       "rate": f"{l['rate']:.0f}", "amount": f"{l['amount']:.2f}"} for l in after.fee_lines],
+        "early_fee": f"{after.early_fee:.2f}",
+        "later_fee": f"{after.later_fee:.2f}",
         "change_fee": f"{after.change_fee:.2f}",
         "overdue_fee": f"{after.overdue_fee:.2f}",
         "deductions": [{"reason": d.reason, "amount": f"{money(d.amount):.2f}"} for d in reservation.deductions.all() if not d.is_void],
@@ -191,6 +208,7 @@ def _snapshot(reservation, payment, before, after, *, served_by):
     snap = {
         "title": payment.title,
         "fee_names": True,          # issued since the fee has two names (Date change / Overdue); a receipt saved before prints as it did
+        "free_days": any(i.uses_free_days for i in reservation.items.all()),     # a free-days booking: the receipt's note says which days are free
         "shop": _shop(),
         "number": payment.receipt_number,
         "when": f"{local:%b} {local.day}, {local.year} {local.hour % 12 or 12}:{local:%M} {'AM' if local.hour < 12 else 'PM'}",
@@ -213,6 +231,7 @@ def _snapshot(reservation, payment, before, after, *, served_by):
     if payment.purpose == Payment.Purpose.DEPOSIT_RETURN:
         snap["return"] = {
             "deposit_paid": f"{after.deposit_paid:.2f}",
+            "extra_paid": f"{after.extra_received if after.extra_credit > 0 else ZERO:.2f}",     # an extra charge paid before that goes back too
             **_working(reservation, after),
             "returned_before": f"{before.refunded:.2f}",
             "returned_now": f"{money(payment.amount):.2f}",
@@ -223,6 +242,17 @@ def _snapshot(reservation, payment, before, after, *, served_by):
     elif payment.purpose == Payment.Purpose.EXTRA:
         # the fees and deductions were more than the deposit, so nothing goes back: this receipt is where the customer sees why they pay more
         snap["extra"] = {**_working(reservation, after), "deposit_used": f"{after.deposit_used:.2f}", "over": f"{after.overflow:.2f}"}
+    elif payment.direction == Payment.Direction.IN and after.total_deduction > 0:
+        # A payment receipt of a booking that already has days outside its free days (or other fees): what will come out of the deposit when the
+        # gowns are back, and what comes back -- so the customer sees it on paper from the first receipt, not only when the deposit is returned.
+        work = _working(reservation, after)
+        snap["deduct"] = {
+            "fee_lines": work["fee_lines"], "deductions": work["deductions"], "total": f"{after.total_deduction:.2f}",
+            "back": f"{max(after.deposit + after.extra_received - after.total_deduction, ZERO):.2f}",
+            "over": f"{max(after.total_deduction - after.deposit - after.extra_received, ZERO):.2f}",
+        }
+    if payment.direction == Payment.Direction.IN and any(i.stage not in i.FINISHED_STAGES for i in reservation.items.all()):
+        snap["change_dates_note"] = True       # "To change your dates, call the shop with this booking number" (the dates can't be changed online)
     return snap
 
 
@@ -346,16 +376,23 @@ def _notice_text(payment):
         if late > 0 or taken > 0:          # the customer is told why it is not the whole deposit (true for a deposit handed back in parts too)
             paid = money(gone.get("deposit_paid") or 0)
             if "change_fee" in gone:
-                fees = fee_words(money(gone["change_fee"]), money(gone.get("overdue_fee") or 0))
+                fees = fee_words(money(gone["change_fee"]), money(gone.get("overdue_fee") or 0),
+                                 money(gone.get("early_fee") or 0), money(gone.get("later_fee") or 0))
             else:                          # a receipt issued before the fee had its two names keeps the words printed on it
                 fees = [f"the {peso(late)} late fee"] if late > 0 else []
             parts = fees + ([f"{peso(taken)} of deductions"] if taken > 0 else [])
-            working = (f" Your {peso(paid)} deposit less {_listed(parts)} comes to {peso(max(paid - late - taken, money(0)))}."
+            more = money(gone.get("extra_paid") or 0)
+            also = f" and the {peso(more)} extra charge you paid before" if more > 0 else ""
+            working = (f" Your {peso(paid)} deposit{also} less {_listed(parts)} comes to {peso(max(paid + more - late - taken, money(0)))}."
                        " The receipt shows the details.")
         return f"Your security deposit of {peso(payment.amount)} for {code} was returned ({how}). Receipt {payment.receipt_number}.{working}{later}"
     snapshot = payment.snapshot or {}
     balance = snapshot.get("balance_after")
     tail = f" Balance still to pay at the shop: {peso(balance)}." if balance and money(balance) > 0 else " Nothing is left to pay."
+    deduct = snapshot.get("deduct") or {}
+    if deduct and money(deduct.get("total") or 0) > 0:
+        tail += (f" When the gown is returned, {peso(deduct['total'])} comes out of your security deposit for the booked days outside the free days"
+                 f" (and any other fees), so {peso(deduct.get('back') or 0)} comes back.")
     return f"Payment received {peso(payment.amount)} for {code} ({payment.get_purpose_display()}, {how}). Receipt {payment.receipt_number}.{tail}"
 
 
@@ -428,7 +465,6 @@ def record_approval_payment(reservation_id, user=None, now=None):
         if deposit <= 0 or reservation.status not in ledger.LIVE_STATUSES:
             return None
         served_by = staff_display_name(user) if user is not None else ""
-        before = ledger.statement(_fresh(reservation.pk))
         payment = Payment.objects.create(
             reservation=reservation, direction=Payment.Direction.IN, purpose=Payment.Purpose.DEPOSIT, method=Payment.Method.ONLINE_GCASH, amount=deposit,
             reference=(reservation.proof_typed_reference or reservation.gcash_reference or "")[:20], paid_at=reservation.reviewed_at or now,
@@ -436,7 +472,10 @@ def record_approval_payment(reservation_id, user=None, now=None):
             note="Paid online by GCash; checked by staff when the booking was approved.",
             receipt_number=ReceiptSequence.next_number(timezone.localtime(now).year),
         )
+        # This is the booking's first row, so "before" is the same figures less this payment (read before saving it, an online booking with no
+        # rows would count its deposit as already paid -- the old-booking guess -- and the receipt would say "Paid before").
         after = ledger.statement(_fresh(reservation.pk))
+        before = ledger.Statement(**{**after.__dict__, "received": money(after.received) - deposit})
         payment.snapshot = _snapshot(reservation, payment, before, after, served_by=served_by)
         payment.save(update_fields=["snapshot"])
         return payment

@@ -11,7 +11,7 @@ from django.http import JsonResponse
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from gowns import deposit
+from gowns import deposit, late_fee
 from gowns.context_processors import _build_search_catalog, all_categories, category_url
 from gowns.models import SiteSettings
 from reservations import gateway
@@ -201,6 +201,7 @@ def _system_prompt(catalog: tuple[str, set[str]] | None = None) -> str:
     )
     catalog_lines, _allowed = catalog or _live_catalog()
     deposit_text = deposit.peso_sign(deposit.per_gown())    # the owner's setting, so the chat never quotes an old amount
+    fee_text = f"P{late_fee.per_day():,}"                    # the fee per gown per extra or late day, the owner's setting too
     if gateway.enabled():
         service = gateway.label()
         # Paying online through PayMongo (the checkout, reservations/paymongo.py): no receipt upload, and the booking is confirmed by the payment itself.
@@ -245,13 +246,19 @@ HOW RENTING WORKS
 1. Create an account and browse the collection online -- a gown with no label can be booked now; otherwise its card shows the date it is next available (for example "Available from Oct 26") or "Fully booked for now".
 2. Submit a reservation (event date and the size that fits best; if the customer is unsure, they can try the gown on at the shop and, if it is too loose or too big, the shop can adjust it to their size -- this can be done up to one week before the pick-up date, depending on whether the gown is available that week).
 3. {pay_step} Note: once a customer opens the reservation page their selection is held for 20 minutes (a countdown shows at the bottom of the screen); letting it run out, or cancelling it, releases the selection AND counts as one cancellation attempt on the account -- the same as cancelling a submitted reservation.
-4. Pick up the item up to 2 days before the event (or on the event day itself when the gown is still being cleaned after an earlier rental) during pickup hours (1-5pm; today's pick-up closes at 5pm), and pay the remaining full rental fee then (GCash or cash in person).
+4. Pick up the item on the booked pick-up day during pickup hours (1-5pm; today's pick-up closes at 5pm), and pay the remaining full rental fee then (GCash or cash in person).
 5. Wear it for the event.
-6. Return it within 2 days after the event, in good condition, to get the full deposit back. Late returns cost P200/day, deducted from the deposit.
+6. Return it by the booked return date, in good condition, to get the deposit back (less any extra or late days).
+
+RENTAL DATES AND FEES
+- On the gown page the customer first picks the EVENT date; the pick-up and return are then set to the free days: 2 days before and 2 days after the event (5 days, free). Pick-up falls on the event day itself only when the days before are taken. Returning 1 or 2 days after the event is free.
+- The customer may choose an earlier pick-up or a later return if the gown is free (and its 5 cleaning days don't run into the next booking). Each booked day outside the free days costs {fee_text} per gown, taken from the security deposit when the gown is returned -- it is NOT paid at booking, and it is charged even if the customer picks up later or returns earlier than booked.
+- Returning after the booked return date costs {fee_text} per gown for each day, also taken from the deposit. Returning within 2 days after the event is never late. Fees above the deposit are paid at the shop.
+- Booked dates cannot be changed on the website. To change the pick-up, return or event date the customer calls the shop with the booking number; staff can change them only if the gown is free, and the fee follows the new dates.
 
 POLICIES
 - Gowns are professionally cleaned before every rental. Customers must not wash, iron, or alter them; if a gown is damaged, staff check it and the repair cost is deducted from the security deposit (any balance is discussed at the shop); if it is lost, the amount depends on the gown and is agreed at the shop.
-- After a booking, that same gown is off the market for 7 days after the event date, even once it's returned -- time for the shop to check, clean, and repair it if needed before it goes out again. If a customer asks why a date they want is greyed out, this is one likely reason (the other is it's simply already booked by someone else).
+- After a rental, that same gown rests for 5 days to be checked, cleaned, and repaired if needed before it goes out again. Until it is back, those days are counted from its booked return date (so about 7 days after the event for a return on a free day). If a customer asks why a date they want is greyed out, this is one likely reason (the other is it's simply already booked by someone else).
 - Cancelling is allowed at any stage before pick-up -- including a reservation that is already confirmed and paid for -- as long as no item in it has been picked up yet. Once a reservation is confirmed, its security deposit is NOT refunded if it is cancelled -- whether the customer cancels it or Arabela cancels it because the gown was not picked up; the customer should contact Arabela to book again. Cancellation attempts are recorded. TWO things count toward the total, every time: cancelling a reservation you already submitted (at any stage up to pick-up), AND holding a selection then leaving without submitting it (either cancelling the countdown or letting it run out). Escalating consequences: at 5 attempts, a temporary 30-minute lockout on starting a new reservation; at 10 attempts, a 2-hour lockout; at 15 or more, the account is automatically flagged for staff review. A flagged account can still browse and reserve, but staff review it before confirming further bookings; only an admin can lift a flag. If you tell a customer about a lockout, only state the exact numbers above (5 -> 30 minutes, 10 -> 2 hours, 15 -> flagged) -- never invent a different threshold or duration.
 {pay_policy}
 - A digital receipt and rental agreement are generated automatically once a reservation is confirmed.

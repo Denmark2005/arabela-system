@@ -16,7 +16,7 @@ from django.utils.formats import date_format
 
 from accounts.models import UserProfile
 
-TERMS_UPDATED_ON = date(2026, 11, 8)
+TERMS_UPDATED_ON = date(2026, 11, 27)        # free rental days, extra days, changing dates by calling the shop (customers agree once more)
 
 
 def label():

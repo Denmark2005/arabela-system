@@ -1297,6 +1297,8 @@
                     {% endif %}
                     <div class="ar-strip sd-money">
                       <span>Deposit paid &#8369;{{ r.dep.paid|floatformat:'-2g' }}</span>
+                      {% if r.dep.extra_back %}<span>Extra charge paid before &#8369;{{ r.dep.extra_back|floatformat:'-2g' }}</span>{% endif %}
+                      {% if r.dep.extra_days_fee %}<span>Extra days &#8369;{{ r.dep.extra_days_fee|floatformat:'-2g' }}</span>{% endif %}
                       {% if r.dep.change_fee %}<span>Date change fee &#8369;{{ r.dep.change_fee|floatformat:'-2g' }}</span>{% endif %}
                       {% if r.dep.overdue_fee %}<span>Overdue fee &#8369;{{ r.dep.overdue_fee|floatformat:'-2g' }}</span>{% endif %}
                       {% if r.dep.deductions %}<span>Deductions &#8369;{{ r.dep.deductions|floatformat:'-2g' }}</span>{% endif %}

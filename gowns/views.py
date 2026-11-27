@@ -405,10 +405,11 @@ def _blocked_dates_for_category(label: str, name: str) -> list[str]:
 def _bookable_units_and_busy_ranges(label: str, name: str):
     """This product's bookable units and, per unit id, its customer bookings and its blocks from today on
     (see gowns.availability.load_busy_ranges). The single source the calendar's fully-booked days, the gown page's
-    per-size calendar and the admin's release reminder are all worked out from."""
+    per-size calendar and the admin's release reminder are all worked out from. Read as far as a return day can be chosen (a year), so a later
+    return the page offers is checked against every booking it could run into, not only the ones inside the event calendar's four months."""
     units = availability.bookable_units(label, name)
     bookings, blocks = availability.load_busy_ranges(
-        [unit.id for unit in units], timezone.localdate(), _AVAILABILITY_HORIZON_DAYS)
+        [unit.id for unit in units], timezone.localdate(), availability.LONGEST_RETURN_DAYS)
     return units, bookings, blocks
 
 
@@ -688,6 +689,128 @@ def _plan_pickup(gown_name, event_date, *, gown_slug="", size="", already_taken=
     return (_UNIT_UNAVAILABLE, None, None)
 
 
+def _copies_in(items, item):
+    """How many lines of this same gown and size are in one checkout (each needs its own physical unit)."""
+    return sum(1 for other in items if other["gown_name"].casefold() == item["gown_name"].casefold()
+               and _normalize_size(other["size"]) == _normalize_size(item["size"]))
+
+
+def resolve_item_dates(item, items, *, already_taken, now):
+    """Checks ONE checkout line and finds the physical gown it books (MUST run inside transaction.atomic(): _find_available_unit locks).
+    Shared by the GCash checkout (reservation_submit) and the online one (gowns/online_checkout.py), so both keep the same rules.
+
+    The line carries the EVENT date and the pick-up and return days the customer chose on the gown page (event_date / rental_date /
+    return_date). Those days are kept exactly as chosen -- never moved behind the customer's back: a day that was taken meanwhile is refused
+    with a message that sends them back to choose again. A line from a bag saved before the customer chose all three dates has no event
+    date: its event is worked out from the return (always 2 days after it then) and its pick-up planned the old way -- inside the free days.
+
+    On success fills in item: matched_gown, event_date, rental_date (the pick-up), return_date (the day the gown is kept until: never before
+    2 days after the event), planned_return_date (the customer's return when it is 1 day after the event, else None), free_pickup_date and
+    free_return_date -- and returns None. Otherwise returns (message for the customer, HTTP status)."""
+    name = item["gown_name"]
+    event = item.get("event_date")
+    if event is None:
+        event = item["return_date"] - timedelta(days=availability.RETURN_DAYS)
+        span = (item["return_date"] - item["rental_date"]).days
+        if not availability.RETURN_DAYS <= span <= availability.RETURN_DAYS + availability.EARLY_PICKUP_DAYS:
+            return (f"Please open {name} from your order summary and choose your dates again.", 400)
+        outcome, unit, pickup = _plan_pickup(name, event, gown_slug=item["gown_slug"], size=item["size"], already_taken=already_taken, now=now)
+        chosen_return = event + timedelta(days=availability.RETURN_DAYS)
+    else:
+        pickup, chosen_return = item["rental_date"], item["return_date"]
+        problem = availability.day_problem(event, now)
+        if problem == "past":
+            outcome, unit = _UNIT_DATE_PASSED, None
+        elif problem == "closed":
+            outcome, unit = _UNIT_TODAY_CLOSED, None
+        elif pickup < now.date():
+            return (f"The pick-up day you chose for {name} ({pickup:%b %d, %Y}) has already passed. "
+                    "Please open it from your order summary and choose new dates.", 400)
+        elif pickup < availability.earliest_pickup_day(now):
+            return (f"Today's pick-up closed at {availability.PICKUP_CLOSES.strftime('%I:%M %p').lstrip('0')}. "
+                    f"Please open {name} from your order summary and choose another pick-up day.", 400)
+        elif pickup > event or chosen_return <= event or chosen_return > availability.last_return_day(now.date(), event):
+            return (f"The dates for {name} are not valid. Please open it from your order summary and choose them again.", 400)
+        else:
+            outcome, unit = _find_available_unit(
+                name, pickup, availability.kept_until(event, chosen_return), gown_slug=item["gown_slug"], size=item["size"],
+                already_taken=already_taken, rest_days=COOLDOWN_DAYS)
+
+    if outcome in (_UNIT_DATE_PASSED, _UNIT_TODAY_CLOSED):
+        # Nothing is written yet; the bag and the checkout hold are left alone so the customer only fixes the date.
+        if outcome == _UNIT_DATE_PASSED:
+            return (f"The date {event:%b %d, %Y} for {name} has already passed. Please open it from your order summary and choose new dates.", 400)
+        return (f"Today's pick-up closed at {availability.PICKUP_CLOSES.strftime('%I:%M %p').lstrip('0')}. "
+                f"Please open {name} from your order summary and choose another date.", 400)
+    if outcome == _UNIT_UNAVAILABLE:
+        # When the SAME gown is in the request more than once, that -- not the date -- is usually why: each one needs its own unit, so a
+        # gown that exists once can only be booked once. Saying "no longer available" there sent customers hunting for a different date.
+        copies = _copies_in(items, item)
+        if copies > 1:
+            return (f"{name} is in your selection {copies} times, but there aren't {copies} of it free for {event:%b %d, %Y}. "
+                    "Please remove the extra ones from your selection and try again.", 400)
+        if item.get("event_date") is not None:
+            # The event itself may still be bookable with fewer days: say which it is, so the customer knows what to choose again.
+            default_outcome, _unit, _pickup = _plan_pickup(name, event, gown_slug=item["gown_slug"], size=item["size"],
+                                                          already_taken=already_taken, now=now)
+            if default_outcome == _UNIT_ASSIGNED:
+                return (f"Some of the days you chose for {name} ({pickup:%b %d} to {chosen_return:%b %d, %Y}) were just taken by another booking. "
+                        "Please open it from your order summary and choose other pick-up and return days.", 400)
+        return (f"{name} is no longer available for {event:%b %d, %Y}. Please choose a different date or another gown.", 400)
+    if outcome == _UNIT_OUT_OF_STOCK:
+        return (f"{name} is no longer available to rent -- it has been removed from the collection. "
+                "Please take it out of your bag or choose another gown.", 400)
+    if outcome in (_UNIT_SIZE_NOT_OFFERED, _UNIT_SIZE_REQUIRED):
+        size_value = _normalize_size(item["size"])
+        if outcome == _UNIT_SIZE_NOT_OFFERED:
+            return (f"{name} doesn't come in {size_value}. Please open it from your order summary and choose one of its sizes.", 400)
+        return (f"Please choose a size for {name}: open it from your order summary and pick one of its sizes.", 400)
+
+    kept = availability.kept_until(event, chosen_return)
+    free_pickup, free_return = availability.free_days(event)
+    item.update({
+        # None when this name has no real inventory (placeholder catalog): the item is still booked, just without a gown FK.
+        "matched_gown": unit, "event_date": event, "rental_date": pickup, "return_date": kept,
+        "planned_return_date": chosen_return if chosen_return < kept else None,
+        "free_pickup_date": free_pickup, "free_return_date": free_return,
+    })
+    return None
+
+
+def _extra_fee_changed(request, items):
+    """None, or the 409 answer when the checkout page showed a different extra-days amount than the current fee per day gives (POST
+    "expected_extra_fee"; an old page that sends nothing is let through)."""
+    expected_raw = (request.POST.get("expected_extra_fee") or "").strip()
+    if not expected_raw:
+        return None
+    try:
+        expected = Decimal(expected_raw)
+    except InvalidOperation:
+        return None
+    rate = late_fee.per_day()
+    now_amount = extra_days_fee(items, rate)
+    if expected == now_amount:
+        return None
+    return JsonResponse({
+        "success": False, "extra_fee_changed": True, "late_fee_per_day": rate,
+        "error": (f"The fee for each day outside the free days is now ₱{rate:,} per gown, so ₱{int(now_amount):,} will come out of your "
+                  "security deposit. Please check your order summary and try again."),
+    }, status=409)
+
+
+def extra_days_fee(items, rate):
+    """The pesos that will come out of the deposit for the days outside the free days, for these checkout lines (each line one gown),
+    worked out from the dates the customer chose -- what the checkout page showed and what the booking will be charged."""
+    total = 0
+    for item in items:
+        event = item.get("event_date")
+        if event is None:
+            continue                                        # an older bag line: booked inside the free days
+        before, after = availability.extra_days(event, item["rental_date"], availability.kept_until(event, item["return_date"]))
+        total += (before + after) * int(rate)
+    return Decimal(total)
+
+
 def _authoritative_price(gown_name, gown_slug, matched_gown):
     """The ONLY trusted source for what a cart item costs -- the client's submitted
     price is never used, anywhere. Returns a Decimal, or None if the item can't be
@@ -811,7 +934,8 @@ def product_detail(request, collection: str, slug: str):
         badge = availability.booking_badge(units, bookings, blocks, now)    # the same label its collection card shows
         size_options = _size_options(units)
         code_of = lambda unit: SIZE_CODES.get(unit.size, "")
-        plans = availability.plan_calendar(units, bookings, blocks, now, _AVAILABILITY_HORIZON_DAYS, code_of)
+        horizon = availability.planned_days(bookings, blocks, now.date(), _AVAILABILITY_HORIZON_DAYS)
+        plans = availability.plan_calendar(units, bookings, blocks, now, horizon, code_of)
         # What the next three event days (today, tomorrow and the day after, the only ones whose plan changes) turn into at
         # 5:00 PM, so a page left open past closing time updates itself without asking the server again (once it is already
         # past 5 PM the plans above are the late ones and nothing is needed).
@@ -829,6 +953,13 @@ def product_detail(request, collection: str, slug: str):
             "hours": availability.PICKUP_HOURS_TEXT,
             "closing": availability.PICKUP_CLOSES.strftime("%I:%M %p").lstrip("0"),
             "restDays": COOLDOWN_DAYS,
+            # The free days around the event and the fee for each day outside them (per gown, out of the security deposit).
+            "freeBefore": availability.EARLY_PICKUP_DAYS,
+            "freeAfter": availability.RETURN_DAYS,
+            "feePerDay": late_fee.per_day(),
+            # For event days further ahead than the plans: from which day each size is free for good, and the latest return offered.
+            "openFrom": availability.open_from(units, bookings, blocks, availability.earliest_pickup_day(now), code_of),
+            "lastReturn": (now.date() + timedelta(days=availability.LONGEST_RETURN_DAYS)).isoformat(),
         }
     size_choices = _size_choices(size_options, real_gown.category)
     fabric, description = design_details.text_of(siblings)             # what staff wrote in Gown Catalog, shared by every size
@@ -997,7 +1128,8 @@ def _submission_fingerprint(parsed_items, proof_file) -> str:
     booking comes with its own deposit receipt, so it never matches an earlier attempt."""
     lines = sorted(
         "|".join([item["gown_name"].casefold(), item["gown_slug"], item["size"],
-                  item["rental_date"].isoformat(), item["return_date"].isoformat()])
+                  item["rental_date"].isoformat(), item["return_date"].isoformat(),
+                  item["event_date"].isoformat() if item.get("event_date") else ""])
         for item in parsed_items
     )
     lines.append(f"{getattr(proof_file, 'name', '')}|{getattr(proof_file, 'size', 0)}")
@@ -1289,6 +1421,8 @@ def reservation_submit(request):
             # the only thing that ever sets this key.
             "rental_date": rental_date,
             "return_date": return_date,
+            # The event the customer chose (None for a line from a bag saved before the event was sent): see resolve_item_dates.
+            "event_date": _parse_date(raw.get("event_date")),
         })
 
     # One booking may hold only a few gowns, and one account only a few bookings waiting for the shop (gowns/reservation_limits.py).
@@ -1314,6 +1448,12 @@ def reservation_submit(request):
                     "Please check the amount and try again."
                 ),
             }, status=409)
+
+    # The same for the extra days: the page showed what comes out of the deposit at the fee per day it knew. When the owner changed the fee
+    # meanwhile, say so instead of booking at another amount than the customer saw.
+    fee_refusal = _extra_fee_changed(request, parsed_items)
+    if fee_refusal is not None:
+        return fee_refusal
 
     profile, _ = UserProfile.objects.get_or_create(user=request.user)
     typed_first_name = (request.POST.get("first_name") or "").strip()
@@ -1404,96 +1544,14 @@ def reservation_submit(request):
         assigned_unit_ids = set()
         now = availability.now_local()
         for item in sorted(parsed_items, key=lambda i: i["gown_name"].casefold()):
-            # The customer books an EVENT date (checkout always sends return = event + 2). The server works out the real
-            # pick-up day itself and saves that -- the pick-up date the browser sent is never trusted.
-            event_date = item["return_date"] - timedelta(days=availability.RETURN_DAYS)
-            outcome, unit, pickup = _plan_pickup(
-                item["gown_name"],
-                event_date,
-                gown_slug=item["gown_slug"],
-                size=item["size"],
-                already_taken=assigned_unit_ids,
-                now=now,
-            )
-            if outcome in (_UNIT_DATE_PASSED, _UNIT_TODAY_CLOSED):
-                # Nothing is written yet; the bag and the checkout hold are left alone so the customer only fixes the date.
-                return JsonResponse(
-                    {
-                        "success": False,
-                        "error": (
-                            f"The date {event_date:%b %d, %Y} for {item['gown_name']} has already passed. "
-                            "Please open it from your order summary and choose new dates."
-                            if outcome == _UNIT_DATE_PASSED else
-                            f"Today's pick-up closed at {availability.PICKUP_CLOSES.strftime('%I:%M %p').lstrip('0')}. "
-                            f"Please open {item['gown_name']} from your order summary and choose another date."
-                        ),
-                    },
-                    status=400,
-                )
-            if outcome != _UNIT_UNAVAILABLE and pickup is not None:
-                item["rental_date"] = pickup
-            if outcome == _UNIT_UNAVAILABLE:
-                # Nothing has been written yet, so returning from inside the block
-                # just commits an empty transaction and releases the row locks. The
-                # checkout hold is deliberately NOT cleared -- the customer still has
-                # a bag and can retry with different dates.
-                #
-                # When the SAME gown is in the request more than once, that -- not the date -- is usually why: each one needs its
-                # own unit, so a gown that exists once can only be booked once. Saying "no longer available" there sent customers
-                # hunting for a different date; say what is really wrong instead.
-                copies = sum(
-                    1 for other in parsed_items
-                    if other["gown_name"].casefold() == item["gown_name"].casefold()
-                    and _normalize_size(other["size"]) == _normalize_size(item["size"])
-                )
-                if copies > 1:
-                    error = (
-                        f"{item['gown_name']} is in your selection {copies} times, but there aren't {copies} of it free for "
-                        f"{event_date:%b %d, %Y}. Please remove the extra ones from your selection and try again."
-                    )
-                else:
-                    error = (
-                        f"{item['gown_name']} is no longer available for {event_date:%b %d, %Y}. "
-                        "Please choose a different date or another gown."
-                    )
-                return JsonResponse({"success": False, "error": error}, status=400)
-            if outcome == _UNIT_OUT_OF_STOCK:
-                # The slug/name is a real gown that staff have pulled from the
-                # collection (status Out-of-Stock). Unlike a genuine placeholder
-                # (_UNIT_NO_INVENTORY -> booked with gown=None), this must NOT go
-                # through. Nothing is written yet; returning here commits an empty
-                # transaction and releases the locks. The checkout hold is left alone.
-                return JsonResponse(
-                    {
-                        "success": False,
-                        "error": (
-                            f"{item['gown_name']} is no longer available to rent -- it has "
-                            "been removed from the collection. Please take it out of your "
-                            "bag or choose another gown."
-                        ),
-                    },
-                    status=400,
-                )
-            if outcome in (_UNIT_SIZE_NOT_OFFERED, _UNIT_SIZE_REQUIRED):
-                # Nothing has been written yet (same as the two refusals above); the checkout hold is left alone so the
-                # customer can open the gown from their bag, pick one of its real sizes and submit again.
-                size_value = _normalize_size(item["size"])
-                return JsonResponse(
-                    {
-                        "success": False,
-                        "error": (
-                            f"{item['gown_name']} doesn't come in {size_value}. Please open it from your order "
-                            "summary and choose one of its sizes."
-                            if outcome == _UNIT_SIZE_NOT_OFFERED else
-                            f"Please choose a size for {item['gown_name']}: open it from your order summary and "
-                            "pick one of its sizes."
-                        ),
-                    },
-                    status=400,
-                )
-            # None when this name has no real inventory (placeholder catalog) --
-            # unchanged behaviour: the item is still booked, just without a gown FK.
-            item["matched_gown"] = unit
+            # The customer books an EVENT date with the pick-up and return days they chose on the gown page; resolve_item_dates keeps those
+            # days exactly (or refuses them when one was taken meanwhile) and finds the free physical gown. Nothing has been written yet,
+            # so a refusal just commits an empty transaction and releases the row locks; the checkout hold is deliberately NOT cleared --
+            # the customer still has a bag and can fix the dates or the size and try again.
+            problem = resolve_item_dates(item, parsed_items, already_taken=assigned_unit_ids, now=now)
+            if problem is not None:
+                return JsonResponse({"success": False, "error": problem[0]}, status=problem[1])
+            unit = item["matched_gown"]
             if unit is not None:
                 assigned_unit_ids.add(unit.id)
 
@@ -1555,13 +1613,17 @@ def reservation_submit(request):
                 size=(item["matched_gown"].size if item["matched_gown"] is not None else item["size"])[:20],
                 rental_price=item["rental_price"],
                 rental_date=item["rental_date"],
+                event_date=item["event_date"],
                 return_date=item["return_date"],
                 original_rental_date=item["rental_date"],
                 original_return_date=item["return_date"],
+                free_pickup_date=item["free_pickup_date"],
+                free_return_date=item["free_return_date"],
+                planned_return_date=item["planned_return_date"],
             )
-            # Automatic cooldown (COOLDOWN_DAYS = 5) right after the return date, which is itself 2 days after the
-            # event: the gown is off the market for 7 days after the event (2 to return it + 5 to check, wash
-            # and repair it). Staff/owner
+            # Automatic cooldown (COOLDOWN_DAYS = 5) right after the return date -- 2 days after the event, or the later
+            # day the customer booked -- so the gown can be checked, washed and repaired before it goes out again (7 days
+            # after the event when it is returned on a free day). Staff/owner
             # can shorten or delete it early from Gown Catalog's Blocked Dates, the
             # exact same tool they already use for a cleaning/repair gap -- see
             # GownUnavailability.Reason.COOLDOWN and arabela_admin/views.py's
@@ -1666,6 +1728,11 @@ def reservation_item_detail(request, item_id):
     gown_photo = sized(saved_photo, PAGE_WIDTH) if saved_photo else ""
     # What the booking owes and has paid, its fees so far and its Payment Receipts (the system works them out: reservations/ledger.py).
     money = ledger.statement(reservation)
+    # This gown's free days and the booked days outside them (shown even before the booking is approved, when there is no statement yet).
+    early, later, change = ledger.booked_extra_days(item)
+    rate = int(reservation.late_fee_per_day or 0)
+    extra_days = early + later + change
+    item_fee = {"early": early, "later": later, "change": change, "days": extra_days, "rate": rate, "amount": Decimal(extra_days * rate)}
     return render(
         request,
         'reservation_item_detail.html',
@@ -1687,6 +1754,10 @@ def reservation_item_detail(request, item_id):
             "reservation_items": reservation.items.select_related("gown").all(),
             "timeline": timeline.for_item(item),
             "money": money,
+            "item_fee": item_fee,
+            # What comes back of the deposit once the booked days outside the free days (and any other fees) are taken from it.
+            "deposit_back": max(money.deposit + money.extra_received - money.total_deduction, Decimal("0")),
+            "deposit_over": max(money.total_deduction - money.deposit - money.extra_received, Decimal("0")),
             # The day the security deposit was settled -- only once nothing is left to hand back or to pay.
             "deposit_settled_on": ledger.deposit_returned_day(reservation, money) if ledger.is_settled(reservation, money) else None,
             "receipts": _customer_receipts(reservation),

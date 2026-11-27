@@ -349,6 +349,9 @@ def render_email(content, data, *, base_url=None, shop=None, inline_logo=False):
             rows.append({"label": "Gown", "value": gown, "sub": dates})
         if content["money"] and data.get("deposit"):
             rows.append({"label": "Security deposit", "value": data["deposit"], "sub": "Refundable when you return the gown"})
+        if content["money"] and data.get("deduction"):
+            rows.append({"label": "Off your deposit", "value": "- " + data["deduction"],
+                         "sub": "Booked days outside the free days (2 before and 2 after your event), taken from the deposit when the gown is returned"})
         if content["money"] and data.get("total"):
             rows.append({"label": "Total", "value": data["total"], "sub": ""})
 
@@ -383,12 +386,18 @@ def _reservation_data(reservation, text=""):
     # (unless every gown was cancelled, when the cancelled booking lists them all).
     every = list(reservation.items.all())
     kept = [item for item in every if item.stage != item.Stage.CANCELLED] or every
-    items = [(item.gown_name, _date_range(item.rental_date, item.return_date)) for item in kept]
+    items = [(item.gown_name, _date_range(item.rental_date, item.return_date) + (f", event {item.effective_event_date:%b} {item.effective_event_date.day}"
+                                                                                 if item.uses_free_days else "")) for item in kept]
+    # The booked days outside the free days: what will come out of the deposit (reservations/ledger.py), shown from the first email on.
+    from reservations import ledger
+    rate = int(reservation.late_fee_per_day or 0)
+    extra = sum(sum(ledger.booked_extra_days(item)) for item in kept if item.stage != item.Stage.CANCELLED) * rate
     return {
         "first_name": _first_name(reservation.customer_name),
         "reference_code": reservation.reference_code,
         "items": items,
         "deposit": _peso(reservation.security_deposit),
+        "deduction": _peso(extra) if extra > 0 else "",
         "total": _peso(reservation.total_amount),
         "text": text,
     }

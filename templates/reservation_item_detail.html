@@ -338,7 +338,36 @@
                   <span class="material-symbols-outlined text-base">calendar_today</span>
                   <span>{{ item.rental_date|date:"M d" }} &mdash; {{ item.return_date|date:"M d, Y" }}</span>
                 </div>
+                {% if item.shown_return_date != item.return_date %}
+                  <p class="text-sm text-secondary/70">You planned to return it on {{ item.shown_return_date|date:"M d" }}. Returning it until {{ item.return_date|date:"M d" }} is free.</p>
+                {% endif %}
               </div>
+
+              {% if item.uses_free_days and variation != "rejected" and variation != "cancelled" %}
+              {# The free days (2 before and 2 after the event first booked) and what the booked days outside them take out of the deposit. #}
+              <div class="flex flex-col gap-2">
+                <label class="text-[0.6875rem] font-semibold uppercase tracking-[0.1rem] text-secondary/60">Free Days</label>
+                <p class="text-sm text-secondary">{{ item.free_pickup_date|date:"M d" }} &mdash; {{ item.free_return_date|date:"M d, Y" }} <span class="text-secondary/60">(2 days before and 2 days after your event)</span></p>
+                {% if item_fee.amount > 0 %}
+                  <div class="border-l-2 border-[#d92d20] bg-[#fef3f2] px-4 py-3 text-sm text-[#b42318]">
+                    <p class="font-semibold">&minus; PHP {{ item_fee.amount|floatformat:"2g" }} off your security deposit</p>
+                    <p class="mt-1 text-[0.8125rem] leading-relaxed text-[#b42318]/85">
+                      {{ item_fee.days }} booked day{{ item_fee.days|pluralize }} outside the free days &times; PHP {{ item_fee.rate|floatformat:"0g" }}.
+                      {% if item_fee.early %}Pick-up {{ item_fee.early }} day{{ item_fee.early|pluralize }} early.{% endif %}
+                      {% with after=item_fee.later|add:item_fee.change %}{% if after %}Return {{ after }} day{{ after|pluralize }} later.{% endif %}{% endwith %}
+                      It is taken from the deposit when the gown is returned, even if you pick it up later or return it earlier.
+                    </p>
+                  </div>
+                {% endif %}
+              </div>
+              {% endif %}
+
+              {% if variation == "pending" or variation == "accepted" %}
+                <p class="flex items-start gap-2 text-[0.8125rem] leading-relaxed text-secondary/70">
+                  <span class="material-symbols-outlined text-base">call</span>
+                  <span>To change your dates, call Arabela{% if site_phone %} at <a href="{{ site_phone_tel }}" class="underline underline-offset-4 hover:text-secondary">{{ site_phone }}</a>{% endif %} with your booking number, {{ reservation.reference_code }}.</span>
+                </p>
+              {% endif %}
 
               {% if variation == "returned" %}
                 <div class="flex flex-col gap-2">
@@ -430,6 +459,17 @@
             </div>
           </div>
 
+          {% if money.extra_days_fee > 0 %}
+          <div class="mt-8 max-w-2xl border-l-2 border-amber-300 bg-amber-50/50 p-6 text-sm text-secondary">
+            <p class="mb-2 text-[0.6875rem] font-semibold uppercase tracking-[0.1rem] text-amber-800">Extra days</p>
+            {% for line in money.fee_lines %}{% if line.kind == "early" or line.kind == "later" %}
+              <p>{{ line.gown }}: {{ line.label|lower|capfirst }}, {{ line.days }} day{{ line.days|pluralize }} x PHP {{ line.rate|floatformat:"0g" }} = <strong>PHP {{ line.amount|floatformat:"2g" }}</strong></p>
+              <p class="text-secondary/70">{% if line.kind == "early" %}Pick-up {{ line.pickup }}; the free days start {{ line.free_from }}.{% else %}Return {{ line.until }}; the free days end {{ line.free_until }}.{% endif %}</p>
+            {% endif %}{% endfor %}
+            <p class="mt-2 text-secondary/70">Booked days outside the free days are taken from your security deposit, even if you pick up later or return earlier.</p>
+          </div>
+          {% endif %}
+
           {% if money.change_fee > 0 %}
           <div class="mt-8 max-w-2xl border-l-2 border-amber-300 bg-amber-50/50 p-6 text-sm text-secondary">
             <p class="mb-2 text-[0.6875rem] font-semibold uppercase tracking-[0.1rem] text-amber-800">Date change fee</p>
@@ -452,10 +492,13 @@
           </div>
           {% endif %}
 
-          {% if money.deductions_total > 0 or money.all_returned %}
+          {% if money.deductions_total > 0 or money.all_returned or money.total_deduction > 0 %}
           <div class="mt-8 max-w-2xl space-y-2 text-sm">
             <p class="text-[0.6875rem] font-semibold uppercase tracking-[0.1rem] text-secondary/60">Your security deposit</p>
             <div class="flex items-center justify-between text-secondary/70"><span>Deposit paid</span><span>PHP {{ money.deposit_paid|floatformat:"2g" }}</span></div>
+            {% if money.extra_credit > 0 %}<div class="flex items-center justify-between text-secondary/70"><span>Extra charge you paid before</span><span>+ PHP {{ money.extra_received|floatformat:"2g" }}</span></div>{% endif %}
+            {% if money.early_fee > 0 %}<div class="flex items-center justify-between text-secondary/70"><span>Early pick-up fee</span><span>- PHP {{ money.early_fee|floatformat:"2g" }}</span></div>{% endif %}
+            {% if money.later_fee > 0 %}<div class="flex items-center justify-between text-secondary/70"><span>Later return fee</span><span>- PHP {{ money.later_fee|floatformat:"2g" }}</span></div>{% endif %}
             {% if money.change_fee > 0 %}<div class="flex items-center justify-between text-secondary/70"><span>Date change fee</span><span>- PHP {{ money.change_fee|floatformat:"2g" }}</span></div>{% endif %}
             <div class="flex items-center justify-between text-secondary/70"><span>Overdue fee</span><span>- PHP {{ money.overdue_fee|floatformat:"2g" }}</span></div>
             <div class="flex items-center justify-between text-secondary/70"><span>Deductions</span><span>- PHP {{ money.deductions_total|floatformat:"2g" }}</span></div>
@@ -572,6 +615,7 @@
               <div>
                 <p class="text-sm font-medium text-secondary">{{ si.gown_name }}{% if si.stage == "Cancelled" %} <span class="text-xs font-normal text-secondary/60">&middot; Cancelled</span>{% endif %}</p>
                 <p class="text-xs text-secondary/60">{% if si.size %}Size {{ si.size }} &middot; {% endif %}{{ si.rental_date|date:"M d" }}&ndash;{{ si.return_date|date:"M d, Y" }}</p>
+                {% if si.event_date %}<p class="text-xs text-secondary/60">Event {{ si.effective_event_date|date:"M d" }}</p>{% endif %}
               </div>
               <p class="whitespace-nowrap text-sm font-semibold text-secondary">PHP {{ si.rental_price|floatformat:2 }}</p>
             </div>
@@ -586,6 +630,12 @@
             <span>Security Deposit</span>
             <span>PHP {{ reservation.security_deposit|floatformat:2 }}</span>
           </div>
+          {% if money.total_deduction > 0 %}
+          <div class="rounded-[6px] border-l-2 border-[#d92d20] bg-[#fef3f2] px-3 py-2 text-[#b42318]">
+            <p class="font-semibold">&minus; PHP {{ money.total_deduction|floatformat:2 }} off your security deposit</p>
+            {% if variation != "cancelled" and variation != "rejected" %}<p class="mt-1 text-[0.75rem]">{% if deposit_over %}PHP {{ deposit_over|floatformat:2 }} more than the deposit is paid at the shop.{% else %}Deposit back after the return: PHP {{ deposit_back|floatformat:2 }}{% endif %}</p>{% endif %}
+          </div>
+          {% endif %}
           <div class="h-px w-full bg-black/5"></div>
           <div class="flex items-center justify-between text-base font-semibold text-secondary">
             <span>Total Amount</span>

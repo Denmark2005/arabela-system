@@ -47,20 +47,20 @@ def make_gown(number, name="Deposit Gown"):
 
 
 class DepositHelperTests(TestCase):
-    def test_the_default_is_two_thousand_and_the_range_is_one_to_ten_thousand(self):
+    def test_the_default_and_the_lowest_are_two_thousand_and_the_highest_ten_thousand(self):
         self.assertEqual(SiteSettings.load().security_deposit_per_gown, 2000)
-        self.assertEqual((deposit.DEFAULT_PER_GOWN, deposit.MIN_PER_GOWN, deposit.MAX_PER_GOWN), (2000, 1, 10000))
+        self.assertEqual((deposit.DEFAULT_PER_GOWN, deposit.MIN_PER_GOWN, deposit.MAX_PER_GOWN), (2000, 2000, 10000))
         self.assertEqual(deposit.per_gown(), 2000)
 
     def test_only_whole_pesos_inside_the_range_are_accepted(self):
-        for good in (1, 5, 2000, 10000, "1", " 250 ", "5,000", 7.0, Decimal("12")):
+        for good in (2000, 2500, 10000, "2000", " 2500 ", "5,000", 7000.0, Decimal("3000")):
             self.assertIsNotNone(deposit.clean(good), good)
-        for bad in (0, -3, 10001, 1.5, "abc", "", "1.5", None, True, "12 pesos", [], Decimal("1.5"), "-5"):
+        for bad in (0, 1, 5, 1999, "1999", -3, 10001, 1.5, "abc", "", "1.5", None, True, "12 pesos", [], Decimal("1.5"), "-5", 2000.5):
             self.assertIsNone(deposit.clean(bad), bad)
 
     def test_the_total_is_per_gown_times_the_number_of_gowns(self):
-        set_deposit(1)
-        self.assertEqual(deposit.for_gowns(5), Decimal("5"))
+        set_deposit(2500)
+        self.assertEqual(deposit.for_gowns(5), Decimal("12500"))
         set_deposit(2000)
         self.assertEqual(deposit.for_gowns(3), Decimal("6000"))
 
@@ -93,10 +93,10 @@ class OnlyTheOwnerCanChangeItTests(TestCase):
 
     def test_the_owner_changes_it_and_it_is_stored(self):
         for user in (self.owner, self.superuser):
-            response = self.save(user, 1)
+            response = self.save(user, 3000)
             self.assertEqual(response.status_code, 200, user)
-            self.assertEqual(response.json(), {"success": True, "amount": 1, "is_default": False})
-            self.assertEqual(SiteSettings.load().security_deposit_per_gown, 1)
+            self.assertEqual(response.json(), {"success": True, "amount": 3000, "is_default": False})
+            self.assertEqual(SiteSettings.load().security_deposit_per_gown, 3000)
         self.assertTrue(self.save(self.owner, "2000").json()["is_default"])
         self.assertEqual(deposit.per_gown(), 2000)
 
@@ -118,14 +118,16 @@ class OnlyTheOwnerCanChangeItTests(TestCase):
         self.assertEqual(self.client.get(SAVE).status_code, 405)
 
     def test_amounts_that_are_not_whole_pesos_in_range_are_refused_and_nothing_changes(self):
-        for bad in (0, -1, 10001, 1.5, "abc", "", None, True, [5], {"a": 1}):
+        for bad in (0, -1, 1, 500, 1999, "1,999", 10001, 1.5, "abc", "", None, True, [5], {"a": 1}):
             response = self.save(self.owner, bad)
             self.assertEqual(response.status_code, 400, bad)
-            self.assertIn("whole number of pesos from 1 to 10,000", response.json()["error"])
+            self.assertIn("whole number of pesos from 2,000 to 10,000", response.json()["error"])
+            self.assertIn("never set below \u20b12,000", response.json()["error"])
         self.assertEqual(SiteSettings.load().security_deposit_per_gown, 2000)
 
     def test_the_edges_are_allowed(self):
-        self.assertEqual(self.save(self.owner, 1).status_code, 200)
+        self.assertEqual(self.save(self.owner, 2000).status_code, 200)
+        self.assertEqual(SiteSettings.load().security_deposit_per_gown, 2000)
         self.assertEqual(self.save(self.owner, 10000).status_code, 200)
         self.assertEqual(SiteSettings.load().security_deposit_per_gown, 10000)
 
@@ -140,16 +142,18 @@ class OnlyTheOwnerCanChangeItTests(TestCase):
         html = self.client.get(page).content.decode()
         self.assertIn('x-data="depositCard()"', html)
         self.assertIn('data-amount="2000"', html)
-        self.assertIn("Test amount", html)                                # the yellow note exists (hidden until the amount is not 2,000)
+        self.assertNotIn("Test amount", html)                             # any amount from 2,000 up is a real one now
+        self.assertIn("never set below &#8369;2,000", html)
+        self.assertIn("min: 2000, max: 10000", html)
         for user in (self.staff, self.manager, self.no_profile):
             self.client.force_login(user)
             self.assertNotIn('x-data="depositCard()"', self.client.get(page).content.decode(), user)
 
     def test_the_card_shows_the_saved_amount(self):
-        set_deposit(7)
+        set_deposit(7000)
         self.client.force_login(self.owner)
         html = self.client.get(reverse("arabela_admin:page", kwargs={"page": "profile"})).content.decode()
-        self.assertIn('data-amount="7"', html)
+        self.assertIn('data-amount="7000"', html)
 
 
 class WordsAndScriptsFollowTheSettingTests(TestCase):
@@ -169,31 +173,31 @@ class WordsAndScriptsFollowTheSettingTests(TestCase):
             self.assertIn("Php 2,000.00", self.html(name), name)
 
     def test_the_pages_say_the_owners_amount_and_never_the_old_one(self):
-        set_deposit(1)
+        set_deposit(3000)
         for name in ("gowns:faqs", "gowns:how_it_works", "gowns:terms_and_conditions"):
             html = self.html(name)
-            self.assertIn("Php 1.00", html, name)
+            self.assertIn("Php 3,000.00", html, name)
             self.assertNotIn("Php 2,000.00", html, name)
 
     def test_the_bag_the_checkout_and_the_footer_scripts_use_the_amount(self):
-        set_deposit(7)
-        self.assertIn("const DEPOSIT_PER_ITEM = 7;", self.html("gowns:selection"))
+        set_deposit(7000)
+        self.assertIn("const DEPOSIT_PER_ITEM = 7000;", self.html("gowns:selection"))
         reservation_page = self.html("gowns:reservation")
-        self.assertIn('data-deposit-per-gown="7"', reservation_page)
-        self.assertIn("const SECURITY_DEPOSIT_PESOS = 7;", reservation_page)
+        self.assertIn('data-deposit-per-gown="7000"', reservation_page)
+        self.assertIn("const SECURITY_DEPOSIT_PESOS = 7000;", reservation_page)
 
     def test_the_terms_summary_uses_the_short_form(self):
-        set_deposit(350)
+        set_deposit(3500)
         self.client.force_login(self.customer)
         response = self.client.get(reverse("gowns:selection"))
-        self.assertIn("Php 350 for every booking", response.content.decode())
+        self.assertIn("Php 3,500 for every gown", response.content.decode())
 
     def test_the_ai_chat_quotes_the_current_amount(self):
         from ai_recommendation import views as ai
 
-        set_deposit(1500)
+        set_deposit(2500)
         prompt = ai._system_prompt()
-        self.assertIn("P1,500 security deposit for each gown", prompt)
+        self.assertIn("P2,500 security deposit for each gown", prompt)
         self.assertNotIn("P2,000", prompt)
 
 
@@ -234,42 +238,42 @@ class CheckoutUsesTheSettingTests(TestCase):
         self.assertEqual(reservation.security_deposit, Decimal("6000.00"))
         self.assertEqual(reservation.total_amount, reservation.rental_subtotal + Decimal("6000.00"))
 
-    def test_one_peso_per_gown_makes_five_gowns_five_pesos(self):
-        set_deposit(1)
-        reservation = self.booking(self.checkout("a", self.gowns[:5], expected=5))
-        self.assertEqual(reservation.security_deposit, Decimal("5.00"))
-        self.assertEqual(reservation.total_amount, reservation.rental_subtotal + Decimal("5.00"))
+    def test_a_higher_deposit_is_charged_for_every_gown(self):
+        set_deposit(2500)
+        reservation = self.booking(self.checkout("a", self.gowns[:5], expected=12500))
+        self.assertEqual(reservation.security_deposit, Decimal("12500.00"))
+        self.assertEqual(reservation.total_amount, reservation.rental_subtotal + Decimal("12500.00"))
 
     def test_a_page_opened_before_the_owner_changed_it_is_told_and_nothing_is_booked(self):
-        set_deposit(1)
+        set_deposit(3000)
         response = self.checkout("a", self.gowns[:2], expected=4000)       # the page still showed 2 x 2,000
         self.assertEqual(response.status_code, 409)
         data = response.json()
         self.assertTrue(data["deposit_changed"])
-        self.assertEqual(data["deposit_per_gown"], 1)
-        self.assertIn("changed to ₱1 per gown", data["error"])
-        self.assertIn("now ₱2", data["error"])
+        self.assertEqual(data["deposit_per_gown"], 3000)
+        self.assertIn("changed to ₱3,000 per gown", data["error"])
+        self.assertIn("now ₱6,000", data["error"])
         self.assertFalse(Reservation.objects.exists())
 
     def test_an_old_page_that_sends_no_expected_amount_is_still_served_the_current_deposit(self):
-        set_deposit(3)
+        set_deposit(3000)
         reservation = self.booking(self.checkout("a", self.gowns[:2]))
-        self.assertEqual(reservation.security_deposit, Decimal("6.00"))
+        self.assertEqual(reservation.security_deposit, Decimal("6000.00"))
 
     def test_a_booking_keeps_the_deposit_it_was_made_with(self):
         first = self.booking(self.checkout("a", self.gowns[:1], expected=2000))
-        set_deposit(1)
-        second = self.booking(self.checkout("b", self.gowns[1:2], expected=1, event=self.event + timedelta(days=10)))
+        set_deposit(2500)
+        second = self.booking(self.checkout("b", self.gowns[1:2], expected=2500, event=self.event + timedelta(days=10)))
         first.refresh_from_db()
         self.assertEqual(first.security_deposit, Decimal("2000.00"))
-        self.assertEqual(second.security_deposit, Decimal("1.00"))
+        self.assertEqual(second.security_deposit, Decimal("2500.00"))
 
     def test_the_customer_cannot_send_their_own_deposit(self):
-        set_deposit(1)
+        set_deposit(2500)
         self.client.force_login(self.customers["a"])
-        response = self.checkout("a", self.gowns[:1], expected=1)
+        response = self.checkout("a", self.gowns[:1], expected=2500)
         reservation = self.booking(response)
-        self.assertEqual(reservation.security_deposit, Decimal("1.00"))
+        self.assertEqual(reservation.security_deposit, Decimal("2500.00"))
 
 
 class WalkInBookingUsesTheSettingTests(TestCase):
@@ -295,20 +299,20 @@ class WalkInBookingUsesTheSettingTests(TestCase):
         return self.client.post(reverse("arabela_admin:booking_create"), data=data)
 
     def test_a_walk_in_booking_adds_the_owners_deposit(self):
-        set_deposit(1)
+        set_deposit(2500)
         response = self.book()
         self.assertEqual(response.status_code, 200, response.content)
         reservation = Reservation.objects.get(channel=Reservation.Channel.WALK_IN)
-        self.assertEqual(reservation.security_deposit, Decimal("1.00"))
-        self.assertEqual(reservation.total_amount, reservation.rental_subtotal + Decimal("1.00"))
+        self.assertEqual(reservation.security_deposit, Decimal("2500.00"))
+        self.assertEqual(reservation.total_amount, reservation.rental_subtotal + Decimal("2500.00"))
 
     def test_the_new_booking_page_tells_its_script_the_amount(self):
-        set_deposit(9)
+        set_deposit(9000)
         page = self.client.get(reverse("arabela_admin:new_booking"))
         self.assertEqual(page.status_code, 200)
-        self.assertIn("DEPOSIT: 9,", page.content.decode())
+        self.assertIn("DEPOSIT: 9000,", page.content.decode())
 
     def test_the_starting_default_in_the_module_is_only_a_default(self):
         self.assertEqual(staff_booking.DEPOSIT_PER_GOWN, Decimal("2000"))
-        set_deposit(4)
-        self.assertEqual(deposit.for_gowns(2), Decimal("8"))
+        set_deposit(4000)
+        self.assertEqual(deposit.for_gowns(2), Decimal("8000"))

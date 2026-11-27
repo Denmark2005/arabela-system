@@ -296,8 +296,10 @@ def terms_gate(request):
     Nothing for visitors, staff or the admin area, and no database query for them."""
     from arabela_system.middleware import is_admin_area
     user = getattr(request, "user", None)
-    if is_admin_area(request.path) or not terms.applies_to(user):
+    if is_admin_area(request.path):
         return {}
+    if not terms.applies_to(user):
+        return {"terms_label": terms.label()}            # the Terms page says which version it shows, to everyone (no database query)
     return {"terms_needed": not terms.has_accepted(user), "terms_label": terms.label()}
 
 
@@ -360,7 +362,14 @@ def site_settings(request):
         # The security deposit per gown the owner set (gowns/deposit.py): the pages' scripts and the FAQ / How It Works / Terms wording
         # all read these, so changing the setting changes every place at once.
         "site_deposit_per_gown": deposit_per_gown,
+        "site_deposit_min_per_gown": deposit.MIN_PER_GOWN,           # the owner can raise the deposit, never set it below this
+        "site_deposit_max_per_gown": deposit.MAX_PER_GOWN,
         "site_late_fee_per_day": late_fee_per_day,
+        "site_late_fee_php": f"Php {late_fee_per_day:,}.00",         # the extra-day / late fee per gown per day, as the Terms and FAQ write it
+        "site_late_fee_php_short": f"Php {late_fee_per_day:,}",           # the same, short, for the pop-up's summary
+        # The worked example the Terms and FAQ give (4 extra days on one gown), in the owner's own amounts.
+        "site_extra_example": {"days": 4, "fee": f"Php {late_fee_per_day * 4:,}.00", "deposit": deposit.php_text(deposit_per_gown),
+                               "back": deposit.php_text(max(deposit_per_gown - late_fee_per_day * 4, 0))},
         # True while the checkout pays through PayMongo (a key is set): the pages that explain how to pay say so (How it works, FAQs, the product page).
         "paymongo_enabled": gateway.enabled(),
         "payment_provider_label": gateway.label(),                 # "Xendit" or "PayMongo": the pages that explain how to pay name the service

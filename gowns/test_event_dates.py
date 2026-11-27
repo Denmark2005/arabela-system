@@ -129,9 +129,9 @@ class PlannerRulesTests(SimpleTestCase):
         bookings = {large.id: [(event - D(days=2), event + D(days=2))]}
         plans = availability.plan_calendar([small, large], bookings, {}, at(self.today, 10), 30, lambda unit: unit.code)
         self.assertEqual(set(plans), {"*", "S", "L"})
-        self.assertEqual(plans["S"][event.isoformat()], [(event - D(days=2)).isoformat(), 1])
+        self.assertEqual(plans["S"][event.isoformat()][:2], [(event - D(days=2)).isoformat(), 1])
         self.assertEqual(plans["L"][event.isoformat()], "booked")
-        self.assertEqual(plans["*"][event.isoformat()], [(event - D(days=2)).isoformat(), 1])   # one of the two is free
+        self.assertEqual(plans["*"][event.isoformat()][:2], [(event - D(days=2)).isoformat(), 1])   # one of the two is free
         self.assertEqual(plans["*"][self.today.isoformat()][1], 2)
 
     def test_today_is_open_until_five_and_closed_after(self):
@@ -139,9 +139,9 @@ class PlannerRulesTests(SimpleTestCase):
         before = availability.plan_calendar([unit], {}, {}, at(self.today, 16, 59), 3, lambda u: "")
         after = availability.plan_calendar([unit], {}, {}, at(self.today, 17, 0), 3, lambda u: "")
         today, tomorrow = self.today.isoformat(), (self.today + D(days=1)).isoformat()
-        self.assertEqual(before["*"][today], [today, 1])
+        self.assertEqual(before["*"][today][:2], [today, 1])
         self.assertEqual(after["*"][today], "closed")
-        self.assertEqual(after["*"][tomorrow], [tomorrow, 1])                      # event tomorrow, picked up tomorrow
+        self.assertEqual(after["*"][tomorrow][:2], [tomorrow, 1])                      # event tomorrow, picked up tomorrow
 
     def test_open_event_dates_lists_only_the_bookable_ones(self):
         unit = make_unit_stub(1, "")
@@ -346,18 +346,18 @@ class GownPageCalendarDataTests(TestCase):
         self.assertEqual(data["seconds"], 10 * 3600)
         self.assertEqual(data["closes"], 17 * 3600)
         in_ten = (self.today + D(days=10)).isoformat()
-        self.assertEqual(data["plans"]["M"][in_ten], [(self.today + D(days=8)).isoformat(), 1])
+        self.assertEqual(data["plans"]["M"][in_ten][:2], [(self.today + D(days=8)).isoformat(), 1])
 
     def test_before_five_the_page_also_knows_what_today_and_tomorrow_become_at_five(self):
         data = self.page(at(self.today, 10)).context["calendar_data"]
         tomorrow = (self.today + D(days=1)).isoformat()
         self.assertIsInstance(data["plans"]["*"][self.today.isoformat()], list)
         self.assertEqual(data["late"]["*"][self.today.isoformat()], "closed")
-        self.assertEqual(data["late"]["*"][tomorrow], [tomorrow, 1])
+        self.assertEqual(data["late"]["*"][tomorrow][:2], [tomorrow, 1])
         # an event the day after tomorrow is normally picked up today; once the shop closes it is picked up tomorrow
         in_two = (self.today + D(days=2)).isoformat()
-        self.assertEqual(data["plans"]["*"][in_two], [self.today.isoformat(), 1])
-        self.assertEqual(data["late"]["*"][in_two], [tomorrow, 1])
+        self.assertEqual(data["plans"]["*"][in_two][:2], [self.today.isoformat(), 1])
+        self.assertEqual(data["late"]["*"][in_two][:2], [tomorrow, 1])
         self.assertNotIn((self.today + D(days=3)).isoformat(), data["late"]["*"])      # later events don't change at 5 PM
 
     def test_after_five_today_is_already_closed_and_nothing_more_is_needed(self):
@@ -373,7 +373,7 @@ class GownPageCalendarDataTests(TestCase):
         for later in range(-4, 8):
             self.assertEqual(plans[(event + D(days=later)).isoformat()], "booked", later)
         first_free = (event + D(days=8)).isoformat()
-        self.assertEqual(plans[first_free], [first_free, 1])
+        self.assertEqual(plans[first_free][:2], [first_free, 1])
 
     def test_the_days_just_before_a_later_booking_are_marked_as_rest_days(self):
         later = self.today + D(days=40)

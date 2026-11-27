@@ -168,7 +168,8 @@ def money_between(start=None, end=None, today=None):
                   page, reservations/ledger.py), so a "Paid in full" counts only its rental part and a deposit-only payment counts nothing.
       by_booking  {booking id: its income}, for the bookings that income came from.
       kept        the fees and deductions the shop kept: what they took out of the deposit of a booking whose last gown came back in these days (only
-                  then are the fees final), plus an extra charge paid on top of a deposit in these days.
+                  then are the fees final), plus an extra charge paid on top of a deposit in these days (less any part the fees no longer ask for,
+                  which goes back to the customer: ledger.extra_credit).
       collected   the security-deposit part of the payments received.
       returned    the deposit money handed back.
       payments    every payment in these days, oldest first: {"reservation", "row" (see _money_rows), "day", "rental", "deposit", "extra", "other"}
@@ -193,7 +194,15 @@ def money_between(start=None, end=None, today=None):
             continue
         deposit_due, rental_due = ledger.money(reservation.security_deposit), ledger.rental_due(reservation)
         received = earned = zero
-        for row in _money_rows(reservation):
+        rows = _money_rows(reservation)
+        statement = ledger.statement(reservation, today)
+        # The part of the extra charges that goes back with the deposit (dates moved back after it was paid), taken off the latest ones first.
+        give_back, not_kept = statement.extra_credit, {}
+        for index in reversed(range(len(rows))):
+            if give_back > 0 and rows[index]["direction"] == Payment.Direction.IN and rows[index]["purpose"] == Payment.Purpose.EXTRA:
+                not_kept[index] = min(rows[index]["amount"], give_back)
+                give_back -= not_kept[index]
+        for index, row in enumerate(rows):
             day = timezone.localtime(row["paid_at"]).date()
             amount = row["amount"]
             parts = {"rental": zero, "deposit": zero, "extra": zero, "other": zero}
@@ -203,7 +212,7 @@ def money_between(start=None, end=None, today=None):
             elif row["purpose"] == Payment.Purpose.EXTRA:
                 parts["extra"] = amount
                 if inside(day):
-                    kept += amount
+                    kept += amount - not_kept.get(index, zero)
             elif row["purpose"] in CORE_PURPOSES:
                 deposit_before = min(received, deposit_due)
                 rental_before = min(max(received - deposit_due, zero), rental_due)
@@ -221,7 +230,6 @@ def money_between(start=None, end=None, today=None):
         if earned > 0:
             income += earned
             by_booking[reservation.pk] = earned
-        statement = ledger.statement(reservation, today)
         if statement.all_returned and statement.deposit_used > 0:
             back = [i.returned_on for i in reservation.items.all() if i.stage == ReservationItem.Stage.RETURNED and i.returned_on]
             if back and inside(max(back)):

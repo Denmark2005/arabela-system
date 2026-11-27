@@ -1,5 +1,6 @@
 import json
 from datetime import timedelta
+from decimal import Decimal
 
 from django.conf import settings
 from django.db import IntegrityError, models, transaction
@@ -697,6 +698,19 @@ class ReservationItem(models.Model):
     # (picked_up_on/returned_on below) -- without the system doing that Php 200/day math itself.
     original_rental_date = models.DateField(null=True, blank=True)
     original_return_date = models.DateField(null=True, blank=True)
+    # The FREE days of a booking made since the customer chooses all three dates (reservations/ledger.py): two days before the event the
+    # customer first booked, and two days after it. Each booked day outside them costs the booking's late_fee_per_day, taken from the
+    # security deposit. Set once at booking and never moved (not even when staff change the event date). Both empty = a booking made before
+    # this rule, which keeps the old money rules (only days after the original return date were ever charged).
+    free_pickup_date = models.DateField(null=True, blank=True)
+    free_return_date = models.DateField(null=True, blank=True)
+    # The return day the customer chose when it is BEFORE free_return_date (1 day after the event). Returning any day up to free_return_date is
+    # free, so the gown stays booked until then and return_date holds that day; this only remembers what the customer said they planned.
+    planned_return_date = models.DateField(null=True, blank=True)
+    # Every saved change of the return date by staff: [{"from": ISO, "to": ISO, "by": name, "at": ISO datetime}]. From the third one the
+    # Audit Log line is marked important, so the owner sees who keeps moving it (arabela_admin/audit_describe.py). Nullable so an older
+    # deployment sharing the database can still insert rows.
+    return_changes = models.JSONField(default=list, blank=True, null=True)
     # The Rental Schedule shows ONE status at a time, chosen by staff (item.stage). Each
     # status maps to its own dates: Pick-up = rental_date..event_date-1, Reserved = the
     # event day, Return = event_date+1..return_date, Overdue = the overdue_date. All four
@@ -734,16 +748,41 @@ class ReservationItem(models.Model):
 
     @property
     def effective_event_date(self):
-        """The customer's event day. event_date is never saved at checkout, so until
-        staff set one it's worked out from the return date: checkout always books
-        return = event + 2, while pick-up gets pinned to today for a booking made less
-        than 2 days out (products.html's clampedPickup) -- so "pick-up + 2" (the old
-        guess) lands on the wrong day for those, and "return - 2" is right for every
-        booking. Never earlier than the pick-up date, so the four dates stay in order
-        even if staff have since shrunk the window."""
+        """The customer's event day. Bookings made since the customer chooses the event, pick-up and return save it (event_date). An
+        older booking never saved it at checkout, so until staff set one it's worked out from the return date: checkout always booked
+        return = event + 2, while pick-up got pinned to today for a booking made less than 2 days out -- so "pick-up + 2" (the old
+        guess) lands on the wrong day for those, and "return - 2" is right for every such booking. Never earlier than the pick-up
+        date, so the four dates stay in order even if staff have since shrunk the window."""
         if self.event_date:
             return self.event_date
         return max(self.rental_date, self.return_date - timedelta(days=2))
+
+    @property
+    def uses_free_days(self):
+        """A booking made under the free-days rule (free_pickup_date / free_return_date): every booked day outside them is charged."""
+        return self.free_pickup_date is not None and self.free_return_date is not None
+
+    @property
+    def extra_days_count(self):
+        """A free-days booking's booked days outside its free days (reservations/ledger.booked_extra_days), 0 for an older booking."""
+        from reservations import ledger
+        return sum(ledger.booked_extra_days(self))
+
+    @property
+    def extra_days_fee(self):
+        """What those days take out of the security deposit, at the booking's fee per day (a Decimal, 0 when none)."""
+        return Decimal(self.extra_days_count * int(self.reservation.late_fee_per_day or 0))
+
+    @property
+    def shown_return_date(self):
+        """The return day to show the CUSTOMER: the day they chose (planned_return_date, 1 day after the event) when it is earlier than the
+        free return day the gown is kept until, else the return date. Once staff move the dates so that day no longer fits (a return that is not
+        the free return day, or an event or pick-up after it), the return date is the one shown."""
+        planned = self.planned_return_date
+        if (planned and planned < self.return_date and self.return_date == self.free_return_date
+                and planned >= self.rental_date and planned > self.effective_event_date):
+            return planned
+        return self.return_date
 
     @property
     def effective_return_date(self):

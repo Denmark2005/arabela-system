@@ -49,6 +49,11 @@
 <span class="font-label text-[0.625rem] tracking-[0.2em] uppercase text-secondary">Security Deposit</span>
 <span class="font-label text-[0.875rem] tabular-nums" id="selection-cart-deposit">₱ 0</span>
 </div>
+<!-- Days outside the free days: taken from the deposit when the gowns are returned (never added to the total). -->
+<div class="flex items-center justify-end gap-10 text-[#b42318]" id="selection-cart-deduction-row" hidden>
+<span class="font-label text-[0.625rem] tracking-[0.2em] uppercase font-semibold">Off your deposit after return</span>
+<span class="font-label text-[0.875rem] font-semibold tabular-nums" id="selection-cart-deduction">₱ 0</span>
+</div>
 </div>
 <div class="flex flex-col">
 <span class="font-label text-[0.625rem] tracking-[0.2em] uppercase text-secondary">Total</span>
@@ -124,6 +129,8 @@ function renderCart() {
     cartSubtotalSpan.textContent = '₱ 0';
     cartDepositSpan.textContent = '₱ 0';
     cartTotalSpan.textContent = '₱ 0 PHP';
+    const emptyDeduction = document.getElementById('selection-cart-deduction-row');
+    if (emptyDeduction) emptyDeduction.hidden = true;
     return;
   }
   cart.forEach((item, idx) => {
@@ -148,6 +155,8 @@ function renderCart() {
               : `<p class="text-[0.75rem] text-secondary tracking-widest uppercase">Size: ${window.arabelaSizeLabel(item.size)}</p>`}
             ${window.arabelaHasRentalDates(item)
               ? `<p class="text-[0.75rem] text-secondary tracking-widest uppercase">Rental: ${item.rental}</p>`
+                + (window.arabelaEventText(item) ? `<p class="text-[0.75rem] text-secondary tracking-widest uppercase">${window.arabelaEventText(item)}</p>` : '')
+                + (window.arabelaDeductionText(item, qty) ? `<p class="text-[0.75rem] font-semibold text-[#b42318]">&minus; ${window.arabelaDeductionText(item, qty)}</p>` : '')
               : `<a href="${getProductDetailUrl(item, idx)}" class="inline-flex items-center gap-1 text-[0.75rem] font-semibold tracking-widest uppercase text-[#b45309] no-underline hover:underline underline-offset-4">
                    <span class="material-symbols-outlined" style="font-size: 0.9rem;">event</span>Select rental date
                  </a>`}
@@ -181,6 +190,13 @@ function renderCart() {
   cartSubtotalSpan.textContent = formatPeso(subtotal);
   cartDepositSpan.textContent = formatPeso(deposit);
   cartTotalSpan.textContent = formatPeso(subtotal + deposit) + ' PHP';
+  // What the extra days take out of the deposit (reservation-flow.js works it out the same way checkout does).
+  const extraFee = cart.reduce((sum, item) => sum + (window.arabelaHasRentalDates(item) ? window.arabelaExtraDays(item).fee * Math.max(1, Number(item.qty) || 1) : 0), 0);
+  const deductionRow = document.getElementById('selection-cart-deduction-row');
+  if (deductionRow) {
+    deductionRow.hidden = !(extraFee > 0);
+    document.getElementById('selection-cart-deduction').textContent = '− ' + formatPeso(extraFee);
+  }
 }
 function removeCartItem(idx) {
   let cart = JSON.parse(localStorage.getItem(CART_STORAGE_KEY) || '[]');
@@ -258,6 +274,7 @@ function proceedReservationFromSelection() {
       qty: qty,
       lineTotal: lineTotal,
       rental: item.rental || '',
+      event: item.event || '',          // the event day: the free days (and the deposit deduction) count from it
       slug: item.id || '',
       // How many of this gown exist in this size, so checkout can check the same thing.
       maxQty: Number(item.maxQty) > 0 ? Number(item.maxQty) : undefined,

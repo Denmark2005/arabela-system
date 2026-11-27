@@ -372,6 +372,75 @@
     transition: opacity 180ms ease-out;
   }
 
+  /* ---- The three date fields (Event / Pick-up / Return). The highlighted field is the date a tap on the calendar sets. ---- */
+  .pd-fields { display: grid; gap: 0.625rem; }
+  .pd-fields-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.625rem; }
+  .pd-field {
+    display: flex; flex-direction: column; align-items: stretch; gap: 0.2rem; width: 100%; min-width: 0;
+    padding: 0.7rem 0.85rem 0.65rem; text-align: left; background: #ffffff; color: inherit;
+    border: 1px solid rgba(11,12,12,0.14); border-radius: 8px; cursor: pointer;
+    transition: border-color 160ms ease-out, box-shadow 160ms ease-out, background-color 160ms ease-out, opacity 220ms ease-out, transform 120ms ease-out;
+  }
+  .pd-field:hover:not(:disabled) { border-color: rgba(11,12,12,0.38); }
+  .pd-field:active:not(:disabled) { transform: scale(0.99); }
+  .pd-field.is-active { border-color: #0b0c0c; box-shadow: inset 0 0 0 1px #0b0c0c; }
+  .pd-field:disabled { cursor: not-allowed; opacity: 0.5; background: #fbfaf9; }
+  .pd-field:focus-visible { outline: 2px solid #0b0c0c; outline-offset: 2px; }
+  .pd-field-label { font-family: 'Inter', sans-serif; font-size: 0.625rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #615e57; }
+  .pd-field.is-active .pd-field-label { color: #0b0c0c; }
+  .pd-field-row { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; min-width: 0; min-height: 1.4rem; }
+  .pd-field-value { font-size: 0.9375rem; font-weight: 700; color: #1b1c1c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .pd-field-icon { font-size: 1.15rem; color: #615e57; flex: none; }
+  .pd-field-hint { font-size: 0.6875rem; line-height: 1.35; color: rgba(97,94,87,0.85); }
+  .pd-field-extra { flex: none; padding: 0.1rem 0.4rem; border-radius: 9999px; background: rgba(180,83,9,0.10); color: #92400e; font-size: 0.625rem; font-weight: 700; white-space: nowrap; }
+  .pd-field-extra[hidden] { display: none; }
+  .pd-field-extra.is-in { animation: pd-pop 260ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+  .pd-mode-hint { font-size: 0.75rem; line-height: 1.5; color: #615e57; min-height: 1.125rem; transition: color 160ms ease-out; }
+  .pd-mode-hint.is-warn { color: #92400e; font-weight: 600; }
+
+  /* The chosen days on the grid: the event is the black circle, the pick-up and the return the grey ones, the days between them shaded.
+     A day outside the free days (2 before and 2 after the event) is amber: it comes out of the security deposit. */
+  .product-calendar-day[data-selected="pickup"] .cal-day-mark,
+  .product-calendar-day[data-selected="return"] .cal-day-mark {
+    background: rgba(11,12,12,0.16); color: #0b0c0c; font-weight: 700; box-shadow: inset 0 0 0 1.5px rgba(11,12,12,0.55);
+    transform-origin: center; animation: product-cal-snap 260ms cubic-bezier(0.34, 1.56, 0.64, 1) both; animation-delay: 40ms;
+  }
+  .product-calendar-day[data-selected="in-range"] .cal-day-mark {
+    transform-origin: center; animation: product-cal-snap 240ms cubic-bezier(0.34, 1.56, 0.64, 1) both; animation-delay: 70ms;
+  }
+  .product-calendar-day[data-extra="true"][data-selected="in-range"] .cal-day-mark { background: rgba(180,83,9,0.12); color: #7c3d06; }
+  .product-calendar-day[data-extra="true"][data-selected="pickup"] .cal-day-mark,
+  .product-calendar-day[data-extra="true"][data-selected="return"] .cal-day-mark { background: rgba(180,83,9,0.20); color: #7c3d06; box-shadow: inset 0 0 0 1.5px rgba(180,83,9,0.75); }
+  /* While the pick-up or the return is being chosen: the days that can be chosen carry a faint ring. */
+  .product-calendar-day[data-choosable="true"]:not([data-selected]) .cal-day-mark { box-shadow: inset 0 0 0 1px rgba(11,12,12,0.20); }
+  .product-calendar-day[data-choosable="true"][data-extra-if-chosen="true"]:not([data-selected]) .cal-day-mark { box-shadow: inset 0 0 0 1px rgba(180,83,9,0.45); }
+
+  .pd-legend { display: flex; flex-wrap: wrap; gap: 0.4rem 0.9rem; margin-top: 0.9rem; font-size: 0.6875rem; color: #615e57; }
+  .pd-legend[hidden] { display: none; }
+  .pd-legend > span { display: inline-flex; align-items: center; gap: 0.35rem; }
+  .pd-legend-dot { width: 0.7rem; height: 0.7rem; border-radius: 9999px; display: inline-block; }
+  .pd-legend-dot--event { background: #0b0c0c; }
+  .pd-legend-dot--end { background: rgba(11,12,12,0.16); box-shadow: inset 0 0 0 1.5px rgba(11,12,12,0.55); }
+  .pd-legend-dot--free { background: rgba(11,12,12,0.10); }
+  .pd-legend-dot--extra { background: rgba(180,83,9,0.20); box-shadow: inset 0 0 0 1.5px rgba(180,83,9,0.75); }
+
+  /* The reminder under the calendar: what the chosen days cost, out of the security deposit. */
+  .pd-fee { display: flex; gap: 0.6rem; align-items: flex-start; margin-top: 1rem; padding: 0.75rem 0.9rem; border-radius: 8px; background: #fbfaf9; border: 1px solid rgba(11,12,12,0.08); }
+  .pd-fee[hidden] { display: none; }
+  .pd-fee.is-extra { background: rgba(180,83,9,0.06); border-color: rgba(180,83,9,0.28); }
+  .pd-fee-icon { font-size: 1.05rem; color: #615e57; margin-top: 0.05rem; flex: none; }
+  .pd-fee.is-extra .pd-fee-icon { color: #b45309; }
+  .pd-fee-title { font-size: 0.8125rem; font-weight: 700; line-height: 1.4; color: #1b1c1c; }
+  .pd-fee.is-extra .pd-fee-title { color: #7c3d06; }
+  .pd-fee-text { margin-top: 0.15rem; font-size: 0.75rem; line-height: 1.55; color: #615e57; }
+  .pd-fee.is-in { animation: pd-fee-in 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+  @keyframes pd-fee-in { from { opacity: 0; transform: translateY(-5px) scale(0.985); } to { opacity: 1; transform: none; } }
+  @keyframes pd-pop { from { opacity: 0; transform: scale(0.7); } to { opacity: 1; transform: scale(1); } }
+  @media (max-width: 380px) {
+    .pd-field { padding: 0.6rem 0.65rem; }
+    .pd-field-value { font-size: 0.875rem; }
+  }
+
   /* Live-sync confirmation: shown only while this page is editing an EXISTING
      bag row (arrived via ?cart_item_index=). A size/date change is written
      straight to the cart the moment it's picked -- this is the on-page receipt
@@ -411,6 +480,11 @@
     .product-cal-tooltip { transition: none; }
     .product-live-save { transition: none; }
     .product-live-save-spinner { animation: none; }
+    .pd-field { transition: none; }
+    .pd-field-extra.is-in, .pd-fee.is-in { animation: none; }
+    .product-calendar-day[data-selected="pickup"] .cal-day-mark,
+    .product-calendar-day[data-selected="return"] .cal-day-mark,
+    .product-calendar-day[data-selected="in-range"] .cal-day-mark { animation: none; }
   }
   /* ---- Front / Side / Back (a gown with side or back photos): the big picture fits the screen with the small ones under it. All the views are drawn to
      the same size (gowns/view_fit.py), so changing view only fades and slides, never jumps. ---- */
@@ -516,19 +590,40 @@
       {{ calendar_data|json_script:"product-calendar-data" }}
     </div>
 
-    <!-- Rental Date Picker (with JS logic) -->
+    <!-- Rental Date Picker: the customer chooses the EVENT date first; the pick-up and the return fill in by themselves (the free days around
+         it) and can then be changed. Every booked day outside the free days comes out of the security deposit (reservations/ledger.py): the
+         reminder under the calendar says how much before anything is booked. All the rules come from the server (gowns/availability.py). -->
     <div class="space-y-4">
       <div>
         <label class="font-label text-[0.6875rem] tracking-widest uppercase font-bold">Select Rental Dates</label>
-        <!-- Sets the expectation BEFORE the tap, so the extra highlighted days are
-             never a surprise in the first place. "up to 2 days" because the server's plan
-             (calData) picks the earliest free day, never one in the past. -->
         <p class="mt-1.5 text-[0.75rem] leading-relaxed text-secondary">
-          Pick your <span class="font-semibold text-on-surface">event date</span> — pick-up is up to 2 days before (or on the event day if the gown is still being cleaned), 1:00 PM to 5:00 PM only. Return is 2 days after.
+          Choose your <span class="font-semibold text-on-surface">event date</span> first. Pick-up and return are set for you: 2 days before and 2 days after it, free of charge. Pick-up is 1:00 PM to 5:00 PM only.
         </p>
       </div>
-      <div class="relative bg-white p-6 rounded-lg border border-outline-variant/15 shadow-none">
-        <div class="flex justify-between items-center mb-6">
+      <div class="relative bg-white p-5 sm:p-6 rounded-lg border border-outline-variant/15 shadow-none" id="product-date-card">
+        <!-- The three dates. The highlighted one is what a tap on the calendar sets. -->
+        <div class="pd-fields" role="group" aria-label="Rental dates">
+          <button type="button" class="pd-field pd-field--event is-active" id="product-date-event" data-date-field="event" aria-pressed="true" aria-controls="product-cal-grid">
+            <span class="pd-field-label">Event Date</span>
+            <span class="pd-field-row"><span class="pd-field-value tabular-nums" id="product-date-event-value">Select a date</span><span class="material-symbols-outlined pd-field-icon" aria-hidden="true">calendar_month</span></span>
+            <span class="pd-field-hint">When will you use the gown?</span>
+          </button>
+          <div class="pd-fields-pair">
+            <button type="button" class="pd-field" id="product-date-pickup" data-date-field="pickup" aria-pressed="false" aria-controls="product-cal-grid" disabled>
+              <span class="pd-field-label">Pick-up Date</span>
+              <span class="pd-field-row"><span class="pd-field-value tabular-nums" id="product-date-pickup-value">&mdash;</span><span class="pd-field-extra" id="product-date-pickup-extra" hidden></span></span>
+              <span class="pd-field-hint">Receive the gown</span>
+            </button>
+            <button type="button" class="pd-field" id="product-date-return" data-date-field="return" aria-pressed="false" aria-controls="product-cal-grid" disabled>
+              <span class="pd-field-label">Return Date</span>
+              <span class="pd-field-row"><span class="pd-field-value tabular-nums" id="product-date-return-value">&mdash;</span><span class="pd-field-extra" id="product-date-return-extra" hidden></span></span>
+              <span class="pd-field-hint">Return the gown</span>
+            </button>
+          </div>
+          <p id="product-date-mode-hint" class="pd-mode-hint" aria-live="polite">Tap a day on the calendar to choose your event date.</p>
+        </div>
+
+        <div class="flex justify-between items-center mt-5 mb-5">
           <span id="product-cal-title" class="font-headline font-bold text-[0.9375rem] uppercase tracking-widest">October 2024</span>
           <div class="flex gap-1">
             <button type="button" class="w-9 h-9 flex items-center justify-center rounded-full text-secondary hover:bg-[#f4f3f1] hover:text-on-surface active:scale-95 transition-all cursor-pointer" id="product-cal-prev" aria-label="Previous month"><span class="material-symbols-outlined text-base">chevron_left</span></button>
@@ -536,7 +631,7 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-7 gap-2 text-center mb-3">
+        <div class="grid grid-cols-7 gap-2 text-center mb-3" aria-hidden="true">
           <span class="font-label text-[0.6875rem] font-semibold tracking-[0.1em] text-secondary">M</span>
           <span class="font-label text-[0.6875rem] font-semibold tracking-[0.1em] text-secondary">T</span>
           <span class="font-label text-[0.6875rem] font-semibold tracking-[0.1em] text-secondary">W</span>
@@ -548,15 +643,29 @@
 
         <div id="product-cal-grid" class="grid grid-cols-7 gap-y-1 text-center text-[0.8125rem] font-semibold" data-blocked-dates="{{ blocked_dates_json }}"></div>
 
-        <!-- First-run explainer for the rental window. Deliberately an inline panel
-             directly beneath the grid rather than a blocking modal: it appears where
-             the customer is already looking, never covers the calendar it describes
-             (which a full-screen dialog would, especially on a phone), and doesn't
-             interrupt the moment they just committed to a date. -->
+        <!-- What the colours mean, once there is something to read. -->
+        <div id="product-cal-legend" class="pd-legend" hidden aria-hidden="true">
+          <span><i class="pd-legend-dot pd-legend-dot--event"></i>Event</span>
+          <span><i class="pd-legend-dot pd-legend-dot--end"></i>Pick-up &amp; return</span>
+          <span><i class="pd-legend-dot pd-legend-dot--free"></i>Free days</span>
+          <span><i class="pd-legend-dot pd-legend-dot--extra"></i>Extra days</span>
+        </div>
+
+        <!-- The reminder: what the chosen days cost, out of the security deposit (never added to what is paid now). -->
+        <div id="product-fee-note" class="pd-fee" hidden role="status" aria-live="polite">
+          <span class="material-symbols-outlined pd-fee-icon" aria-hidden="true">info</span>
+          <div class="min-w-0">
+            <p class="pd-fee-title" id="product-fee-title"></p>
+            <p class="pd-fee-text" id="product-fee-text"></p>
+          </div>
+        </div>
+
+        <!-- The rental window explained, with the five dots (first pick, or the info button). An inline panel beneath the grid rather than a
+             blocking modal: it appears where the customer is already looking and never covers the calendar it describes. -->
         <div id="product-cal-tip" class="product-cal-tip" role="note" hidden>
-          <p class="font-label text-[0.625rem] uppercase tracking-widest text-secondary">Why the extra days?</p>
+          <p class="font-label text-[0.625rem] uppercase tracking-widest text-secondary">Your free rental days</p>
           <p class="mt-1.5 text-[0.8125rem] leading-relaxed text-on-surface">
-            The day you picked is your <span class="font-semibold">event date</span>. The gown is reserved around it, so the shaded days beside your pick are part of your rental — not dates someone else has taken.
+            Your rental is set to <span class="font-semibold">5 days</span>: 2 days before your event, the event day, and 2 days after. These days are free, with no deduction. They keep the gown reserved around your event so no one else can take it.
           </p>
 
           <div class="product-cal-tip-diagram" aria-hidden="true">
@@ -571,6 +680,9 @@
             <span></span>
             <span class="product-cal-tip-cap">Return</span>
           </div>
+          <p class="mt-3 text-[0.75rem] leading-relaxed text-secondary">
+            Need the gown longer? Choose an earlier pick-up or a later return. Each extra day costs &#8369;<span data-fee-per-day>{{ site_late_fee_per_day }}</span> per gown, taken from your security deposit after the gown is returned.
+          </p>
 
           <div class="mt-4 flex items-center justify-between gap-3 flex-wrap">
             <label class="inline-flex items-center gap-2 cursor-pointer select-none">
@@ -588,32 +700,27 @@
              rather than one per day, so it stays lightweight and consistent. -->
         <div id="product-cal-tooltip" role="status" class="product-cal-tooltip" aria-hidden="true">Unavailable</div>
 
-        <div class="mt-6 pt-4 border-t border-outline-variant/15 flex justify-between items-center">
-          <div>
+        <div class="mt-5 pt-4 border-t border-outline-variant/15 flex justify-between items-center gap-3">
+          <div class="min-w-0">
             <div class="flex items-center gap-1.5">
               <p class="font-label text-[0.625rem] text-secondary uppercase tracking-widest">Rental Period</p>
               <!-- Keeps "Don't show this again" reversible -- without this, dismissing
                    the explainer would hide it permanently with no way back. -->
               <button type="button" id="product-cal-tip-open"
                 class="w-4 h-4 flex items-center justify-center rounded-full text-secondary hover:text-on-surface transition-colors cursor-pointer"
-                aria-label="What do the shaded days mean?">
+                aria-label="Which days are free?">
                 <span class="material-symbols-outlined" style="font-size: 0.875rem;">info</span>
               </button>
             </div>
             <p id="product-cal-range" class="text-sm font-bold">Select dates</p>
-            <p id="product-pickup-note" class="mt-2 text-[0.75rem] font-semibold text-on-surface" hidden></p>
-            <div id="product-cal-dates" class="mt-1 space-y-1" aria-hidden="true">
-              <p class="product-cal-line product-cal-line--start text-sm font-bold">
-                <span class="font-label text-[0.625rem] text-secondary uppercase tracking-widest font-medium">Start Date</span>
-                <span class="ml-2 tabular-nums" id="product-cal-start-date"></span>
-              </p>
-              <p class="product-cal-line product-cal-line--return text-sm font-bold">
-                <span class="font-label text-[0.625rem] text-secondary uppercase tracking-widest font-medium">Return Date</span>
-                <span class="ml-2 tabular-nums" id="product-cal-return-date"></span>
-              </p>
+            <p id="product-pickup-note" class="mt-1.5 text-[0.75rem] font-semibold text-on-surface" hidden></p>
+            <!-- Kept for the page's script: the pick-up and return of the rental, as text. -->
+            <div id="product-cal-dates" class="hidden" aria-hidden="true">
+              <span id="product-cal-start-date"></span>
+              <span id="product-cal-return-date"></span>
             </div>
           </div>
-          <span class="material-symbols-outlined text-secondary">calendar_today</span>
+          <span class="material-symbols-outlined text-secondary shrink-0">calendar_today</span>
         </div>
       </div>
     </div>
@@ -692,8 +799,8 @@
           <p><strong>3. Use AI Recommends.</strong> Not sure what to pick? Use the AI Recommends feature — just tell it your event type and preferences, and it will suggest the most suitable gowns available in the collection for you.</p>
           <p><strong>4. Submit your reservation.</strong> Once you have chosen a gown, submit your reservation directly through the platform. No walk-in or Facebook message required.</p>
           <p><strong>5. Pay the security deposit.</strong> After submitting, you will be directed to the payment page to pay the {{ site_deposit_php }} security deposit via GCash or cash. This confirms your booking.</p>
-          <p><strong>6. Pick up your gown.</strong> You may pick up the gown at the shop up to two days before your event (on the event day itself if the gown is still being cleaned) during business hours (1:00 PM – 5:00 PM).</p>
-          <p><strong>7. Return the gown.</strong> Return it to the shop within two days after your event. Once the gown is returned on time and in good condition, your security deposit will be refunded to you.</p>
+          <p><strong>6. Pick up your gown.</strong> Your pick-up day is set for you two days before your event (on the event day itself when the days before are taken), or the earlier day you chose. Pick up the gown at the shop during business hours (1:00 PM – 5:00 PM).</p>
+          <p><strong>7. Return the gown.</strong> Return it to the shop by your return date (up to two days after your event is free). Your security deposit is then refunded to you, less any extra days, late return or damage charges.</p>
           <p>Once your payment is verified, open the reservation from your Reservations page — the Order Summary &amp; Receipt panel there shows the gown, rental dates, amount breakdown, and the payment proof you uploaded, all tied to your reference number. That is your official record of the transaction.</p>
         </div>
       </div>
@@ -727,7 +834,7 @@
       </div>
       <div class="max-h-0 overflow-hidden transition-[max-height] duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]" data-faq-panel>
         <p class="pt-6 text-[0.95rem] leading-7 text-on-surface-variant font-body">
-          A security deposit of {{ site_deposit_php }} is required for every reservation. This is separate from the actual rental fee of the gown. You will get the full deposit back when you return the gown on time and in good condition. If there are late return penalties, the amount will be deducted from your deposit.
+          A security deposit of {{ site_deposit_php }} is required for every gown you reserve. This is separate from the actual rental fee of the gown. You get it back after the gown is returned, less any extra days you booked outside the free days, any late return fee and any damage charges. When there are none, you get the full deposit back.
         </p>
       </div>
     </div>
@@ -749,7 +856,7 @@
       </div>
       <div class="max-h-0 overflow-hidden transition-[max-height] duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]" data-faq-panel>
         <p class="pt-6 text-[0.95rem] leading-7 text-on-surface-variant font-body">
-          You may pick up the gown up to two (2) days before your event date (or on the event day itself when the gown is still being cleaned after an earlier rental), and you must return it two (2) days after the event. This is the standard pickup and return window. All pickups and returns must be done in person at the shop during business hours (1:00 PM – 5:00 PM). The system does not offer delivery or courier service.
+          Your rental is set to 5 free days: two (2) days before your event, the event day, and two (2) days after it. Pick-up is on the first free day (or on the event day itself when the days before are taken), and you may return the gown one or two days after the event. You may also choose an earlier pick-up or a later return when the gown is free: each extra day costs {{ site_late_fee_php }} per gown, taken from your security deposit, even if you do not use it. To change your dates after booking, call the shop with your booking number. All pickups and returns must be done in person at the shop during business hours (1:00 PM – 5:00 PM). The system does not offer delivery or courier service.
         </p>
       </div>
     </div>
@@ -760,7 +867,7 @@
       </div>
       <div class="max-h-0 overflow-hidden transition-[max-height] duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]" data-faq-panel>
         <p class="pt-6 text-[0.95rem] leading-7 text-on-surface-variant font-body">
-          If you return the gown outside the allowed two-days-after window, a penalty of Php 200.00 per day will be charged. This penalty will be deducted from your security deposit. The system automatically flags reservations as Overdue once the return deadline has passed.
+          If you return the gown after your booked return date, {{ site_late_fee_php }} per gown per day will be charged and deducted from your security deposit. Returning within two (2) days after your event is never late. The system automatically flags reservations as Overdue once the return deadline has passed.
         </p>
       </div>
     </div>
@@ -902,6 +1009,22 @@
     const tipHideBox = document.getElementById('product-cal-tip-hide');
     const tipOpenBtn = document.getElementById('product-cal-tip-open');
     const bookNowBtn = document.getElementById('product-book-now');
+    // The three date fields and what is said under them (the date picker, see the markup above the calendar).
+    const fieldButtons = {
+      event: document.getElementById('product-date-event'),
+      pickup: document.getElementById('product-date-pickup'),
+      'return': document.getElementById('product-date-return')
+    };
+    const eventValueEl = document.getElementById('product-date-event-value');
+    const pickupValueEl = document.getElementById('product-date-pickup-value');
+    const returnValueEl = document.getElementById('product-date-return-value');
+    const pickupExtraEl = document.getElementById('product-date-pickup-extra');
+    const returnExtraEl = document.getElementById('product-date-return-extra');
+    const modeHintEl = document.getElementById('product-date-mode-hint');
+    const feeNoteEl = document.getElementById('product-fee-note');
+    const feeTitleEl = document.getElementById('product-fee-title');
+    const feeTextEl = document.getElementById('product-fee-text');
+    const legendEl = document.getElementById('product-cal-legend');
     const sizeButtons = Array.from(document.querySelectorAll('[data-product-size]'));
     const productTitleEl = document.getElementById('product-title');
     const productPriceEl = document.getElementById('product-price');
@@ -1036,9 +1159,12 @@
           updateSizeButtonState();
           liveSyncEditableCartRow({ size: selectedSize });
           // The calendar shows the chosen size's own availability. Defined further down; a click can only
-          // happen after the page has finished loading, by which time they exist.
+          // happen after the page has finished loading, by which time they exist. The pick-up and return already chosen
+          // must be free on a gown of THIS size too, else they go back to the free days (and the customer is told).
+          if (typeof keepChosenDaysPossible === 'function') keepChosenDaysPossible('size');
           if (typeof render === 'function') render();
           if (typeof updateSizeAvailability === 'function') updateSizeAvailability();
+          if (typeof updateDateFields === 'function') updateDateFields();
         });
       });
       // A gown that comes in one size only: that size is the only possible answer, so it starts chosen.
@@ -1066,7 +1192,8 @@
           price: existing.unitPrice,
           img: existing.image,
           size: existing.size,
-          rental: existing.rental
+          rental: existing.rental,
+          event: existing.event
         };
       }
     } else if (Number.isInteger(requestedCartIndex) && requestedCartIndex >= 0) {
@@ -1094,8 +1221,12 @@
       }
     }
 
-    // Fixed-offset snap selection: always a 5-day block centered on the clicked date
+    // The chosen dates. center = the EVENT day; chosenPickup / chosenReturn = the pick-up and return days (set to the free days when the
+    // event is chosen, then changeable). mode = which of the three a tap on the calendar sets ('event', 'pickup' or 'return').
     let center = null;
+    let chosenPickup = null;
+    let chosenReturn = null;
+    let mode = 'event';
 
     function ymd(d) {
       const yyyy = d.getFullYear();
@@ -1116,17 +1247,33 @@
     const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const todayStr = ymd(todayMidnight);
 
-    // The pick-up day for an event date is decided by the server's plan (pickupFor, further down): 2 days before the event when the
-    // gown is free then, otherwise the first free day, at the latest the event day.
+    // The default pick-up day for an event date is decided by the server's plan (pickupFor, further down): 2 days before the event when
+    // the gown is free then, otherwise the first free day, at the latest the event day. The customer may then choose other days.
+
+    function addDays(d, n) {
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+    }
+    // Whole days from a to b (negative when b is earlier), counted on the calendar, never on the clock.
+    function daysBetween(a, b) {
+      return Math.round((Date.UTC(b.getFullYear(), b.getMonth(), b.getDate()) - Date.UTC(a.getFullYear(), a.getMonth(), a.getDate())) / 86400000);
+    }
+    function fmtLong(d) {
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
 
     // Live preview of the window a day WOULD produce if clicked, shown on hover before
-    // anything is committed. Deliberately uses pickupFor -- the same function the
-    // real click path uses -- so the preview can never promise a pick-up date that
-    // selecting the day wouldn't actually give. Only paints buttons already rendered
-    // (no re-render), so moving across the grid stays cheap.
+    // anything is committed. While the EVENT is being chosen it uses pickupFor -- the same
+    // function the real click path uses -- so the preview can never promise a pick-up date
+    // that selecting the day wouldn't actually give; while the pick-up or the return is being
+    // chosen it previews the stretch from the hovered day to the other end. Only paints
+    // buttons already rendered (no re-render), so moving across the grid stays cheap.
     function showRangePreview(hoveredDate) {
-      const startStr = ymd(pickupFor(hoveredDate));
-      const endStr = ymd(returnFor(hoveredDate));
+      let start = pickupFor(hoveredDate);
+      let end = returnFor(hoveredDate);
+      if (mode === 'pickup' && center && chosenReturn) { start = hoveredDate; end = chosenReturn; }
+      if (mode === 'return' && center && chosenPickup) { start = chosenPickup; end = hoveredDate; }
+      const startStr = ymd(start);
+      const endStr = ymd(end);
       const hoveredStr = ymd(hoveredDate);
       for (const child of gridEl.children) {
         const cellDate = child.dataset ? child.dataset.date : null;
@@ -1195,43 +1342,24 @@
       }, 220);
     }
 
+    // The footer under the calendar: the whole rental (pick-up to return, how many days) and the pick-up hours.
     function setRangeText() {
-      if (!center) {
+      if (!center || !chosenPickup || !chosenReturn) {
+        rangeEl.dataset.value = '';
         rangeEl.textContent = 'Select dates';
-        datesWrapEl.classList.remove('is-open');
-        datesWrapEl.setAttribute('aria-hidden', 'true');
         startDateEl.textContent = '';
         returnDateEl.textContent = '';
-        startDateEl.dataset.value = '';
-        returnDateEl.dataset.value = '';
         if (pickupNoteEl) pickupNoteEl.hidden = true;
         return;
       }
-      const a = pickupFor(center);
-      const b = returnFor(center);
+      const days = daysBetween(chosenPickup, chosenReturn) + 1;
+      crossDissolve(rangeEl, fmt(chosenPickup) + ' – ' + fmtLong(chosenReturn) + ' · ' + days + ' days');
       if (pickupNoteEl) {
-        pickupNoteEl.textContent = 'Pick-up: ' + fmt(a) + ', ' + PICKUP_HOURS + ' only.';
+        pickupNoteEl.textContent = 'Pick-up: ' + fmt(chosenPickup) + ', ' + PICKUP_HOURS + ' only.';
         pickupNoteEl.hidden = false;
       }
-      rangeEl.textContent = '';
-      const wasClosed = !datesWrapEl.classList.contains('is-open');
-      datesWrapEl.setAttribute('aria-hidden', 'false');
-
-      if (wasClosed) {
-        // Set values before opening so the staggered entrance reveals meaningful content.
-        startDateEl.dataset.value = fmtMDY(a);
-        returnDateEl.dataset.value = fmtMDY(b);
-        startDateEl.textContent = fmtMDY(a);
-        returnDateEl.textContent = fmtMDY(b);
-
-        datesWrapEl.classList.remove('is-open');
-        void datesWrapEl.offsetWidth; // restart transitions
-        datesWrapEl.classList.add('is-open');
-        return;
-      }
-
-      crossDissolve(startDateEl, fmtMDY(a));
-      crossDissolve(returnDateEl, fmtMDY(b));
+      startDateEl.textContent = fmtMDY(chosenPickup);
+      returnDateEl.textContent = fmtMDY(chosenReturn);
     }
 
     // First-run explainer for the rental window. Shown after the customer's FIRST
@@ -1288,19 +1416,77 @@
       });
     }
 
-    function isAdjacentToStart(d) {
-      if (!center || sameDay(d, center)) return false;
-      return d >= pickupFor(center) && d <= returnFor(center);
-    }
-
     // ---- Which dates can be booked, and the pick-up day each one gets ------------------------------------------------------
-    // Looked up from the server's plan: plans[size][event day] = [pick-up day, units free] or the reason it can't be booked
-    // ('booked', 'rest', 'closed'). The same rules checkout applies, so this page can never offer what checkout would refuse.
+    // Looked up from the server's plan: plans[size][event day] = [default pick-up day, units free, windows] or the reason it can't be
+    // booked ('booked', 'rest', 'closed'). windows: one [lowest pick-up, highest return] per free gown, in days from the event. The same
+    // rules checkout applies (gowns/availability.py unit_window), so this page can never offer what checkout would refuse.
     const sizeCodes = sizeButtons.map(function (btn) { return btn.dataset.productSize || ''; });
     const PICKUP_HOURS = (calData && calData.hours) || '1:00 PM to 5:00 PM';
     const CLOSING_TEXT = (calData && calData.closing) || '5:00 PM';
     const REST_DAYS = (calData && calData.restDays) || 5;
+    const FREE_BEFORE = (calData && Number(calData.freeBefore)) || 2;      // the free days: 2 before the event and 2 after it
+    const FREE_AFTER = (calData && Number(calData.freeAfter)) || 2;
+    const FEE_PER_DAY = calData && calData.feePerDay !== undefined ? Number(calData.feePerDay) || 0 : 200;   // the owner's fee per gown per day
     const pageLoadedAt = performance.now();
+    document.querySelectorAll('[data-fee-per-day]').forEach(function (el) { el.textContent = FEE_PER_DAY.toLocaleString('en-PH'); });
+
+    function pesoText(n) {
+      return '₱' + Math.round(Number(n) || 0).toLocaleString('en-PH');
+    }
+    function daysWord(n) {
+      return n + (n === 1 ? ' day' : ' days');
+    }
+
+    // The free gowns' windows for the chosen event (and size), as [lowest pick-up, highest return] in days from the event. On a page left
+    // open past 5 PM today can no longer be a pick-up day, so every window starts tomorrow at the earliest.
+    function windowsFor(eventDate) {
+      if (!eventDate) return [];
+      const plan = planForSelection(eventDate);
+      if (!plan.ok) return [];
+      let wins = Array.isArray(plan.windows) && plan.windows.length
+        ? plan.windows.map(function (w) { return [Number(w[0]), Number(w[1])]; })
+        : [[daysBetween(eventDate, plan.pickup), FREE_AFTER]];   // further ahead than the server planned: the free days only
+      const earliest = pastClosingTime() ? addDays(todayMidnight, 1) : todayMidnight;
+      const lowestOffset = daysBetween(eventDate, earliest);
+      return wins.map(function (w) { return [Math.max(w[0], lowestOffset), w[1]]; }).filter(function (w) { return w[0] <= 0; });
+    }
+    // A pick-up `offset` days from the event on one gown's window: any day from its lowest pick-up up to the day before the event --
+    // the event day itself only when no earlier day is possible (the same rule the server keeps, availability.pickup_allowed).
+    function pickupFitsWindow(w, offset) {
+      return w[0] >= 0 ? offset === 0 : (offset >= w[0] && offset <= -1);
+    }
+    function returnFitsWindow(w, offset) {
+      return offset >= 1 && offset <= w[1];
+    }
+    function canPickupOn(d) {
+      if (!center) return false;
+      const off = daysBetween(center, d);
+      return windowsFor(center).some(function (w) { return pickupFitsWindow(w, off); });
+    }
+    function canReturnOn(d) {
+      if (!center) return false;
+      const off = daysBetween(center, d);
+      return windowsFor(center).some(function (w) { return returnFitsWindow(w, off); });
+    }
+    // Both days on the SAME gown: checkout books one physical gown for the whole stretch.
+    function daysFitTogether(p, r) {
+      if (!center || !p || !r) return false;
+      const po = daysBetween(center, p);
+      const ro = daysBetween(center, r);
+      return windowsFor(center).some(function (w) { return pickupFitsWindow(w, po) && returnFitsWindow(w, ro); });
+    }
+    // The free days of the chosen event, and what the chosen days cost out of the security deposit.
+    function freePickupDay() { return center ? addDays(center, -FREE_BEFORE) : null; }
+    function freeReturnDay() { return center ? addDays(center, FREE_AFTER) : null; }
+    function extraOf(p, r) {
+      if (!center || !p || !r) return { before: 0, after: 0, days: 0, fee: 0 };
+      const before = Math.max(0, daysBetween(p, freePickupDay()));
+      const after = Math.max(0, daysBetween(freeReturnDay(), r));
+      return { before: before, after: after, days: before + after, fee: (before + after) * FEE_PER_DAY };
+    }
+    function isExtraDay(d) {
+      return !!center && (d < freePickupDay() || d > freeReturnDay());
+    }
 
     function secondsNow() {
       return calData ? Number(calData.seconds) + (performance.now() - pageLoadedAt) / 1000 : 0;
@@ -1316,19 +1502,35 @@
       return new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate() + 2);
     }
 
-    // The plan for one event day and size ('*' = any size). -> { ok, pickup (Date), count (units free, or null), reason }
+    // The plan for one event day and size ('*' = any size). -> { ok, pickup (Date), count (units free, or null), reason, windows }
     function planOf(eventDate, sizeCode) {
       const day = ymd(eventDate);
       const key = calData && calData.plans[sizeCode] ? sizeCode : '*';
       let value = calData && calData.plans[key] ? calData.plans[key][day] : undefined;
       if (pastClosingTime() && calData.late[key] && calData.late[key][day] !== undefined) value = calData.late[key][day];
       if (value === undefined) {
-        // Further ahead than the server planned for: nothing is booked that far out (checkout still re-checks everything).
-        const early = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate() - 2);
-        return { ok: true, pickup: early < todayMidnight ? todayMidnight : early, count: null, reason: '' };
+        if (eventDate < todayMidnight) return { ok: false, pickup: null, count: 0, reason: 'past', windows: null };
+        return farPlan(eventDate, key);
       }
-      if (Array.isArray(value)) return { ok: true, pickup: parseDay(String(value[0])), count: Number(value[1]), reason: '' };
-      return { ok: false, pickup: null, count: 0, reason: String(value) };
+      if (Array.isArray(value)) {
+        return { ok: true, pickup: parseDay(String(value[0])), count: Number(value[1]), reason: '', windows: Array.isArray(value[2]) ? value[2] : null };
+      }
+      return { ok: false, pickup: null, count: 0, reason: String(value), windows: null };
+    }
+    // An event further ahead than the server planned day by day (checkout still re-checks everything): from openFrom on, one gown of
+    // this size has nothing booked any more, so any pick-up from it and any return up to a year from today can be chosen.
+    function farPlan(eventDate, key) {
+      const openIso = calData && calData.openFrom ? (calData.openFrom[key] || calData.openFrom['*']) : null;
+      let open = openIso ? parseDay(openIso) : todayMidnight;
+      if (open < todayMidnight) open = todayMidnight;
+      if (open > eventDate) return { ok: false, pickup: null, count: 0, reason: 'booked', windows: null };
+      const early = addDays(eventDate, -FREE_BEFORE);
+      const freeReturn = addDays(eventDate, FREE_AFTER);
+      const last = calData && calData.lastReturn ? parseDay(calData.lastReturn) : freeReturn;
+      return {
+        ok: true, pickup: early < open ? open : early, count: null, reason: '',
+        windows: [[daysBetween(eventDate, open), daysBetween(eventDate, last > freeReturn ? last : freeReturn)]]
+      };
     }
     function planForSelection(eventDate) {
       return planOf(eventDate, sizeCodes.indexOf(selectedSize) >= 0 ? selectedSize : '*');
@@ -1418,6 +1620,165 @@
       tooltipHideTimer = window.setTimeout(hideCalTooltip, 1600);
     }
 
+    // ---- Choosing the three dates ----------------------------------------------------------------------------------------------------
+    // The line under the fields: what a tap on the calendar does now, or (amber) why a chosen day had to change.
+    function modeHint() {
+      if (!center) return 'Tap a day on the calendar to choose your event date.';
+      const fee = FEE_PER_DAY > 0 ? ' cost ' + pesoText(FEE_PER_DAY) + ' each, taken from your security deposit.' : ' are free.';
+      if (mode === 'pickup') return 'Choose your pick-up day. Days before ' + fmt(freePickupDay()) + fee;
+      if (mode === 'return') return 'Choose your return day. Days after ' + fmt(freeReturnDay()) + fee;
+      return 'Want the gown longer? Tap Pick-up Date or Return Date to choose other days.';
+    }
+    function dateNotice(text) {
+      if (!modeHintEl) return;
+      modeHintEl.classList.toggle('is-warn', !!text);
+      modeHintEl.textContent = text || modeHint();
+    }
+    function setExtraChip(el, days) {
+      if (!el) return;
+      const text = days > 0 ? '+' + daysWord(days) : '';
+      if (!text) { el.hidden = true; el.textContent = ''; return; }
+      const changed = el.hidden || el.textContent !== text;
+      el.textContent = text;
+      el.hidden = false;
+      if (changed) { el.classList.remove('is-in'); void el.offsetWidth; el.classList.add('is-in'); }
+    }
+
+    // The reminder under the calendar: what the chosen days take out of the security deposit (nothing is added to what is paid now).
+    let lastFeeKey = '';
+    function updateFeeNote() {
+      if (!feeNoteEl) return;
+      if (!center || !chosenPickup || !chosenReturn) { feeNoteEl.hidden = true; lastFeeKey = ''; return; }
+      const extra = extraOf(chosenPickup, chosenReturn);
+      const freeText = fmt(freePickupDay()) + ' to ' + fmt(freeReturnDay());
+      let title;
+      let text;
+      if (extra.days > 0 && extra.fee > 0) {
+        const parts = [];
+        if (extra.before) parts.push('pick-up ' + daysWord(extra.before) + ' early');
+        if (extra.after) parts.push('return ' + daysWord(extra.after) + ' later');
+        const what = parts.join(' and ');
+        title = pesoText(extra.fee) + ' will be deducted from your security deposit';
+        text = what.charAt(0).toUpperCase() + what.slice(1) + ': ' + daysWord(extra.days) + ' × ' + pesoText(FEE_PER_DAY) + '. The free days are ' + freeText
+          + '. It is charged for the days you book, even if you pick up later or return earlier, and taken from the deposit when the gown is returned. Nothing extra is paid now.';
+      } else {
+        title = 'No deduction: your days are free';
+        text = 'The free days are ' + freeText + ' (2 days before and 2 days after your event).'
+          + (FEE_PER_DAY > 0 ? ' Each day outside them costs ' + pesoText(FEE_PER_DAY) + ' per gown, taken from your security deposit.' : '');
+        if (chosenReturn < freeReturnDay()) text += ' You can still return the gown until ' + fmt(freeReturnDay()) + ' at no charge.';
+      }
+      feeNoteEl.classList.toggle('is-extra', extra.fee > 0);
+      feeTitleEl.textContent = title;
+      feeTextEl.textContent = text;
+      const key = title + '|' + text;
+      const wasHidden = feeNoteEl.hidden;
+      feeNoteEl.hidden = false;
+      if (wasHidden || key !== lastFeeKey) { feeNoteEl.classList.remove('is-in'); void feeNoteEl.offsetWidth; feeNoteEl.classList.add('is-in'); }
+      lastFeeKey = key;
+    }
+
+    // The three fields: which one is active, the chosen days, the "+N days" chips, and the reminder.
+    function updateDateFields() {
+      Object.keys(fieldButtons).forEach(function (key) {
+        const btn = fieldButtons[key];
+        if (!btn) return;
+        const active = key === mode;
+        btn.classList.toggle('is-active', active);
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+        if (key !== 'event') btn.disabled = !center;
+      });
+      crossDissolve(eventValueEl, center ? center.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : 'Select a date');
+      crossDissolve(pickupValueEl, chosenPickup ? fmt(chosenPickup) : '—');
+      crossDissolve(returnValueEl, chosenReturn ? fmt(chosenReturn) : '—');
+      const extra = extraOf(chosenPickup, chosenReturn);
+      setExtraChip(pickupExtraEl, extra.before);
+      setExtraChip(returnExtraEl, extra.after);
+      if (legendEl) legendEl.hidden = !center;
+      if (modeHintEl && !modeHintEl.classList.contains('is-warn')) modeHintEl.textContent = modeHint();
+      updateFeeNote();
+    }
+
+    // Writes the chosen days into the bag row being edited (if any): the rental (pick-up - return) and the event.
+    function syncChosenDates() {
+      if (!center || !chosenPickup || !chosenReturn) return;
+      liveSyncEditableCartRow({
+        rental: fmtMDY(chosenPickup) + ' - ' + fmtMDY(chosenReturn), event: fmtMDY(center),
+        rentalStart: fmtMDY(chosenPickup), rentalReturn: fmtMDY(chosenReturn), selectedDate: fmtMDY(center)
+      });
+    }
+    function afterDatesChanged() {
+      setRangeText();
+      render();
+      updateDateFields();
+      updateSizeAvailability();
+      syncChosenDates();
+    }
+    // The event: the pick-up and the return start on the free days (the server's default pick-up, and 2 days after the event).
+    function chooseEvent(d) {
+      center = d;
+      chosenPickup = pickupFor(d);
+      chosenReturn = returnFor(d);
+      dateNotice('');
+      showSizeNote('');
+      afterDatesChanged();
+      maybeShowRentalTip();
+    }
+    // Another pick-up. The return stays, unless the gown is not free for the whole stretch (then it goes back to the free return day).
+    function choosePickup(d) {
+      chosenPickup = d;
+      if (!daysFitTogether(chosenPickup, chosenReturn)) {
+        chosenReturn = returnFor(center);
+        dateNotice('Your return was set back to ' + fmt(chosenReturn) + ': the gown is not free for all the days you chose.');
+      } else {
+        dateNotice('');
+      }
+      afterDatesChanged();
+    }
+    // Another return. The pick-up stays, unless the gown is not free for the whole stretch (then it moves to a free day that fits).
+    function chooseReturn(d) {
+      chosenReturn = d;
+      if (!daysFitTogether(chosenPickup, chosenReturn)) {
+        const off = daysBetween(center, d);
+        const fits = windowsFor(center).find(function (w) { return returnFitsWindow(w, off); });
+        chosenPickup = fits ? addDays(center, fits[0] >= 0 ? 0 : Math.max(fits[0], -FREE_BEFORE)) : pickupFor(center);
+        dateNotice('Your pick-up was moved to ' + fmt(chosenPickup) + ': the gown is not free for all the days you chose.');
+      } else {
+        dateNotice('');
+      }
+      afterDatesChanged();
+    }
+    // After a size is chosen, or the shop's 5 PM pick-up cut-off: days that no longer fit together go back to the free days, with a word.
+    function keepChosenDaysPossible(why) {
+      if (!center || !chosenPickup || !chosenReturn || !planForSelection(center).ok) return;
+      if (daysFitTogether(chosenPickup, chosenReturn)) return;
+      chosenPickup = pickupFor(center);
+      chosenReturn = returnFor(center);
+      dateNotice(why === 'size'
+        ? 'This size is not free for all the days you chose, so your pick-up and return were set back to the free days.'
+        : 'Some of the days you chose are no longer free, so your pick-up and return were set back to the free days. Please check them.');
+      setRangeText();
+      syncChosenDates();
+    }
+    function setMode(next) {
+      if (next !== 'event' && !center) return;
+      mode = next;
+      hideCalTooltip();
+      const focusDay = next === 'pickup' ? chosenPickup : next === 'return' ? chosenReturn : center;
+      if (focusDay && (focusDay.getMonth() !== viewMonth || focusDay.getFullYear() !== viewYear)) {
+        viewYear = focusDay.getFullYear();
+        viewMonth = focusDay.getMonth();
+        renderMonth();
+      } else {
+        render();
+      }
+      dateNotice('');
+      updateDateFields();
+    }
+    Object.keys(fieldButtons).forEach(function (key) {
+      const btn = fieldButtons[key];
+      if (btn) btn.addEventListener('click', function () { if (!btn.disabled) setMode(key); });
+    });
+
     function render() {
       // The tooltip is anchored to a specific day button; rebuilding the grid
       // (month nav, or any re-render) destroys that button, so drop any
@@ -1455,12 +1816,35 @@
         btn.dataset.date = dateStr;
         if (dateStr === todayStr) btn.dataset.today = 'true';
 
+        // The chosen rental on the grid, whatever is being chosen now: the event black, the pick-up and the return grey circles, the days
+        // between shaded -- and every day outside the free days amber, because it comes out of the security deposit.
+        if (center && chosenPickup && chosenReturn) {
+          if (sameDay(d, center)) btn.dataset.selected = 'start';
+          else if (sameDay(d, chosenPickup)) btn.dataset.selected = 'pickup';
+          else if (sameDay(d, chosenReturn)) btn.dataset.selected = 'return';
+          else if (d > chosenPickup && d < chosenReturn) btn.dataset.selected = 'in-range';
+          if (btn.dataset.selected && isExtraDay(d)) btn.dataset.extra = 'true';
+        }
+
         // A day that has already been and gone can never be booked, whatever the
         // inventory says -- checked before the server's blocked list so past days stay
         // plainly disabled instead of claiming a gown is unavailable.
         const isPast = dateStr < todayStr;
-        const dayPlan = isPast ? null : planForSelection(d);
-        const isUnavailable = !!dayPlan && !dayPlan.ok;
+        let refusal = '';
+        if (!isPast) {
+          if (mode === 'pickup' && center) {
+            if (d > center) refusal = 'The pick-up is on or before your event day';
+            else if (!canPickupOn(d)) refusal = sameDay(d, center)
+              ? 'Pick-up on the event day is only offered when the days before are taken'
+              : (d < todayMidnight || (pastClosingTime() && sameDay(d, todayMidnight)) ? "Today's pick-up has closed" : 'Not free: the gown is booked or being cleaned');
+          } else if (mode === 'return' && center) {
+            if (d <= center) refusal = 'The return is after your event day';
+            else if (!canReturnOn(d)) refusal = 'Not free: the gown is booked, or needs ' + REST_DAYS + ' days of cleaning before its next booking';
+          } else {
+            const dayPlan = planForSelection(d);
+            if (!dayPlan.ok) refusal = tipFor(dayPlan.reason);
+          }
+        }
 
         if (isPast) {
           // Greyed out like an unavailable day, but with no tooltip: "this date has
@@ -1469,13 +1853,13 @@
           btn.dataset.pastDate = 'true';
           btn.setAttribute('aria-disabled', 'true');
           btn.setAttribute('aria-label', day + ' -- date has passed');
-        } else if (isUnavailable) {
+        } else if (refusal) {
           // Grey + unclickable. Hover (desktop) and tap (mobile/touch) both
-          // surface the same "Unavailable" tooltip -- there's nothing else for
-          // this day to do, so a tap showing it (instead of doing nothing) is
-          // the more useful mobile behaviour.
+          // surface the same tooltip -- there's nothing else for this day to do,
+          // so a tap showing it (instead of doing nothing) is the more useful
+          // mobile behaviour.
           btn.dataset.unavailable = 'true';
-          btn.dataset.tip = tipFor(dayPlan.reason);
+          btn.dataset.tip = refusal;
           btn.setAttribute('aria-disabled', 'true');
           btn.setAttribute('aria-label', day + ' -- ' + btn.dataset.tip);
           btn.addEventListener('mouseenter', function () { showCalTooltip(btn); });
@@ -1491,10 +1875,11 @@
             hideCalTooltipDelayed();
           });
         } else {
-          // Selection styling: clicked date is black (use existing "start" styling),
-          // ±2 days are gray ("adjacent"). No cumulative ranges.
-          if (sameDay(d, center)) btn.dataset.selected = 'start';
-          else if (isAdjacentToStart(d)) btn.dataset.selected = 'adjacent';
+          if (mode !== 'event' && center) {
+            btn.dataset.choosable = 'true';
+            if (isExtraDay(d)) btn.dataset.extraIfChosen = 'true';
+          }
+          btn.setAttribute('aria-label', day + ' ' + monthNames[viewMonth] + ' -- choose as ' + (mode === 'pickup' ? 'pick-up day' : mode === 'return' ? 'return day' : 'event date'));
 
           // Only selectable days preview -- past and unavailable days deliberately
           // don't, since showing a range for a day that can't be picked would lie.
@@ -1503,16 +1888,9 @@
 
           btn.addEventListener('click', function () {
             const clicked = new Date(viewYear, viewMonth, day);
-            // Reset-on-click: replace the entire selection state immediately
-            center = clicked;
-            setRangeText();
-            render();
-            showSizeNote('');
-            updateSizeAvailability();
-            maybeShowRentalTip();
-            const liveStart = pickupFor(clicked);
-            const liveReturn = returnFor(clicked);
-            liveSyncEditableCartRow({ rental: fmtMDY(liveStart) + ' - ' + fmtMDY(liveReturn) });
+            if (mode === 'pickup' && center) choosePickup(clicked);
+            else if (mode === 'return' && center) chooseReturn(clicked);
+            else chooseEvent(clicked);
           });
         }
 
@@ -1562,33 +1940,36 @@
       }
     });
 
-    // Restore a previously chosen rental window, so arriving here to CHANGE dates
-    // shows the current ones rather than an empty calendar.
-    //
-    // Recover the event day from the RETURN date, never the start: returnDate is
-    // exactly center + 2 days, whereas startDate is the pick-up the server planned
-    // (it moves with other bookings and with the clock) -- so only the return
-    // date round-trips reliably.
-    function restoreSelectionFrom(rental) {
-      const parts = String(rental || '').split(' - ');
-      if (parts.length !== 2) return false;
-      const bits = parts[1].trim().split('/');
-      if (bits.length !== 3) return false;
+    // Restore the dates chosen before, so arriving here to CHANGE them shows the current ones rather than an empty calendar.
+    // A bag line saved since the customer chooses all three dates carries its event; an older one only has "pick-up - return", and
+    // its event is recovered from the RETURN date (it was always exactly 2 days after the event then).
+    function parseMDY(text) {
+      const bits = String(text || '').trim().split('/');
+      if (bits.length !== 3) return null;
       const mm = Number(bits[0]);
       const dd = Number(bits[1]);
       const yyyy = Number(bits[2]);
-      if (!mm || !dd || !yyyy) return false;
-      const returnDate = new Date(yyyy, mm - 1, dd);
-      if (isNaN(returnDate.getTime())) return false;
-      const recovered = new Date(yyyy, mm - 1, dd - 2);
-      if (recovered < todayMidnight) return false; // the window has already passed
-      center = recovered;
+      if (!mm || !dd || !yyyy) return null;
+      const d = new Date(yyyy, mm - 1, dd);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    function restoreSelectionFrom(saved) {
+      const parts = String((saved && saved.rental) || '').split(' - ');
+      if (parts.length !== 2) return false;
+      const pickup = parseMDY(parts[0]);
+      const ret = parseMDY(parts[1]);
+      if (!pickup || !ret) return false;
+      const event = parseMDY(saved.event) || addDays(ret, -FREE_AFTER);
+      if (event < todayMidnight || pickup > event || ret <= event) return false; // the window has already passed, or it never made sense
+      center = event;
+      chosenPickup = pickup;
+      chosenReturn = ret;
       viewYear = center.getFullYear();
       viewMonth = center.getMonth();
       return true;
     }
 
-    if (cartContextItem) restoreSelectionFrom(cartContextItem.rental);
+    if (cartContextItem) restoreSelectionFrom(cartContextItem);
 
     // arabelaSizeCode normalises every shape a stored size can arrive in ('M', 'Size: M', 'Medium', 'Free Size')
     // to a button code. Only a size this gown really comes in is restored; anything else (an old bag line from
@@ -1601,16 +1982,24 @@
       }
     }
 
-    // Dates carried in from the bag that can't be booked any more (taken since, or already passed) are dropped, with a note.
-    if (center && isUnavailable(center)) {
+    // Dates carried in from the bag that can't be booked any more (taken since, or already passed) are dropped, with a note. An event that
+    // can still be booked keeps its pick-up and return only while the gown is still free for all of them (else the free days, with a word).
+    function dropEventThatCannotBeBooked() {
+      if (!center || !isUnavailable(center)) return false;
       const gone = center;
       const gonePlan = planForSelection(gone);
       center = null;
+      chosenPickup = null;
+      chosenReturn = null;
+      mode = 'event';
       showSizeNote(gonePlan.reason === 'closed' ? tipFor('closed') : fmt(gone) + ' is no longer available. Please choose new dates.');
+      return true;
     }
+    if (!dropEventThatCannotBeBooked()) keepChosenDaysPossible('restore');
 
     setRangeText();
     render();
+    updateDateFields();
     updateSizeAvailability();
 
     // A page left open past the shop's closing time updates itself: today greys out and a pick-up that was "today" moves
@@ -1619,15 +2008,12 @@
       const wait = (Number(calData.closes) - secondsNow()) * 1000;
       if (wait > 0) {
         window.setTimeout(function () {
-          if (center && isUnavailable(center)) {
-            const reason = planForSelection(center).reason;
-            const gone = center;
-            center = null;
-            showSizeNote(reason === 'closed' ? tipFor('closed') : fmt(gone) + ' is no longer available. Please choose new dates.');
-          }
+          if (!dropEventThatCannotBeBooked()) keepChosenDaysPossible('closing');
           setRangeText();
           render();
+          updateDateFields();
           updateSizeAvailability();
+          syncChosenDates();
         }, wait + 300);
       }
     }
@@ -1650,9 +2036,17 @@
           arabelaAlert({ title: 'Date not available', message: tipFor(finalPlan.reason) + (finalPlan.reason === 'booked' ? ' Please choose another size or date.' : '') });
           return;
         }
+        // The pick-up and return chosen must still be free on one gown (the same rule checkout keeps). If not, back to the free days.
+        if (!chosenPickup || !chosenReturn || !daysFitTogether(chosenPickup, chosenReturn)) {
+          chosenPickup = pickupFor(center);
+          chosenReturn = returnFor(center);
+          afterDatesChanged();
+          arabelaAlert({ title: 'Please check your dates', message: 'The gown is not free for all the days you chose, so your pick-up and return were set back to the free days. Please check them and press Book Now again.' });
+          return;
+        }
 
-        const startDate = finalPlan.pickup;
-        const returnDate = returnFor(center);
+        const startDate = chosenPickup;
+        const returnDate = chosenReturn;
         const resolvedId = cartContextItem && cartContextItem.id ? cartContextItem.id : '{{ slug|escapejs }}';
         const resolvedName = cartContextItem && cartContextItem.name ? cartContextItem.name : '{{ product.title|escapejs }}';
         const resolvedColl =
@@ -1674,7 +2068,9 @@
           rental: fmtMDY(startDate) + ' - ' + fmtMDY(returnDate),
           rentalStart: fmtMDY(startDate),
           rentalReturn: fmtMDY(returnDate),
-          selectedDate: fmtMDY(center)
+          selectedDate: fmtMDY(center),
+          // The event day, sent with the booking: the free days (and so what comes out of the deposit) are counted from it.
+          event: fmtMDY(center)
         };
 
         // Came from the checkout Order Summary: update that one line of the held
@@ -1686,6 +2082,7 @@
           const target = snapshot && snapshot.items[editReservationIndex];
           if (target) {
             target.rental = item.rental;
+            target.event = item.event;
             target.size = selectedSize;
             if (typeof window.arabelaSaveReservationSnapshot === 'function') {
               window.arabelaSaveReservationSnapshot(RESERVATION_SNAPSHOT_KEY, snapshot);   // this tab + the backup

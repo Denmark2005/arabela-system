@@ -104,8 +104,8 @@ class EveryTipIsBuiltTheSameWayTests(SimpleTestCase):
             counts[name] = len(re.findall(r'<details class="ht-tip"', (ADMIN / name).read_text(encoding="utf8")))
         self.assertGreaterEqual(counts["gown-catalog.html"], 12)
         self.assertEqual({k: v for k, v in counts.items() if k != "gown-catalog.html"}, {
-            "calendar.html": 2, "profile.html": 13, "email-preview.html": 3, "payment-verification.html": 1, "categories.html": 1,
-            "staff-management.html": 4, "reservation-records.html": 0})        # profile: + "Your access", + 6 in the GCash card and the deposit card (Customers pay to, keep accepting the old GCash, QR code, Held by, old number, Test amount), + 1 in the Valid ID card; staff management: the choices tip and the per-permission tip, in Add and in Edit
+            "calendar.html": 2, "profile.html": 12, "email-preview.html": 3, "payment-verification.html": 1, "categories.html": 1,
+            "staff-management.html": 4, "reservation-records.html": 0})        # profile: + "Your access", + 6 in the GCash card and the deposit card (Customers pay to, keep accepting the old GCash, QR code, Held by, old number), + 1 in the Valid ID card; staff management: the choices tip and the per-permission tip, in Add and in Edit
 
 
 class SharedPiecesAreOnEveryPageTests(SimpleTestCase):

@@ -222,8 +222,9 @@ def row(item, today):
     category = item.gown.category if item.gown is not None else REMOVED_GOWN
     status = item.view["status"]
     rate = int(reservation.late_fee_per_day or 0)
-    # The same fees the opened row names, added up (a gown nobody picked up is never charged).
-    fees = ledger.money(ledger.planned_late_days(item, today) * rate) if rate > 0 and status != rental_history.MISSED else ledger.ZERO
+    # The same fees the opened row names, added up. A gown nobody picked up is charged only a free-days booking's booked extra days (the gown was kept for them).
+    charged = rate > 0 and (item.uses_free_days or status != rental_history.MISSED)
+    fees = ledger.money(ledger.planned_late_days(item, today) * rate) if charged else ledger.ZERO
     name = reservation.display_customer_name
     return {
         "item": item, "id": item.id, "booking_id": reservation.pk, "code": reservation.reference_code, "customer": name,

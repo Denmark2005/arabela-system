@@ -5,13 +5,19 @@ The one rule set the Payments page, the printed receipts, the customer's booking
   * Total to pay = the gown rental + the security deposit (the deposit the booking was made with).
   * Money received covers the DEPOSIT first, then the rental. (The deposit is the shop's protection and it is never paid in halves, see
     reservations/payments.py: a deposit payment is exactly the deposit, or the booking is paid in full.)
-  * The fee for days past the booked return date (`late_fee` in the code) = the booking's fee per day x those days, counted from the return
-    date the customer ORIGINALLY booked (a gown that is still out counts up to today -- "so far"; a gown that is back counts up to the day
-    it came back). It is not stored: it is worked out every time, so moving a return date later never makes it disappear.
-    People read it in two parts, the same money: the DATE CHANGE FEE (the days the shop moved the return date) and the OVERDUE FEE (the days
-    past the date agreed now, while the booking shows as Overdue).
+  * The DATE FEES (`late_fee` in the code: all of them together) = the booking's fee per day x the days charged, per gown. Worked out every
+    time from the dates, never typed or stored. Two rule sets, by when the gown was booked:
+      - FREE-DAYS bookings (ReservationItem.uses_free_days: made since the customer chooses the event, pick-up and return): 2 days before
+        the event and 2 days after it are free. Every BOOKED day outside them is charged, whether or not the customer uses it (the gown is
+        kept for them): the EARLY PICK-UP FEE (pick-up before the free days), the LATER RETURN FEE (the return the customer booked, after
+        them) and the DATE CHANGE FEE (staff moved the return past the booked one). Staff changing the dates moves these with the new dates,
+        up or down. The OVERDUE FEE is the days a gown comes back (or is still out) after its return date.
+      - older bookings: counted from the return date the customer ORIGINALLY booked (a gown that is still out counts up to today -- "so
+        far"; a gown that is back counts up to the day it came back), read as the DATE CHANGE FEE (the days the shop moved the return date)
+        and the OVERDUE FEE (the days past the date agreed now). Moving a return date later never makes it disappear.
   * The fees and any manual deductions come out of the deposit. Refundable = deposit paid - fees - deductions. If they are
-    MORE than the deposit, the extra is what the customer still owes ("extra owed").
+    MORE than the deposit, the extra is what the customer still owes ("extra owed"). An extra charge already paid that the fees
+    no longer ask for (staff moved the dates back, a deduction was removed) goes back with the deposit ("extra credit").
   * Balance still to pay = what is unpaid of the deposit and the rental + any extra owed.
 
 A booking made before the Payments page has no Payment rows. Until the one-time backfill (manage.py backfill_payments) gives it some, its
@@ -48,9 +54,11 @@ STATE_LABELS = {
     BALANCE: "Balance due", REFUND: "Refund due", PAID: "Paid in full", SETTLED: "Settled", CANCELLED: "Cancelled - deposit kept",
 }
 
-# The two names of the fee (the same money per day): see agreed_return() and overdue_days().
-CHANGE_FEE, OVERDUE_FEE = "change", "overdue"
-FEE_LABELS = {CHANGE_FEE: "Date change fee", OVERDUE_FEE: "Overdue fee"}
+# The names of the date fees (the same money per day): see fee_days(), agreed_return() and overdue_days(). EARLY and LATER exist only on
+# free-days bookings; CHANGE and OVERDUE on every booking.
+EARLY_FEE, LATER_FEE, CHANGE_FEE, OVERDUE_FEE = "early", "later", "change", "overdue"
+FEE_KINDS = (EARLY_FEE, LATER_FEE, CHANGE_FEE, OVERDUE_FEE)
+FEE_LABELS = {EARLY_FEE: "Early pick-up fee", LATER_FEE: "Later return fee", CHANGE_FEE: "Date change fee", OVERDUE_FEE: "Overdue fee"}
 
 # Where an approved booking's security deposit stands (deposit_stage): All Bookings and Rental History say it with these words, and the
 # Security Deposits page counts it the same way (arabela_admin.views._deposit_state).
@@ -89,14 +97,66 @@ def rental_due(reservation):
 
 
 # ---------------------------------------------------------------- late days
+def _uses_free_days(item):
+    return getattr(item, "free_pickup_date", None) is not None and getattr(item, "free_return_date", None) is not None
+
+
+def _days_past_return(item, today):
+    """Days a gown came back (or is still out) after its return date: what a free-days booking's Overdue fee counts."""
+    if item.return_date is None:
+        return 0
+    if item.stage == ReservationItem.Stage.RETURNED:
+        return max(0, (item.returned_on - item.return_date).days) if item.returned_on else 0
+    if item.stage in OUT_STAGES:
+        return max(0, (today - item.return_date).days)
+    return 0
+
+
+def booked_extra_days(item):
+    """(early, later, change): the BOOKED days of a free-days booking outside its free days -- picked up before them, returned after them as
+    the customer booked it, and returned after that because staff moved the return later. Charged whether or not the days are used, and
+    moving with every date change (up or down). (0, 0, 0) for an older booking, a gown the shop cancelled, or a booking that was cancelled
+    or rejected (its gown is not kept for those days: a cancelled booking keeps the deposit and charges nothing on top, as the Terms say)."""
+    if not _uses_free_days(item) or item.stage == ReservationItem.Stage.CANCELLED or item.rental_date is None or item.return_date is None:
+        return 0, 0, 0
+    if item.reservation.status in (Reservation.Status.CANCELLED, Reservation.Status.REJECTED):
+        return 0, 0, 0
+    early = max(0, (item.free_pickup_date - item.rental_date).days)
+    booked = item.original_return_date or item.return_date
+    later = max(0, (min(item.return_date, booked) - item.free_return_date).days)
+    change = max(0, (item.return_date - max(booked, item.free_return_date)).days)
+    return early, later, change
+
+
+def fee_days(item, today=None, planned=False):
+    """{fee kind: days} for one gown -- EARLY_FEE, LATER_FEE, CHANGE_FEE, OVERDUE_FEE -- the ONE count every page, receipt and total uses.
+
+    Free-days booking: the booked days outside the free days (booked_extra_days, from the moment it is booked) and the days it came back
+    or is still out after its return date. Older booking: exactly the old rule -- late_days() (or planned_late_days() for the dates as they
+    stand, `planned`) read as the date change part and the overdue part."""
+    today = today or timezone.localdate()
+    if _uses_free_days(item):
+        early, later, change = booked_extra_days(item)
+        overdue = _days_past_return(item, today) if item.stage != ReservationItem.Stage.CANCELLED else 0
+        return {EARLY_FEE: early, LATER_FEE: later, CHANGE_FEE: change, OVERDUE_FEE: overdue}
+    total = planned_late_days(item, today) if planned else late_days(item, today)
+    overdue = overdue_days(item, today)
+    return {EARLY_FEE: 0, LATER_FEE: 0, CHANGE_FEE: max(0, total - overdue), OVERDUE_FEE: overdue}
+
+
 def late_days(item, today=None):
     """How many days this gown is late (or was). 0 = on time or not applicable.
 
-    Counted from the return date the customer ORIGINALLY booked (original_return_date, else the current one). A gown that has not been
-    picked up, or that the shop cancelled, can't be late. One that is out counts up to `today` ("late fee so far"); one that is back counts
-    up to the day it came back (returned_on). Unlike the Overdue label on Active Reservations -- which waits for the CURRENT return date
-    -- the fee starts the day after the original one, so a customer who asks for the gown longer pays for the extra days."""
+    Free-days booking: the days charged after its free return day (the later return, the moved return and the overdue days; the early
+    pick-up days are not "late"). Older booking: counted from the return date the customer ORIGINALLY booked (original_return_date, else the
+    current one). A gown that has not been picked up, or that the shop cancelled, can't be late. One that is out counts up to `today` ("late
+    fee so far"); one that is back counts up to the day it came back (returned_on). Unlike the Overdue label on Active Reservations -- which
+    waits for the CURRENT return date -- the fee starts the day after the original one, so a customer who asks for the gown longer pays for
+    the extra days."""
     today = today or timezone.localdate()
+    if _uses_free_days(item):
+        _early, later, change = booked_extra_days(item)
+        return later + change + (_days_past_return(item, today) if item.stage != ReservationItem.Stage.CANCELLED else 0)
     scheduled = item.original_return_date or item.return_date
     if scheduled is None:
         return 0
@@ -113,8 +173,10 @@ def planned_late_days(item, today=None):
     A gown that is back counts exactly like late_days (up to the day it came back). One that has not come back yet counts up to its current return date --
     or up to today, when it is out and already past that date. So a return moved later shows the fee it will cost before the days have gone by, and
     the number never drops below what late_days() says today. Always counted from the return date the customer ORIGINALLY booked (the pick-up date and the
-    event date never change it). A cancelled gown, or one with no return date, has none."""
+    event date never change it). A cancelled gown, or one with no return date, has none. A free-days booking: every day charged (fee_days)."""
     today = today or timezone.localdate()
+    if _uses_free_days(item):
+        return sum(fee_days(item, today, planned=True).values())
     scheduled = item.original_return_date or item.return_date
     if scheduled is None or item.return_date is None:
         return 0
@@ -130,7 +192,10 @@ def planned_late_days(item, today=None):
 
 def agreed_return(item):
     """The return date agreed with the customer now: the current one (staff move it later when the customer asks for more days), and never earlier
-    than the one originally booked. The days between the two are the Date change fee; the days after it are overdue."""
+    than the one originally booked. The days between the two are the Date change fee; the days after it are overdue. A free-days booking: simply its
+    return date (staff may also move it earlier, and the fee follows)."""
+    if _uses_free_days(item):
+        return item.return_date
     booked = item.original_return_date or item.return_date
     if booked is None or item.return_date is None:
         return booked
@@ -140,6 +205,10 @@ def agreed_return(item):
 def overdue_days(item, today=None):
     """Of late_days(item), the days PAST the agreed return date: the gown is (or was) overdue -- the Overdue fee, and the "N days overdue" people read.
     The rest of late_days are days the return date was moved: the Date change fee."""
+    if _uses_free_days(item):
+        if item.stage == ReservationItem.Stage.CANCELLED:
+            return 0
+        return _days_past_return(item, today or timezone.localdate())
     total = late_days(item, today)
     if total <= 0:
         return 0
@@ -234,25 +303,46 @@ def statement(reservation, today=None):
 
     late_lines, fee_lines = [], []
     for item in live:
-        days = late_days(item, today)
+        counts = fee_days(item, today)
+        days = sum(counts.values())
         if days > 0 and rate > 0:
             back = item.stage == ReservationItem.Stage.RETURNED
-            overdue = overdue_days(item, today)
+            free_days_rule = _uses_free_days(item)
+            overdue = counts[OVERDUE_FEE]
             booked, agreed = item.original_return_date or item.return_date, agreed_return(item)
             late_lines.append({
                 "item_id": item.id, "gown": item.gown_name, "days": days, "rate": Decimal(rate), "amount": money(days * rate), "back": back,
                 # the return date the fee is counted from (the ORIGINAL one) and the day it really came back: what a receipt says to explain the days
                 "due": long_day(booked), "returned": long_day(item.returned_on), "change_days": days - overdue, "overdue_days": overdue,
+                "free_days": free_days_rule,
             })
-            # The same days under the names people read: moved (booked -> agreed) first, then overdue (past the agreed date). "growing": another day adds to it.
-            for kind, count, due, growing in ((CHANGE_FEE, days - overdue, booked, not back and today < agreed), (OVERDUE_FEE, overdue, agreed, not back)):
-                if count > 0:
-                    fee_lines.append({
-                        "kind": kind, "label": FEE_LABELS[kind], "item_id": item.id, "gown": item.gown_name, "days": count, "rate": Decimal(rate),
-                        "amount": money(count * rate), "back": back, "growing": growing, "booked": long_day(booked), "agreed": long_day(agreed),
-                        "due": long_day(due), "returned": long_day(item.returned_on),
-                    })
+            # The same days under the names people read: an early pick-up and the later return as booked (free-days bookings), then moved
+            # (booked -> agreed), then overdue (past the agreed date). "growing": another day adds to it (only an overdue gown, or an older
+            # booking's moved return while it is out).
+            for kind in FEE_KINDS:
+                count = counts[kind]
+                if count <= 0:
+                    continue
+                if kind == OVERDUE_FEE:
+                    due, growing = agreed, not back
+                elif kind == CHANGE_FEE:
+                    due, growing = booked, (not back and today < agreed and not free_days_rule)
+                else:
+                    due, growing = (item.free_pickup_date if kind == EARLY_FEE else item.free_return_date), False
+                fee_lines.append({
+                    "kind": kind, "label": FEE_LABELS[kind], "item_id": item.id, "gown": item.gown_name, "days": count, "rate": Decimal(rate),
+                    "amount": money(count * rate), "back": back, "growing": growing, "booked": long_day(booked), "agreed": long_day(agreed),
+                    "due": long_day(due), "returned": long_day(item.returned_on),
+                    # what a free-days line explains: the booked pick-up / return and the free days they are counted from
+                    "free_days": free_days_rule,
+                    "pickup": long_day(item.rental_date), "return": long_day(item.return_date),
+                    "free_from": long_day(getattr(item, "free_pickup_date", None)), "free_until": long_day(getattr(item, "free_return_date", None)),
+                    # a later return fee's days run up to the return date, or the day first booked when staff moved it further (that part is a change)
+                    "until": long_day(min(item.return_date, booked)) if kind == LATER_FEE else "",
+                })
     late_fee = sum((line["amount"] for line in late_lines), ZERO)
+    early_fee = sum((line["amount"] for line in fee_lines if line["kind"] == EARLY_FEE), ZERO)
+    later_fee = sum((line["amount"] for line in fee_lines if line["kind"] == LATER_FEE), ZERO)
     change_fee = sum((line["amount"] for line in fee_lines if line["kind"] == CHANGE_FEE), ZERO)
     overdue_fee = sum((line["amount"] for line in fee_lines if line["kind"] == OVERDUE_FEE), ZERO)
 
@@ -260,9 +350,15 @@ def statement(reservation, today=None):
     deductions_total = sum((money(d.amount) for d in deductions), ZERO)
 
     against = late_fee + deductions_total
-    overflow = max(against - deposit_paid, ZERO)
+    # A free-days booking's BOOKED days are charged from the day it is booked, so they can be there while the deposit is not paid yet: they
+    # come out of the deposit once it is paid, so that unpaid part is not asked for a second time as "extra" (only what no deposit covers is).
+    booked_fee = sum((line["amount"] for line in fee_lines if line["free_days"] and line["kind"] != OVERDUE_FEE), ZERO)
+    covered_when_paid = min(booked_fee, deposit_unpaid)
+    overflow = max(against - deposit_paid - covered_when_paid, ZERO)
     extra_owed = max(overflow - extra_in, ZERO)
-    refundable_total = max(deposit_paid - against, ZERO)
+    # An extra charge paid that is no longer needed is the customer's money: it goes back with the deposit. (A cancelled booking keeps what it has.)
+    extra_credit = ZERO if cancelled else max(extra_in - overflow, ZERO)
+    refundable_total = max(deposit_paid - against, ZERO) + extra_credit
     all_returned = bool(live) and all(i.stage == ReservationItem.Stage.RETURNED for i in live)
     refund_available = max(refundable_total - refunded, ZERO) if (tracked and not cancelled and all_returned) else ZERO
 
@@ -272,7 +368,8 @@ def statement(reservation, today=None):
         balance_core = balance_due = ZERO                      # nothing more is asked of a booking that is not running (or was cancelled)
         extra_owed = ZERO
 
-    late_now = any(not line["back"] for line in late_lines)          # a fee is still moving: a gown that has one is still out
+    # A fee is still moving: an older booking's gown that has one is still out; a free-days booking's only while its gown is out past its return date.
+    late_now = any(not line["back"] and (not line["free_days"] or line["overdue_days"] > 0) for line in late_lines)
     overdue_now = any(line["kind"] == OVERDUE_FEE and not line["back"] for line in fee_lines)          # a gown is out past its agreed return date
     if cancelled and tracked:
         state = CANCELLED
@@ -292,9 +389,13 @@ def statement(reservation, today=None):
         deposit_paid=deposit_paid, rental_paid=rental_paid, deposit_unpaid=deposit_unpaid, rental_unpaid=rental_unpaid,
         late_rate=Decimal(rate), late_lines=late_lines, late_days_total=sum(line["days"] for line in late_lines), late_fee=late_fee,
         late_now=late_now, overdue_now=overdue_now, fee_lines=fee_lines, change_fee=change_fee, overdue_fee=overdue_fee,
+        early_fee=early_fee, later_fee=later_fee, extra_days_fee=early_fee + later_fee,
+        early_days_total=sum(line["days"] for line in fee_lines if line["kind"] == EARLY_FEE),
+        later_days_total=sum(line["days"] for line in fee_lines if line["kind"] == LATER_FEE),
         change_days_total=sum(line["days"] for line in fee_lines if line["kind"] == CHANGE_FEE),
         overdue_days_total=sum(line["days"] for line in fee_lines if line["kind"] == OVERDUE_FEE),
-        deductions_total=deductions_total, deposit_used=min(deposit_paid, against), overflow=overflow, extra_received=extra_in,
+        total_deduction=late_fee + deductions_total,                 # everything that comes out of the deposit: the date fees and the deductions
+        deductions_total=deductions_total, deposit_used=min(deposit_paid, against), overflow=overflow, extra_received=extra_in, extra_credit=extra_credit,
         extra_owed=extra_owed, refundable_total=refundable_total, refund_available=refund_available,
         all_returned=all_returned, balance_core=balance_core, balance_due=balance_due,
         state=state, state_label=STATE_LABELS[state],

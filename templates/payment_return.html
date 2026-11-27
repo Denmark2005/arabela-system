@@ -47,6 +47,9 @@
     .pay-gown-t b { display: block; font-size: 0.9rem; font-weight: 500; color: #1b1c1c; overflow-wrap: anywhere; }
     .pay-line { display: flex; justify-content: space-between; gap: 1rem; padding: 0.3rem 0; font-size: 0.875rem; color: #615E57; }
     .pay-line.pay-total { margin-top: 0.5rem; padding-top: 0.8rem; border-top: 1px solid #D4D0CD; font-weight: 500; color: #1b1c1c; }
+    /* booked days outside the free days: taken from the deposit when the gown is back (the shop's red money line) */
+    .pay-line.pay-deduct { margin-top: 0.35rem; padding: 0.4rem 0.6rem; border-left: 2px solid #d92d20; border-radius: 6px; background: #fef3f2; color: #b42318; font-weight: 600; }
+    .pay-gown-t .pay-deduct { color: #b42318; font-weight: 600; }
     .pay-actions { display: flex; flex-direction: column; align-items: center; gap: 1.4rem; margin-top: 2.5rem; }
     .pay-actions-row { display: flex; flex-direction: column; gap: 0.9rem; width: 100%; }
     @media (min-width: 640px) { .pay-actions-row { flex-direction: row; justify-content: center; width: auto; } }
@@ -106,6 +109,7 @@
           <hr class="pay-sep">
           <h3 class="pay-h">What happens next</h3>
           <p class="pay-note">Come to the shop on your pick-up day between {{ pickup_hours }}. <span data-pay-field="next_balance"></span></p>
+          <p class="pay-note" style="margin-top: .6rem;">To change your dates, call Arabela{% if site_phone %} at <a href="{{ site_phone_tel }}" class="underline underline-offset-4 whitespace-nowrap">{{ site_phone }}</a>{% endif %} with your booking number.</p>
         </div>
         <aside class="pay-summary">
           <h3 class="pay-h">Rental summary</h3>
@@ -260,9 +264,14 @@
         var text = mk('div', 'pay-gown-t');
         text.appendChild(mk('b', '', g.name));
         if (g.size) { text.appendChild(mk('span', '', 'Size ' + g.size)); text.appendChild(document.createElement('br')); }
+        if (g.event) { text.appendChild(mk('span', '', 'Event ' + g.event)); text.appendChild(document.createElement('br')); }
         text.appendChild(mk('span', '', 'Pick-up ' + g.pickup)); text.appendChild(document.createElement('br'));
         text.appendChild(mk('span', '', 'Return ' + g.return)); text.appendChild(document.createElement('br'));
         text.appendChild(mk('span', '', '\u20b1' + g.price));
+        if (g.extra) {
+          text.appendChild(document.createElement('br'));
+          text.appendChild(mk('span', 'pay-deduct', '\u2212 \u20b1' + g.extra + ' off your deposit (' + g.extra_days + ' extra day' + (g.extra_days === 1 ? '' : 's') + ')'));
+        }
         row.appendChild(text);
         list.appendChild(row);
       });
@@ -273,6 +282,11 @@
       totals.appendChild(line('Total', '\u20b1' + d.total, 'pay-total'));
       totals.appendChild(line('Paid now', '\u20b1' + d.paid));
       if (d.owes) totals.appendChild(line('Still to pay at the shop', '\u20b1' + d.balance));
+      if (d.deduction) {
+        // Booked days outside the free days: taken from the deposit when the gowns are back (nothing more was paid for them now).
+        totals.appendChild(line('Off your deposit after return', '\u2212 \u20b1' + d.deduction, 'pay-deduct'));
+        totals.appendChild(line('Deposit back after return', '\u20b1' + d.deposit_back));
+      }
       box.hidden = false;
     }
 

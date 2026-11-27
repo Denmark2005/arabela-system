@@ -79,6 +79,9 @@
     .nb-verdict--wait { background: #f9fafb; color: #475467; border: 1px solid #e4e7ec; }
     .dark .nb-verdict--wait { background: rgba(255,255,255,.04); color: #98a2b3; border-color: #1d2939; }
     .nb-verdict ul { margin: .35rem 0 0 1.1rem; padding: 0; list-style: disc; }
+    /* a gown taken earlier than 2 days before the event: what comes out of the deposit for it (amber, the page's own fee colour) */
+    .nb-extra-fee { margin: .45rem 0 0; padding: .45rem .6rem; border-radius: .5rem; background: #fffaeb; color: #b54708; font-size: .8125rem; font-weight: 500; }
+    .dark .nb-extra-fee { background: rgba(247,144,9,.14); color: #fdb022; }
     .nb-verdict-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .55rem; }
     .nb-hint { margin-top: .75rem; padding: .65rem .85rem; border-radius: .7rem; background: #fffaeb; color: #93370d; border: 1px solid #fedf89; font-size: .8125rem; line-height: 1.5; }
     .dark .nb-hint { background: rgba(247,144,9,.12); color: #fdb022; border-color: rgba(247,144,9,.35); }
@@ -89,6 +92,10 @@
     .nb-sum td:last-child { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .nb-sum tr.nb-sum-total td { font-weight: 700; color: #1d2939; border-bottom: 0; }
     .dark .nb-sum tr.nb-sum-total td { color: #f2f4f7; }
+    /* What the early pick-up days take out of the deposit when the gown comes back: said with the amounts, so it is seen before saving. */
+    .nb-sum tr.nb-sum-extra td { color: #b54708; font-weight: 600; border-top: 1px solid #f2f4f7; border-bottom: 0; }
+    .dark .nb-sum tr.nb-sum-extra td { color: #fdb022; border-top-color: #1d2939; }
+    .nb-sum tr.nb-sum-extra small { display: block; font-size: .8125rem; font-weight: 400; }
     .nb-error { margin: 0 0 1rem; padding: .7rem .9rem; border-radius: .7rem; background: #fef3f2; color: #b42318; border: 1px solid #fecdca; font-size: .875rem; line-height: 1.5; }
     .dark .nb-error { background: rgba(240,68,56,.14); color: #fda29b; border-color: rgba(240,68,56,.35); }
     .nb-saved { padding: 1.25rem; border-radius: 1rem; background: #ecfdf3; border: 1px solid #abefc6; color: #05603a; margin-bottom: 1.25rem; }
@@ -1801,6 +1808,9 @@
                           <template x-if="!line.checking &amp;&amp; line.check">
                             <div class="nb-verdict" :class="line.check.ok ? 'nb-verdict--ok' : 'nb-verdict--no'" aria-live="polite">
                               <strong x-text="line.check.ok ? '✓ ' : '✕ '"></strong><span x-text="line.check.headline || line.check.message"></span>
+                              <template x-if="line.check.ok &amp;&amp; line.check.extraText">
+                                <p class="nb-extra-fee" x-text="line.check.extraText"></p>
+                              </template>
                               <template x-if="!line.check.ok &amp;&amp; line.check.conflicts.length">
                                 <ul>
                                   <template x-for="c in line.check.conflicts" :key="c.text">
@@ -1882,6 +1892,10 @@
                           <tr class="nb-sum-total"><td>Total</td><td x-text="peso(rentalTotal + depositTotal)"></td></tr>
                           <tr x-show="payment === 'deposit'" x-cloak><td>Paid now (the deposit)</td><td x-text="peso(depositTotal)"></td></tr>
                           <tr x-show="payment === 'deposit'" x-cloak><td>Still to pay (the rental)</td><td x-text="peso(rentalTotal)"></td></tr>
+                          <tr class="nb-sum-extra" x-show="extraTotal > 0" x-cloak>
+                            <td>Early pick-up fee<small x-text="extraTotal > depositTotal ? 'taken from the deposit; ' + peso(extraTotal - depositTotal) + ' more is paid at the shop' : 'taken from the deposit when the gown is returned'"></small></td>
+                            <td x-text="'−' + peso(extraTotal)"></td>
+                          </tr>
                         </tbody>
                       </table>
                     </aside>
@@ -2033,6 +2047,8 @@
         get anyTakesNow() { return this.lines.some(function (l) { return l.takesNow; }); },
         get rentalTotal() { return this.chosenLines.reduce(function (sum, l) { return sum + l.gown.priceValue; }, 0); },
         get depositTotal() { return this.chosenLines.length * this.DEPOSIT; },
+        // What taking gowns before their free days takes out of the deposit (each gown's own check says it).
+        get extraTotal() { return this.chosenLines.reduce(function (sum, l) { return sum + (!l.checking && l.check && l.check.ok ? Number(l.check.extraFee) || 0 : 0); }, 0); },
         // What the payment choice asks for, exactly: the deposit alone, or the rental and the deposit. The box starts with it; staff confirm or correct it.
         get amountDue() { return this.payment === 'full' ? this.rentalTotal + this.depositTotal : this.depositTotal; },
         get amountText() { return this.amountEdited ? this.amount : (this.payment === '' || !this.amountDue ? '' : String(this.amountDue)); },

@@ -28,6 +28,7 @@ from django.db import IntegrityError, transaction
 from django.http import JsonResponse
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from accounts import rate_limit, terms
 from accounts.models import CustomerMessage, UserProfile
@@ -75,42 +76,20 @@ def absolute(request, path):
 
 
 # ---------------------------------------------------------------- picking the gowns (the same rules the older checkout uses)
-def _resolve_items(items, *, authoritative_price):
+def _resolve_items(items, *, authoritative_price, now=None):
     """Finds a free physical gown for every selected item (MUST run inside transaction.atomic(): it takes the same row locks the older checkout does).
 
-    Mutates each item: `matched_gown` (the unit, or None for a gown with no inventory row), `rental_date` (the real pick-up day the server works
-    out), and -- when `authoritative_price` -- `price` from the database. Returns None when every item can be booked, else (message, status)."""
+    Mutates each item (checkout.resolve_item_dates): `matched_gown` (the unit, or None for a gown with no inventory row), the event, pick-up and
+    return days kept as the customer chose them, the free days -- and, when `authoritative_price`, `price` from the database. `now`: the moment
+    the dates are judged by (a paid booking is judged by the moment Pay was pressed, so a pick-up "today" paid at 4:59 PM is not refused at
+    5:01 PM). Returns None when every item can be booked, else (message, status)."""
     assigned_unit_ids = set()
-    now = availability.now_local()
+    now = now or availability.now_local()
     for item in sorted(items, key=lambda i: i["gown_name"].casefold()):
-        event_date = item["return_date"] - timedelta(days=availability.RETURN_DAYS)
-        outcome, unit, pickup = checkout._plan_pickup(
-            item["gown_name"], event_date, gown_slug=item["gown_slug"], size=item["size"], already_taken=assigned_unit_ids, now=now)
-        if outcome in (checkout._UNIT_DATE_PASSED, checkout._UNIT_TODAY_CLOSED):
-            if outcome == checkout._UNIT_DATE_PASSED:
-                return (f"The date {event_date:%b %d, %Y} for {item['gown_name']} has already passed. "
-                        "Please open it from your order summary and choose new dates.", 400)
-            return (f"Today's pick-up closed at {availability.PICKUP_CLOSES.strftime('%I:%M %p').lstrip('0')}. "
-                    f"Please open {item['gown_name']} from your order summary and choose another date.", 400)
-        if outcome != checkout._UNIT_UNAVAILABLE and pickup is not None:
-            item["rental_date"] = pickup
-        if outcome == checkout._UNIT_UNAVAILABLE:
-            copies = sum(1 for other in items if other["gown_name"].casefold() == item["gown_name"].casefold()
-                         and checkout._normalize_size(other["size"]) == checkout._normalize_size(item["size"]))
-            if copies > 1:
-                return (f"{item['gown_name']} is in your selection {copies} times, but there aren't {copies} of it free for "
-                        f"{event_date:%b %d, %Y}. Please remove the extra ones from your selection and try again.", 400)
-            return (f"{item['gown_name']} is no longer available for {event_date:%b %d, %Y}. "
-                    "Please choose a different date or another gown.", 400)
-        if outcome == checkout._UNIT_OUT_OF_STOCK:
-            return (f"{item['gown_name']} is no longer available to rent -- it has been removed from the collection. "
-                    "Please take it out of your bag or choose another gown.", 400)
-        if outcome in (checkout._UNIT_SIZE_NOT_OFFERED, checkout._UNIT_SIZE_REQUIRED):
-            size_value = checkout._normalize_size(item["size"])
-            if outcome == checkout._UNIT_SIZE_NOT_OFFERED:
-                return (f"{item['gown_name']} doesn't come in {size_value}. Please open it from your order summary and choose one of its sizes.", 400)
-            return (f"Please choose a size for {item['gown_name']}: open it from your order summary and pick one of its sizes.", 400)
-        item["matched_gown"] = unit
+        problem = checkout.resolve_item_dates(item, items, already_taken=assigned_unit_ids, now=now)
+        if problem is not None:
+            return problem
+        unit = item["matched_gown"]
         if unit is not None:
             assigned_unit_ids.add(unit.id)
         if authoritative_price:
@@ -123,8 +102,10 @@ def _resolve_items(items, *, authoritative_price):
 
 # ---------------------------------------------------------------- 1. START
 def _selection_key(rows):
-    """What makes two selections the same booking to pay for: each gown, its size and its return date (the event is two days before it)."""
-    return sorted((str(r["gown_name"]).casefold(), str(r.get("gown_slug", "")), str(r.get("size", "")), str(r["return_date"])) for r in rows)
+    """What makes two selections the same booking to pay for: each gown, its size, its event and its pick-up and return days (a page that
+    changed only the pick-up is another booking: it costs a different amount out of the deposit)."""
+    return sorted((str(r["gown_name"]).casefold(), str(r.get("gown_slug", "")), str(r.get("size", "")), str(r["return_date"]),
+                   str(r.get("event_date") or ""), str(r.get("rental_date") or r.get("planned_pickup") or "")) for r in rows)
 
 
 def _parse_items(raw_items):
@@ -143,8 +124,17 @@ def _parse_items(raw_items):
             "size": (raw.get("size") or "").strip()[:20],
             "rental_date": rental_date,
             "return_date": return_date,
+            "event_date": checkout._parse_date(raw.get("event_date")),     # None: a line from a bag saved before the event was sent
         })
     return parsed
+
+
+def _chosen(item):
+    """One line of a selection as the customer chose it (before the server fills in anything), as plain text: what an attempt keeps and what
+    makes two selections the same one (_selection_key)."""
+    return {"gown_name": item["gown_name"], "gown_slug": item["gown_slug"], "size": item["size"],
+            "event_date": item["event_date"].isoformat() if item.get("event_date") else "",
+            "rental_date": item["rental_date"].isoformat(), "return_date": item["return_date"].isoformat()}
 
 
 def start_payment(request):
@@ -198,6 +188,11 @@ def start_payment(request):
             return _fail(f"The security deposit changed to ₱{per_gown:,} per gown, so your deposit is now ₱{int(current_deposit):,}. "
                          "Please check the amount and try again.", 409, deposit_changed=True, deposit_per_gown=per_gown)
 
+    # The extra days the page showed coming out of the deposit, at the fee per day it knew (see checkout._extra_fee_changed).
+    fee_refusal = checkout._extra_fee_changed(request, items)
+    if fee_refusal is not None:
+        return fee_refusal
+
     purpose = (request.POST.get("pay_option") or "").strip()
     if purpose not in PaymentAttempt.Purpose.values:
         return _fail("Please choose how much to pay now: the deposit only, or everything.")
@@ -213,8 +208,7 @@ def start_payment(request):
     if request_id:
         earlier = PaymentAttempt.objects.filter(customer=user, request_id=request_id).first()
         if earlier is not None:
-            same = earlier.purpose == purpose and _selection_key(earlier.payload.get("items", [])) == _selection_key(
-                [{"gown_name": i["gown_name"], "gown_slug": i["gown_slug"], "size": i["size"], "return_date": i["return_date"].isoformat()} for i in items])
+            same = earlier.purpose == purpose and _selection_key(earlier.payload.get("items", [])) == _selection_key([_chosen(i) for i in items])
             # A payment that already went through (or was sorted out) is never thrown away or doubled, whatever the page now says (a page restored by
             # the Back button can show an old choice): the customer is shown what happened to it.
             if earlier.status not in (S.CREATED, S.CANCELLED, S.EXPIRED):
@@ -254,7 +248,9 @@ def start_payment(request):
     }
 
     # Every gown must be free right now (the same rules, the same locks, as the older checkout) and every price comes from the database.
-    # Nothing is written: the locks are released when this block ends, and the selection is only KEPT in the attempt below.
+    # Nothing is written: the locks are released when this block ends, and the selection is only KEPT in the attempt below -- as the customer
+    # chose it, so the booking made after the payment is checked against the very same days.
+    chosen = [_chosen(i) for i in items]
     with transaction.atomic():
         get_user_model().objects.select_for_update().filter(pk=user.pk).first()
         problem = _resolve_items(items, authoritative_price=True)
@@ -269,9 +265,10 @@ def start_payment(request):
     now = timezone.now()
     payload = {
         "items": [{
-            "gown_name": i["gown_name"], "gown_slug": i["gown_slug"], "size": i["size"], "event_date": (i["return_date"] - timedelta(days=availability.RETURN_DAYS)).isoformat(),
-            "return_date": i["return_date"].isoformat(), "planned_pickup": i["rental_date"].isoformat(), "price": str(i["price"]),
-        } for i in items],
+            "gown_name": c["gown_name"], "gown_slug": c["gown_slug"], "size": c["size"], "event_date": c["event_date"],
+            "return_date": c["return_date"], "planned_pickup": c["rental_date"], "price": str(i["price"]),
+        } for c, i in zip(chosen, items)],
+        "started_at": now.isoformat(),                   # the moment Pay was pressed: the dates are judged by it again when the booking is made
         "details": details,
         "rental_subtotal": str(rental_subtotal),
         "security_deposit": str(current_deposit),
@@ -440,10 +437,15 @@ def _create_booking(attempt):
             "gown_name": raw["gown_name"], "gown_slug": raw.get("gown_slug", ""), "size": raw.get("size", ""),
             "rental_date": checkout._parse_date(raw.get("planned_pickup")) or checkout._parse_date(raw["return_date"]),
             "return_date": checkout._parse_date(raw["return_date"]), "price": Decimal(raw["price"]),
+            # An attempt kept since the customer chooses all three dates carries the chosen event; an older one ("" or a worked-out event with
+            # no "started_at") is booked the old way, inside the free days.
+            "event_date": checkout._parse_date(raw.get("event_date")) if payload.get("started_at") else None,
         })
     if not items:
         raise BookingUnavailable("The selection was empty.")
-    problem = _resolve_items(items, authoritative_price=False)          # the SNAPSHOT prices: the customer pays exactly what they saw
+    # The days are judged by the moment Pay was pressed (the customer paid for them then); who else holds the gown is read as it is NOW.
+    started = parse_datetime(payload.get("started_at") or "") or attempt.created_at
+    problem = _resolve_items(items, authoritative_price=False, now=timezone.localtime(started))   # the SNAPSHOT prices: the customer pays exactly what they saw
     if problem is not None:
         raise BookingUnavailable(problem[0])
 
@@ -467,8 +469,9 @@ def _create_booking(attempt):
             gown_name=(gown.name if gown is not None else item["gown_name"])[:150], gown_slug=item["gown_slug"],
             gown_photo_url=((gown.photo_url if gown is not None else "") or "")[:500],
             size=(gown.size if gown is not None else item["size"])[:20], rental_price=item["price"],
-            rental_date=item["rental_date"], return_date=item["return_date"],
+            rental_date=item["rental_date"], event_date=item["event_date"], return_date=item["return_date"],
             original_rental_date=item["rental_date"], original_return_date=item["return_date"],
+            free_pickup_date=item["free_pickup_date"], free_return_date=item["free_return_date"], planned_return_date=item["planned_return_date"],
         )
         if gown is not None:
             GownUnavailability.objects.create(
@@ -603,9 +606,13 @@ def booked_details(reservation, payment, attempt):
         if item.stage == ReservationItem.Stage.CANCELLED:
             continue
         photo = item.gown.photo_url if item.gown_id else item.gown_photo_url
+        early, later, change = ledger.booked_extra_days(item)
+        extra = (early + later + change) * int(reservation.late_fee_per_day or 0)
         gowns.append({
             "name": item.gown_name, "size": item.size or "", "photo": sized(photo, 240) if photo else "", "price": f"{money(item.rental_price):,.2f}",
-            "pickup": _day(item.rental_date), "return": _day(item.return_date), "event": _day(item.effective_event_date),
+            "pickup": _day(item.rental_date), "return": _day(item.shown_return_date), "event": _day(item.effective_event_date),
+            # what this gown's booked days outside the free days take out of the deposit ("" when none)
+            "extra": f"{money(extra):,.2f}" if extra > 0 else "", "extra_days": early + later + change,
         })
     way = payment.get_method_display().replace(" (online payment)", "") if payment else gateway.CHANNEL_LABELS.get(attempt.channel, "")
     when = timezone.localtime(attempt.paid_at) if attempt.paid_at else None
@@ -619,6 +626,9 @@ def booked_details(reservation, payment, attempt):
         "rental": f"{statement.rental:,.2f}", "deposit": f"{statement.deposit:,.2f}", "total": f"{statement.total:,.2f}",
         "paid": f"{money(attempt.paid_amount):,.2f}", "balance": f"{statement.balance_due:,.2f}", "owes": statement.balance_due > 0,
         "paid_in_full": attempt.purpose == PaymentAttempt.Purpose.FULL,
+        # what comes out of the deposit when the gowns are back, and what comes back ("" when nothing is deducted)
+        "deduction": f"{statement.total_deduction:,.2f}" if statement.total_deduction > 0 else "",
+        "deposit_back": f"{max(statement.deposit - statement.total_deduction, ledger.ZERO):,.2f}",
     }
 
 

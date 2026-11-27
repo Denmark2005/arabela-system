@@ -82,7 +82,7 @@ class AgreementRecordTests(TestCase):
         self.assertEqual(UserProfile.objects.get(user=user).terms_accepted_at, first)
 
     def test_the_version_label_is_a_readable_date(self):
-        self.assertEqual(terms.label(), "Nov 8, 2026")
+        self.assertEqual(terms.label(), "Nov 27, 2026")
 
 
 class AcceptEndpointTests(TestCase):
@@ -203,7 +203,7 @@ class WhoSeesThePopupTests(TestCase):
         self.assertIn('data-terms-needed="true"', html)
         self.assertIn('id="ara-terms"', html)
         self.assertIn("Before you rent", html)
-        self.assertIn("The 5 things that matter most", html)
+        self.assertIn("The 7 things that matter most", html)
         self.assertIn(reverse("accounts:accept_terms"), html)
         self.assertIn(f"Version of {terms.label()}", html)
 
@@ -246,7 +246,7 @@ class OneTextTests(TestCase):
     """The Terms page and the pop-up are the same text, so they can never disagree."""
 
     def headings(self, html):
-        return re.findall(r'<h2 class="font-label[^>]*>([^<]+)</h2>', html)
+        return re.findall(r'<h2 class="terms-h"><span class="terms-n">\d+</span>([^<]+)</h2>', html)
 
     def test_the_page_and_the_popup_show_the_same_sections_in_the_same_order(self):
         page = self.client.get(reverse("gowns:terms_and_conditions")).content.decode()
@@ -259,8 +259,8 @@ class OneTextTests(TestCase):
 
     def test_the_page_keeps_its_reveal_animation_and_the_popup_does_not_hide_anything(self):
         page = self.client.get(reverse("gowns:terms_and_conditions")).content.decode()
-        self.assertEqual(page.count('<article class="terms-reveal'), 10)         # all 10 sections fade in on the page, exactly as before
-        self.assertIn('class="text-center mb-14 terms-reveal"', page)            # and so does the heading
+        self.assertEqual(len(re.findall(r'<article id="terms-[a-z]+" class="terms-sec terms-reveal', page)), 10)         # all 10 sections fade in on the page, exactly as before
+        self.assertIn('class="text-center mb-10 terms-reveal"', page)            # and so does the heading
         self.client.force_login(customer("same_text2"))
         popup = self.client.get(reverse("gowns:homepage")).content.decode()
         popup = popup[popup.index('id="ara-terms"'):]

@@ -8,6 +8,8 @@ JSON the view answered, before = the state captured before the view ran) and ret
 A describe function may raise or find nothing: the decorator then still writes a plain line, so a line is never skipped.
 The `before_*` functions run BEFORE the view and capture what is about to change.
 """
+from datetime import date
+
 from reservations.models import ReceiptRecord, Reservation, ReservationItem
 
 
@@ -174,6 +176,36 @@ def item_change_pickup(ctx):
             "details": {"pick-up date": [old, new], "return date": [ctx.before.get("return", ""), _date_text(item.return_date) if item else ""]}}
 
 
+RETURN_CHANGES_ALERT = 3      # from this many saved return-date changes of one gown, the line is important: the owner sees it on the bell
+
+
+def _ordinal(n):
+    return f"{n}{'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')}"
+
+
+def _short_iso(text):
+    try:
+        day = date.fromisoformat(str(text))
+    except ValueError:
+        return str(text)
+    return f"{day:%b} {day.day}"
+
+
+def _with_return_alert(info, item, return_changed):
+    """A return-date change that is the third (or later) one of this gown: the line is marked important and says every change and who made it,
+    so the owner can see who keeps moving it (ReservationItem.return_changes)."""
+    changes = list(getattr(item, "return_changes", None) or []) if item else []
+    if not return_changed or len(changes) < RETURN_CHANGES_ALERT:
+        return info
+    steps = [f"{_short_iso(c.get('from'))} to {_short_iso(c.get('to'))} by {c.get('by') or 'someone'}" for c in changes]
+    shown = steps[-5:]
+    info["summary"] = (f"changed the return date of {_item_text(item)} for the {_ordinal(len(changes))} time: "
+                       + ("... " if len(steps) > len(shown) else "") + "; ".join(shown))
+    info["sensitive"] = True
+    info.setdefault("details", {})["return date changes"] = [f"{c.get('from')} -> {c.get('to')} ({c.get('by') or ''})" for c in changes]
+    return info
+
+
 def item_change_dates(ctx):
     item = _item(ctx.kwargs.get("item_id"))
     before = ctx.before or {}
@@ -190,16 +222,18 @@ def item_change_dates(ctx):
     if before.get("event", "") != new_event:
         parts.append(f"event date from {before.get('event', '')} to {new_event}")
         details["event date"] = [before.get("event", ""), new_event]
-    return {"summary": f"changed the dates of {_item_text(item)}: " + (" and ".join(parts) or "no change"),
+    info = {"summary": f"changed the dates of {_item_text(item)}: " + (" and ".join(parts) or "no change"),
             "target": _booking_target(item.reservation if item else None), "details": details}
+    return _with_return_alert(info, item, "return date" in details)
 
 
 def item_change_return(ctx):
     item = _item(ctx.kwargs.get("item_id"))
     old = ctx.before.get("return", "")
     new = _date_text(item.return_date) if item else ""
-    return {"summary": f"changed the return date of {_item_text(item)} from {old} to {new}",
+    info = {"summary": f"changed the return date of {_item_text(item)} from {old} to {new}",
             "target": _booking_target(item.reservation if item else None), "details": {"return date": [old, new]}}
+    return _with_return_alert(info, item, old != new)
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------
@@ -772,7 +806,7 @@ def report_download(ctx):
 def late_fee_setting(ctx):
     from gowns.models import SiteSettings
     new = SiteSettings.load().late_fee_per_day
-    return {"summary": f"changed the overdue / date change fee per gown per day from ₱{ctx.before.get('late_fee', '')} to ₱{new}", "sensitive": True,
+    return {"summary": f"changed the extra day / overdue fee per gown per day from ₱{ctx.before.get('late_fee', '')} to ₱{new}", "sensitive": True,
             "details": {"fee per day": [ctx.before.get("late_fee", ""), new]}}
 
 

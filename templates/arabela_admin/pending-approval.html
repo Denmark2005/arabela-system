@@ -99,6 +99,7 @@
       /* A phone: one column, in the order staff read it. */
       @media (max-width: 760px) {
         .ar-line.pa-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.25rem; grid-template-areas: "cust cust chev" "gowns gowns gowns" "dates total total" "acts acts acts"; }
+        .ar-line.pa-grid > .pa-dates { white-space: normal; }        /* half a phone's width: the two dates wrap instead of running into the total */
         .ar-gl.pa-gl { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name name" "dates price"; row-gap: .3rem; }
         .ar-gl.pa-gl > .ar-gname { grid-area: name; }
         .ar-gl.pa-gl > .ar-gdates { grid-area: dates; }
@@ -1335,7 +1336,7 @@
                             </span>
                             {% endif %}
                           </div>
-                          <div class="ar-gdates"><span>{{ item.rental_date|date:"M j" }}{% if item.rental_date.year != item.return_date.year %}, {{ item.rental_date.year }}{% endif %} &rarr; {{ item.return_date|date:"M j, Y" }}</span></div>
+                          <div class="ar-gdates{% if item.uses_free_days %} is-extra{% endif %}"><span>{{ item.rental_date|date:"M j" }}{% if item.rental_date.year != item.return_date.year %}, {{ item.rental_date.year }}{% endif %} &rarr; {{ item.return_date|date:"M j, Y" }}</span>{% if item.uses_free_days %}<span>Event {{ item.effective_event_date|date:"M j" }}</span>{% endif %}{% if item.extra_days_fee %}<span class="ar-gxtra" title="Booked days outside the free days (2 before and 2 after the event): taken from the security deposit when the gown is returned">{{ item.extra_days_count }} extra day{{ item.extra_days_count|pluralize }} &middot; &#8369;{{ item.extra_days_fee|floatformat:'-2g' }} off the deposit</span>{% endif %}</div>
                           <div class="ar-gprice">&#8369;{{ item.rental_price|floatformat:'-2g' }}</div>
                         </div>
                       </div>

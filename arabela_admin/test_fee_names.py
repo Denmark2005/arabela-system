@@ -219,13 +219,13 @@ class PageTests(Base):
     def test_the_profile_card_and_the_audit_log_name_both(self):
         self.client.force_login(self.owner)
         html = self.client.get(reverse("arabela_admin:page", kwargs={"page": "profile"})).content.decode()
-        for piece in ("Overdue &amp; date change fee", "Fee for each gown, each day (pesos)", "'Save Fee'", "3 days overdue at"):
+        for piece in ("Extra day &amp; overdue fee", "Fee for each gown, each day (pesos)", "'Save Fee'", "3 extra days at"):
             with self.subTest(piece=piece):
                 self.assertIn(piece, html)
         self.assertNotIn("Late fee", html)
         response = self.client.post(reverse("arabela_admin:late_fee_setting_update"), data='{"amount": "250"}', content_type="application/json")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("changed the overdue / date change fee per gown per day from ₱200 to ₱250", AuditLog.objects.get(action="settings.late_fee").summary)
+        self.assertIn("changed the extra day / overdue fee per gown per day from ₱200 to ₱250", AuditLog.objects.get(action="settings.late_fee").summary)
 
     def test_the_monitoring_picture_fills_a_square_box_like_the_catalog(self):
         css = (TEMPLATES / "arabela_admin" / "gown-monitoring.html").read_text(encoding="utf-8")

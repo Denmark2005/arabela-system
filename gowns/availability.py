@@ -1,14 +1,18 @@
-"""Which event dates a customer can book, and the day the gown is picked up -- ONE set of rules used by the gown page
-calendar, by checkout, and by the admin's "release blocked dates" reminder.
+"""Which event dates a customer can book, and the days the gown is picked up and returned -- ONE set of rules used by the gown
+page calendar, by checkout, and by the admin's "release blocked dates" reminder.
 
 The rules (Philippine time, see TIME_ZONE):
-  * The customer picks an EVENT date. The gown comes back 2 days after it, then rests COOLDOWN_DAYS (5) days.
-  * Pick-up is the earliest free day up to 2 days before the event. When the days before are taken, it is the event day
-    itself. Pick-up is only 1:00 PM - 5:00 PM.
-  * Today can be chosen until 5:00 PM. From 5:00 PM no pick-up can still happen today, so the earliest pick-up is tomorrow
-    (today is closed as an event date, tomorrow still works with a same-day pick-up).
-  * The rental (pick-up .. return) must not touch ANY booking or block of that unit. The rest days after the return must
-    not run into a later customer's booking (they may overlap a staff block: the gown is being cleaned anyway).
+  * The customer picks an EVENT date. Which event dates can be booked: the gown must be free from a pick-up day up to 2 days
+    before the event (when the days before are taken, the event day itself) through 2 days after it, and then rest
+    COOLDOWN_DAYS (5) days that must not run into a later customer's booking.
+  * The FREE days are 2 days before the event and 2 days after it (free_days). By default the pick-up is the earliest free day
+    of those (plan_unit) and the return is 2 days after the event.
+  * The customer may also choose an earlier pick-up or a later return (unit_window): each day outside the free days costs the
+    shop's fee per day (reservations/ledger.py). A return 1 day after the event may be chosen too; returning any day up to 2 days
+    after it is free, so the gown stays booked until then (kept_until).
+  * Pick-up is only 1:00 PM - 5:00 PM. Today can be chosen until 5:00 PM; from then the earliest pick-up is tomorrow.
+  * The rental (pick-up .. the day the gown is kept until) must not touch ANY booking or block of that unit. The rest days after
+    it must not run into a later customer's booking (they may overlap a staff block: the gown is being cleaned anyway).
 The planning functions work on plain dates and never touch the database; only bookable_units / load_busy_ranges at the
 bottom read it, so every caller feeds the planner the same data.
 """
@@ -26,11 +30,42 @@ RETURN_DAYS = 2                  # the gown is due back this many days after the
 EARLY_PICKUP_DAYS = 2            # ... and can be collected up to this many days before it
 PICKUP_HOURS_TEXT = "1:00 PM to 5:00 PM"
 HORIZON_DAYS = 120               # how far ahead the calendar is planned (about four months)
+LONGEST_RETURN_DAYS = 365        # how far from today a return day can be chosen: the same one-year limit staff have when they move one
 
 
 def rental_days_needed() -> int:
     """Days in a row one rental needs: the event day, the 2 return days and the cleaning days."""
     return 1 + RETURN_DAYS + COOLDOWN_DAYS
+
+
+def free_days(event: date):
+    """(the first free pick-up day, the last free return day) of an event: 2 days before it and 2 days after it."""
+    return event - timedelta(days=EARLY_PICKUP_DAYS), event + timedelta(days=RETURN_DAYS)
+
+
+def extra_days(event: date, pickup: date, ret: date):
+    """(days picked up before the free days, days returned after them) for a booking of these dates."""
+    free_pickup, free_return = free_days(event)
+    return max(0, (free_pickup - pickup).days), max(0, (ret - free_return).days)
+
+
+def kept_until(event: date, ret: date) -> date:
+    """The last day the gown is held for a booking returned on `ret`: never before the free return day (returning up to 2 days after
+    the event is free, so a customer who chose 1 day after may still bring it on the second day)."""
+    return max(ret, event + timedelta(days=RETURN_DAYS))
+
+
+def last_return_day(today: date, event: date) -> date:
+    """The latest return day the website offers for an event (one year from today, never before the free return day)."""
+    return max(today + timedelta(days=LONGEST_RETURN_DAYS), event + timedelta(days=RETURN_DAYS))
+
+
+def pickup_allowed(event: date, pickup: date, lowest: date) -> bool:
+    """Whether `pickup` may be chosen on a unit whose earliest possible pick-up is `lowest`: any day from it up to the day before the
+    event -- the event day itself only when no earlier day is possible (the same rule the default pick-up follows)."""
+    if lowest >= event:
+        return pickup == event
+    return lowest <= pickup <= event - timedelta(days=1)
 
 
 def now_local():
@@ -79,12 +114,71 @@ def plan_unit(event: date, bookings, blocks, earliest: date):
     return pickup, None
 
 
+def unit_window(event: date, bookings, blocks, earliest: date, last_return: date):
+    """The days ONE physical gown can be booked around this event date -> ((default pick-up, lowest pick-up, highest return), None) or
+    (None, reason). The event must be bookable on the unit (plan_unit); then:
+      * lowest pick-up: the earliest day the gown is free in a row up to the default pick-up (never before `earliest`);
+      * highest return: the latest day the gown is free in a row after the free return day, whose rest days still stay clear of the next
+        customer's booking (never after `last_return`).
+    Every pick-up from the lowest one (pickup_allowed) together with every return from 1 day after the event up to the highest one can be
+    booked on this unit: the free stretch is one block of days, so any smaller stretch inside it is free too."""
+    pickup, reason = plan_unit(event, bookings, blocks, earliest)
+    if pickup is None:
+        return None, reason
+    taken = list(bookings) + list(blocks)
+    free_return = event + timedelta(days=RETURN_DAYS)
+    # Nothing touches pickup .. free_return (plan_unit checked it), so every range ends before the pick-up or starts after the free return.
+    lowest = max([earliest] + [end + timedelta(days=1) for start, end in taken if end < pickup])
+    highest = last_return
+    for start, _end in taken:
+        if start > free_return:
+            highest = min(highest, start - timedelta(days=1))
+    if COOLDOWN_DAYS:
+        for start, _end in bookings:
+            if start > free_return:
+                highest = min(highest, start - timedelta(days=COOLDOWN_DAYS + 1))
+    return (pickup, min(lowest, pickup), max(highest, free_return)), None
+
+
+def unit_fits(event: date, pickup: date, ret: date, bookings, blocks, earliest: date, last_return: date) -> bool:
+    """Can ONE physical gown be booked from `pickup` to `ret` for this event (the rule the gown page offers and checkout keeps)?"""
+    window, _reason = unit_window(event, bookings, blocks, earliest, last_return)
+    if window is None:
+        return False
+    _default, lowest, highest = window
+    return pickup_allowed(event, pickup, lowest) and event + timedelta(days=1) <= ret <= highest
+
+
+def planned_days(bookings_by_unit, blocks_by_unit, today: date, at_least: int = HORIZON_DAYS) -> int:
+    """How far ahead the gown page's calendar is planned: HORIZON_DAYS, or further when something is booked or blocked later than that (up
+    to a year), so a far-off event -- a wedding next year -- is judged like any other. Past the planned days nothing is booked (open_from)."""
+    ends = [end for ranges in list(bookings_by_unit.values()) + list(blocks_by_unit.values()) for _start, end in ranges]
+    if not ends:
+        return at_least
+    return max(at_least, min((max(ends) - today).days + EARLY_PICKUP_DAYS + 1, LONGEST_RETURN_DAYS))
+
+
+def open_from(units, bookings_by_unit, blocks_by_unit, earliest: date, size_code_of):
+    """{size code or '*': ISO date}: from this day on, one gown of that size has nothing booked or blocked any more. The gown page uses it for
+    event days further ahead than the calendar was planned: any pick-up from it (and any return up to a year from today) is free."""
+    result = {}
+    for unit in units:
+        taken = list(bookings_by_unit.get(unit.id, ())) + list(blocks_by_unit.get(unit.id, ()))
+        free = max([earliest] + [end + timedelta(days=1) for _start, end in taken])
+        for key in ("*", size_code_of(unit)):
+            if key and (key not in result or free < result[key]):
+                result[key] = free
+    return {key: day.isoformat() for key, day in result.items()}
+
+
 def plan_calendar(units, bookings_by_unit, blocks_by_unit, now, horizon_days, size_code_of):
     """The whole calendar of one product, ready to hand to the gown page: {size code or '*': {event ISO date: value}}.
 
-    value = [pickup ISO date, number of free units] when the date can be booked, else the reason as a string
-    ('past', 'closed', 'booked', 'rest'). '*' means "any size" (before a size is chosen). Days from today to
-    today + horizon_days."""
+    value = [default pick-up ISO date, number of free units, windows] when the date can be booked, else the reason as a string
+    ('past', 'closed', 'booked', 'rest'). windows: one [lowest pick-up, highest return] per free unit (duplicates left out), each
+    as days from the event (-9 = 9 days before it, 30 = 30 days after it) -- what the page needs to offer an earlier pick-up or a
+    later return on a gown that really is free for all those days (see unit_window). '*' means "any size" (before a size is
+    chosen). Days from today to today + horizon_days."""
     today = now.date()
     earliest = earliest_pickup_day(now)
     keys = {"*": list(units)}
@@ -100,15 +194,19 @@ def plan_calendar(units, bookings_by_unit, blocks_by_unit, now, horizon_days, si
             if problem:
                 calendar[key][event.isoformat()] = problem
                 continue
-            pickups, reasons = [], []
+            pickups, reasons, windows = [], [], []
+            last_return = last_return_day(today, event)
             for unit in members:
-                pickup, reason = plan_unit(event, bookings_by_unit.get(unit.id, ()), blocks_by_unit.get(unit.id, ()), earliest)
-                if pickup is not None:
-                    pickups.append(pickup)
+                window, reason = unit_window(event, bookings_by_unit.get(unit.id, ()), blocks_by_unit.get(unit.id, ()), earliest, last_return)
+                if window is not None:
+                    pickups.append(window[0])
+                    span = [(window[1] - event).days, (window[2] - event).days]
+                    if span not in windows:
+                        windows.append(span)
                 else:
                     reasons.append(reason)
             if pickups:
-                calendar[key][event.isoformat()] = [min(pickups).isoformat(), len(pickups)]
+                calendar[key][event.isoformat()] = [min(pickups).isoformat(), len(pickups), sorted(windows)]
             else:
                 # 'rest' only when some unit's rental fitted and only its rest days were in the way -- the more useful hint.
                 calendar[key][event.isoformat()] = "rest" if "rest" in reasons else "booked"
