@@ -149,9 +149,11 @@ class PageTests(Base):
         html = response.content.decode()
         self.assertRegex(html, rf'data-booking-id="{moved.pk}" data-state="[a-z]+" data-late="0"')
         self.assertRegex(html, rf'data-booking-id="{late.pk}" data-state="[a-z]+" data-late="1"')
-        self.assertIn('class="pm-chip pm-chip--change"', html)
-        self.assertIn("Date&nbsp;change &#8369;600</span>", html)
-        self.assertIn("Overdue &#8369;400</span>", html)
+        # the Fees column names each fee (its amount on hover); the overdue one is marked while it is still growing
+        self.assertIn('title="Date change ₱600.00">&#8369;600.00</span>', html)
+        self.assertIn("<span>Date change</span>", html)
+        self.assertIn('title="Overdue ₱400.00 so far">&#8369;400.00</span>', html)
+        self.assertIn('<span class="pm-fee-late">Overdue</span>', html)
         self.assertNotIn("Late fee", html)
 
     def test_the_payments_window_lists_each_fee_with_its_reason(self):

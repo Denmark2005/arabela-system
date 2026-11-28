@@ -5,6 +5,9 @@
   the frame WITHOUT look=1, so it counts as the original or a reprint exactly like the Payments page's Print, then opens the browser's print window.
   A Paper choice (80 mm roll, 58 mm roll, normal page) is remembered on this computer.
 
+  Two more ways in (the All receipts page): open(id, {payment: id, viewOnly: true}) shows just that receipt with Close, never counting a print;
+  print(url) prints one receipt at once (a hidden frame loads the printable page WITHOUT look=1, so it counts), without opening anything.
+
   Included ONCE per admin page from partials/notifications.html. Self-contained: its own CSS (class prefix rcm-), light and dark. Everything that comes from the
   server is put on the page as plain text (never as HTML).
 {% endcomment %}
@@ -171,6 +174,10 @@
 
     function render(data) {
       state.list = data.receipts || [];
+      if (state.viewOnly && state.only) {                           // just the receipt asked for
+        state.list = state.list.filter(function (r) { return r.id === state.only; });
+        data.at = 0;
+      }
       say(els.booking, data.booking.code + ' · ' + data.booking.customer);
       if (!state.list.length) {
         els.pill.hidden = true;
@@ -187,7 +194,7 @@
         busy(false);
         return;
       }
-      els.bar.hidden = false;
+      els.bar.hidden = state.viewOnly;
       els.chips.textContent = '';
       els.chips.hidden = state.list.length < 2;
       state.list.forEach(function (r, i) {
@@ -212,6 +219,9 @@
       state.reservation = id;
       state.list = [];
       state.printing = false;
+      state.viewOnly = !!opts.viewOnly;
+      state.only = state.viewOnly ? Number(opts.payment) || 0 : 0;
+      els.print.hidden = state.viewOnly;
       var seq = ++state.seq;
       root.hidden = false;
       document.body.style.overflow = 'hidden';
@@ -273,6 +283,37 @@
       els.frame.src = r.printUrl;
     });
 
-    window.arabelaReceipt = { open: open, close: close };
+    // Print one receipt at once: the printable page loads out of sight (counted by the server as the original or a reprint), then the print window opens.
+    function printNow(url, button) {
+      if (state.printingNow) { return; }
+      state.printingNow = true;
+      if (button) { button.disabled = true; }
+      var old = document.getElementById('rcm-printframe');
+      if (old) { old.parentNode.removeChild(old); }
+      var frame = document.createElement('iframe');
+      frame.id = 'rcm-printframe';
+      frame.title = 'The receipt being printed';
+      frame.setAttribute('aria-hidden', 'true');
+      frame.tabIndex = -1;
+      frame.style.cssText = 'position: fixed; right: 0; bottom: 0; width: 1px; height: 1px; border: 0; opacity: 0;';
+      frame.addEventListener('load', function () {
+        try {
+          var d = frame.contentDocument;
+          if (!d || !d.querySelector('.rc-paper')) { throw new Error('no receipt'); }
+          d.documentElement.setAttribute('data-paper', paper());
+          frame.contentWindow.focus();
+          frame.contentWindow.print();
+        } catch (e) {
+          var words = { title: 'The receipt could not be printed', message: 'Reload the page and try again.' };
+          if (window.adminAlert) { window.adminAlert(words); } else { window.console.error(words.title, e); }
+        }
+        state.printingNow = false;
+        if (button) { button.disabled = false; }
+      });
+      frame.src = url;
+      document.body.appendChild(frame);
+    }
+
+    window.arabelaReceipt = { open: open, close: close, print: printNow };
   })();
 </script>

@@ -1,0 +1,87 @@
+{% comment %}
+  The three money boxes at the top of Payments and Security Deposits, the same look as Rental History's report. The numbers are drawn by the server
+  (money_boxes_body.html); this script asks for them again when the page's dates change, every 30 seconds while the page is visible, and when it is
+  looked at again. While new dates load the old numbers fade; if they cannot be loaded the boxes say so instead of showing numbers of other dates.
+{% endcomment %}
+<style>
+  .mb-sum { position: relative; z-index: 20; container-type: inline-size; container-name: mbsum; margin-bottom: 1.25rem; }
+  .mb-boxes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; transition: opacity .15s; }
+  .mb-sum.is-loading .mb-boxes { opacity: .45; }
+  .mb-box { display: flex; flex-direction: column; gap: .4rem; min-width: 0; padding: 1.35rem 1.5rem 1.4rem; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; }
+  .mb-box--wide { grid-column: 1 / -1; }
+  .dark .mb-box { border-color: #1d2939; background: rgba(255,255,255,.03); }
+  .mb-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .7rem; }
+  .mb-head .ht-tip { margin-left: -.35rem; }
+  .mb-ic { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; border-radius: .75rem; background: #f2f4f7; color: #344054; }
+  .dark .mb-ic { background: #1d2939; color: rgba(255,255,255,.9); }
+  .mb-ic svg { display: block; width: 1.25rem; height: 1.25rem; fill: currentColor; }
+  .mb-title { margin: 0; font-size: 1.0625rem; font-weight: 600; color: #344054; }
+  .dark .mb-title { color: #d0d5dd; }
+  .mb-tag { max-width: 100%; padding: .05rem .55rem; border-radius: 999px; background: #f2f4f7; color: #667085; font-size: .8125rem; font-weight: 500; }
+  .dark .mb-tag { background: #1d2939; color: #98a2b3; }
+  .mb-num { margin: .45rem 0 0; font-size: 2.25rem; font-weight: 700; line-height: 1.15; letter-spacing: -.01em; font-variant-numeric: tabular-nums; color: #101828; overflow-wrap: anywhere; }
+  .mb-num--long { font-size: 1.875rem; }
+  .dark .mb-num { color: rgba(255,255,255,.95); }
+  .mb-sub { margin: 0 0 .15rem; font-size: .9375rem; line-height: 1.4; color: #667085; }
+  .mb-line { display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; margin: 0; font-size: .9375rem; line-height: 1.5; color: #667085; }
+  .mb-line b { font-weight: 600; color: #344054; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .dark .mb-sub, .dark .mb-line { color: #98a2b3; }
+  .dark .mb-line b { color: #d0d5dd; }
+  .mb-give { display: flex; flex: 1 1 auto; align-items: baseline; justify-content: space-between; gap: .75rem; color: #b54708; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+  .mb-line .mb-give b { color: #b54708; }
+  .dark .mb-give, .dark .mb-line .mb-give b { color: #fdb022; }
+  .mb-methods { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem 1rem; margin-top: .45rem; padding-top: .7rem; border-top: 1px solid #f2f4f7; }
+  .mb-cap { margin: .45rem 0 0; padding-top: .7rem; border-top: 1px solid #f2f4f7; font-size: .8125rem; line-height: 1.4; color: #667085; }
+  .mb-cap + .mb-methods { margin-top: 0; padding-top: 0; border-top: 0; }
+  .dark .mb-methods, .dark .mb-cap { border-color: #1d2939; }
+  .dark .mb-cap { color: #98a2b3; }
+  .mb-methods span { display: flex; flex-direction: column; min-width: 0; font-size: .8125rem; color: #667085; }
+  .mb-methods b { font-size: .9375rem; font-weight: 600; color: #1d2939; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .dark .mb-methods span { color: #98a2b3; }
+  .dark .mb-methods b { color: #e4e7ec; }
+  @container mbsum (max-width: 55.99rem) { .mb-boxes { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @container mbsum (max-width: 37.99rem) { .mb-boxes { grid-template-columns: minmax(0, 1fr); } .mb-box { padding: 1.1rem 1rem; } .mb-num, .mb-num--long { font-size: 2rem; } }
+</style>
+<div class="mb-sum" id="money-boxes" data-url="{% url 'arabela_admin:money_boxes' %}">{% include "arabela_admin/partials/money_boxes_body.html" %}</div>
+<script>
+  (function () {
+    if (window.arabelaMoney) { return; }
+    var box = document.getElementById('money-boxes');
+    var asked = new URLSearchParams(window.location.search);
+    var wanted = { from: asked.get('from') || asked.get('date') || '', to: asked.get('to') || asked.get('date') || '', by: asked.get('by') || asked.get('kind') || 'return' };
+    var seq = 0, timer = null;
+    function load(newDates) {
+      newDates = newDates || box.classList.contains('is-loading');  // a refresh that overtakes a change of dates finishes that change
+      var mine = ++seq;
+      if (newDates) { box.classList.add('is-loading'); }
+      var query = new URLSearchParams(wanted).toString();
+      fetch(box.getAttribute('data-url') + '?' + query, { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (res) { return res.ok ? res.text() : Promise.reject(new Error('no')); })
+        .then(function (html) {
+          if (mine !== seq) { return; }
+          if (html.indexOf('data-money-boxes') === -1) { throw new Error('no'); }
+          var open = box.querySelector('details[open]');
+          if (!newDates && open) { return; }                       // somebody is reading a "?" note: not moved under them
+          box.innerHTML = html;
+          box.classList.remove('is-loading');
+        })
+        .catch(function () {
+          if (mine !== seq || !newDates) { return; }               // a quiet refresh that failed keeps the right numbers it already shows
+          box.classList.remove('is-loading');
+          box.innerHTML = '<div class="mb-boxes" data-money-boxes><section class="mb-box mb-box--wide"><p class="mb-sub">The numbers for these dates could not be loaded. Check the connection, then reload the page.</p></section></div>';
+        });
+    }
+    window.arabelaMoney = {
+      set: function (from, to, by) {
+        if (wanted.from === from && wanted.to === to && wanted.by === by) { return; }
+        wanted = { from: from, to: to, by: by };
+        box.classList.add('is-loading');
+        window.clearTimeout(timer);
+        timer = window.setTimeout(function () { load(true); }, 150);   // From and To changing together ask once
+      },
+      refresh: function () { load(false); }
+    };
+    window.setInterval(function () { if (!document.hidden && !box.classList.contains('is-loading')) { load(false); } }, 30000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden && !box.classList.contains('is-loading')) { load(false); } });
+  })();
+</script>

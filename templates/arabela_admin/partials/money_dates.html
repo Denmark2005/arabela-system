@@ -1,0 +1,110 @@
+{% comment %}
+  The date bar of the money pages (Payments, Security Deposits): All, Today, This month, One date or From - To, and what a date means (pick-up,
+  return, event, or the day money was paid or handed back). The page's Alpine scope holds dateFrom, dateTo ('' or YYYY-MM-DD, both counted),
+  datePick ('any' | 'today' | 'month' | 'day' | 'range') and dateKind ('pickup' | 'return' | 'event' | 'paid'). Rows carry their days in
+  data-d-pickup / -return / -event / -paid; arabelaMD.has() says whether a row has one inside the chosen dates.
+{% endcomment %}
+<style>
+  .md-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem .9rem; padding: 0 1.25rem .85rem; }
+  .md-lbl { font-size: .8125rem; color: #667085; }
+  .dark .md-lbl { color: #98a2b3; }
+  .md-quick { display: inline-flex; flex-wrap: wrap; gap: .4rem; }
+  .md-chip { display: inline-flex; align-items: center; min-height: 2.25rem; padding: .3rem .85rem; border: 1px solid #d0d5dd; border-radius: 999px; background: transparent; color: #475467; font-size: .8125rem; font-weight: 500; cursor: pointer; }
+  .md-chip:hover { background: rgba(152,162,179,.12); }
+  .md-chip.is-on { background: #465fff; border-color: #465fff; color: #fff; }
+  .dark .md-chip { border-color: #344054; color: #d0d5dd; }
+  .dark .md-chip.is-on { background: #465fff; border-color: #465fff; color: #fff; }
+  .md-step, .md-range { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
+  .md-arrow { display: inline-flex; align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; border: 1px solid #d0d5dd; border-radius: .6rem; background: transparent; color: #475467; font-size: 1.25rem; line-height: 1; cursor: pointer; }
+  .md-arrow:hover { background: rgba(152,162,179,.12); }
+  .dark .md-arrow { border-color: #344054; color: #d0d5dd; }
+  .md-date { box-sizing: border-box; width: 10.5rem; height: 2.5rem; padding: .4rem .7rem; border: 1px solid #d0d5dd; border-radius: .6rem; background-color: transparent; color: #1d2939; font: inherit; font-size: .875rem; }
+  .dark .md-date { background-color: #0c111d; border-color: #344054; color: #f2f4f7; }
+  .md-seg { display: inline-flex; flex-wrap: wrap; gap: .25rem; padding: .25rem; border-radius: .75rem; background: #f2f4f7; }
+  .dark .md-seg { background: rgba(255,255,255,.05); }
+  .md-seg button { padding: .45rem .8rem; border-radius: .55rem; border: 0; background: transparent; font-size: .8125rem; font-weight: 500; color: #667085; white-space: nowrap; cursor: pointer; }
+  .md-seg button.is-on { background: #fff; color: #1d2939; box-shadow: 0 1px 2px rgba(16,24,40,.08); }
+  .dark .md-seg button { color: #98a2b3; }
+  .dark .md-seg button.is-on { background: #1d2939; color: #f2f4f7; box-shadow: none; }
+  .md-chip:focus-visible, .md-arrow:focus-visible, .md-seg button:focus-visible, .md-date:focus { outline: 2px solid #465fff; outline-offset: 1px; }
+  .md-note { flex: 1 1 100%; margin: 0; font-size: .8125rem; font-weight: 500; color: #465fff; }
+  .dark .md-note { color: #9bb0ff; }
+  .md-note.is-wrong { color: #b42318; }
+  .dark .md-note.is-wrong { color: #fda29b; }
+  @media (max-width: 620px) { .md-bar { padding: 0 1rem .75rem; } .md-date { width: 9.5rem; } }
+</style>
+<script>
+  (function () {
+    if (window.arabelaMD) { return; }
+    function ok(value) { var day = arabelaDF.clean(value); return day && day.slice(0, 4) >= '2000' && day.slice(0, 4) <= '2100' ? day : ''; }
+    function pad(n) { return (n < 10 ? '0' : '') + n; }
+    function iso(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+    var KINDS = ['pickup', 'return', 'event', 'paid'];
+    window.arabelaMD = {
+      ok: ok,
+      today: function () { return iso(new Date()); },
+      monthStart: function () { var d = new Date(); return iso(new Date(d.getFullYear(), d.getMonth(), 1)); },
+      monthEnd: function () { var d = new Date(); return iso(new Date(d.getFullYear(), d.getMonth() + 1, 0)); },
+      kind: function (value) { return KINDS.indexOf(value) === -1 ? 'return' : value; },
+      wrong: function (from, to) { return !!(ok(from) && ok(to) && ok(to) < ok(from)); },
+      // Does this row have a day (of that kind) inside the chosen dates? No dates chosen: every row does. A To before the From: none.
+      has: function (el, from, to, kind, prefix) {
+        var low = ok(from), high = ok(to);
+        if (!low && !high) { return true; }
+        if (low && high && high < low) { return false; }
+        var days = (el.getAttribute('data-' + (prefix || 'd') + '-' + this.kind(kind)) || '').split(' ');
+        return days.some(function (day) { return day && (!low || day >= low) && (!high || day <= high); });
+      },
+      // The dates and the kind in the page's address (an older ?date= link: one exact day).
+      read: function (params) {
+        var from = ok(params.get('from') || params.get('date')), to = ok(params.get('to') || params.get('date'));
+        var pick = 'any';
+        if (from || to) {
+          pick = from === to ? (from === this.today() ? 'today' : 'day') : (from === this.monthStart() && to === this.monthEnd() ? 'month' : 'range');
+        }
+        return { from: from, to: to, pick: pick, kind: this.kind(params.get('by') || params.get('kind')) };
+      },
+      write: function (params, from, to, kind) {
+        ['date', 'kind', 'from', 'to', 'by'].forEach(function (name) { params.delete(name); });
+        if (ok(from)) { params.set('from', ok(from)); }
+        if (ok(to)) { params.set('to', ok(to)); }
+        if (ok(from) || ok(to)) { params.set('by', this.kind(kind)); }
+      },
+      words: function (kind, from, to) {
+        var low = ok(from), high = ok(to);
+        if (!low && !high) { return ''; }
+        if (this.wrong(from, to)) { return 'The To date can’t be before the From date.'; }
+        var say = function (day) { return arabelaDF.label(day); };
+        var when = low && high ? (low === high ? 'on ' + say(low) : 'from ' + say(low) + ' to ' + say(high)) : (low ? 'from ' + say(low) : 'until ' + say(high));
+        var what = { pickup: 'with a gown picked up', 'return': 'with a gown coming back', event: 'with an event', paid: 'with money paid or given back' }[this.kind(kind)];
+        return 'Showing bookings ' + what + ' ' + when;
+      }
+    };
+  })();
+</script>
+<div class="md-bar" role="group" aria-label="Choose the dates">
+  <span class="md-lbl">Dates:</span>
+  <div class="md-quick">
+    <button type="button" class="md-chip" :class="datePick === 'any' && 'is-on'" :aria-pressed="datePick === 'any' ? 'true' : 'false'" @click="datePick = 'any'; dateFrom = ''; dateTo = ''">All</button>
+    <button type="button" class="md-chip" :class="datePick === 'today' && 'is-on'" :aria-pressed="datePick === 'today' ? 'true' : 'false'" @click="datePick = 'today'; dateFrom = arabelaMD.today(); dateTo = arabelaMD.today()">Today</button>
+    <button type="button" class="md-chip" :class="datePick === 'month' && 'is-on'" :aria-pressed="datePick === 'month' ? 'true' : 'false'" @click="datePick = 'month'; dateFrom = arabelaMD.monthStart(); dateTo = arabelaMD.monthEnd()">This month</button>
+    <button type="button" class="md-chip" :class="datePick === 'day' && 'is-on'" :aria-pressed="datePick === 'day' ? 'true' : 'false'" @click="datePick = 'day'; dateFrom = arabelaMD.ok(dateFrom) || arabelaMD.today(); dateTo = dateFrom">One date</button>
+    <button type="button" class="md-chip" :class="datePick === 'range' && 'is-on'" :aria-pressed="datePick === 'range' ? 'true' : 'false'" @click="datePick = 'range'; dateFrom = arabelaMD.ok(dateFrom) || arabelaMD.monthStart(); dateTo = arabelaMD.ok(dateTo) && dateTo >= dateFrom ? dateTo : arabelaMD.today()">From &ndash; To</button>
+  </div>
+  <div class="md-step" x-show="datePick === 'day'" x-cloak>
+    <button type="button" class="md-arrow" @click="dateFrom = arabelaDF.shift(dateFrom, -1); dateTo = dateFrom" aria-label="The day before" title="The day before">&lsaquo;</button>
+    <input type="date" class="md-date md-date--one" x-model="dateFrom" @input="dateTo = dateFrom" aria-label="Pick one exact date">
+    <button type="button" class="md-arrow" @click="dateFrom = arabelaDF.shift(dateFrom, 1); dateTo = dateFrom" aria-label="The day after" title="The day after">&rsaquo;</button>
+  </div>
+  <div class="md-range" x-show="datePick === 'range'" x-cloak>
+    <label class="md-lbl">From <input type="date" class="md-date md-date--from" x-model="dateFrom"></label>
+    <label class="md-lbl">To <input type="date" class="md-date md-date--to" x-model="dateTo"></label>
+  </div>
+  <div class="md-seg" role="group" aria-label="What the date means" x-show="datePick !== 'any'" x-cloak>
+    <button type="button" :class="dateKind === 'pickup' && 'is-on'" :aria-pressed="dateKind === 'pickup' ? 'true' : 'false'" @click="dateKind = 'pickup'" title="The day the gown is picked up">Pick-up</button>
+    <button type="button" :class="dateKind === 'return' && 'is-on'" :aria-pressed="dateKind === 'return' ? 'true' : 'false'" @click="dateKind = 'return'" title="The day the gown is due back or came back">Return</button>
+    <button type="button" :class="dateKind === 'event' && 'is-on'" :aria-pressed="dateKind === 'event' ? 'true' : 'false'" @click="dateKind = 'event'" title="The day of the customer's event">Event</button>
+    <button type="button" :class="dateKind === 'paid' && 'is-on'" :aria-pressed="dateKind === 'paid' ? 'true' : 'false'" @click="dateKind = 'paid'" title="The day money was paid or handed back">Paid on</button>
+  </div>
+  <p class="md-note" :class="arabelaMD.wrong(dateFrom, dateTo) && 'is-wrong'" x-show="arabelaMD.words(dateKind, dateFrom, dateTo)" x-cloak x-text="arabelaMD.words(dateKind, dateFrom, dateTo)"></p>
+</div>

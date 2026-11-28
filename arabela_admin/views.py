@@ -265,7 +265,10 @@ def dashboard_view(request):
 
     latest_transactions = overview("the latest transactions", dashboard_money.latest_transactions, [])
     shop_today = overview("today's counts", lambda: dashboard_money.shop_today(today), None)
-    month_money = overview("the rental income", lambda: dashboard_money.month_money(today), None)
+    # Earnings only for who may see them ("See rental income"); everyone else gets today's money by how it was paid, for the cash count.
+    see_income = _can(request, "see_income")
+    month_money = overview("the rental income", lambda: dashboard_money.month_money(today), None) if see_income else None
+    today_money = None if see_income else overview("today's money", lambda: dashboard_money.today_money(today), None)
     deposits_held = overview("the deposits held", lambda: _deposits_held(today), None)
     now_local = timezone.localtime()
     day_url = reverse("arabela_admin:active_reservations") + "?"
@@ -282,6 +285,7 @@ def dashboard_view(request):
             "returns_today_url": day_url + urlencode({"date": today.isoformat(), "kind": "return"}),
             "alerts": dashboard_money.alerts(shop_today),
             "month_money": month_money,
+            "today_money": today_money,
             "deposits_held": deposits_held,
             "latest_transactions": latest_transactions,
             "shop_today": shop_today,
@@ -875,6 +879,10 @@ def rental_history_view(request):
     filters = rental_report.read_filters(request.GET)
     items = _history_items(today)
     report = rental_report.build(period, items, today=today, held=_deposit_totals(today))
+    # Earnings only for who may see them ("See rental income"); everyone else gets today's money by how it was paid.
+    see_income = _can(request, "see_income")
+    from arabela_admin.money_views import owing_and_giveback
+    give_back, give_back_bookings = owing_and_giveback(None, None, "return", today)[2:]
 
     shown = []
     for line in report["listed"]:
@@ -928,6 +936,10 @@ def rental_history_view(request):
             "status_filters": [(status, rental_history.DOTS[rental_history.LOOK[status][0]], rental_history.LOOK[status][1])
                                for status in rental_history.LOOK],
             "report": report,
+            "see_income": see_income,
+            "today_money": None if see_income else dashboard_money.today_money(today),
+            "give_back": f"{give_back:,.2f}",
+            "give_back_bookings": give_back_bookings,
             "period": period,
             "filters": filters,
             "has_history": bool(items),
@@ -997,9 +1009,11 @@ def _deposit_gown_state(item):
     if stage == ReservationItem.Stage.RETURNED:
         when = item.returned_on or timezone.localtime(item.updated_at).date()
         return "returned", f"Returned {when:%b} {when.day}"
+    if item.reservation.status == Reservation.Status.CANCELLED:
+        return "cancelled", "Booking cancelled"
     if stage == ReservationItem.Stage.PICKUP:
         return "waiting", "Waiting for pick-up"
-    if stage == ReservationItem.Stage.OVERDUE:
+    if stage == ReservationItem.Stage.OVERDUE or item.overdue_days_now:      # past its return date, also when nobody set "Overdue"
         return "late", "Out with the customer, overdue"
     return "out", "Out with the customer"
 
@@ -1018,27 +1032,29 @@ def _deposits_held(today):
     return {**totals, "held": f"{totals['held']:,.2f}", "due": f"{totals['due']:,.2f}"}
 
 
+def _deposit_bookings():
+    """The bookings Security Deposits lists: every running one, and a cancelled one whose deposit the owner decided to give back."""
+    return Reservation.objects.filter(
+        Q(status__in=_SCHEDULED_STATUSES)
+        | (Q(status=Reservation.Status.CANCELLED, refunds_rental=True, reviewed_at__isnull=False) & ~Q(deposit_refund_reason="")))
+
+
 def _deposit_totals(today):
-    """The deposit money the shop is holding for its customers, by the SAME states as the Security Deposits page (_deposit_state, over the same
-    bookings): a Held booking (a gown is not back yet) counts what was paid less anything already handed back; a Return due booking (every gown back)
-    counts what is still to hand back -- the fees and deductions it keeps are the shop's, not held; a Returned one counts nothing. Amounts are Decimals:
-    the Dashboard and Rental History's report both come from here."""
+    """The security deposit money the shop is holding for its customers, by the SAME states as the Security Deposits page (_deposit_state, over
+    the same bookings). held = DEPOSIT money only: what was paid, less what the fees and deductions keep once every gown is back, less what was
+    handed back (a cancelled booking whose deposit goes back included). due = what is to hand back now on the "Return due" ones (the deposit,
+    and an extra charge going back with it). Amounts are Decimals: the Dashboard, Rental History and the money boxes all come from here."""
     held = due = Decimal("0")
     held_bookings = due_bookings = 0
-    bookings = Reservation.objects.filter(status__in=_SCHEDULED_STATUSES).prefetch_related("items", _receipts_prefetch(), "payments", "deductions")
+    bookings = _deposit_bookings().prefetch_related("items", _receipts_prefetch(), "payments", "deductions")
     for reservation in bookings:
         live = [i for i in reservation.items.all() if i.stage != ReservationItem.Stage.CANCELLED]
         state = _deposit_state(reservation, live, today)
-        if state["state"] == "Held":
-            amount = max(state["paid"] - state["handed_back"], Decimal("0"))
-        elif state["state"] == "Return due":
-            amount = state["to_hand_back"]
-            due += amount
+        if state["state"] == "Return due":
+            due += state["to_hand_back"]
             due_bookings += 1
-        else:
-            continue
-        if amount > 0:
-            held += amount
+        if state["deposit_held"] > 0:
+            held += state["deposit_held"]
             held_bookings += 1
     return {"held": held, "held_bookings": held_bookings, "due": due, "due_bookings": due_bookings}
 
@@ -1058,7 +1074,24 @@ def _deposit_state(reservation, live_items, today):
             methods.append(label)
     back = sum(1 for i in live_items if i.stage == ReservationItem.Stage.RETURNED)
     notes, when, how = [], None, ""
-    if reservation.deposit_returned_at:
+    deposit_back = dashboard_money.returned_split(statement)[0]              # of the money handed back, the DEPOSIT
+    to_hand_back = statement.refund_available - statement.rental_to_return
+    if statement.cancelled:
+        # Listed only when the owner gives the deposit back (_deposit_bookings): the gowns never went out, so no fee comes out of it.
+        left = max(statement.deposit_paid - deposit_back, Decimal("0"))
+        to_hand_back = min(left, statement.refund_available)
+        if to_hand_back > 0:
+            state = "Return due"
+            notes.append(f"{ledger.peso(to_hand_back)} to hand back: booking cancelled, the deposit goes back")
+            if statement.refund_available > to_hand_back:
+                notes.append(f"{ledger.peso(statement.refund_available - to_hand_back)} rental to give back too (Payments)")
+        else:
+            state = "Returned"
+            if handed_back:
+                when = timezone.localtime(max(p.paid_at for p in handed_back)).date()
+                how = " and ".join(methods)
+            notes.append(f"{ledger.peso(deposit_back)} handed back" + (f" ({how})" if how else "") + " after the cancellation")
+    elif reservation.deposit_returned_at:
         state = "Returned"
         when = timezone.localtime(reservation.deposit_returned_at).date()
         notes.append("Marked as returned before the Payments page")
@@ -1089,22 +1122,32 @@ def _deposit_state(reservation, live_items, today):
             notes.append("No deposit was paid")
         else:
             notes.append("Nothing to hand back: the fees and deductions used the deposit")
+    # What the shop still holds of the DEPOSIT: until every gown is back all that was paid (less anything handed back); then what the fees and
+    # deductions leave to hand back; nothing once it is returned.
+    if state == "Held":
+        held = statement.deposit_paid - deposit_back
+    elif state == "Return due":
+        held = statement.deposit_paid - deposit_back - (Decimal("0") if statement.cancelled else statement.deposit_used)
+    else:
+        held = Decimal("0")
     return {
-        "state": state, "kind": _DEPOSIT_KINDS[state], "notes": notes, "when": when, "how": how,
+        "state": state, "kind": _DEPOSIT_KINDS[state], "notes": notes, "when": when, "how": how, "deposit_held": max(held, Decimal("0")),
         "paid": statement.deposit_paid, "late_fee": statement.late_fee, "change_fee": statement.change_fee, "overdue_fee": statement.overdue_fee,
         "extra_days_fee": statement.extra_days_fee,
         "extra_back": statement.extra_received if statement.extra_credit > 0 else Decimal("0"),    # an extra charge paid before that goes back too
         "deductions": statement.deductions_total,
         # the DEPOSIT's own figures: rental returned for a cancelled gown is not part of the deposit
-        "handed_back": statement.refunded - statement.rental_returned, "to_hand_back": statement.refund_available - statement.rental_to_return,
+        "handed_back": statement.refunded - statement.rental_returned, "to_hand_back": to_hand_back,
     }
 
 
 @_require_admin_staff
 def security_deposits_view(request):
+    from arabela_admin.money_views import boxes_context          # it reads this module, so it is read here
+
     today = timezone.localdate()
     reservations = list(
-        Reservation.objects.filter(status__in=_SCHEDULED_STATUSES)
+        _deposit_bookings()
         .select_related("customer__profile")
         .prefetch_related("items", _receipts_prefetch(), "payments", "deductions")
     )
@@ -1130,8 +1173,11 @@ def security_deposits_view(request):
         r.last_return = last_return
         r.last_return_late = bool(last_return and last_return < today and deposit_state["state"] == "Held")
         r.back_on = None if deposit_state["state"] == "Held" else r.deposit_returned_on     # the day the last gown came back
+        if r.status == Reservation.Status.CANCELLED:
+            r.last_return = None                      # nothing is coming back: the gowns never went out
         dates = _focus_dates(r, items)
         r.d_pickup, r.d_return, r.d_event = " ".join(dates["datesPickup"]), " ".join(dates["datesReturn"]), " ".join(dates["datesEvent"])
+        r.d_paid = " ".join(dashboard_money.payment_days(r))
         r.has_receipt = reservation_payments.has_receipt(r)
 
     return render(
@@ -1145,6 +1191,7 @@ def security_deposits_view(request):
             "due_count": counts["Return due"],
             "returned_count": counts["Returned"],
             "returned_this_month": returned_this_month,
+            "money": boxes_context(request),
         },
     )
 

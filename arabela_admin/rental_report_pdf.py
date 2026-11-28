@@ -199,10 +199,13 @@ def _info(report, filter_words, printed):
 
 def _figures(report):
     income = [f"from {_plural(report['income_bookings'], 'booking')}" if report["income_bookings"] else "No rental paid in these dates",
-              f"Fees and deductions kept: {php(report['kept'])}", "Security deposits are not income"]
+              f"Fees and deductions kept: {php(report['kept'])}", f"Kept from cancellations: {php(report['kept_cancelled'])}",
+              "Security deposits are not income"]
     held = report["held"]
     deposits = [f"held now, for {_plural(held['held_bookings'], 'booking')}" if held["held_bookings"] else "No deposit is held now",
-                f"Collected in these dates: {php(report['collected'])}", f"Returned in these dates: {php(report['returned'])}"]
+                f"Collected in these dates: {php(report['collected'])}", f"Deposit returned in these dates: {php(report['returned_deposit'])}"]
+    if report["returned_extra"]:
+        deposits.append(f"Extra money returned in these dates: {php(report['returned_extra'])}")
     gowns = ["gown" + ("" if report["rentals"] == 1 else "s") + " rented or booked"]
     gowns += [f"{entry['status']}: {entry['count']}" for entry in report["by_status"]]
     gowns.append(f"Cancelled (not listed): {report['cancelled']}")

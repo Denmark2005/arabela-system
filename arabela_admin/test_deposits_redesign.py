@@ -248,7 +248,7 @@ class PageChromeTests(DepositsBase):
     def test_the_heading_the_two_tiles_and_the_fake_spinner_are_gone(self):
         self.book("Chrome", "09170000021", [(3, 6, P, {})])
         _, html = self.page()
-        for gone in ("Deposits Held", "Returned This Month", "filtering", "filterTimeout", 'style="height: 300px;"'):
+        for gone in ("Returned This Month", "filtering", "filterTimeout", 'style="height: 300px;"'):
             self.assertNotIn(gone, html)
         self.assertNotRegex(html, r'<h2\s[^>]*x-text="pageName"')                    # no big heading ...
         self.assertIn("pageName: `Security Deposits`", html)                         # ... but the "Home > Security Deposits" breadcrumb is there
@@ -303,11 +303,11 @@ class DateBarTests(DepositsBase):
     def test_the_bar_is_on_the_page_and_opens_on_the_return_date(self):
         reservation, _ = self.book("Dates", "09170000041", [(3, 6, P, {})])
         _, html = self.page()
-        self.assertIn('class="df-bar"', html)
-        self.assertIn("dateFocus: '', dateKind: 'return'", html)
-        self.assertIn("arabelaDF.has(el, this.dateFocus, this.dateKind)", html)
-        self.assertIn("presetSearchParams.get('kind') ? arabelaDF.kind(presetSearchParams.get('kind')) : 'return'", html)
-        self.assertIn("$watch('dateFocus', syncFilterParamsToUrl);", html)
+        self.assertIn('class="md-bar"', html)
+        self.assertIn("dateFrom: '', dateTo: '', datePick: 'any', dateKind: 'return'", html)
+        self.assertIn("arabelaMD.has(el, this.dateFrom, this.dateTo, this.dateKind, 'd')", html)
+        self.assertIn("arabelaMD.read(presetSearchParams)", html)
+        self.assertIn("$watch('dateFrom', syncFilterParamsToUrl);", html)
         tag = re.search(r'<div class="ar-booking" data-booking-id="%d"[^>]*>' % reservation.id, html).group(0)
         due, pick = self.today + timedelta(days=6), self.today + timedelta(days=3)
         self.assertIn(f'data-d-return="{due:%Y-%m-%d}"', tag)

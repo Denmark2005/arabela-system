@@ -21,6 +21,7 @@
     .sd-year-input { padding-left: .8rem; }
     .sd-countrow { display: flex; flex-wrap: wrap; align-items: center; gap: .1rem .75rem; }
     .sd-month { color: #667085; }
+    .sd-wide { max-width: 2000px; }                 /* as wide as Active Reservations */
     /* customer | gown | deposit | date held | status | payment | arrow. Every column is fixed or has a minimum, never "auto" (an auto column is sized per row and
        the column titles would stop lining up). */
     .ar-head.sd-grid, .ar-line.sd-grid { grid-template-columns: minmax(8rem, 1.5fr) minmax(8rem, 1.5fr) 6rem 7rem minmax(9rem, 1.2fr) 5.5rem 2.25rem; }
@@ -80,11 +81,11 @@
   </style>
 </head>
   <body
-    x-data="{ page: 'security-deposits', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', statusFilter: 'All', yearFilter: '', dateFocus: '', dateKind: 'return', showYearToast: false, yearToastTimeout: null, openBookings: [], autoOpen: [],
+    x-data="{ page: 'security-deposits', 'loaded': true, 'darkMode': false, 'stickyMenu': false, 'sidebarToggle': false, 'scrollTop': false, search: '', statusFilter: 'All', yearFilter: '', dateFrom: '', dateTo: '', datePick: 'any', dateKind: 'return', showYearToast: false, yearToastTimeout: null, openBookings: [], autoOpen: [],
       matches(el) {
         return (this.statusFilter === 'All' || el.getAttribute('data-status') === this.statusFilter)
           && (this.yearFilter === '' || el.getAttribute('data-year') === this.yearFilter)
-          && arabelaDF.has(el, this.dateFocus, this.dateKind)
+          && arabelaMD.has(el, this.dateFrom, this.dateTo, this.dateKind, 'd')
           && (this.search === '' || (el.getAttribute('data-search') || '').indexOf(String(this.search).toLowerCase()) !== -1);
       },
       isBookingOpen(id) { return this.openBookings.includes(id) || this.autoOpen.includes(id); },
@@ -108,23 +109,26 @@
          if (presetSearch) { search = presetSearch; }
          const presetStatus = presetSearchParams.get('status');
          if (['Held', 'Return due', 'Returned'].includes(presetStatus)) { statusFilter = presetStatus; }
-         const presetDate = arabelaDF.clean(presetSearchParams.get('date'));
-         if (presetDate) { dateFocus = presetDate; dateKind = presetSearchParams.get('kind') ? arabelaDF.kind(presetSearchParams.get('kind')) : 'return'; }
+         const presetDates = arabelaMD.read(presetSearchParams);
+         dateFrom = presetDates.from; dateTo = presetDates.to; datePick = presetDates.pick; dateKind = presetDates.kind;
          // Keeps the address bar in sync with whatever is actually on screen, so a reload (this page's own refresh, or the browser's) lands back on what the
          // admin was just looking at instead of snapping back to the URL that was true only when the page first opened.
          function syncFilterParamsToUrl() {
            const params = new URLSearchParams(window.location.search);
            search ? params.set('search', search) : params.delete('search');
            (statusFilter && statusFilter !== 'All') ? params.set('status', statusFilter) : params.delete('status');
-           if (dateFocus) { params.set('date', dateFocus); params.set('kind', dateKind); } else { params.delete('date'); params.delete('kind'); }
+           arabelaMD.write(params, dateFrom, dateTo, dateKind);
            const query = params.toString();
            const next = window.location.pathname + (query ? '?' + query : '');
            history.replaceState(null, '', next);
          }
          $watch('search', syncFilterParamsToUrl);
          $watch('statusFilter', syncFilterParamsToUrl);
-         $watch('dateFocus', syncFilterParamsToUrl);
+         $watch('dateFrom', syncFilterParamsToUrl);
+         $watch('dateTo', syncFilterParamsToUrl);
          $watch('dateKind', syncFilterParamsToUrl);
+         // the money boxes above follow the dates
+         ['dateFrom', 'dateTo', 'dateKind'].forEach(name => $watch(name, () => window.arabelaMoney.set(arabelaMD.ok(dateFrom), arabelaMD.ok(dateTo), dateKind)));
          sdSetupBookings($data, $watch);"
     :class="{'dark bg-gray-900': darkMode === true}"
   >
@@ -1172,7 +1176,7 @@
 
         <!-- ===== Main Content Start ===== -->
         <main>
-          <div class="mx-auto max-w-(--breakpoint-2xl) p-4 md:p-6">
+          <div class="mx-auto sd-wide p-4 md:p-6">
             <!-- Breadcrumb Start -->
             <div x-data="{ pageName: `Security Deposits`}">
               <div class="mb-4 flex flex-wrap items-center justify-end gap-3">
@@ -1211,8 +1215,9 @@
 </div>
 </div>
             <!-- Breadcrumb End -->
-            <!-- ONE box, the same look as Active Reservations: the search, the status buttons (they carry the counts) and the year, the "On this date" bar (here it
-                 opens on the RETURN date: who gives a gown back on that day), then one short line per booking. The deposit is Held until every gown is back, Return due
+            {% include "arabela_admin/partials/money_boxes.html" %}
+            <!-- ONE box, the same look as Active Reservations: the search, the status buttons (they carry the counts) and the year, the date bar (here "Return"
+                 comes first: who gives a gown back on those days), then one short line per booking. The deposit is Held until every gown is back, Return due
                  once it is (hand it back in Payments, which prints the receipt) and Returned after. Everything is read from the payments ledger: nothing is typed here. -->
             <div class="sd-card">
               <div class="ar-toolbar">
@@ -1230,7 +1235,7 @@
                   <input type="text" inputmode="numeric" class="ar-search-input sd-year-input" x-model="yearFilter" @input="yearFilter = yearFilter.replace(/[^0-9]/g, '').slice(0, 4)" maxlength="4" placeholder="Year" aria-label="Show one year only, for example 2026" title="Show one year only, for example 2026">
                 </div>
               </div>
-              {% include "arabela_admin/partials/date_focus.html" %}
+              {% include "arabela_admin/partials/money_dates.html" %}
               <div class="ar-count sd-countrow"><span id="ar-count" aria-live="polite"></span><span class="sd-month" data-live-region="sd-month">{{ returned_this_month }} returned this month</span></div>
 
               <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg=".ar-booking" data-arpg-noun="bookings" data-arpg-top="off" data-arpg-count="#ar-count" data-live-region="sd-list" data-live-hold="details[open]">
@@ -1246,7 +1251,7 @@
                 {% for r in reservations %}
                 <!-- One booking: a closed line (name and booking number, the gown(s), the deposit, the day the last gown comes back, ONE status, the Receipt and Payments buttons) and,
                      hidden until it is opened, who it was booked as, the money of the deposit and where each gown is. -->
-                <div class="ar-booking" data-booking-id="{{ r.id }}" data-status="{{ r.dep.state }}" data-year="{{ r.created_at|date:'Y' }}" data-d-pickup="{{ r.d_pickup }}" data-d-return="{{ r.d_return }}" data-d-event="{{ r.d_event }}" data-search="{{ r.display_customer_name|lower }} {{ r.reference_code|lower }}{% for gi in r.items.all %} {{ gi.gown_name|lower }}{% endfor %} {{ r.phone|cut:' ' }} {{ r.proof_search_text }}" x-show="matches($el)">
+                <div class="ar-booking" data-booking-id="{{ r.id }}" data-status="{{ r.dep.state }}" data-year="{{ r.created_at|date:'Y' }}" data-d-pickup="{{ r.d_pickup }}" data-d-return="{{ r.d_return }}" data-d-event="{{ r.d_event }}" data-d-paid="{{ r.d_paid }}" data-search="{{ r.display_customer_name|lower }} {{ r.reference_code|lower }}{% for gi in r.items.all %} {{ gi.gown_name|lower }}{% endfor %} {{ r.phone|cut:' ' }} {{ r.proof_search_text }}" x-show="matches($el)">
                   <!-- A click on the line opens the booking, except a click on the buttons (it does not stop the click: other scripts on the page may listen for it). -->
                   <div class="ar-line sd-grid" :class="isBookingOpen({{ r.id }}) ? 'is-open' : ''" @click="if (!$event.target.closest('.sd-acts')) { toggleBooking({{ r.id }}) }">
                     <div class="sd-cust">
@@ -1329,7 +1334,7 @@
                 {% endfor %}
                 {% if reservations %}
                 <div class="ar-empty" x-show="matchCount() === 0" x-cloak>
-                  <p class="text-gray-500 text-theme-sm dark:text-gray-400" x-text="dateFocus !== '' ? 'No deposit has a gown on that date. Try another date, or press Any date.' : 'No security deposit matches your search.'"></p>
+                  <p class="text-gray-500 text-theme-sm dark:text-gray-400" x-text="(dateFrom || dateTo) ? 'No security deposit matches those dates. Try other dates, or press All.' : 'No security deposit matches your search.'"></p>
                 </div>
                 {% endif %}
               </div>
@@ -1373,7 +1378,8 @@
       watch('search', openTheOnlyMatch);
       watch('statusFilter', openTheOnlyMatch);
       watch('yearFilter', openTheOnlyMatch);
-      watch('dateFocus', openTheOnlyMatch);
+      watch('dateFrom', openTheOnlyMatch);
+      watch('dateTo', openTheOnlyMatch);
       watch('dateKind', openTheOnlyMatch);
       openTheOnlyMatch();
     }

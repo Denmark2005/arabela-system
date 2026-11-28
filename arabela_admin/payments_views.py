@@ -28,7 +28,7 @@ import logging
 from datetime import datetime, time, timedelta
 
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q, Sum
 from django.http import Http404, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
@@ -43,7 +43,8 @@ from gowns.models import SiteSettings
 from reservations import cancellation, gateway, ledger, payments
 from reservations.models import Deduction, Payment, PaymentAttempt, Reservation, ReservationItem
 
-from . import audit_describe
+from . import audit_describe, dashboard_money
+from .money_views import booking_days, boxes_context, tracked_bookings
 from .views import _can, _is_admin_staff, _is_owner, _permission_error, _require_admin_staff, _require_owner
 
 RECEIPTS_PER_PAGE = 25
@@ -56,15 +57,6 @@ def _body(request):
     except (json.JSONDecodeError, UnicodeDecodeError):
         return None
     return data if isinstance(data, dict) else None
-
-
-def _tracked_bookings():
-    """Every booking whose money is tracked (see ledger.counts_as_tracked), with everything the statement reads loaded in a few queries."""
-    return (
-        Reservation.objects.filter(Q(status__in=ledger.LIVE_STATUSES) | Q(status=Reservation.Status.CANCELLED, reviewed_at__isnull=False))
-        .select_related("customer__profile")
-        .prefetch_related("items", "payments", "deductions", "receipt_records")
-    )
 
 
 def _php(value):
@@ -99,13 +91,45 @@ def _deposit_text(s):
     return "Held"
 
 
+def _deposit_lines(text):
+    """The Deposit cell in two short lines for a cancelled booking's long words ("Give back ₱3,500.00" over "Kept (cancelled)"), without
+    repeating the column's name; anything else stays as it is. The whole sentence shows on hover."""
+    first, split, rest = text.partition("), ")
+    if not split:
+        return [text]
+    return [rest[:1].upper() + rest[1:], first.replace("Deposit ", "", 1).capitalize() + ")"]
+
+
+def _fee_parts(s):
+    """What the Fees column names: [{"name", "amount", "growing"}] for the booking's date fees that are above zero, the overdue fee first.
+    "growing": a gown is still out past its date, so the amount goes up each day."""
+    parts = (("Overdue", s.overdue_fee, s.overdue_now), ("Date change", s.change_fee, False), ("Extra days", s.extra_days_fee, False))
+    return [{"name": name, "amount": amount, "growing": growing} for name, amount, growing in parts if amount > 0]
+
+
+def _bar_dates(reservation, items, s):
+    """The days the date bar finds a booking by: every gown's pick-up, return and event days and the days money was paid or handed back (the
+    same days "Still to Collect" counts, money_views.booking_days); and -- for the Overdue filter -- those of the gowns that are overdue right
+    now (the same gowns the statement counts). Space separated; no gown days for a cancelled booking."""
+    from .views import _focus_dates
+
+    late_ids = {line["item_id"] for line in s.fee_lines if line["kind"] == ledger.OVERDUE_FEE and not line["back"]}
+    every = booking_days(reservation)
+    late = _focus_dates(reservation, [i for i in items if i.id in late_ids])
+    marks = {f"d_{kind}": " ".join(days) for kind, days in every.items()}
+    for kind in ("pickup", "return", "event"):
+        marks[f"late_{kind}"] = " ".join(late[f"dates{kind.title()}"])
+    marks["late_paid"] = marks["d_paid"] if late_ids else ""
+    return marks
+
+
 # ---------------------------------------------------------------- the page
 @_require_admin_staff
 def payments_view(request):
     today = timezone.localdate()
-    rows, balance_total = [], ledger.ZERO
+    rows = []
     counts = {"all": 0, ledger.BALANCE: 0, ledger.REFUND: 0, "late": 0}
-    for reservation in _tracked_bookings().order_by("-created_at", "-id"):
+    for reservation in tracked_bookings().order_by("-created_at", "-id"):
         s = ledger.statement(reservation, today)
         if not s.tracked:
             continue
@@ -116,17 +140,22 @@ def payments_view(request):
         reservation.span_start = min((i.rental_date for i in live), default=None)
         reservation.span_end = max((i.return_date for i in live), default=None)
         reservation.deposit_text = _deposit_text(s)
+        reservation.deposit_lines = _deposit_lines(reservation.deposit_text)
+        reservation.fees = _fee_parts(s)
+        reservation.fee_note = " · ".join(f"{p['name']} {_php(p['amount'])}{' so far' if p['growing'] else ''}" for p in reservation.fees)
+        reservation.bar = _bar_dates(reservation, items, s)
         reservation.search_text = " ".join([reservation.reference_code, reservation.display_customer_name, reservation.phone or ""] +
                                            [i.gown_name for i in items]).lower()
         counts["all"] += 1
-        if s.state in (ledger.BALANCE, ledger.REFUND):
-            counts[s.state] += 1
+        if s.state == ledger.BALANCE:
+            counts[ledger.BALANCE] += 1
+        if s.refund_available > 0:                  # "Refund due": every booking with money to give back, also one that still owes something
+            counts[ledger.REFUND] += 1
         if s.overdue_now:
             counts["late"] += 1
-        balance_total += s.balance_due
         rows.append(reservation)
     return render(request, "arabela_admin/payments.html", {
-        "page": "payments", "mode": "bookings", "rows": rows, "counts": counts, "balance_total": balance_total,
+        "page": "payments", "mode": "bookings", "rows": rows, "counts": counts, "money": boxes_context(request),
         "is_owner": _is_owner(request), "can_void": _can(request, "void_receipts"),
         "late_fee_per_day": late_fee.per_day(), "open_id": request.GET.get("open", ""), "online_attention": online_attention_count(),
         # "Customer needs to pay" after a return: the booking's window opens with cash chosen, or shows the QR code at once.
@@ -195,7 +224,7 @@ def _detail(reservation, request):
 
 
 def _get_booking(pk):
-    booking = _tracked_bookings().filter(pk=pk).first()
+    booking = tracked_bookings().filter(pk=pk).first()
     if booking is None:
         return None
     return booking
@@ -471,11 +500,11 @@ def payment_receipt_print_view(request, payment_id):
 
 # ---------------------------------------------------------------- one booking's receipts (the Receipt preview window)
 def _receipt_pill(payment):
-    """The status pill of one receipt: Void, Deposit returned, Paid, or Partly paid (with what is still to pay at that moment)."""
+    """The status pill of one receipt: Void, Deposit returned or Refund, Paid, or Partly paid (with what is still to pay at that moment)."""
     if payment.is_void:
         return {"kind": "void", "text": "Void"}
     if payment.direction == Payment.Direction.OUT:
-        return {"kind": "returned", "text": "Deposit returned"}
+        return {"kind": "returned", "text": "Refund" if payment.is_over_return else "Deposit returned"}
     try:
         balance = ledger.money((payment.snapshot or {}).get("balance_after") or "0")
     except Exception:       # noqa: BLE001 -- an odd snapshot must not break the window
@@ -487,7 +516,7 @@ def _receipt_pill(payment):
 
 def _receipt_item(payment):
     out = payment.direction == Payment.Direction.OUT
-    label = "Deposit return" if out else payment.get_purpose_display()
+    label = ("Refund" if payment.is_over_return else "Deposit return") if out else payment.get_purpose_display()
     amount = ledger.money(payment.amount)
     base = reverse("arabela_admin:payment_receipt_print", args=[payment.pk])
     return {
@@ -513,15 +542,41 @@ def receipt_list_view(request, pk):
 
 
 # ---------------------------------------------------------------- every receipt (owner)
+def _receipt_totals(rows):
+    """What the receipts the search found add up to (EVERY page of them, voided ones never counted): how many, money received, money handed
+    back, the net of the two, and the net by how it was paid."""
+    zero = ledger.ZERO
+    received = returned = zero
+    by_method = {name: zero for name in dashboard_money.METHOD_GROUPS}
+    counted = voided = 0
+    for line in rows.order_by().values("direction", "method", "status").annotate(total=Sum("amount"), number=Count("id")):
+        if line["status"] == Payment.Status.VOID:
+            voided += line["number"]
+            continue
+        counted += line["number"]
+        amount = ledger.money(line["total"])
+        if line["direction"] == Payment.Direction.IN:
+            received += amount
+            by_method[dashboard_money.method_group(line["method"])] += amount
+        else:
+            returned += amount
+            by_method[dashboard_money.method_group(line["method"])] -= amount
+    return {
+        "count": counted + voided, "voided": voided, "received": f"{received:,.2f}", "returned": f"{returned:,.2f}",
+        "net": f"{received - returned:,.2f}", "methods": dashboard_money.method_lines(by_method),
+    }
+
 @_require_owner
 def payment_receipts_view(request):
     q = (request.GET.get("q") or "").strip()
     kind = request.GET.get("kind") or "all"
     status = request.GET.get("status") or "all"
     start, end = (request.GET.get("from") or "").strip(), (request.GET.get("to") or "").strip()
-    rows = Payment.objects.filter(is_legacy=False, receipt_number__isnull=False).select_related("reservation")
+    rows = Payment.objects.filter(is_legacy=False, receipt_number__isnull=False).select_related("reservation__customer__profile")
     if q:
+        # The name on the booking and the name the customer's profile shows now (what the list prints).
         rows = rows.filter(Q(receipt_number__icontains=q) | Q(reservation__reference_code__icontains=q) | Q(reservation__customer_name__icontains=q) |
+                           Q(reservation__customer__profile__display_name__icontains=q) |
                            Q(reference__icontains=q.replace(" ", "")) | Q(recorded_by_name__icontains=q))
     if kind == "in":
         rows = rows.filter(direction=Payment.Direction.IN)
@@ -532,18 +587,29 @@ def payment_receipts_view(request):
     elif status == "ok":
         rows = rows.filter(status=Payment.Status.RECORDED)
     tz = timezone.get_current_timezone()
+    date_error = ""
     try:
-        if start:
-            rows = rows.filter(paid_at__gte=timezone.make_aware(datetime.combine(datetime.strptime(start, "%Y-%m-%d").date(), time.min), tz))
-        if end:
-            rows = rows.filter(paid_at__lt=timezone.make_aware(datetime.combine(datetime.strptime(end, "%Y-%m-%d").date() + timedelta(days=1), time.min), tz))
+        first = datetime.strptime(start, "%Y-%m-%d").date() if start else None
+        last = datetime.strptime(end, "%Y-%m-%d").date() if end else None
     except ValueError:
+        first = last = None
         start = end = ""
+    if first and last and last < first:
+        date_error = "The To date can't be before the From date."
+        rows = rows.none()
+    if first:
+        rows = rows.filter(paid_at__gte=timezone.make_aware(datetime.combine(first, time.min), tz))
+    if last:
+        rows = rows.filter(paid_at__lt=timezone.make_aware(datetime.combine(last + timedelta(days=1), time.min), tz))
     page = Paginator(rows.order_by("-paid_at", "-id"), RECEIPTS_PER_PAGE).get_page(request.GET.get("page"))
     for p in page:
         p.customer_name = p.reservation.display_customer_name
+    today = timezone.localdate()
+    month_end = (today.replace(day=1) + timedelta(days=32)).replace(day=1) - timedelta(days=1)
     return render(request, "arabela_admin/payments.html", {
         "page": "payments", "mode": "receipts", "receipts": page, "q": q, "kind": kind, "status": status, "from": start, "to": end,
+        "totals": _receipt_totals(rows), "date_error": date_error,
+        "today_iso": today.isoformat(), "month_start_iso": today.replace(day=1).isoformat(), "month_end_iso": month_end.isoformat(),
         "is_owner": True, "can_void": True, "online_attention": online_attention_count(), "payment_provider": gateway.label(), "paymongo_mode": gateway.mode(),
         "paymongo_demo": gateway.is_demo(),
     })

@@ -1516,18 +1516,30 @@
               <div class="rh-box"><p class="rh-box-sub">Pick a From date and a To date above, then press Show, to see the report.</p></div>
               {% else %}
               <div class="rh-boxes">
+                {% if see_income %}
                 <section class="rh-box">
                   <div class="rh-box-head"><span class="rh-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M19 14V6c0-1.1-.9-2-2-2H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zm-9-1c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm13-6v11c0 1.1-.9 2-2 2H4v-2h17V7h2z"/></svg></span><h2 class="rh-box-title">Rental Income</h2><details class="ht-tip"><summary aria-label="About Rental Income" title="About Rental Income">?</summary><div class="ht-tip-pop"><p>The gown rental money paid in these dates, counted on the day it was paid (the same rule as the Dashboard).</p><p>Security deposits are never income. What the shop kept from them for fees or damage is shown below it.</p><p>The rentals below are chosen by their {{ period.kind_label|lower }} day, so their prices can add up to a different amount.</p></div></details><span class="rh-tag">{{ period.tag }}</span></div>
                   <p class="rh-num{% if report.text.income|length > 10 %} rh-num--long{% endif %}">&#8369;{{ report.text.income }}</p>
                   <p class="rh-box-sub">{% if report.income_bookings %}from {{ report.income_bookings }} booking{{ report.income_bookings|pluralize }}{% else %}No rental money paid in these dates{% endif %} &middot; deposits not included</p>
                   <p class="rh-box-sub">Fees &amp; deductions kept: <b>&#8369;{{ report.text.kept }}</b></p>
+                  <p class="rh-box-sub">Kept from cancellations: <b>&#8369;{{ report.text.kept_cancelled }}</b></p>
                 </section>
+                {% else %}
+                <section class="rh-box">
+                  <div class="rh-box-head"><span class="rh-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M19 14V6c0-1.1-.9-2-2-2H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zm-9-1c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm13-6v11c0 1.1-.9 2-2 2H4v-2h17V7h2z"/></svg></span><h2 class="rh-box-title">Today's Money</h2><details class="ht-tip"><summary aria-label="About Today's Money" title="About Today's Money">?</summary><div class="ht-tip-pop"><p>All money received today, deposits included, less money handed back today, by how it was paid.</p></div></details><span class="rh-tag">Today</span></div>
+                  <p class="rh-num">&#8369;{{ today_money.net }}</p>
+                  <p class="rh-box-sub">Received today less money handed back &middot; deposits included</p>
+                  {% for name, amount in today_money.methods %}<p class="rh-box-sub">{{ name }}: <b>&#8369;{{ amount }}</b></p>{% endfor %}
+                </section>
+                {% endif %}
                 <section class="rh-box">
                   <div class="rh-box-head"><span class="rh-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg></span><h2 class="rh-box-title">Deposits Held</h2><details class="ht-tip"><summary aria-label="About Deposits Held" title="About Deposits Held">?</summary><div class="ht-tip-pop"><p>The security deposits belong to the customers. The big number is what the shop holds today (the same as Security Deposits).</p><p>Collected and returned are the deposit money that came in or went back in these dates.</p></div></details><span class="rh-tag">Now</span></div>
                   <p class="rh-num{% if report.text.held|length > 10 %} rh-num--long{% endif %}">&#8369;{{ report.text.held }}</p>
                   <p class="rh-box-sub">{% if report.held.held_bookings %}held now for {{ report.held.held_bookings }} booking{{ report.held.held_bookings|pluralize }}{% else %}No deposit is held right now{% endif %}{% if report.held.due_bookings %} &middot; <span class="rh-due">&#8369;{{ report.text.due }} to hand back now</span>{% endif %}</p>
                   <p class="rh-box-sub">Collected in these dates: <b>&#8369;{{ report.text.collected }}</b></p>
-                  <p class="rh-box-sub">Returned in these dates: <b>&#8369;{{ report.text.returned }}</b></p>
+                  <p class="rh-box-sub">Deposit returned in these dates: <b>&#8369;{{ report.text.returned_deposit }}</b></p>
+                  {% if report.returned_extra %}<p class="rh-box-sub">Extra money returned in these dates: <b>&#8369;{{ report.text.returned_extra }}</b></p>{% endif %}
+                  {% if give_back_bookings %}<p class="rh-box-sub">{% url 'arabela_admin:payments' as give_url %}<a class="rh-due" href="{{ give_url }}?status=refund">To give back now ({{ give_back_bookings }}): &#8369;{{ give_back }}</a></p>{% endif %}
                 </section>
                 <section class="rh-box">
                   <div class="rh-box-head"><span class="rh-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zm-8.47-2.5-3.54-3.54 1.42-1.41 2.12 2.12 4.24-4.24 1.42 1.41-5.66 5.66z"/></svg></span><h2 class="rh-box-title">Rentals</h2><details class="ht-tip"><summary aria-label="About Rentals" title="About Rentals">?</summary><div class="ht-tip-pop"><p>One count for each gown: a booking with 3 gowns counts 3.</p><p>Cancelled gowns are counted here but are not in the list.</p></div></details><span class="rh-tag">{{ period.tag }}</span></div>
@@ -1549,7 +1561,7 @@
                   <p class="rh-panel-sub">Tap a gown to list its rentals.</p>
                   <ol class="rh-rank">
                     {% for gown in report.top %}
-                    <li><button type="button" class="rh-rank-row" data-key="{{ gown.key }}" data-name="{{ gown.name }}" :class="gownFilter === $el.dataset.key ? 'is-on' : ''" :aria-pressed="gownFilter === $el.dataset.key ? 'true' : 'false'" @click="chooseGown($el.dataset.key, $el.dataset.name)"><span class="rh-rank-no">{{ forloop.counter }}</span><span class="rh-rank-who"><span class="rh-rank-name">{{ gown.name }}</span><span class="rh-rank-cat">{{ gown.category }}</span></span><span class="rh-rank-nums"><b>{{ gown.times }} time{{ gown.times|pluralize }}</b>&#8369;{{ gown.amount_text }}</span><span class="rh-bar" aria-hidden="true"><span style="width: {{ gown.share }}%"></span></span></button></li>
+                    <li><button type="button" class="rh-rank-row" data-key="{{ gown.key }}" data-name="{{ gown.name }}" :class="gownFilter === $el.dataset.key ? 'is-on' : ''" :aria-pressed="gownFilter === $el.dataset.key ? 'true' : 'false'" @click="chooseGown($el.dataset.key, $el.dataset.name)"><span class="rh-rank-no">{{ forloop.counter }}</span><span class="rh-rank-who"><span class="rh-rank-name">{{ gown.name }}</span><span class="rh-rank-cat">{{ gown.category }}</span></span><span class="rh-rank-nums"><b>{{ gown.times }} time{{ gown.times|pluralize }}</b>{% if see_income %}&#8369;{{ gown.amount_text }}{% endif %}</span><span class="rh-bar" aria-hidden="true"><span style="width: {{ gown.share }}%"></span></span></button></li>
                     {% endfor %}
                   </ol>
                   {% else %}<p class="rh-none">No gown was rented in these dates.</p>{% endif %}
@@ -1557,10 +1569,10 @@
                 <section class="rh-panel-card">
                   <h2 class="rh-panel-title">Rentals by category</h2>
                   {% if report.categories %}
-                  <p class="rh-panel-sub">Gowns rented and what they rented for.</p>
+                  <p class="rh-panel-sub">{% if see_income %}Gowns rented and what they rented for.{% else %}Gowns rented.{% endif %}</p>
                   <ul class="rh-rank rh-cats">
                     {% for category in report.categories %}
-                    <li><div class="rh-rank-row"><span class="rh-rank-who"><span class="rh-rank-name">{{ category.name }}</span></span><span class="rh-rank-nums"><b>{{ category.times }} gown{{ category.times|pluralize }}</b>&#8369;{{ category.amount_text }}</span><span class="rh-bar" aria-hidden="true"><span style="width: {{ category.share }}%"></span></span></div></li>
+                    <li><div class="rh-rank-row"><span class="rh-rank-who"><span class="rh-rank-name">{{ category.name }}</span></span><span class="rh-rank-nums"><b>{{ category.times }} gown{{ category.times|pluralize }}</b>{% if see_income %}&#8369;{{ category.amount_text }}{% endif %}</span><span class="rh-bar" aria-hidden="true"><span style="width: {{ category.share }}%"></span></span></div></li>
                     {% endfor %}
                   </ul>
                   {% else %}<p class="rh-none">No gown was rented in these dates.</p>{% endif %}

@@ -65,11 +65,11 @@ class RentalIncomeTests(TestCase):
 
     def test_paid_in_full_this_month_counts_only_the_rental(self):
         pay(make_booking(), P.FULL, "5500")
-        self.assertEqual(self.money(), {"income": "3,500.00", "bookings": 1, "kept": "0.00"})
+        self.assertEqual(self.money(), {"income": "3,500.00", "bookings": 1, "kept": "0.00", "kept_cancelled": "0.00"})
 
     def test_a_deposit_alone_is_never_income(self):
         pay(make_booking(), P.DEPOSIT, "2000")
-        self.assertEqual(self.money(), {"income": "0.00", "bookings": 0, "kept": "0.00"})
+        self.assertEqual(self.money(), {"income": "0.00", "bookings": 0, "kept": "0.00", "kept_cancelled": "0.00"})
 
     def test_the_rental_counts_in_the_month_it_was_paid(self):
         early = make_booking()
@@ -78,7 +78,7 @@ class RentalIncomeTests(TestCase):
         pay(early, P.BALANCE, "2000")                                                      # the rental in two parts, both this month
         before = make_booking()
         Payment.objects.filter(pk=pay(before, P.FULL, "5500").pk).update(paid_at=last_month_noon())   # all of it last month: nothing this month
-        self.assertEqual(self.money(), {"income": "3,500.00", "bookings": 1, "kept": "0.00"})
+        self.assertEqual(self.money(), {"income": "3,500.00", "bookings": 1, "kept": "0.00", "kept_cancelled": "0.00"})
 
     def test_a_voided_payment_and_a_booking_still_waiting_for_approval_count_nothing(self):
         pay(make_booking(), P.FULL, "5500", status=Payment.Status.VOID)
@@ -91,13 +91,13 @@ class RentalIncomeTests(TestCase):
         pay(back_today, P.FULL, "5500")
         back_before = make_booking(stage=S.RETURNED, ret=days_to_last_month() - 2, returned_on=days_to_last_month(), pickup=days_to_last_month() - 6)
         Payment.objects.filter(pk=pay(back_before, P.FULL, "5500").pk).update(paid_at=last_month_noon())   # its ₱400 was last month's
-        self.assertEqual(self.money(), {"income": "3,500.00", "bookings": 1, "kept": "600.00"})
+        self.assertEqual(self.money(), {"income": "3,500.00", "bookings": 1, "kept": "600.00", "kept_cancelled": "0.00"})
 
     def test_a_late_fee_bigger_than_the_deposit_counts_the_deposit_part_and_the_extra_paid(self):
         booking = make_booking(stage=S.RETURNED, ret=-15, returned_on=0, pickup=-20)        # 15 days x ₱200 = ₱3,000: ₱1,000 over the deposit
         pay(booking, P.FULL, "5500")
         pay(booking, P.EXTRA, "1000")
-        self.assertEqual(self.money(), {"income": "3,500.00", "bookings": 1, "kept": "3,000.00"})
+        self.assertEqual(self.money(), {"income": "3,500.00", "bookings": 1, "kept": "3,000.00", "kept_cancelled": "0.00"})
 
     def test_a_deduction_counts_once_every_gown_is_back(self):
         booking = make_booking(stage=S.RETURNED, ret=0, returned_on=0)

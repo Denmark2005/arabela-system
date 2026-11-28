@@ -85,10 +85,12 @@ def _summary(sheet, report, filter_words, printed):
         ("Rental income (PHP)", report["income"], MONEY),
         ("Bookings the rental income came from", report["income_bookings"], NUMBER),
         ("Fees and deductions kept (PHP)", report["kept"], MONEY),
+        ("Kept from cancellations (PHP)", report["kept_cancelled"], MONEY),
         ("Security deposits held now (PHP)", held["held"], MONEY),
         ("Bookings with a deposit held now", held["held_bookings"], NUMBER),
         ("Security deposits collected in these dates (PHP)", report["collected"], MONEY),
-        ("Security deposits returned in these dates (PHP)", report["returned"], MONEY),
+        ("Security deposits returned in these dates (PHP)", report["returned_deposit"], MONEY),
+        ("Extra money returned in these dates (PHP)", report["returned_extra"], MONEY),
         ("Rentals (gowns)", report["rentals"], NUMBER),
     ]
     figures += [(f"    {status}", report["status_counts"][status], NUMBER) for status in rental_history.LOOK]

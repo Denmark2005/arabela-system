@@ -29,27 +29,44 @@
     .dark .pm-tab { border-color: #344054; color: #d0d5dd; }
     .dark .pm-tab.is-on { background: #fff; border-color: #fff; color: #101828; }
     .pm-countrow { display: flex; flex-wrap: wrap; align-items: center; gap: .1rem .75rem; }
-    .pm-collect { margin-left: auto; font-weight: 600; color: #b42318; }
-    .dark .pm-collect { color: #fda29b; }
 
-    /* customer | booking no. | total | paid | balance | deposit | status | arrow. Every column is fixed or has a minimum (never "auto"). */
-    .pm-head, .pm-line { display: grid; grid-template-columns: minmax(8rem, 1.7fr) minmax(6.5rem, 1fr) 5.5rem 5.5rem 5.5rem minmax(6rem, .9fr) minmax(6.5rem, .9fr) 2rem; align-items: center; column-gap: .75rem; }
+    /* customer | booking no. | paid | balance | deposit | fees | status | arrow. Every column has a minimum (never "auto"), and no cell is more
+       than two lines, so every booking's row is the same height. The list measures ITSELF (a container query, in rem, so it also follows the
+       text size switch): too narrow for one line, each booking takes two. */
+    .pm-wide { max-width: 2000px; }                 /* as wide as Active Reservations */
+    .pm-list { container-type: inline-size; }
+    .pm-head, .pm-line { display: grid; grid-template-columns: minmax(6.75rem, 1.7fr) minmax(7rem, .8fr) minmax(5.75rem, .7fr) minmax(5.25rem, .6fr) minmax(8.25rem, 1fr) minmax(8.25rem, 1.2fr) minmax(6rem, .8fr) 1.25rem; align-items: center; column-gap: .5rem; }
+    .pm-dep-main { display: block; }
     .pm-head { padding: .7rem 1.25rem; background: #f9fafb; border-top: 1px solid #f2f4f7; border-bottom: 1px solid #f2f4f7; font-size: 0.8125rem; font-weight: 500; color: #667085; }
     .dark .pm-head { background: rgba(255,255,255,.025); border-color: #1d2939; color: #98a2b3; }
     .pm-head > span.r, .pm-line > .pm-amt { text-align: right; }
     .pm-row { border-bottom: 1px solid #f2f4f7; }
     .dark .pm-row { border-color: #1d2939; }
-    .pm-line { padding: .75rem 1.25rem; cursor: pointer; }
+    .pm-line { min-height: 4.25rem; padding: .75rem 1.25rem; cursor: pointer; }
     .pm-line:hover { background: rgba(152,162,179,.08); }
     .pm-line:focus-visible { outline: 2px solid #465fff; outline-offset: -2px; }
-    .pm-who { display: flex; flex-direction: column; min-width: 0; }
-    .pm-sub { margin-top: .1rem; font-size: 0.8125rem; color: #667085; overflow-wrap: anywhere; }
+    .pm-line .ar-ref b { white-space: nowrap; }
+    .pm-who { display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; }
+    .pm-who .ar-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }          /* a very long name: the whole of it on hover */
+    .pm-sub { display: flex; align-items: baseline; gap: .25rem; min-width: 0; margin-top: .1rem; font-size: 0.8125rem; color: #667085; }
+    .pm-sub-g { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pm-sub-d { flex: none; white-space: nowrap; }
     .pm-amt { font-size: .875rem; font-weight: 500; font-variant-numeric: tabular-nums; color: #344054; white-space: nowrap; }
     .dark .pm-amt { color: #d0d5dd; }
+    .pm-of { display: block; font-size: .8125rem; font-weight: 400; color: #667085; }
     .pm-bal.is-due { font-weight: 700; color: #b42318; }
     .dark .pm-bal.is-due { color: #fda29b; }
-    .pm-dep { font-size: .8125rem; color: #475467; }
+    .pm-dep { min-width: 0; font-size: .8125rem; color: #475467; }
     .dark .pm-dep { color: #98a2b3; }
+    /* The date fees: the total, and one grey line naming them (hover for the amount of each). */
+    .pm-fees { min-width: 0; font-size: .875rem; }
+    .pm-fee { display: block; font-weight: 600; font-variant-numeric: tabular-nums; color: #344054; white-space: nowrap; }
+    .dark .pm-fee { color: #d0d5dd; }
+    .pm-fee-what { display: block; font-size: .8125rem; color: #667085; }
+    .pm-fee-what span { white-space: nowrap; }
+    .pm-fee-what .pm-fee-late { color: #b42318; }
+    .dark .pm-of, .dark .pm-fee-what { color: #98a2b3; }
+    .dark .pm-fee-what .pm-fee-late { color: #fda29b; }
     .pm-stat { display: flex; flex-wrap: wrap; gap: .3rem; }
     .pm-chev { justify-self: end; color: #667085; }
     .pm-chev svg { width: 1rem; height: 1rem; display: block; }
@@ -72,25 +89,82 @@
     .pm-dot--settled, .pm-dot--cancelled { background: #667085; }
     .pm-empty { padding: 2.5rem 1.25rem; text-align: center; color: #667085; font-size: .9rem; }
 
-    /* A laptop or smaller: two lines per booking, each value with its small label above it. */
-    @media (max-width: 1279px) {
+    /* A narrow list (a smaller laptop, or the largest text size): two lines per booking, each value with its small label above it. */
+    @container (max-width: 53.99rem) {
       .pm-head { display: none; }
-      .pm-line { grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-areas: "who who who stat stat" "ref total paid bal dep"; row-gap: .55rem; column-gap: .75rem; }
+      .pm-line { grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-areas: "who who who stat stat" "ref paid bal dep fees"; align-items: start; row-gap: .55rem; column-gap: .75rem; }
       .pm-line > .ar-who { grid-area: who; }
       .pm-line > .pm-stat { grid-area: stat; justify-content: flex-end; }
       .pm-line > .ar-ref { grid-area: ref; }
-      .pm-line > .pm-amt[data-label="Total"] { grid-area: total; }
-      .pm-line > .pm-amt[data-label="Paid"] { grid-area: paid; }
+      .pm-line > .pm-paid { grid-area: paid; }
       .pm-line > .pm-bal { grid-area: bal; }
       .pm-line > .pm-dep { grid-area: dep; }
+      .pm-line > .pm-fees { grid-area: fees; }
       .pm-chev { display: none; }
       .pm-line > [data-label]:not(.pm-stat)::before { content: attr(data-label); display: block; flex: 0 0 100%; margin-bottom: .12rem; font-size: 0.8125rem; font-weight: 500; color: #667085; white-space: nowrap; }
       .pm-line > .pm-amt { text-align: left; }
+      .pm-who .ar-name { white-space: normal; }
     }
-    @media (max-width: 760px) {
-      .pm-line { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "who stat" "ref total" "paid bal" "dep dep"; padding: .7rem 1rem; }
+    /* A phone: two columns. */
+    @container (max-width: 43.99rem) {
+      .pm-line { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "who stat" "ref paid" "bal dep" "fees fees"; padding: .7rem 1rem; }
     }
 
+    /* ---- The receipts list: the search, quick dates, what they add up to, and a two-line row per receipt (a container query makes it two columns when narrow) ---- */
+    .rc-find { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .6rem; padding: .85rem 1.25rem .6rem; }
+    .rc-f { display: flex; flex-direction: column; min-width: 9rem; }
+    .rc-f .pm-in { width: 100%; }
+    .rc-f--q { flex: 1 1 18rem; }
+    .rc-f--go { flex-direction: row; gap: .5rem; min-width: 0; }
+    .rc-quick { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; padding: 0 1.25rem .85rem; }
+    .rc-chip { display: inline-flex; align-items: center; min-height: 2.25rem; padding: .3rem .85rem; border: 1px solid #d0d5dd; border-radius: 999px; color: #475467; font-size: .8125rem; font-weight: 500; }
+    .rc-chip:hover { background: rgba(152,162,179,.12); }
+    .rc-chip.is-on { background: #465fff; border-color: #465fff; color: #fff; }
+    .dark .rc-chip { border-color: #344054; color: #d0d5dd; }
+    .dark .rc-chip.is-on { background: #465fff; border-color: #465fff; color: #fff; }
+    .rc-err { font-size: .8125rem; font-weight: 600; color: #b42318; }
+    .dark .rc-err { color: #fda29b; }
+    .rc-totals { display: flex; flex-wrap: wrap; align-items: stretch; gap: .75rem 2rem; padding: .9rem 1.25rem; border-top: 1px solid #f2f4f7; background: #f9fafb; }
+    .dark .rc-totals { border-color: #1d2939; background: rgba(255,255,255,.02); }
+    .rc-sum, .rc-methods span { display: flex; flex-direction: column; font-size: .8125rem; color: #667085; }
+    .rc-sum b { font-size: 1.25rem; font-weight: 700; color: #101828; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .rc-sum small { font-size: .8125rem; }
+    .rc-sum--net b { color: #067647; }
+    .rc-methods { display: flex; flex-wrap: wrap; gap: .75rem 1.5rem; margin-left: auto; align-items: center; }
+    .rc-methods b { font-size: .9375rem; font-weight: 600; color: #1d2939; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .dark .rc-sum, .dark .rc-methods span { color: #98a2b3; }
+    .dark .rc-sum b { color: #f2f4f7; }
+    .dark .rc-sum--net b { color: #32d583; }
+    .dark .rc-methods b { color: #e4e7ec; }
+    .rc-list { container-type: inline-size; }
+    .rc-grid { display: grid; grid-template-columns: minmax(11rem, 1.2fr) minmax(9rem, 1.3fr) minmax(11rem, 1.5fr) minmax(7rem, 1fr) minmax(7rem, .8fr) 7rem; align-items: center; column-gap: 1rem; padding: .7rem 1.25rem; }
+    .rc-head { border-top: 1px solid #f2f4f7; border-bottom: 1px solid #f2f4f7; font-size: .8125rem; font-weight: 500; color: #667085; }
+    .rc-head .r { text-align: right; }
+    .dark .rc-head { border-color: #1d2939; color: #98a2b3; }
+    .rc-row { min-height: 4.25rem; border-bottom: 1px solid #f2f4f7; }
+    .rc-row:hover { background: rgba(152,162,179,.08); }
+    .dark .rc-row { border-color: #1d2939; }
+    .rc-c { display: flex; flex-direction: column; min-width: 0; }
+    .rc-main { display: flex; align-items: center; gap: .4rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .875rem; color: #1d2939; }
+    .rc-who .rc-main, .rc-pay .rc-main, .rc-by .rc-main { display: block; }
+    .rc-main b { font-weight: 600; }
+    .rc-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: .1rem; font-size: .8125rem; color: #667085; }
+    .rc-sub a { color: #465fff; }
+    .rc-amt { align-items: flex-end; }
+    .rc-amt .rc-main { font-weight: 700; font-variant-numeric: tabular-nums; }
+    .rc-amt.is-out .rc-main { color: #b54708; }
+    .rc-row.is-void .rc-amt .rc-main { text-decoration: line-through; color: #98a2b3; }
+    .rc-row.is-void .rc-c:not(.rc-acts) .rc-main { color: #98a2b3; }
+    .dark .rc-main { color: rgba(255,255,255,.9); }
+    .dark .rc-sub { color: #98a2b3; }
+    .dark .rc-sub a { color: #9bb0ff; }
+    .dark .rc-amt.is-out .rc-main { color: #fdb022; }
+    .rc-acts { flex-direction: row; justify-content: flex-end; gap: .4rem; }
+    @container (max-width: 59.99rem) {
+      .rc-head { display: none; }
+      .rc-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "no amt" "who pay" "by acts"; row-gap: .55rem; }
+      .rc-no { grid-area: no; } .rc-who { grid-area: who; } .rc-pay { grid-area: pay; } .rc-by { grid-area: by; align-self: center; } .rc-amt { grid-area: amt; } .rc-acts { grid-area: acts; }
+    }
     /* the window */
     .pm-win { position: fixed; inset: 0; z-index: 99999; display: flex; align-items: flex-start; justify-content: center; padding: 1.25rem; overflow-y: auto; background: rgba(16,24,40,.5); }
     .pm-sheet { position: relative; width: 100%; max-width: 46rem; margin: auto; border-radius: 1.25rem; background: #fff; box-shadow: 0 24px 48px -12px rgba(16,24,40,.3); }
@@ -202,7 +276,8 @@
     x-data="paymentsApp()"
     x-init="
          darkMode = JSON.parse(localStorage.getItem('darkMode'));
-         $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)));"
+         $watch('darkMode', value => localStorage.setItem('darkMode', JSON.stringify(value)));{% if mode == "bookings" %}
+         initFilters();{% endif %}"
     :class="{'dark bg-gray-900': darkMode === true}"
   >
     <!-- ===== Preloader Start ===== -->
@@ -1249,7 +1324,7 @@
 
         <!-- ===== Main Content Start ===== -->
         <main>
-          <div class="mx-auto max-w-(--breakpoint-2xl) p-4 md:p-6">
+          <div class="mx-auto pm-wide p-4 md:p-6">
             <!-- Breadcrumb Start -->
             <div x-data="{ pageName: `Payments`}">
               <div class="mb-4 flex flex-wrap items-center justify-end gap-3">
@@ -1295,6 +1370,9 @@
             </div>
 
             {% if mode == "bookings" %}
+            <div @click="if ($event.target.closest('[data-giveback-link]')) { $event.preventDefault(); search = ''; datePick = 'any'; dateFrom = ''; dateTo = ''; statusFilter = 'refund'; }">
+              {% include "arabela_admin/partials/money_boxes.html" %}
+            </div>
             <!-- What every booking still owes, its date change and overdue fees and the deposit it can give back: all worked out by the system (reservations/ledger.py). Click a booking to open its payments. -->
             <div class="pm-card">
               <div class="ar-toolbar">
@@ -1303,45 +1381,48 @@
                   <input type="text" class="ar-search-input" x-model="search" placeholder="Search by customer, booking number or gown..." aria-label="Search payments">
                 </div>
                 <div class="ar-filters" role="group" aria-label="Show bookings by payment status">
-                  <button type="button" class="ar-filter" :class="statusFilter === 'All' ? 'is-on' : ''" :aria-pressed="statusFilter === 'All' ? 'true' : 'false'" @click="statusFilter = 'All'">All <span class="ar-n">{{ counts.all }}</span></button>
-                  <button type="button" class="ar-filter{% if counts.balance %} ar-filter--hot{% endif %}" :class="statusFilter === 'balance' ? 'is-on' : ''" :aria-pressed="statusFilter === 'balance' ? 'true' : 'false'" @click="statusFilter = 'balance'" title="Something is still to pay"><span class="ar-dot pm-dot--balance"></span>Balance due <span class="ar-n">{{ counts.balance }}</span></button>
-                  <button type="button" class="ar-filter" :class="statusFilter === 'late' ? 'is-on' : ''" :aria-pressed="statusFilter === 'late' ? 'true' : 'false'" @click="statusFilter = 'late'" title="A gown is past its return date: its overdue fee is growing each day"><span class="ar-dot ar-dot--overdue"></span>Overdue <span class="ar-n">{{ counts.late }}</span></button>
-                  <button type="button" class="ar-filter" :class="statusFilter === 'refund' ? 'is-on' : ''" :aria-pressed="statusFilter === 'refund' ? 'true' : 'false'" @click="statusFilter = 'refund'" title="There is money to give back to the customer"><span class="ar-dot pm-dot--refund"></span>Refund due <span class="ar-n">{{ counts.refund }}</span></button>
+                  <button type="button" class="ar-filter" :class="statusFilter === 'All' ? 'is-on' : ''" :aria-pressed="statusFilter === 'All' ? 'true' : 'false'" @click="statusFilter = 'All'">All <span class="ar-n" x-text="count('All')">{{ counts.all }}</span></button>
+                  <button type="button" class="ar-filter{% if counts.balance %} ar-filter--hot{% endif %}" :class="{ 'is-on': statusFilter === 'balance', 'ar-filter--hot': count('balance') > 0 }" :aria-pressed="statusFilter === 'balance' ? 'true' : 'false'" @click="statusFilter = 'balance'" title="Something is still to pay"><span class="ar-dot pm-dot--balance"></span>Balance due <span class="ar-n" x-text="count('balance')">{{ counts.balance }}</span></button>
+                  <button type="button" class="ar-filter" :class="statusFilter === 'late' ? 'is-on' : ''" :aria-pressed="statusFilter === 'late' ? 'true' : 'false'" @click="statusFilter = 'late'" title="A gown is past its return date: its overdue fee is growing each day"><span class="ar-dot ar-dot--overdue"></span>Overdue <span class="ar-n" x-text="count('late')">{{ counts.late }}</span></button>
+                  <button type="button" class="ar-filter" :class="statusFilter === 'refund' ? 'is-on' : ''" :aria-pressed="statusFilter === 'refund' ? 'true' : 'false'" @click="statusFilter = 'refund'" title="There is money to give back to the customer"><span class="ar-dot pm-dot--refund"></span>Refund due <span class="ar-n" x-text="count('refund')">{{ counts.refund }}</span></button>
                   <button type="button" class="ar-filter" :class="statusFilter === 'done' ? 'is-on' : ''" :aria-pressed="statusFilter === 'done' ? 'true' : 'false'" @click="statusFilter = 'done'" title="Paid in full or settled"><span class="ar-dot pm-dot--paid"></span>Paid / settled</button>
                 </div>
               </div>
-              <div class="ar-count pm-countrow"><span id="ar-count" aria-live="polite"></span>{% if balance_total %}<span class="pm-collect">Still to collect: &#8369;{{ balance_total|floatformat:"2g" }}</span>{% endif %}</div>
+              {# The dates: the status numbers, the list and the boxes above follow them. #}
+              {% include "arabela_admin/partials/money_dates.html" %}
+              <div class="ar-count pm-countrow"><span id="ar-count" aria-live="polite"></span></div>
 
-              <div class="custom-scrollbar overflow-y-auto" style="max-height: 760px;" data-arpg=".pm-row" data-arpg-noun="bookings" data-arpg-top="off" data-arpg-count="#ar-count">
+              <div class="custom-scrollbar pm-list overflow-y-auto" style="max-height: 760px;" data-arpg=".pm-row" data-arpg-noun="bookings" data-arpg-top="off" data-arpg-count="#ar-count">
                 <div class="pm-head">
                   <span>Customer</span>
                   <span>Booking no.</span>
-                  <span class="r">Total</span>
                   <span class="r">Paid</span>
                   <span class="r">Balance</span>
                   <span>Deposit</span>
+                  <span>Fees</span>
                   <span>Status</span>
                   <span></span>
                 </div>
                 {% for r in rows %}
-                <div class="ar-booking pm-row" data-booking-id="{{ r.id }}" data-state="{{ r.stmt.state }}" data-late="{% if r.stmt.overdue_now %}1{% else %}0{% endif %}" data-search="{{ r.search_text }}" x-show="matches($el)">
+                <div class="ar-booking pm-row" data-booking-id="{{ r.id }}" data-state="{{ r.stmt.state }}" data-late="{% if r.stmt.overdue_now %}1{% else %}0{% endif %}" data-giveback="{% if r.stmt.refund_available > 0 %}1{% else %}0{% endif %}" data-d-pickup="{{ r.bar.d_pickup }}" data-d-return="{{ r.bar.d_return }}" data-d-event="{{ r.bar.d_event }}" data-d-paid="{{ r.bar.d_paid }}" data-late-pickup="{{ r.bar.late_pickup }}" data-late-return="{{ r.bar.late_return }}" data-late-event="{{ r.bar.late_event }}" data-late-paid="{{ r.bar.late_paid }}" data-search="{{ r.search_text }}" x-show="matches($el)">
                   <div class="pm-line" role="button" tabindex="0" @click="open({{ r.id }})" @keydown.enter.prevent="open({{ r.id }})" aria-label="Open the payments of {{ r.display_customer_name }}, {{ r.reference_code }}">
                     <div class="ar-who">
                       <span class="ar-dot pm-dot--{{ r.stmt.state }}" role="img" aria-label="{{ r.stmt.state_label }}" title="{{ r.stmt.state_label }}"></span>
-                      <div class="pm-who"><span class="ar-name">{{ r.display_customer_name }}</span><span class="pm-sub">{{ r.gown_text }}{% if r.span_start %} &middot; {{ r.span_start|date:"M j" }} &ndash; {{ r.span_end|date:"M j" }}{% endif %}</span></div>
+                      <div class="pm-who"><span class="ar-name" title="{{ r.display_customer_name }}">{{ r.display_customer_name }}</span><span class="pm-sub"><span class="pm-sub-g" title="{{ r.gown_text }}">{{ r.gown_text }}</span>{% if r.span_start %}<span class="pm-sub-d">&middot; {{ r.span_start|date:"M j" }} &ndash; {{ r.span_end|date:"M j" }}</span>{% endif %}</span></div>
                     </div>
                     <div class="ar-ref" data-label="Booking no."><b>{{ r.reference_code }}</b></div>
-                    <div class="pm-amt" data-label="Total">&#8369;{{ r.stmt.total|floatformat:"2g" }}</div>
-                    <div class="pm-amt" data-label="Paid">&#8369;{% if r.stmt.cancelled %}{{ r.stmt.received|floatformat:"2g" }}{% else %}{{ r.stmt.paid_net|floatformat:"2g" }}{% endif %}</div>
+                    <div class="pm-amt pm-paid" data-label="Paid">&#8369;{% if r.stmt.cancelled %}{{ r.stmt.received|floatformat:"2g" }}{% else %}{{ r.stmt.paid_net|floatformat:"2g" }}{% endif %}<span class="pm-of">of &#8369;{{ r.stmt.total|floatformat:"2g" }}</span></div>
                     <div class="pm-amt pm-bal{% if r.stmt.balance_due > 0 %} is-due{% endif %}" data-label="Balance">{% if r.stmt.cancelled %}<span class="pm-muted" title="Cancelled: nothing more is collected">&mdash;</span>{% else %}&#8369;{{ r.stmt.balance_due|floatformat:"2g" }}{% endif %}</div>
-                    <div class="pm-dep" data-label="Deposit">{{ r.deposit_text }}</div>
-                    <div class="pm-stat" data-label="Status"><span class="pm-chip pm-chip--{{ r.stmt.state }}">{{ r.stmt.state_label }}</span>{% if r.stmt.extra_days_fee %}<span class="pm-chip pm-chip--change" title="{{ r.stmt.early_days_total|add:r.stmt.later_days_total }} booked day{{ r.stmt.early_days_total|add:r.stmt.later_days_total|pluralize }} outside the free days: taken from the security deposit">Extra&nbsp;days &#8369;{{ r.stmt.extra_days_fee|floatformat:"0g" }}</span>{% endif %}{% if r.stmt.late_now %}{% if r.stmt.change_fee %}<span class="pm-chip pm-chip--change" title="{{ r.stmt.change_days_total }} day{{ r.stmt.change_days_total|pluralize }} the return was moved, so far">Date&nbsp;change &#8369;{{ r.stmt.change_fee|floatformat:"0g" }}</span>{% endif %}{% if r.stmt.overdue_fee %}<span class="pm-chip pm-chip--late" title="{{ r.stmt.overdue_days_total }} day{{ r.stmt.overdue_days_total|pluralize }} overdue">Overdue &#8369;{{ r.stmt.overdue_fee|floatformat:"0g" }}</span>{% endif %}{% endif %}</div>
+                    <div class="pm-dep" data-label="Deposit" title="{{ r.deposit_text }}">{% if r.deposit_lines|length > 1 %}<span class="pm-dep-main">{{ r.deposit_lines.0 }}</span><span class="pm-of">{{ r.deposit_lines.1 }}</span>{% else %}{{ r.deposit_text }}{% endif %}</div>
+                    <div class="pm-fees" data-label="Fees">{% if r.fees %}<span class="pm-fee" title="{{ r.fee_note }}">&#8369;{{ r.stmt.late_fee|floatformat:"2g" }}</span><span class="pm-fee-what" title="{{ r.fee_note }}">{% if r.fees|length > 2 %}<span{% if r.fees.0.growing %} class="pm-fee-late"{% endif %}>{{ r.fees.0.name }}</span> &middot; <span>+{{ r.fees|length|add:"-1" }} more</span>{% else %}{% for fee in r.fees %}{% if not forloop.first %} &middot; {% endif %}<span{% if fee.growing %} class="pm-fee-late"{% endif %}>{{ fee.name }}</span>{% endfor %}{% endif %}</span>{% else %}<span class="pm-muted">&mdash;</span>{% endif %}</div>
+                    <div class="pm-stat" data-label="Status"><span class="pm-chip pm-chip--{{ r.stmt.state }}">{{ r.stmt.state_label }}</span></div>
                     <div class="pm-chev" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 5l5 5-5 5"/></svg></div>
                   </div>
                 </div>
                 {% empty %}
                 <p class="pm-empty">No booking has been approved yet, so there is nothing to collect or hand back.</p>
                 {% endfor %}
+                {% if rows %}<p class="pm-empty" x-show="shownCount() === 0" x-cloak x-text="search ? 'No booking matches your search.' : ((dateFrom || dateTo) ? 'No booking in this list matches those dates. Try other dates, or press All.' : 'No booking in this list.')"></p>{% endif %}
               </div>
             </div>
             {% elif mode == "online" %}
@@ -1433,47 +1514,54 @@
               })();
             </script>
             {% else %}
-            <!-- Every Payment Receipt, newest first (owner only). The paper itself opens in its own page; a void keeps the line and shows the reason. -->
+            <!-- Every Payment Receipt, newest first (owner only): what the search found adds up above the list (voided ones never counted). View opens the paper
+                 on this page (not counted as a print), Print opens the print window at once (counted: the original, then reprints); a void keeps its line. -->
             <div class="pm-card">
-              <form method="get" class="pm-filters" role="search" aria-label="Find a receipt">
-                <div style="flex: 1 1 14rem; min-width: 12rem;">
+              <form method="get" class="rc-find" role="search" aria-label="Find a receipt">
+                <div class="rc-f rc-f--q">
                   <label class="pm-hint" for="pm-q">Receipt, booking, customer or GCash number</label>
-                  <input id="pm-q" type="text" name="q" value="{{ q }}" class="pm-in" style="width: 100%;" placeholder="PR-2026-000123, RSV-2026-0112, Juan...">
+                  <input id="pm-q" type="text" name="q" value="{{ q }}" class="pm-in" placeholder="PR-2026-000123, RSV-2026-0112, Juan...">
                 </div>
-                <div><label class="pm-hint" for="pm-kind">Type</label>
-                  <select id="pm-kind" name="kind" class="pm-in"><option value="all"{% if kind == "all" %} selected{% endif %}>All</option><option value="in"{% if kind == "in" %} selected{% endif %}>Payments received</option><option value="out"{% if kind == "out" %} selected{% endif %}>Deposit returns</option></select></div>
-                <div><label class="pm-hint" for="pm-status">Status</label>
+                <div class="rc-f"><label class="pm-hint" for="pm-kind">Type</label>
+                  <select id="pm-kind" name="kind" class="pm-in"><option value="all"{% if kind == "all" %} selected{% endif %}>All</option><option value="in"{% if kind == "in" %} selected{% endif %}>Payments received</option><option value="out"{% if kind == "out" %} selected{% endif %}>Money returned</option></select></div>
+                <div class="rc-f"><label class="pm-hint" for="pm-status">Status</label>
                   <select id="pm-status" name="status" class="pm-in"><option value="all"{% if status == "all" %} selected{% endif %}>All</option><option value="ok"{% if status == "ok" %} selected{% endif %}>Not voided</option><option value="void"{% if status == "void" %} selected{% endif %}>Voided</option></select></div>
-                <div><label class="pm-hint" for="pm-from">From</label><input id="pm-from" type="date" name="from" value="{{ from }}" class="pm-in"></div>
-                <div><label class="pm-hint" for="pm-to">To</label><input id="pm-to" type="date" name="to" value="{{ to }}" class="pm-in"></div>
-                <button type="submit" class="pm-b pm-b--main">Search</button>
-                <a href="{% url 'arabela_admin:payment_receipts' %}" class="pm-b">Clear</a>
+                <div class="rc-f"><label class="pm-hint" for="pm-from">From</label><input id="pm-from" type="date" name="from" value="{{ from }}" class="pm-in"></div>
+                <div class="rc-f"><label class="pm-hint" for="pm-to">To</label><input id="pm-to" type="date" name="to" value="{{ to }}" class="pm-in"></div>
+                <div class="rc-f rc-f--go"><button type="submit" class="pm-b pm-b--main">Search</button><a href="{% url 'arabela_admin:payment_receipts' %}" class="pm-b">Clear</a></div>
               </form>
-              <div style="overflow-x: auto;">
-                <table class="pm-table">
-                  <thead><tr><th>Receipt no.</th><th>Date</th><th>Booking</th><th>Customer</th><th>For</th><th>Method</th><th class="r">Amount</th><th>Served by</th><th></th></tr></thead>
-                  <tbody>
-                  {% for p in receipts %}
-                    <tr{% if p.is_void %} class="is-void"{% endif %}>
-                      <td><b>{{ p.receipt_number }}</b>{% if p.is_void %}<div><span class="pm-chip pm-chip--void">VOID</span></div>{% endif %}</td>
-                      <td>{{ p.paid_at|date:"M j, Y" }}<div class="pm-legacy">{{ p.paid_at|date:"g:i A" }}</div></td>
-                      <td>{{ p.reservation.reference_code }}</td>
-                      <td>{{ p.customer_name }}</td>
-                      <td>{% if p.direction == "Out" %}Deposit returned{% else %}{{ p.get_purpose_display }}{% endif %}</td>
-                      <td>{{ p.get_method_display }}{% if p.reference %}<div class="pm-legacy">ref {{ p.reference }}</div>{% endif %}</td>
-                      <td class="r">{% if p.direction == "Out" %}-{% endif %}&#8369;{{ p.amount|floatformat:"2g" }}</td>
-                      <td>{{ p.recorded_by_name|default:"-" }}</td>
-                      <td style="white-space: nowrap;">
-                        <a class="pm-b pm-b--small" href="{% url 'arabela_admin:payment_receipt_print' p.id %}?look=1" target="_blank" rel="noopener">View</a>
-                        <a class="pm-b pm-b--small" href="{% url 'arabela_admin:payment_receipt_print' p.id %}" target="_blank" rel="noopener">Print</a>
-                        <a class="pm-b pm-b--small" href="{% url 'arabela_admin:payments' %}?open={{ p.reservation_id }}" title="Open the booking: send again, void">Booking</a>
-                      </td>
-                    </tr>
-                  {% empty %}
-                    <tr><td colspan="9" class="pm-empty">No receipt matches.</td></tr>
-                  {% endfor %}
-                  </tbody>
-                </table>
+              <div class="rc-quick" role="group" aria-label="Quick dates">
+                <span class="pm-hint">Dates:</span>
+                <a class="rc-chip{% if not from and not to %} is-on{% endif %}" href="?q={{ q|urlencode }}&amp;kind={{ kind }}&amp;status={{ status }}">All</a>
+                <a class="rc-chip{% if from == today_iso and to == today_iso %} is-on{% endif %}" href="?q={{ q|urlencode }}&amp;kind={{ kind }}&amp;status={{ status }}&amp;from={{ today_iso }}&amp;to={{ today_iso }}">Today</a>
+                <a class="rc-chip{% if from == month_start_iso and to == month_end_iso %} is-on{% endif %}" href="?q={{ q|urlencode }}&amp;kind={{ kind }}&amp;status={{ status }}&amp;from={{ month_start_iso }}&amp;to={{ month_end_iso }}">This month</a>
+                {% if date_error %}<span class="rc-err" role="alert">{{ date_error }}</span>{% endif %}
+              </div>
+              <div class="rc-totals" aria-label="What these receipts add up to">
+                <div class="rc-sum"><span>Receipts</span><b data-total="count">{{ totals.count }}</b>{% if totals.voided %}<small>{{ totals.voided }} voided, not counted</small>{% endif %}</div>
+                <div class="rc-sum"><span>Received</span><b data-total="received">&#8369;{{ totals.received }}</b></div>
+                <div class="rc-sum"><span>Returned</span><b data-total="returned">&#8369;{{ totals.returned }}</b></div>
+                <div class="rc-sum rc-sum--net"><span>Net</span><b data-total="net">&#8369;{{ totals.net }}</b></div>
+                <div class="rc-methods">{% for name, amount in totals.methods %}<span>{{ name }}<b data-method="{{ name }}">&#8369;{{ amount }}</b></span>{% endfor %}</div>
+              </div>
+              <div class="rc-list">
+                <div class="rc-head rc-grid" aria-hidden="true"><span>Receipt</span><span>Customer</span><span>Payment</span><span>Served by</span><span class="r">Amount</span><span></span></div>
+                {% for p in receipts %}
+                <div class="rc-row rc-grid{% if p.is_void %} is-void{% endif %}" data-receipt="{{ p.pk }}">
+                  <div class="rc-c rc-no"><span class="rc-main"><b>{{ p.receipt_number }}</b>{% if p.is_void %}<span class="pm-chip pm-chip--void">VOID</span>{% endif %}</span><span class="rc-sub">{{ p.paid_at|date:"M j, Y" }} &middot; {{ p.paid_at|date:"g:i A" }}</span></div>
+                  <div class="rc-c rc-who"><span class="rc-main" title="{{ p.customer_name }}">{{ p.customer_name }}</span><span class="rc-sub"><a href="{% url 'arabela_admin:payments' %}?open={{ p.reservation_id }}">{{ p.reservation.reference_code }}</a></span></div>
+                  <div class="rc-c rc-pay"><span class="rc-main">{% if p.direction == "Out" and not p.is_over_return %}Deposit returned{% else %}{{ p.get_purpose_display }}{% endif %}</span><span class="rc-sub" title="{{ p.get_method_display }}{% if p.reference %} · ref {{ p.reference }}{% endif %}">{{ p.get_method_display }}{% if p.reference %} &middot; ref {{ p.reference }}{% endif %}</span></div>
+                  <div class="rc-c rc-by"><span class="rc-main" title="{{ p.recorded_by_name|default:'-' }}">{{ p.recorded_by_name|default:"-" }}</span></div>
+                  <div class="rc-c rc-amt{% if p.direction == "Out" %} is-out{% endif %}"><span class="rc-main">{% if p.direction == "Out" %}-{% endif %}&#8369;{{ p.amount|floatformat:"2g" }}</span></div>
+                  <div class="rc-c rc-acts">
+                    <button type="button" class="ar-ib rc-view" @click="arabelaReceipt.open({{ p.reservation_id }}, { payment: {{ p.pk }}, viewOnly: true })" title="View the receipt" aria-label="View receipt {{ p.receipt_number }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                    <button type="button" class="ar-ib rc-print" @click="arabelaReceipt.print('{% url 'arabela_admin:payment_receipt_print' p.id %}?embed=1', $el)" title="Print the receipt" aria-label="Print receipt {{ p.receipt_number }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></button>
+                    <a class="ar-ib rc-book" href="{% url 'arabela_admin:payments' %}?open={{ p.reservation_id }}" title="Open the booking: send again, void" aria-label="Open the booking {{ p.reservation.reference_code }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg></a>
+                  </div>
+                </div>
+                {% empty %}
+                <p class="pm-empty">No receipt matches.</p>
+                {% endfor %}
               </div>
               {% if receipts.paginator.num_pages > 1 %}
               <div class="pm-pages">
@@ -1762,7 +1850,7 @@
       var OPEN_PAY = '{{ open_pay|escapejs }}';          // "cash" or "qr": opened to collect what is still owed
       return {
         page: 'payments', loaded: true, darkMode: false, stickyMenu: false, sidebarToggle: false, scrollTop: false,
-        search: '', statusFilter: 'All',
+        search: '', statusFilter: 'All', dateFrom: '', dateTo: '', datePick: 'any', dateKind: 'return',
         openId: 0, d: null, loading: false, loadError: '', changed: false, last: null,
         busy: false, formError: '', formWhere: '', voiding: null,
         rec: { purpose: '', amount: '', method: 'Cash', note: '', rid: '' },
@@ -1777,13 +1865,52 @@
         url: function (base, id) { return base.replace('999999', id); },
 
         matches: function (el) {
+          return this.inStatus(el, this.statusFilter) && this.onDate(el, this.statusFilter)
+            && (this.search === '' || (el.getAttribute('data-search') || '').indexOf(String(this.search).toLowerCase()) !== -1);
+        },
+        inStatus: function (el, filter) {
           var state = el.getAttribute('data-state'), late = el.getAttribute('data-late') === '1';
-          var okFilter = this.statusFilter === 'All'
-            || (this.statusFilter === 'balance' && state === 'balance')
-            || (this.statusFilter === 'refund' && state === 'refund')
-            || (this.statusFilter === 'late' && late)
-            || (this.statusFilter === 'done' && (state === 'paid' || state === 'settled'));
-          return okFilter && (this.search === '' || (el.getAttribute('data-search') || '').indexOf(String(this.search).toLowerCase()) !== -1);
+          return filter === 'All'
+            || (filter === 'balance' && state === 'balance')
+            || (filter === 'refund' && el.getAttribute('data-giveback') === '1')
+            || (filter === 'late' && late)
+            || (filter === 'done' && (state === 'paid' || state === 'settled'));
+        },
+        // The dates: a booking with a day (pick-up, return, event or money paid) inside them. Under "Overdue" only its overdue gowns count, so
+        // "a date + Overdue" is the bookings whose gown of that day is the one still out.
+        onDate: function (el, filter) {
+          return arabelaMD.has(el, this.dateFrom, this.dateTo, this.dateKind, filter === 'late' ? 'late' : 'd');
+        },
+        bookingRows: function () { return Array.prototype.slice.call(document.querySelectorAll('.pm-row')); },
+        // The number on a status button, for the chosen dates.
+        count: function (filter) {
+          var self = this;
+          return this.bookingRows().filter(function (el) { return self.inStatus(el, filter) && self.onDate(el, filter); }).length;
+        },
+        shownCount: function () {
+          var self = this;
+          return this.bookingRows().filter(function (el) { return self.matches(el); }).length;
+        },
+        // The search, the status and the dates stay in the address, so a reload (this page's own after a change, or the browser's) shows the same
+        // list; the boxes above follow the dates.
+        initFilters: function () {
+          var self = this, params = new URLSearchParams(window.location.search);
+          if (params.get('search')) { this.search = params.get('search'); }
+          if (['balance', 'late', 'refund', 'done'].indexOf(params.get('status')) !== -1) { this.statusFilter = params.get('status'); }
+          var dates = arabelaMD.read(params);
+          this.dateFrom = dates.from; this.dateTo = dates.to; this.datePick = dates.pick; this.dateKind = dates.kind;
+          ['search', 'statusFilter'].forEach(function (name) { self.$watch(name, function () { self.syncUrl(); }); });
+          ['dateFrom', 'dateTo', 'dateKind'].forEach(function (name) {
+            self.$watch(name, function () { self.syncUrl(); window.arabelaMoney.set(arabelaMD.ok(self.dateFrom), arabelaMD.ok(self.dateTo), self.dateKind); });
+          });
+        },
+        syncUrl: function () {
+          var params = new URLSearchParams(window.location.search);
+          if (this.search) { params.set('search', this.search); } else { params.delete('search'); }
+          if (this.statusFilter !== 'All') { params.set('status', this.statusFilter); } else { params.delete('status'); }
+          arabelaMD.write(params, this.dateFrom, this.dateTo, this.dateKind);
+          var query = params.toString();
+          window.history.replaceState(window.history.state, '', window.location.pathname + (query ? '?' + query : ''));
         },
 
         api: function (url, method, body) {
@@ -1832,9 +1959,19 @@
         },
         close: function () {
           var wasOpen = !!this.openId;
-          this.openId = 0; this.d = null;          // (before the QR code is cleared: the window's own parts go away first, so nothing reads the empty booking)
+          this.openId = 0;
+          if (wasOpen && this.changed) {
+            // The page reloads with the new numbers, on the same search, status and date. The hidden window keeps its data until then:
+            // emptying it after its numbers were refreshed made its parts read an empty booking (an error in the browser).
+            this.payStop();
+            var keep = new URLSearchParams(window.location.search);
+            keep.delete('open'); keep.delete('pay');
+            var query = keep.toString();
+            window.location.href = window.location.pathname + (query ? '?' + query : '');
+            return;
+          }
+          this.d = null;          // (before the QR code is cleared: the window's own parts go away first, so nothing reads the empty booking)
           this.paySet(null);
-          if (wasOpen && this.changed) { window.location.href = window.location.pathname; }
         },
 
         run: function (where, url, body, message) {
@@ -1843,6 +1980,7 @@
           var self = this;
           this.api(url, 'POST', body).then(function (data) {
             self.busy = false; self.changed = true;
+            if (window.arabelaMoney) { window.arabelaMoney.refresh(); }
             var printUrl = data.payment && data.payment.printUrl ? data.payment.printUrl : '';
             var shown = typeof message === 'function' ? message(data) : message;
             self.show(data.detail);

@@ -1331,7 +1331,7 @@
 
                 {% comment %} The money. Rental Income is what the shop EARNED this month (the rental part of every payment; deposits are the customers' money and are never in
                    it -- arabela_admin/dashboard_money.month_money). Security Deposits Held is counted by the Security Deposits page's own rules (views._deposits_held). {% endcomment %}
-                {% if month_money or deposits_held %}
+                {% if month_money or today_money or deposits_held %}
                 <div class="db-row db-row--money" data-live-region="overview-top">
                   {% if month_money %}
                   <a href="{% url 'arabela_admin:payments' %}" class="db-card db-money" title="The gown rental paid this month (security deposits are not income) - opens Payments">
@@ -1339,6 +1339,14 @@
                     <span class="db-money-num">&#8369;{{ month_money.income }}</span>
                     <span class="db-money-sub">{% if month_money.bookings %}from {{ month_money.bookings }} booking{{ month_money.bookings|pluralize }}{% else %}No rental paid yet this month{% endif %} &middot; deposits not included</span>
                     <span class="db-money-sub">Fees &amp; deductions kept: <b>&#8369;{{ month_money.kept }}</b></span>
+                    <span class="db-money-sub">Kept from cancellations: <b>&#8369;{{ month_money.kept_cancelled }}</b></span>
+                  </a>
+                  {% elif today_money %}
+                  <a href="{% url 'arabela_admin:payments' %}" class="db-card db-money" title="Money received today less money handed back, by how it was paid - opens Payments">
+                    <span class="db-money-head"><span class="ov-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 14V6c0-1.1-.9-2-2-2H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zm-9-1c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm13-6v11c0 1.1-.9 2-2 2H4v-2h17V7h2z"/></svg></span><span class="db-money-title">Today's Money</span><span class="ov-tag">Today</span></span>
+                    <span class="db-money-num">&#8369;{{ today_money.net }}</span>
+                    <span class="db-money-sub">Received today less money handed back &middot; deposits included</span>
+                    <span class="db-money-sub">{% for name, amount in today_money.methods %}{% if not forloop.first %} &middot; {% endif %}{{ name }} <b>&#8369;{{ amount }}</b>{% endfor %}</span>
                   </a>
                   {% endif %}
                   {% if deposits_held %}

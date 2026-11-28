@@ -9,11 +9,12 @@ disagree with the pages it links to.
 """
 from datetime import timedelta
 
+from django.db.models import Prefetch
 from django.urls import reverse
 from django.utils import timezone
 
-from reservations import ledger
-from reservations.models import Payment, PaymentAttempt, Reservation, ReservationItem
+from reservations import cancellation, ledger
+from reservations.models import Payment, PaymentAttempt, Reservation, ReservationItem, ReservationStatusEvent
 
 LATEST = 5
 PICKUP_DAYS = 2             # "pick-ups with a balance" looks at today and the next 2 days
@@ -21,6 +22,43 @@ LIVE_STATUSES = (Reservation.Status.CONFIRMED, Reservation.Status.ACTIVE, Reserv
 CORE_PURPOSES = (Payment.Purpose.DEPOSIT, Payment.Purpose.FULL, Payment.Purpose.BALANCE)
 
 M = Payment.Method
+# "Money by method": every way a payment can be made, under the name people count it by ("Other": an old booking's money, or an unknown online way).
+METHOD_GROUPS = ("Cash", "GCash", "Maya", "QR Ph", "Other")
+_METHOD_GROUP = {M.CASH: "Cash", M.GCASH: "GCash", M.ONLINE_GCASH: "GCash", M.PM_GCASH: "GCash", M.PM_MAYA: "Maya", M.PM_QRPH: "QR Ph"}
+CANCEL_LABELS = (cancellation.CUSTOMER_CANCEL_LABEL, cancellation.SHOP_CANCEL_LABEL)     # the history line a cancelled booking carries
+
+
+def method_group(method):
+    return _METHOD_GROUP.get(method, "Other")
+
+
+def returned_split(statement):
+    """(security deposit, extra money): of the money handed back besides gown rental, how much was the deposit and how much was an extra charge
+    going back (counted first: an extra charge that is no longer owed is given back before the deposit is touched)."""
+    back = max(statement.refunded - statement.rental_returned, ledger.ZERO)
+    extra = min(back, statement.extra_credit)
+    return back - extra, extra
+
+
+def cancel_events():
+    """The prefetch cancelled_on() reads."""
+    return Prefetch("status_events", queryset=ReservationStatusEvent.objects.filter(label__in=CANCEL_LABELS).order_by("occurred_at", "id"),
+                    to_attr="cancel_lines")
+
+
+def cancelled_on(reservation):
+    """The day a cancelled booking was cancelled (its history line; an old one without it: the day it last changed)."""
+    lines = getattr(reservation, "cancel_lines", None)
+    if lines is None:
+        lines = list(reservation.status_events.filter(label__in=CANCEL_LABELS).order_by("occurred_at", "id"))
+    return timezone.localtime(lines[0].occurred_at if lines else reservation.updated_at).date()
+
+
+def payment_days(reservation):
+    """The days money moved on this booking (the same payments money_between adds up), as sorted ISO days."""
+    return sorted({timezone.localtime(row["paid_at"]).date().isoformat() for row in _money_rows(reservation)})
+
+
 # How a payment was made, as a name and a colour class (the page's CSS knows gcash / maya / qrph / cash / other). Names only, no logos.
 _METHOD_BADGE = {
     M.CASH: ("Cash", "cash"),
@@ -175,7 +213,9 @@ def money_between(start=None, end=None, today=None):
                   then are the fees final), plus an extra charge paid on top of a deposit in these days (less any part the fees no longer ask for,
                   which goes back to the customer: ledger.extra_credit).
       collected   the security-deposit part of the payments received.
-      returned    the money handed back besides rental (the deposit, and extra amounts).
+      returned    the money handed back besides rental, split into returned_deposit and returned_extra (returned_split).
+      kept_cancelled  the security deposits kept from bookings cancelled in these days (not given back by the owner).
+      by_method   {method group: money received less money handed back, deposits included}: what to count in the cash drawer and the e-wallets.
       payments    every payment in these days, oldest first: {"reservation", "row" (see _money_rows), "day", "rental", "deposit", "extra", "other"}
                   ("other" = money paid beyond what the booking asks, e.g. for a gown cancelled afterwards).
 
@@ -187,11 +227,13 @@ def money_between(start=None, end=None, today=None):
 
     zero = ledger.ZERO
     income = kept = collected = returned = rental_back = zero
+    returned_deposit = returned_extra = kept_cancelled = zero
+    by_method = {name: zero for name in METHOD_GROUPS}
     by_booking, payments = {}, []
     candidates = (
         Reservation.objects.filter(status__in=LIVE_STATUSES + (Reservation.Status.CANCELLED,))
         .select_related("customer__profile")
-        .prefetch_related("items", "payments", "deductions", "receipt_records")
+        .prefetch_related("items", "payments", "deductions", "receipt_records", cancel_events())
     )
     for reservation in candidates:
         if not ledger.counts_as_tracked(reservation):
@@ -207,15 +249,23 @@ def money_between(start=None, end=None, today=None):
             if give_back > 0 and rows[index]["direction"] == Payment.Direction.IN and paid_extra > 0:
                 not_kept[index] = min(paid_extra, give_back)
                 give_back -= not_kept[index]
+        extra_to_return = statement.extra_credit          # an extra charge going back is counted before the deposit (returned_split)
         for index, row in enumerate(rows):
             day = timezone.localtime(row["paid_at"]).date()
             amount = row["amount"]
             parts = {"rental": zero, "deposit": zero, "extra": zero, "other": zero}
+            if inside(day):
+                sign = 1 if row["direction"] == Payment.Direction.IN else -1
+                by_method[method_group(row["method"])] += sign * amount
             if row["direction"] != Payment.Direction.IN:
                 back = row["rental_back"]
                 parts["rental"] = -back
+                extra_part = min(amount - back, extra_to_return)
+                extra_to_return -= extra_part
                 if inside(day):
                     returned += amount - back
+                    returned_extra += extra_part
+                    returned_deposit += amount - back - extra_part
                     rental_back += back
                     earned -= back
             elif row["purpose"] == Payment.Purpose.EXTRA:
@@ -246,9 +296,25 @@ def money_between(start=None, end=None, today=None):
             back = [i.returned_on for i in reservation.items.all() if i.stage == ReservationItem.Stage.RETURNED and i.returned_on]
             if back and inside(max(back)):
                 kept += statement.deposit_used
+        # A cancelled booking keeps its security deposit (unless the owner gives it back): the shop's money from the day it was cancelled.
+        if statement.cancelled and not statement.deposit_back_too and inside(cancelled_on(reservation)):
+            kept_cancelled += max(statement.deposit_paid - returned_split(statement)[0], zero)
     payments.sort(key=lambda p: (p["row"]["paid_at"], p["row"]["payment"].pk if p["row"]["payment"] is not None else 0, p["reservation"].pk))
     return {"income": income, "by_booking": by_booking, "kept": kept, "collected": collected, "returned": returned, "rental_back": rental_back,
+            "returned_deposit": returned_deposit, "returned_extra": returned_extra, "kept_cancelled": kept_cancelled, "by_method": by_method,
             "payments": payments}
+
+
+def method_lines(by_method):
+    """[(name, "1,500.00")] for the boxes: Cash and GCash always, the others when money moved that way."""
+    return [(name, f"{by_method[name]:,.2f}") for name in METHOD_GROUPS if name in ("Cash", "GCash", "Maya", "QR Ph") or by_method[name]]
+
+
+def today_money(today):
+    """"Today's Money" (what staff without "See rental income" see instead): all money in today less money handed back, by method."""
+    money = money_between(today, today, today)
+    net = sum(money["by_method"].values(), ledger.ZERO)
+    return {"net": f"{net:,.2f}", "methods": method_lines(money["by_method"])}
 
 
 def month_money(today):
@@ -257,4 +323,5 @@ def month_money(today):
     last = (first + timedelta(days=32)).replace(day=1) - timedelta(days=1)
     money = money_between(first, last, today)
     paid = sum(1 for value in money["by_booking"].values() if value > 0)
-    return {"income": f"{money['income']:,.2f}", "bookings": paid, "kept": f"{money['kept']:,.2f}"}
+    return {"income": f"{money['income']:,.2f}", "bookings": paid, "kept": f"{money['kept']:,.2f}",
+            "kept_cancelled": f"{money['kept_cancelled']:,.2f}"}

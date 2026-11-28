@@ -463,8 +463,13 @@ class DashboardPageTests(Base):
         self.assertIn('data-live-region="overview-top"', html)                              # the money cards are built on their own
         with mock.patch("arabela_admin.dashboard_money.month_money", side_effect=RuntimeError("boom")):
             with self.assertLogs("arabela_admin.views", level="ERROR"):
-                _, html = self.page()
+                _, html = self.page(self.owner)                                              # only who may see the income asks for it
         self.assertNotIn("Rental Income", html)
+        self.assertIn("Security Deposits Held", html)
+        with mock.patch("arabela_admin.dashboard_money.today_money", side_effect=RuntimeError("boom")):
+            with self.assertLogs("arabela_admin.views", level="ERROR"):
+                _, html = self.page()                                                        # staff get today's money instead
+        self.assertNotIn("Today's Money", html)
         self.assertIn("Security Deposits Held", html)
 
     def test_the_warning_line_says_what_needs_a_person_and_opens_the_page_with_the_details(self):

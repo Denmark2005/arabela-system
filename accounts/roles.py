@@ -47,13 +47,21 @@ PERMISSIONS = {
         "help": "Hand money back to a customer in cash, online or by the shop's GCash: the security deposit after a return, and the refund of a cancelled booking or gown. Without it, staff can see what is due but can't return it.",
         "verb": "return money to customers",
     },
+    "see_income": {
+        "label": "See rental income",
+        "help": "See the shop's earnings: Rental Income, the money it keeps from fees and cancellations, and the earnings totals in Rental History. Without it, staff still see the deposits held, the money to give back, what is still to collect and today's money by how it was paid. The owner always sees everything.",
+        "verb": "see the rental income",
+    },
 }
 PERMISSION_KEYS = tuple(PERMISSIONS)
+
+# Earnings are private: the "Senior staff" quick setting does not tick it, the owner ticks it on purpose.
+PRIVATE_PERMISSIONS = ("see_income",)
 
 # The two quick settings in Staff Management: (id, label, permissions)
 PRESETS = (
     ("daily", "Daily work only", ()),
-    ("senior", "Senior staff", PERMISSION_KEYS),
+    ("senior", "Senior staff", tuple(key for key in PERMISSION_KEYS if key not in PRIVATE_PERMISSIONS)),
 )
 
 # How long the person who attached a receipt photo may delete it again without the "Delete receipt photos" permission.

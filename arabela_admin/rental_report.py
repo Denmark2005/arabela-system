@@ -272,7 +272,8 @@ def _cancelled_gowns(period):
 
 def _no_money():
     zero = ledger.ZERO
-    return {"income": zero, "by_booking": {}, "kept": zero, "collected": zero, "returned": zero, "rental_back": zero, "payments": []}
+    return {"income": zero, "by_booking": {}, "kept": zero, "collected": zero, "returned": zero, "rental_back": zero, "payments": [],
+            "returned_deposit": zero, "returned_extra": zero, "kept_cancelled": zero}
 
 
 def _payment_line(entry):
@@ -340,7 +341,8 @@ def build(period, items, *, today, held):
         "period": period, "listed": listed,
         "income": money["income"], "income_bookings": sum(1 for value in money["by_booking"].values() if value > 0), "kept": money["kept"],
         "rental_back": money["rental_back"],
-        "held": held, "collected": money["collected"], "returned": money["returned"],
+        "held": held, "collected": money["collected"], "returned": money["returned"], "returned_deposit": money["returned_deposit"],
+        "returned_extra": money["returned_extra"], "kept_cancelled": money["kept_cancelled"],
         "rentals": len(listed), "by_status": [{"status": s, "count": n, "dot": rental_history.DOTS[rental_history.LOOK[s][0]]} for s, n in counts.items() if n],
         "status_counts": counts, "cancelled": _cancelled_gowns(period),
         "owing": owing_total, "owing_bookings": len(owing),
@@ -351,7 +353,8 @@ def build(period, items, *, today, held):
         "text": {
             "income": amount_text(money["income"]), "kept": amount_text(money["kept"]), "collected": amount_text(money["collected"]),
             "returned": amount_text(money["returned"]), "held": amount_text(held["held"]), "due": amount_text(held["due"]),
-            "owing": amount_text(owing_total),
+            "owing": amount_text(owing_total), "kept_cancelled": amount_text(money["kept_cancelled"]),
+            "returned_deposit": amount_text(money["returned_deposit"]), "returned_extra": amount_text(money["returned_extra"]),
         },
     }
 
