@@ -285,7 +285,7 @@
                   Reservation Completed
                 </span>
               {% else %}
-                {% if item.stage == "Overdue" %}
+                {% if item.overdue_days_now %}
                   <span class="mb-6 inline-flex w-fit items-center gap-1.5 rounded-full bg-red-50 px-3 py-1 text-[0.625rem] font-bold uppercase tracking-widest text-red-600">
                     <span class="material-symbols-outlined text-[14px]">warning</span>
                     Return Overdue
@@ -341,6 +341,16 @@
                 {% if item.shown_return_date != item.return_date %}
                   <p class="text-sm text-secondary/70">You planned to return it on {{ item.shown_return_date|date:"M d" }}. Returning it until {{ item.return_date|date:"M d" }} is free.</p>
                 {% endif %}
+                {% with late_days=item.overdue_days_now %}
+                {% if late_days and variation == "accepted" %}
+                  <div class="mt-1 border-l-2 border-[#d92d20] bg-[#fef3f2] px-4 py-3 text-sm text-[#b42318]" id="overdue-note" role="status">
+                    <p class="font-semibold">{{ late_days }} day{{ late_days|pluralize }} overdue</p>
+                    <p class="mt-1 text-[0.8125rem] leading-relaxed text-[#b42318]/85">
+                      It was due back on {{ item.return_date|date:"M d, Y" }}. Please return it to Arabela as soon as possible.{% if reservation.late_fee_per_day %} The overdue fee of PHP {{ reservation.late_fee_per_day|floatformat:"0g" }} a day keeps growing until it is returned.{% endif %}
+                    </p>
+                  </div>
+                {% endif %}
+                {% endwith %}
               </div>
 
               {% if item.uses_free_days and variation != "rejected" and variation != "cancelled" %}

@@ -172,6 +172,8 @@
         white-space: nowrap;
       }
       .res-chip .material-symbols-outlined { font-size: 14px; }
+      /* The smallest phones: the longest status ("Reservation Completed") still fits inside its card. */
+      @media (max-width: 359px) { .res-card .res-chip { letter-spacing: 0.01em; padding-left: 0.45rem; padding-right: 0.45rem; } }
 
       /* ---- Filter tabs ---- */
       .res-tab {
@@ -413,12 +415,14 @@
         <div id="res-list" class="res-scroll flex flex-col gap-3" data-live-region="res-list">
           {% for reservation in reservations %}
             {% for item in reservation.items.all %}
+              {# 0 unless this gown is out past its return date (ReservationItem.overdue_days_now). #}
+              {% with late_days=item.overdue_days_now %}
               <div class="res-card group cursor-pointer p-5 sm:p-6"
-                   data-status-key="{% if reservation.status == 'Pending' %}pending{% elif reservation.status == 'Rejected' %}rejected{% elif reservation.status == 'Cancelled' or item.stage == 'Cancelled' %}cancelled{% elif item.stage == 'Returned' %}returned{% elif item.stage == 'Overdue' %}overdue{% elif item.stage == 'Pick-up' %}pickup{% else %}rented{% endif %}"
+                   data-status-key="{% if reservation.status == 'Pending' %}pending{% elif reservation.status == 'Rejected' %}rejected{% elif reservation.status == 'Cancelled' or item.stage == 'Cancelled' %}cancelled{% elif item.stage == 'Returned' %}returned{% elif late_days %}overdue{% elif item.stage == 'Pick-up' %}pickup{% else %}rented{% endif %}"
                    onclick="transitionTo('{% url 'gowns:reservation_item_detail' item.id %}')">
 
                 <!-- Line 1: status chip + reference code -->
-                <div class="flex items-center justify-between gap-3">
+                <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
                   {% if reservation.status == "Pending" %}
                     <span class="res-chip bg-amber-50 text-amber-700"><span class="material-symbols-outlined">schedule</span>Reservation Pending</span>
                   {% elif reservation.status == "Rejected" %}
@@ -429,7 +433,7 @@
                     <span class="res-chip bg-neutral-100 text-neutral-600"><span class="material-symbols-outlined">cancel</span>Gown Cancelled</span>
                   {% elif item.stage == "Returned" %}
                     <span class="res-chip bg-neutral-100 text-neutral-600"><span class="material-symbols-outlined">inventory_2</span>Reservation Completed</span>
-                  {% elif item.stage == "Overdue" %}
+                  {% elif late_days %}
                     <span class="res-chip bg-red-50 text-red-600"><span class="material-symbols-outlined">warning</span>Return Overdue</span>
                   {% elif item.stage == "Pick-up" and item.is_ready_for_pickup %}
                     <span class="res-chip bg-emerald-50 text-emerald-600"><span class="material-symbols-outlined">local_shipping</span>Ready for Pick-up</span>
@@ -438,7 +442,8 @@
                   {% else %}
                     <span class="res-chip bg-emerald-50 text-emerald-600"><span class="material-symbols-outlined">check_circle</span>Currently Rented</span>
                   {% endif %}
-                  <span class="shrink-0 text-[0.75rem] text-secondary/60">Booked {{ reservation.created_at|date:"M d, Y" }} &middot; {{ reservation.created_at|date:"g:i A" }}</span>
+                  {# On a phone the date goes under the status (and the time under the date) instead of being cut off. #}
+                  <span class="text-[0.75rem] text-secondary/60"><span class="whitespace-nowrap">Booked {{ reservation.created_at|date:"M d, Y" }}</span> &middot; <span class="whitespace-nowrap">{{ reservation.created_at|date:"g:i A" }}</span></span>
                 </div>
 
                 <!-- Line 2: gown name + dates/price -->
@@ -451,9 +456,9 @@
                         <span><span class="font-medium text-secondary">Was scheduled:</span> {{ item.rental_date|date:"M d, Y" }}</span>
                       {% elif item.stage == "Returned" %}
                         <span><span class="font-medium text-secondary">Returned on:</span> {{ item.returned_on|date:"M d, Y" }}</span>
-                      {% elif item.stage == "Overdue" %}
-                        <span><span class="font-medium text-secondary">Overdue since:</span> {{ item.overdue_date|date:"M d, Y" }}</span>
-                      {% elif item.stage == "Reserved" or item.stage == "Return" %}
+                      {% elif late_days %}
+                        <span class="text-red-600"><span class="font-medium">Was due:</span> {{ item.return_date|date:"M d, Y" }} &middot; {{ late_days }} day{{ late_days|pluralize }} overdue</span>
+                      {% elif item.stage == "Reserved" or item.stage == "Return" or item.stage == "Overdue" %}
                         <span><span class="font-medium text-secondary">Return by:</span> {{ item.return_date|date:"M d, Y" }}</span>
                       {% else %}
                         <span><span class="font-medium text-secondary">Pick-up Date:</span> {{ item.rental_date|date:"M d, Y" }}</span>
@@ -496,6 +501,7 @@
                 {% endif %}
                 {% endwith %}
               </div>
+              {% endwith %}
             {% endfor %}
           {% empty %}
             <div class="res-empty flex flex-col items-center rounded-[12px] border border-black/10 bg-[#fcfcfc] px-6 py-14 text-center">

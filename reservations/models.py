@@ -811,6 +811,21 @@ class ReservationItem(models.Model):
         return self.returned_on or self.return_date
 
     @property
+    def overdue_days_now(self):
+        """How many days this gown is overdue right now, 0 when it isn't: the booking is running, the gown is with the customer and its
+        return date has passed. Worked out from the dates (nobody sets "Overdue" by hand), and counted from the return date agreed with the
+        customer, so the customer's pages say the same number as Active Reservations."""
+        from reservations import ledger
+        if self.stage not in ledger.OUT_STAGES or self.reservation.status not in (
+            Reservation.Status.CONFIRMED, Reservation.Status.ACTIVE, Reservation.Status.OVERDUE,
+        ):
+            return 0
+        today = timezone.localdate()
+        if today <= self.return_date:
+            return 0
+        return max(1, (today - ledger.agreed_return(self)).days)
+
+    @property
     def is_ready_for_pickup(self):
         """Staff marked this gown ready for the pick-up it is still waiting for (the shop's pages and the customer's own page ask this one question)."""
         return self.stage == self.Stage.PICKUP and self.ready_at is not None and self.ready_for == self.rental_date
