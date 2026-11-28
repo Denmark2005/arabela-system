@@ -201,8 +201,9 @@
       .rc-no { grid-area: no; } .rc-who { grid-area: who; } .rc-pay { grid-area: pay; } .rc-by { grid-area: by; align-self: center; } .rc-amt { grid-area: amt; } .rc-acts { grid-area: acts; }
     }
     /* the window */
-    .pm-win { position: fixed; inset: 0; z-index: 99999; display: flex; align-items: flex-start; justify-content: center; padding: 1.25rem; overflow-y: auto; background: rgba(16,24,40,.5); }
-    .pm-sheet { position: relative; width: 100%; max-width: 46rem; margin: auto; border-radius: 1.25rem; background: #fff; box-shadow: 0 24px 48px -12px rgba(16,24,40,.3); }
+    .pm-win { position: fixed; inset: 0; z-index: 99999; display: flex; align-items: flex-start; justify-content: center; padding: 1.25rem; overflow-y: auto; background: rgba(16,24,40,.5); animation: pm-fade .2s ease both; }
+    /* Wide, and one steady height: the header and the bar at the bottom stay put while the steps change between them. */
+    .pm-sheet { position: relative; display: flex; flex-direction: column; width: 100%; max-width: 66rem; height: min(46rem, calc(100vh - 2.5rem)); margin: auto; overflow: hidden; border-radius: 1.25rem; background: #fff; box-shadow: 0 24px 48px -12px rgba(16,24,40,.3); animation: pm-rise .28s cubic-bezier(.2,.8,.2,1) both; }
     .dark .pm-sheet { background: #101828; border: 1px solid #1d2939; }
     .pm-wh { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1.25rem 1.5rem 1rem; border-bottom: 1px solid #f2f4f7; }
     .dark .pm-wh { border-color: #1d2939; }
@@ -213,7 +214,62 @@
     .pm-x:hover { background: #e4e7ec; }
     .pm-x:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
     .dark .pm-x { background: #1d2939; color: #d0d5dd; }
-    .pm-wb { padding: 1.1rem 1.5rem 1.5rem; display: grid; gap: 1.1rem; }
+    .pm-wh, .pm-steps, .pm-wf { flex: none; }
+    .pm-wb { display: flex; flex: 1 1 auto; flex-direction: column; gap: .8rem; min-height: 0; padding: 1rem 1.5rem 1rem; }
+    .pm-body { display: flex; flex: 1 1 auto; flex-direction: column; gap: .8rem; min-height: 0; }
+    .pm-body > .pm-ok, .pm-body > .pm-voidbox { flex: none; animation: pm-drop .28s ease both; }
+    /* the two steps */
+    .pm-steps { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .5rem; padding: .8rem 1.5rem 0; }
+    .pm-stepbtn { display: inline-flex; align-items: center; gap: .45rem; min-height: 2.25rem; padding: .25rem .95rem .25rem .35rem; border: 1px solid #d0d5dd; border-radius: 999px; background: transparent; color: #475467; font: 600 .875rem system-ui, sans-serif; cursor: pointer; transition: background-color .2s, border-color .2s, color .2s; }
+    .pm-stepbtn b { display: inline-flex; align-items: center; justify-content: center; width: 1.6rem; height: 1.6rem; border-radius: 999px; background: #f2f4f7; color: #344054; font-size: .8125rem; transition: background-color .2s, color .2s; }
+    .pm-stepbtn.is-on { background: #465fff; border-color: #465fff; color: #fff; }
+    .pm-stepbtn.is-on b { background: #fff; color: #3641f5; }
+    .pm-stepbtn:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+    .pm-steparrow { color: #98a2b3; }
+    .dark .pm-stepbtn { border-color: #344054; color: #d0d5dd; }
+    .dark .pm-stepbtn b { background: #1d2939; color: #d0d5dd; }
+    .dark .pm-stepbtn.is-on { background: #465fff; border-color: #465fff; color: #fff; }
+    .dark .pm-stepbtn.is-on b { background: #fff; color: #3641f5; }
+    /* step 1: two columns, each scrolls by itself only when a booking has a very long list */
+    .pm-panel { display: grid; flex: 1 1 auto; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); grid-template-rows: minmax(0, 1fr); gap: 1.25rem; min-height: 0; animation: pm-in-right .28s ease both; }
+    .pm-col { display: flex; flex-direction: column; gap: 1rem; min-height: 0; overflow-y: auto; padding: 0 .2rem .2rem 0; }
+    .pm-col > * { flex: none; }
+    .pm-panel .pm-sum { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    /* step 2 */
+    .pm-panel2 { display: grid; flex: 1 1 auto; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-content: start; gap: 1rem 1.25rem; min-height: 0; overflow-y: auto; padding: 0 .2rem .2rem 0; animation: pm-in-right .28s ease both; }
+    .pm-sheet.is-back .pm-panel, .pm-sheet.is-back .pm-panel2 { animation-name: pm-in-left; }
+    .pm-s2pay, .pm-s2ret, .pm-s2extra { display: grid; align-content: start; gap: .8rem; min-width: 0; }
+    .pm-s2extra { grid-column: 1 / -1; }
+    .pm-panel2.only-pay .pm-s2pay, .pm-panel2:not(.only-pay):not(.only-ret) .pm-s2extra { justify-self: center; width: 100%; max-width: 40rem; }
+    .pm-panel2.only-pay .pm-s2pay { grid-column: 1 / -1; }
+    .pm-panel2.only-ret .pm-s2ret { grid-column: 1 / -1; }
+    .pm-ret-grid { display: grid; gap: .7rem; }
+    .pm-ret-a, .pm-ret-b { display: grid; align-content: start; gap: .7rem; min-width: 0; }
+    .pm-panel2.only-ret .pm-ret-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.25rem; }
+    .pm-panel2 details[open] > div { animation: pm-drop .25s ease both; }
+    /* the bar at the bottom */
+    .pm-wf { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; padding: .85rem 1.5rem 1rem; border-top: 1px solid #f2f4f7; }
+    .dark .pm-wf { border-color: #1d2939; }
+    .pm-wf .pm-err { flex: 1 1 100%; animation: pm-drop .2s ease both; }
+    .pm-wfsp { flex: 1 1 auto; }
+    .pm-b--big { min-height: 2.75rem; padding: 0 1.35rem; font-size: .9rem; }
+    @keyframes pm-fade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes pm-rise { from { opacity: 0; transform: translateY(16px) scale(.985); } to { opacity: 1; transform: none; } }
+    @keyframes pm-in-right { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+    @keyframes pm-in-left { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+    @keyframes pm-drop { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+    @media (max-width: 760px) {
+      .pm-win { padding: .5rem; }
+      .pm-sheet { height: calc(100vh - 1rem); height: calc(100dvh - 1rem); }
+      .pm-panel { display: flex; flex-direction: column; overflow-y: auto; }
+      .pm-col { flex: none; overflow: visible; }
+      .pm-panel2, .pm-panel2.only-ret .pm-ret-grid { grid-template-columns: minmax(0, 1fr); }
+      .pm-s2pay, .pm-s2ret { grid-column: 1 / -1; }
+      .pm-steps { padding: .7rem .9rem 0; }
+      .pm-wb, .pm-wf { padding-left: .9rem; padding-right: .9rem; }
+      .pm-wf .pm-next { flex: 1 1 auto; }
+    }
+    @media (prefers-reduced-motion: reduce) { .pm-win, .pm-sheet, .pm-panel, .pm-panel2, .pm-body > .pm-ok, .pm-body > .pm-voidbox, .pm-panel2 details[open] > div, .pm-wf .pm-err { animation: none; } }
     .pm-sum { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .6rem; }
     .pm-sum > div { padding: .7rem .85rem; border: 1px solid #e4e7ec; border-radius: .8rem; }
     .dark .pm-sum > div { border-color: #1d2939; }
@@ -1647,7 +1703,7 @@
           {% if mode == "bookings" %}
           <!-- The booking's window: what it owes, its payments and receipts, and the three actions. Everything shown comes from the server (api/payments/booking/<id>/). -->
           <div class="pm-win" x-show="openId" x-cloak @click.self="close()" role="dialog" aria-modal="true" aria-labelledby="pm-title" data-overlay-root :aria-hidden="openId ? 'false' : 'true'">
-            <div class="pm-sheet">
+            <div class="pm-sheet" :class="back && 'is-back'">
               <div class="pm-wh">
                 <div>
                   <h2 class="pm-wt" id="pm-title" x-text="d ? d.customer : 'Loading...'"></h2>
@@ -1655,16 +1711,34 @@
                 </div>
                 <button type="button" class="pm-x" @click="close()" aria-label="Close" title="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
               </div>
+              <nav class="pm-steps" x-show="stepLabel() !== ''" x-cloak aria-label="Steps">
+                <button type="button" class="pm-stepbtn" :class="step === 1 && 'is-on'" :aria-current="step === 1 ? 'step' : false" @click="goStep(1)"><b>1</b> Summary</button>
+                <span class="pm-steparrow" aria-hidden="true">&rarr;</span>
+                <button type="button" class="pm-stepbtn" :class="step === 2 && 'is-on'" :aria-current="step === 2 ? 'step' : false" @click="goStep(2)"><b>2</b> <span x-text="stepLabel()"></span></button>
+              </nav>
               <div class="pm-wb">
                 <p class="pm-hint" x-show="loading && !d">Loading...</p>
                 <p class="pm-err" x-show="loadError" x-text="loadError"></p>
                 <template x-if="d">
-                  <div style="display: grid; gap: 1.1rem;">
+                  <div class="pm-body">
                     <div class="pm-ok" x-show="last" x-cloak>
                       <span x-text="last ? last.message : ''"></span>
                       <div class="pm-btns"><button type="button" class="pm-b pm-b--main" x-show="last && last.printUrl" @click="arabelaReceipt.open(d.id, {payment: last.paymentId})">Receipt</button></div>
                     </div>
 
+                    <template x-if="voiding">
+                      <div class="pm-form pm-voidbox">
+                        <p class="pm-sec" style="margin: 0;" x-text="'Void ' + voiding.label + '?'"></p>
+                        <p class="pm-hint">It stays in the records marked VOID with your name and the reason, and the booking's numbers go back as they were.</p>
+                        <div><label for="pm-void-reason">Why? (required)</label><input id="pm-void-reason" type="text" class="pm-in" x-model="voiding.reason" maxlength="200" placeholder="For example: typed on the wrong booking" @keydown.enter.prevent="doVoid()"></div>
+                        <p class="pm-err" x-show="formError" x-text="formError"></p>
+                        <div class="pm-btns"><button type="button" class="pm-b pm-b--danger" @click="doVoid()" :disabled="busy" x-text="busy ? 'Saving...' : 'Yes, void it'"></button><button type="button" class="pm-b" @click="voiding = null; formError = ''">Cancel</button></div>
+                      </div>
+                    </template>
+
+                    <!-- Step 1: what the booking is, what it owes and what was paid. -->
+                    <div class="pm-panel" x-show="step === 1">
+                    <div class="pm-col">
                     <div class="pm-sum" x-show="d.s.cancelled">
                       <div><span>Paid</span><b x-text="peso(d.peso.received)"></b></div>
                       <div><span>Handed back</span><b x-text="peso(d.peso.refunded)"></b></div>
@@ -1687,6 +1761,29 @@
                       </div>
                     </div>
 
+                    <div>
+                      <p class="pm-sec">Payments and receipts</p>
+                      <div class="pm-lines">
+                        <p class="pm-hint" style="padding: .7rem .85rem;" x-show="!d.payments.length">Nothing recorded yet.</p>
+                        <template x-for="(p, pi) in d.payments" :key="'pay' + pi + '-' + p.id">
+                          <div class="pm-l" :class="p.void ? 'is-void' : ''">
+                            <span><span x-text="(p.direction === 'Out' ? 'Handed back: ' : '') + p.purposeLabel + ' - ' + p.method"></span>
+                              <small><span x-text="p.receiptNumber || 'before the Payments page'"></span><span x-show="p.when"> - <span x-text="p.when"></span></span><span x-show="p.by"> - <span x-text="p.by"></span></span><span x-show="p.reference"> - ref <span x-text="p.reference"></span></span><span x-show="p.void"> - VOIDED: <span x-text="p.voidReason"></span></span></small></span>
+                            <span style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .45rem;">
+                              <b x-text="(p.direction === 'Out' ? '-' : '') + peso(p.amount)"></b>
+                              <button type="button" class="pm-b pm-b--small" x-show="p.printUrl" @click="arabelaReceipt.open(d.id, {payment: p.id})" title="See the receipt and print it">Receipt</button>
+                              <button type="button" class="pm-b pm-b--small" x-show="p.printUrl && d.hasAccount && !p.void" @click="send(p)" :disabled="busy" title="Send the receipt to the customer's account and email again">Send</button>
+                              <button type="button" class="pm-b pm-b--small pm-b--danger" x-show="d.canVoid && !p.legacy && !p.void && p.printUrl" @click="startVoid('payment', p.id, 'receipt ' + p.receiptNumber)">Void</button>
+                            </span>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+
+                    <p class="pm-hint" x-show="d.canDeduct && !d.canVoid">Voiding a receipt or adding a deduction needs the owner's permission. Ask the owner.</p>
+                    <p class="pm-hint" x-show="d.s.legacy">This booking was made before the Payments page. Its payments above are read from what it already carried.</p>
+                    </div>
+                    <div class="pm-col">
                     <!-- A cancelled booking: nothing more is collected, so it says what happened to each kind of money. -->
                     <div x-show="d.s.cancelled">
                       <p class="pm-sec">What happened to the money</p>
@@ -1722,35 +1819,14 @@
                       </div>
                     </div>
 
-                    <div>
-                      <p class="pm-sec">Payments and receipts</p>
-                      <div class="pm-lines">
-                        <p class="pm-hint" style="padding: .7rem .85rem;" x-show="!d.payments.length">Nothing recorded yet.</p>
-                        <template x-for="(p, pi) in d.payments" :key="'pay' + pi + '-' + p.id">
-                          <div class="pm-l" :class="p.void ? 'is-void' : ''">
-                            <span><span x-text="(p.direction === 'Out' ? 'Handed back: ' : '') + p.purposeLabel + ' - ' + p.method"></span>
-                              <small><span x-text="p.receiptNumber || 'before the Payments page'"></span><span x-show="p.when"> - <span x-text="p.when"></span></span><span x-show="p.by"> - <span x-text="p.by"></span></span><span x-show="p.reference"> - ref <span x-text="p.reference"></span></span><span x-show="p.void"> - VOIDED: <span x-text="p.voidReason"></span></span></small></span>
-                            <span style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .45rem;">
-                              <b x-text="(p.direction === 'Out' ? '-' : '') + peso(p.amount)"></b>
-                              <button type="button" class="pm-b pm-b--small" x-show="p.printUrl" @click="arabelaReceipt.open(d.id, {payment: p.id})" title="See the receipt and print it">Receipt</button>
-                              <button type="button" class="pm-b pm-b--small" x-show="p.printUrl && d.hasAccount && !p.void" @click="send(p)" :disabled="busy" title="Send the receipt to the customer's account and email again">Send</button>
-                              <button type="button" class="pm-b pm-b--small pm-b--danger" x-show="d.canVoid && !p.legacy && !p.void && p.printUrl" @click="startVoid('payment', p.id, 'receipt ' + p.receiptNumber)">Void</button>
-                            </span>
-                          </div>
-                        </template>
-                      </div>
+                    <!-- Money to hand back, seen by a staff account the owner has not allowed to return it. -->
+                    <p class="pm-form pm-hint pm-noreturn" x-show="d.canReturn && !d.canReturnMoney" x-text="peso(d.peso.refund_available) + ' is to be given back. Only the owner and staff allowed to return money can do it. Please ask the owner.'"></p>
+                    </div>
                     </div>
 
-                    <template x-if="voiding">
-                      <div class="pm-form">
-                        <p class="pm-sec" style="margin: 0;" x-text="'Void ' + voiding.label + '?'"></p>
-                        <p class="pm-hint">It stays in the records marked VOID with your name and the reason, and the booking's numbers go back as they were.</p>
-                        <div><label for="pm-void-reason">Why? (required)</label><input id="pm-void-reason" type="text" class="pm-in" x-model="voiding.reason" maxlength="200" placeholder="For example: typed on the wrong booking" @keydown.enter.prevent="doVoid()"></div>
-                        <p class="pm-err" x-show="formError" x-text="formError"></p>
-                        <div class="pm-btns"><button type="button" class="pm-b pm-b--danger" @click="doVoid()" :disabled="busy" x-text="busy ? 'Saving...' : 'Yes, void it'"></button><button type="button" class="pm-b" @click="voiding = null; formError = ''">Cancel</button></div>
-                      </div>
-                    </template>
-
+                    <!-- Step 2: what can be done now -- receive money, hand money back, and the owner's extras. -->
+                    <div class="pm-panel2" x-show="step === 2" x-cloak :class="{ 'only-pay': payCol() && !retCol(), 'only-ret': retCol() && !payCol() }">
+                    <div class="pm-s2pay" x-show="payCol()">
                     <!-- "Pay online": the customer scans this and pays on their phone; the window only shows what the server reads back from {{ payment_provider }}. -->
                     <template x-if="pay">
                       <div class="pm-form" role="status" aria-live="polite" id="pm-qr">
@@ -1801,15 +1877,13 @@
                         </div></div>
                       {% if online_enabled %}<p class="pm-hint pm-warn" x-show="rec.method === 'Online' && Number(String(rec.amount).replace(/,/g, '')) > {{ online_max }}">At most &#8369;{{ online_max|floatformat:"0g" }} can be paid online at once. Pay it in parts, or take cash.</p>{% endif %}
                       <div><label for="pm-rec-note">Note (optional)</label><input id="pm-rec-note" type="text" class="pm-in" x-model="rec.note" maxlength="200"></div>
-                      <p class="pm-err" x-show="formError && formWhere === 'rec'" x-text="formError"></p>
-                      <div class="pm-btns"><button type="button" class="pm-b pm-b--main" @click="record()" :disabled="busy" x-text="busy && formWhere === 'rec' ? (rec.method === 'Online' ? 'Opening...' : 'Saving...') : (rec.method === 'Online' ? 'Show payment QR' : 'Record payment')"></button></div>
                     </div>
-
-                    <!-- Money to hand back, seen by a staff account the owner has not allowed to return it. -->
-                    <p class="pm-form pm-hint pm-noreturn" x-show="d.canReturn && !d.canReturnMoney" x-text="peso(d.peso.refund_available) + ' is to be given back. Only the owner and staff allowed to return money can do it. Please ask the owner.'"></p>
-
+                    </div>
+                    <div class="pm-s2ret" x-show="retCol()">
                     <div class="pm-form" x-show="d.canReturn && d.canReturnMoney">
                       <p class="pm-sec" style="margin: 0;" x-text="returnTitle()">Hand the security deposit back</p>
+                      <div class="pm-ret-grid">
+                      <div class="pm-ret-a">
                       <!-- The working, so staff (and the customer standing there) can see why it is this amount: the deposit, what comes off it, and what goes back. -->
                       <div class="pm-lines" aria-label="How the amount to hand back is worked out">
                         <div class="pm-l" x-show="!d.s.cancelled && d.s.all_returned"><span>Security deposit paid</span><b x-text="peso(d.peso.deposit_paid)"></b></div>
@@ -1830,6 +1904,8 @@
                       </div>
                       <p class="pm-hint" x-show="!d.s.cancelled && d.s.all_returned && d.s.late_fee === '0.00' && d.s.deductions_total === '0.00'">No fees and no deductions: the whole deposit goes back.</p>
                       <p class="pm-hint" x-text="d.s.cancelled ? 'No more than the amount above can be handed back.' : (d.s.all_returned ? 'Every gown is back. No more than the amount above can be handed back.' : 'Only the rental of the cancelled gown can be handed back now. The deposit goes back once every gown is returned.')">Every gown is back. No more than the amount above can be handed back.</p>
+                      </div>
+                      <div class="pm-ret-b">
                       <div><label for="pm-ret-amount">Amount handed back (pesos)</label><input id="pm-ret-amount" type="text" inputmode="decimal" class="pm-in" x-model="ret.amount" autocomplete="off"></div>
                       <div>
                         <div class="pm-lblrow"><span class="pm-lbl">Handed back by</span><details class="ht-tip"><summary aria-label="About handing the deposit back" title="About handing the deposit back">?</summary><div class="ht-tip-pop"><p><b>Cash:</b> hand over the money, then record it.</p><p><b>Shop's GCash:</b> send it from the shop's own GCash app, then type its reference number and record it.</p><p x-show="d.onlineRefund && d.onlineRefund.available"><b>Pay online:</b> {{ payment_provider }} sends it back to the <span x-text="d.onlineRefund ? d.onlineRefund.label : ''"></span> account the customer paid with, usually within a day. It cannot be undone.</p><p x-show="d.onlineRefund && !d.onlineRefund.available"><b>Why only cash:</b> <span x-text="d.onlineRefund ? d.onlineRefund.reason : ''"></span></p></div></details></div>
@@ -1843,10 +1919,11 @@
                       <p class="pm-hint" x-show="ret.method === 'PayMongo'">It is sent as soon as you press the button and cannot be undone.</p>
                       <div x-show="ret.method === 'GCash'"><label for="pm-ret-ref">GCash reference number (13 digits)</label><input id="pm-ret-ref" type="text" inputmode="numeric" class="pm-in" x-model="ret.reference" maxlength="20" autocomplete="off" placeholder="Send it first, then type its number"></div>
                       <div><label for="pm-ret-note">Note (optional)</label><input id="pm-ret-note" type="text" class="pm-in" x-model="ret.note" maxlength="200"></div>
-                      <p class="pm-err" x-show="formError && formWhere === 'ret'" x-text="formError"></p>
-                      <div class="pm-btns"><button type="button" class="pm-b pm-b--main" @click="giveBack()" :disabled="busy" x-text="busy && formWhere === 'ret' ? 'Saving...' : (ret.method === 'PayMongo' ? (retNumber() > 0 ? 'Send ' + retShown() + ' back' : 'Send deposit back') : (d.s.cancelled || !d.s.all_returned ? 'Record the return' : 'Record deposit return'))"></button></div>
+                      </div>
+                      </div>
                     </div>
-
+                    </div>
+                    <div class="pm-s2extra" x-show="hasOther()">
                     <!-- Owner only: the cancel was the shop's fault, so the deposit goes back too. -->
                     <template x-if="d.isOwner && d.s.cancelled && d.s.refunds_rental && d.s.deposit_paid !== '0.00' && !d.s.deposit_back_too">
                       <details class="pm-form pm-depx">
@@ -1875,11 +1952,21 @@
                         <div class="pm-btns"><button type="button" class="pm-b pm-b--main" @click="deduct()" :disabled="busy" x-text="busy && formWhere === 'ded' ? 'Saving...' : 'Add deduction'"></button></div>
                       </div>
                     </details>
-                    <p class="pm-hint" x-show="d.canDeduct && !d.canVoid">Voiding a receipt or adding a deduction needs the owner's permission. Ask the owner.</p>
-                    <p class="pm-hint" x-show="d.s.legacy">This booking was made before the Payments page. Its payments above are read from what it already carried.</p>
+                    </div>
+                    </div>
                   </div>
                 </template>
               </div>
+              <template x-if="d">
+                <div class="pm-wf" x-show="step === 2 || stepLabel() !== ''">
+                  <p class="pm-err" x-show="step === 2 && formError && (formWhere === 'rec' || formWhere === 'ret')" x-text="formError"></p>
+                  <button type="button" class="pm-b pm-b--big pm-backbtn" x-show="step === 2" @click="goStep(1)">&larr; Back</button>
+                  <span class="pm-wfsp"></span>
+                  <button type="button" class="pm-b pm-b--main pm-b--big pm-next" x-show="step === 1 && stepLabel() !== ''" @click="goStep(2)"><span x-text="'Next: ' + stepLabel()"></span>&nbsp;&rarr;</button>
+                  <button type="button" class="pm-b pm-b--main pm-b--big" x-show="d && step === 2 && d.choices.kind !== 'none' && !pay" @click="record()" :disabled="busy" x-text="busy && formWhere === 'rec' ? (rec.method === 'Online' ? 'Opening...' : 'Saving...') : (rec.method === 'Online' ? 'Show payment QR' : 'Record payment')"></button>
+                  <button type="button" class="pm-b pm-b--main pm-b--big" x-show="d && step === 2 && d.canReturn && d.canReturnMoney" @click="giveBack()" :disabled="busy" x-text="!d ? '' : (busy && formWhere === 'ret' ? 'Saving...' : (ret.method === 'PayMongo' ? (retNumber() > 0 ? 'Send ' + retShown() + ' back' : 'Send deposit back') : (d.s.cancelled || !d.s.all_returned ? 'Record the return' : 'Record deposit return')))"></button>
+                </div>
+              </template>
             </div>
           </div>
           {% endif %}
@@ -1921,7 +2008,7 @@
       return {
         page: 'payments', loaded: true, darkMode: false, stickyMenu: false, sidebarToggle: false, scrollTop: false,
         search: '', statusFilter: 'All', dateFrom: '', dateTo: '', datePick: 'any', dateKind: 'return', moneyPick: '',
-        openId: 0, d: null, loading: false, loadError: '', changed: false, last: null,
+        openId: 0, step: 1, back: false, d: null, loading: false, loadError: '', changed: false, last: null,
         busy: false, formError: '', formWhere: '', voiding: null,
         rec: { purpose: '', amount: '', method: 'Cash', note: '', rid: '' },
         ret: { amount: '', method: 'Cash', note: '', rid: '' },
@@ -2105,6 +2192,7 @@
         },
 
         open: function (id) {
+          this.step = 1; this.back = false;
           this.openId = id; this.d = null; this.loadError = ''; this.last = null; this.voiding = null; this.formError = ''; this.loading = true;
           this.paySet(null);
           var self = this;
@@ -2120,6 +2208,7 @@
           if (window.history && window.history.replaceState) { window.history.replaceState(null, '', window.location.pathname + '?open=' + this.openId); }
           if (!c || c.kind === 'none') { return; }
           if (c.kind !== 'deposit') { this.rec.amount = c.max; }
+          this.back = false; this.step = 2;                       // "customer needs to pay": straight to the payment
           if (how === 'qr' && {% if online_enabled %}true{% else %}false{% endif %} && !this.pay) { this.rec.method = 'Online'; this.startPay(); }
         },
         show: function (data) {
@@ -2135,7 +2224,11 @@
           this.ded = { amount: '', reason: '', rid: pmUid() };
           this.formError = ''; this.voiding = null;
           // Only the window's own load carries the QR code: the answers to the other actions leave the one on screen as it is.
-          if (Object.prototype.hasOwnProperty.call(data, 'pay')) { this.paySet(data.pay); }
+          if (Object.prototype.hasOwnProperty.call(data, 'pay')) {
+            this.paySet(data.pay);
+            if (data.pay) { this.back = false; this.step = 2; }          // a QR code is open for this booking: show it
+          }
+          if (this.step === 2 && !this.stepLabel()) { this.back = true; this.step = 1; }
         },
         close: function () {
           var wasOpen = !!this.openId;
@@ -2164,6 +2257,7 @@
             var shown = typeof message === 'function' ? message(data) : message;
             self.show(data.detail);
             self.last = { message: shown, printUrl: printUrl, paymentId: data.payment && data.payment.id ? data.payment.id : 0 };
+            self.back = true; self.step = 1;                      // saved: back to the summary, with the new numbers
           }).catch(function (e) {
             self.busy = false; self.formError = e.message;
             if (e.refresh && self.d) { self.reload(function () { self.formError = e.message; self.formWhere = where; }); }
@@ -2225,6 +2319,7 @@
           if (data.detail) { this.show(data.detail); }
           this.last = { message: 'Payment received: ' + this.peso(data.amount) + ' with ' + data.paidWith + '. Receipt ' + data.receiptNumber + ' is ready to print.' + (data.test ? ' (A test payment: no real money moved.)' : ''),
             printUrl: data.paymentId ? 'receipt' : '', paymentId: data.paymentId };
+          this.back = true; this.step = 1;
         },
         payStop: function () { if (this.payTimer) { window.clearInterval(this.payTimer); this.payTimer = null; } this.payAsking = false; },
         payTick: function () {
@@ -2240,6 +2335,31 @@
           this.api(this.pay.statusUrl, 'GET')
             .then(function (data) { self.payAsking = false; if (self.pay && self.pay.token === token) { self.payError = ''; self.payApply(data); } })
             .catch(function () { self.payAsking = false; /* a dropped connection is not a failed payment: keep asking */ });
+        },
+        // ---- the window's two steps: the summary, then what can be done now
+        payCol: function () { return !!this.pay || !!(this.d && this.d.choices && this.d.choices.kind !== 'none'); },
+        retCol: function () { return !!(this.d && this.d.canReturn && this.d.canReturnMoney); },
+        hasOther: function () {
+          var d = this.d;
+          if (!d) { return false; }
+          return !!((d.canVoid && d.canDeduct) || (d.isOwner && d.s.cancelled && d.s.refunds_rental && d.s.deposit_paid !== '0.00' && !d.s.deposit_back_too) || (d.isOwner && d.s.deposit_back_too));
+        },
+        // The second step's name, from what this booking can have done to it; '' when there is nothing (then there is only the summary).
+        stepLabel: function () {
+          var d = this.d;
+          if (!d) { return ''; }
+          var pay = this.payCol(), back = this.retCol();
+          if (this.pay && !back) { return 'Pay online'; }
+          if (pay && back) { return 'Payment and refund'; }
+          if (pay) { return 'Record payment'; }
+          if (back) { return d.s.cancelled || !d.s.all_returned ? 'Give money back' : 'Hand deposit back'; }
+          return this.hasOther() ? 'Other actions' : '';
+        },
+        goStep: function (n) {
+          if (n === this.step || (n === 2 && !this.stepLabel())) { return; }
+          this.back = n < this.step;
+          this.step = n;
+          this.formError = '';
         },
         payClock: function () { var s = this.payLeft; return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); },
         payTitle: function () {
