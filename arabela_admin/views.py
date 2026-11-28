@@ -286,6 +286,8 @@ def dashboard_view(request):
             "alerts": dashboard_money.alerts(shop_today),
             "month_money": month_money,
             "today_money": today_money,
+            # The dates the income card's link carries, so the Payments page it opens adds up the same days.
+            "month_range": f"from={month_start.isoformat()}&to={(next_month_start - timedelta(days=1)).isoformat()}&by=paid",
             "deposits_held": deposits_held,
             "latest_transactions": latest_transactions,
             "shop_today": shop_today,
@@ -1039,6 +1041,14 @@ def _deposit_bookings():
         | (Q(status=Reservation.Status.CANCELLED, refunds_rental=True, reviewed_at__isnull=False) & ~Q(deposit_refund_reason="")))
 
 
+def _is_deposit_booking(reservation):
+    """_deposit_bookings() for one booking already in hand (the Payments page): whether Security Deposits lists it."""
+    if reservation.status in _SCHEDULED_STATUSES:
+        return True
+    return bool(reservation.status == Reservation.Status.CANCELLED and reservation.refunds_rental and reservation.reviewed_at is not None
+                and reservation.deposit_refund_reason)
+
+
 def _deposit_totals(today):
     """The security deposit money the shop is holding for its customers, by the SAME states as the Security Deposits page (_deposit_state, over
     the same bookings). held = DEPOSIT money only: what was paid, less what the fees and deductions keep once every gown is back, less what was
@@ -1046,10 +1056,7 @@ def _deposit_totals(today):
     and an extra charge going back with it). Amounts are Decimals: the Dashboard, Rental History and the money boxes all come from here."""
     held = due = Decimal("0")
     held_bookings = due_bookings = 0
-    bookings = _deposit_bookings().prefetch_related("items", _receipts_prefetch(), "payments", "deductions")
-    for reservation in bookings:
-        live = [i for i in reservation.items.all() if i.stage != ReservationItem.Stage.CANCELLED]
-        state = _deposit_state(reservation, live, today)
+    for _reservation, _live, state in _deposit_states(today):
         if state["state"] == "Return due":
             due += state["to_hand_back"]
             due_bookings += 1
@@ -1057,6 +1064,15 @@ def _deposit_totals(today):
             held += state["deposit_held"]
             held_bookings += 1
     return {"held": held, "held_bookings": held_bookings, "due": due, "due_bookings": due_bookings}
+
+
+def _deposit_states(today):
+    """(booking, its gowns that are not cancelled, its deposit state) for every booking the Security Deposits page lists: what _deposit_totals
+    adds up, and what the list behind "Deposits Held" shows."""
+    bookings = _deposit_bookings().select_related("customer__profile").prefetch_related("items", _receipts_prefetch(), "payments", "deductions")
+    for reservation in bookings:
+        live = [i for i in reservation.items.all() if i.stage != ReservationItem.Stage.CANCELLED]
+        yield reservation, live, _deposit_state(reservation, live, today)
 
 
 def _deposit_state(reservation, live_items, today):
@@ -1143,8 +1159,6 @@ def _deposit_state(reservation, live_items, today):
 
 @_require_admin_staff
 def security_deposits_view(request):
-    from arabela_admin.money_views import boxes_context          # it reads this module, so it is read here
-
     today = timezone.localdate()
     reservations = list(
         _deposit_bookings()
@@ -1153,6 +1167,7 @@ def security_deposits_view(request):
     )
     counts = {"Held": 0, "Return due": 0, "Returned": 0}
     returned_this_month = 0
+    totals = {"held": Decimal("0"), "holding": Decimal("0"), "due": Decimal("0"), "back": Decimal("0")}      # the box and the status buttons
     for r in reservations:
         # What the closed line says about the gowns (a gown the shop cancelled never went out, so it is not counted). The opened booking lists every gown.
         items = list(r.items.all())
@@ -1179,6 +1194,16 @@ def security_deposits_view(request):
         r.d_pickup, r.d_return, r.d_event = " ".join(dates["datesPickup"]), " ".join(dates["datesReturn"]), " ".join(dates["datesEvent"])
         r.d_paid = " ".join(dashboard_money.payment_days(r))
         r.has_receipt = reservation_payments.has_receipt(r)
+        # What this booking adds to each button: the deposit held now, what is to hand back, and what was handed back (in centavos for the page).
+        held = deposit_state["deposit_held"]
+        due = deposit_state["to_hand_back"] if deposit_state["state"] == "Return due" else Decimal("0")
+        back = deposit_state["handed_back"] if deposit_state["state"] == "Returned" else Decimal("0")
+        totals["held"] += held
+        totals["holding"] += held if deposit_state["state"] == "Held" else Decimal("0")
+        totals["due"] += due
+        totals["back"] += back
+        r.cents_held, r.cents_due, r.cents_back = int(held * 100), int(due * 100), int(back * 100)
+        r.held_text = f"{held:,.2f}"
 
     return render(
         request,
@@ -1191,7 +1216,8 @@ def security_deposits_view(request):
             "due_count": counts["Return due"],
             "returned_count": counts["Returned"],
             "returned_this_month": returned_this_month,
-            "money": boxes_context(request),
+            # the box in full; the buttons without a needless ".00"
+            "deposit_money": {name: f"{value:,.2f}" if name == "held" else f"{value:,.2f}".removesuffix(".00") for name, value in totals.items()},
         },
     )
 
@@ -2256,6 +2282,13 @@ def gown_catalog_view(request):
     inventory = gown_inventory.split(
         ((g.id, g.status) for g in gowns), (row["gown"].id for row in blocked_gowns_today),
     )
+    # The status filter lists a gown under the same box it is counted in: an Available gown with a block today is "Blocked", not "Available".
+    blocked_ids = {row["gown"].id for row in blocked_gowns_today}
+    for g in gowns:
+        g.filter_box = gown_inventory.box_of(g.status, g.id in blocked_ids)
+    for mini in gowns_min:
+        if mini["id"] in blocked_ids:
+            mini["box"] = gown_inventory.box_of(mini["status"], True)
 
     return render(
         request,

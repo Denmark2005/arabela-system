@@ -1,0 +1,32 @@
+{# The money boxes' look (Payments and Security Deposits): a name and one big figure. A box is a button that sorts the list under it. #}
+<style>
+  .mb-sum { container-type: inline-size; container-name: mbsum; margin-bottom: 1.25rem; }
+  .mb-boxes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; }
+  .mb-boxes--one { grid-template-columns: minmax(0, 24rem); }
+  .mb-box { -webkit-appearance: none; appearance: none; display: flex; flex-direction: column; gap: .55rem; width: 100%; min-width: 0; padding: 1.2rem 1.5rem 1.3rem; border: 1px solid #e4e7ec; border-radius: 1rem; background: #fff; text-align: left; font-family: inherit; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+  .mb-box:hover { border-color: #98a2b3; }
+  .mb-box.is-on, .mb-box.is-on:hover { border-color: #465fff; box-shadow: 0 0 0 1px #465fff; }
+  .mb-box:focus-visible { outline: 2px solid #465fff; outline-offset: 2px; }
+  .dark .mb-box { border-color: #1d2939; background: rgba(255,255,255,.03); }
+  .dark .mb-box:hover { border-color: #344054; }
+  .dark .mb-box.is-on, .dark .mb-box.is-on:hover { border-color: #465fff; }
+  .mb-head { display: flex; align-items: center; gap: .7rem; min-width: 0; }
+  .mb-ic { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; border-radius: .75rem; background: #f2f4f7; color: #344054; }
+  .dark .mb-ic { background: #1d2939; color: rgba(255,255,255,.9); }
+  .mb-ic svg { display: block; width: 1.25rem; height: 1.25rem; fill: currentColor; }
+  .mb-title { font-size: 1.0625rem; font-weight: 600; color: #344054; }
+  .dark .mb-title { color: #d0d5dd; }
+  .mb-num { font-size: 2.25rem; font-weight: 700; line-height: 1.15; letter-spacing: -.01em; font-variant-numeric: tabular-nums; color: #101828; overflow-wrap: anywhere; }
+  .mb-num--long { font-size: 1.875rem; }
+  .dark .mb-num { color: rgba(255,255,255,.95); }
+  /* What the list under the buttons adds up to, and the amounts on the status buttons. */
+  .pm-total { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .35rem 1rem; margin: 0 1.25rem .85rem; padding: .7rem 1rem; border-radius: .75rem; background: #f2f4f7; color: #344054; font-size: .9375rem; font-weight: 500; }
+  .pm-total b { font-size: 1.25rem; font-weight: 700; color: #101828; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .dark .pm-total { background: rgba(255,255,255,.06); color: #d0d5dd; }
+  .dark .pm-total b { color: #f2f4f7; }
+  .pm-pillamt { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pm-pillamt:empty { display: none; }
+  @media (max-width: 620px) { .pm-total { margin-left: 1rem; margin-right: 1rem; } }
+  @container mbsum (max-width: 51.99rem) { .mb-boxes { grid-template-columns: repeat(2, minmax(0, 1fr)); } .mb-boxes--one { grid-template-columns: minmax(0, 24rem); } }
+  @container mbsum (max-width: 37.99rem) { .mb-boxes, .mb-boxes--one { grid-template-columns: minmax(0, 1fr); } .mb-box { padding: 1rem; } .mb-num, .mb-num--long { font-size: 2rem; } }
+</style>

@@ -1,7 +1,9 @@
-"""The money boxes on Payments and Security Deposits, the All receipts totals and the "See rental income" permission (asked for 2026-11-28).
+"""The money boxes on Payments, the deposit box on Security Deposits, the All receipts totals and the "See rental income" permission
+(asked for 2026-11-28).
 
 Money people count by eye, so every figure is checked to the centavo on one small shop with known amounts: each booking is ₱3,500 of gown
 rental plus a ₱2,000 security deposit, and the overdue fee is ₱200 a day."""
+import re
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 
@@ -13,7 +15,7 @@ from django.utils import timezone
 from accounts.models import UserProfile
 from accounts.roles import PERMISSION_KEYS, PERMISSIONS, PRESETS, join_permissions, parse_permissions
 from arabela_admin import dashboard_money
-from arabela_admin.money_views import period_words, read_dates
+from arabela_admin.money_views import read_dates
 from reservations.models import Payment, Reservation, ReservationItem
 from reservations.test_ledger import make_booking, pay
 
@@ -27,7 +29,6 @@ DEPOSITS = reverse("arabela_admin:security_deposits")
 RECEIPTS = reverse("arabela_admin:payment_receipts")
 DASHBOARD = reverse("arabela_admin:dashboard")
 HISTORY = reverse("arabela_admin:rental_history")
-BOXES = reverse("arabela_admin:money_boxes")
 
 
 def money_of_month(today):
@@ -72,7 +73,7 @@ class Shop(TestCase):
         self.client.force_login(self.owner)
 
     def box(self, **params):
-        response = self.client.get(BOXES, params)
+        response = self.client.get(PAYMENTS, params)
         self.assertEqual(response.status_code, 200)
         return response.context["money"]
 
@@ -84,7 +85,7 @@ class TheSumsTests(Shop):
         self.assertEqual(box["income_bookings"], 5)
         self.assertEqual(box["kept"], "600.00")                  # the overdue fee, out of the deposit
         self.assertEqual(box["kept_cancelled"], "4,000.00")      # cancelled + refunded keep their deposits; shop_fault does not
-        self.assertEqual((box["collected"], box["returned_deposit"], box["has_returned_extra"]), ("14,000.00", "2,000.00", False))
+        self.assertEqual((box["collected"], box["returned_deposit"], box["returned_extra"]), ("14,000.00", "2,000.00", "0.00"))
         self.assertEqual((box["held"], box["held_bookings"]), ("7,400.00", 4))     # running 2,000 + partly 2,000 + late 1,400 + shop_fault 2,000
         self.assertEqual((box["give_back"], box["give_back_bookings"]), ("10,400.00", 3))      # late 1,400 + cancelled 3,500 + shop_fault 5,500
         self.assertEqual((box["owing"], box["owing_bookings"]), ("3,500.00", 1))
@@ -102,12 +103,11 @@ class TheSumsTests(Shop):
         self.assertEqual(sum(money["by_method"].values()), net)
         self.assertEqual(net, D("29500.00"))
 
-    def test_the_two_pages_show_the_same_boxes(self):
-        keys = ("income", "kept", "kept_cancelled", "held", "give_back", "owing", "collected", "returned_deposit")
-        first = self.client.get(PAYMENTS).context["money"]
-        second = self.client.get(DEPOSITS).context["money"]
-        self.assertEqual([first[k] for k in keys], [second[k] for k in keys])
-        self.assertEqual([first[k] for k in keys], [self.box()[k] for k in keys])
+    def test_security_deposits_holds_the_same_figure(self):
+        response = self.client.get(DEPOSITS)
+        self.assertEqual(response.context["deposit_money"]["held"], self.box()["held"])
+        self.assertEqual(sum(r.cents_held for r in response.context["reservations"]), 740000)
+        self.assertEqual(re.findall(r'data-box="([a-z]+)"', response.content.decode()), ["held"])
 
     def test_the_other_pages_agree_with_the_boxes(self):
         month = self.client.get(DASHBOARD).context
@@ -136,7 +136,7 @@ class TheSumsTests(Shop):
         self.assertEqual(after["returned_deposit"] - before["returned_deposit"], D("2000.00"))
         self.assertEqual(after["returned_extra"] - before["returned_extra"], D("300.00"))
         self.assertEqual(after["kept"], D("600.00"))             # the 300 was never the shop's
-        self.assertTrue(self.box()["has_returned_extra"])
+        self.assertNotEqual(self.box()["returned_extra"], "0.00")
 
     def test_handing_money_back_moves_it_at_once(self):
         give_back(self.late, "1400")
@@ -178,16 +178,14 @@ class TheDatesTests(Shop):
         box = self.box(**{"from": "2020-01-01", "to": "2020-01-31"})
         self.assertEqual((box["income"], box["collected"], box["returned_deposit"], box["kept"], box["kept_cancelled"], box["owing"]),
                          ("0.00",) * 6)
-        self.assertEqual(box["tag"], "January 2020")
 
     def test_wrong_order_and_junk(self):
-        self.assertIn("can&#x27;t be before", self.client.get(BOXES, {"from": "2026-02-02", "to": "2026-02-01"}).content.decode())
+        self.assertIn("be before the From date", self.box(**{"from": "2026-02-02", "to": "2026-02-01"})["error"])
         self.assertEqual(read_dates({"from": "junk", "to": "9999-01-01", "by": "<x>"}), (None, None, "return", ""))
-        today = timezone.localdate()
-        self.assertEqual(period_words(today, today, today), "Today")
-        self.assertEqual(period_words(None, None, today), "All dates")
         for url in (PAYMENTS, DEPOSITS):
-            self.assertEqual(self.client.get(url, {"from": "'\"><script>", "to": "x", "by": "z"}).status_code, 200)
+            junk = self.client.get(url, {"from": "'\"><script>", "to": "x", "by": "z", "money": "<script>alert(1)</script>"})
+            self.assertEqual(junk.status_code, 200)
+            self.assertNotIn("<script>alert(1)</script>", junk.content.decode())
 
     def test_paid_days_are_on_the_rows(self):
         day = self.yesterday(self.running)
@@ -213,7 +211,7 @@ class ThePermissionTests(Shop):
 
     def pages(self):
         out = {}
-        for name, url in (("payments", PAYMENTS), ("deposits", DEPOSITS), ("dashboard", DASHBOARD), ("history", HISTORY), ("boxes", BOXES)):
+        for name, url in (("payments", PAYMENTS), ("deposits", DEPOSITS), ("dashboard", DASHBOARD), ("history", HISTORY)):
             response = self.client.get(url)
             self.assertEqual(response.status_code, 200, name)
             out[name] = response
@@ -226,7 +224,7 @@ class ThePermissionTests(Shop):
             html = response.content.decode()
             for words in ("Rental Income", "Kept from cancellations", "Fees &amp; deductions kept", "17,500.00"):
                 self.assertNotIn(words, html, f"{name}: {words}")
-        for name in ("payments", "deposits", "boxes"):
+        for name in ("payments",):
             box = pages[name].context["money"]
             self.assertFalse({"income", "kept", "kept_cancelled", "methods"} & set(box), name)
             self.assertEqual(box["today_money"]["net"], "29,500.00")
@@ -241,16 +239,9 @@ class ThePermissionTests(Shop):
         for user in (self.allowed, self.owner):
             self.client.force_login(user)
             pages = self.pages()
-            for name in ("payments", "deposits", "dashboard", "history", "boxes"):
+            for name in ("payments", "dashboard", "history"):
                 self.assertIn("Rental Income", pages[name].content.decode(), f"{user.username} {name}")
-            self.assertEqual(pages["boxes"].context["money"]["income"], "17,500.00")
-
-    def test_signed_out_and_posting(self):
-        self.client.logout()
-        self.assertEqual(self.client.get(BOXES).status_code, 401)
-        self.client.force_login(self.owner)
-        self.assertEqual(self.client.post(BOXES).status_code, 405)
-        self.assertIn("no-store", self.client.get(BOXES)["Cache-Control"])
+            self.assertEqual(pages["payments"].context["money"]["income"], "17,500.00")
 
     def test_it_is_off_unless_the_owner_ticks_it(self):
         self.assertEqual(PERMISSIONS["see_income"]["label"], "See rental income")

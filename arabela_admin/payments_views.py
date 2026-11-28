@@ -44,7 +44,7 @@ from reservations import cancellation, gateway, ledger, payments
 from reservations.models import Deduction, Payment, PaymentAttempt, Reservation, ReservationItem
 
 from . import audit_describe, dashboard_money
-from .money_views import booking_days, boxes_context, tracked_bookings
+from .money_views import booking_days, boxes, row_money, tracked_bookings
 from .views import _can, _is_admin_staff, _is_owner, _permission_error, _require_admin_staff, _require_owner
 
 RECEIPTS_PER_PAGE = 25
@@ -129,7 +129,11 @@ def payments_view(request):
     today = timezone.localdate()
     rows = []
     counts = {"all": 0, ledger.BALANCE: 0, ledger.REFUND: 0, "late": 0}
-    for reservation in tracked_bookings().order_by("-created_at", "-id"):
+    bookings = list(tracked_bookings().order_by("-created_at", "-id"))
+    see_income = _can(request, "see_income")
+    amounts = row_money(bookings, today, see_income)             # each booking's money, once: the boxes and the list's buttons add these up
+    days = {}
+    for reservation in bookings:
         s = ledger.statement(reservation, today)
         if not s.tracked:
             continue
@@ -144,6 +148,8 @@ def payments_view(request):
         reservation.fees = _fee_parts(s)
         reservation.fee_note = " · ".join(f"{p['name']} {_php(p['amount'])}{' so far' if p['growing'] else ''}" for p in reservation.fees)
         reservation.bar = _bar_dates(reservation, items, s)
+        days[reservation.pk] = {kind: reservation.bar[f"d_{kind}"].split() for kind in ("pickup", "return", "event", "paid")}
+        reservation.money_json = json.dumps(amounts[reservation.pk], separators=(",", ":"))
         reservation.search_text = " ".join([reservation.reference_code, reservation.display_customer_name, reservation.phone or ""] +
                                            [i.gown_name for i in items]).lower()
         counts["all"] += 1
@@ -155,7 +161,8 @@ def payments_view(request):
             counts["late"] += 1
         rows.append(reservation)
     return render(request, "arabela_admin/payments.html", {
-        "page": "payments", "mode": "bookings", "rows": rows, "counts": counts, "money": boxes_context(request),
+        "page": "payments", "mode": "bookings", "rows": rows, "counts": counts,
+        "money": boxes({r.pk: amounts[r.pk] for r in rows}, days, request.GET, today, see_income),
         "is_owner": _is_owner(request), "can_void": _can(request, "void_receipts"),
         "late_fee_per_day": late_fee.per_day(), "open_id": request.GET.get("open", ""), "online_attention": online_attention_count(),
         # "Customer needs to pay" after a return: the booking's window opens with cash chosen, or shows the QR code at once.

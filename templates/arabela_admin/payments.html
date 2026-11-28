@@ -1,4 +1,4 @@
-{% load static %}
+{% load static %}{% load money_tags %}
 <!doctype html>
 <html lang="en">
   <head>
@@ -88,6 +88,41 @@
     .pm-dot--paid { background: #039855; }
     .pm-dot--settled, .pm-dot--cancelled { background: #667085; }
     .pm-empty { padding: 2.5rem 1.25rem; text-align: center; color: #667085; font-size: .9rem; }
+
+    /* The money list beside the dates. */
+    .pm-filterrow { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0 1.25rem; padding-left: 1.25rem; }
+    .pm-filterrow .md-bar { flex: 1 1 24rem; padding-left: 0; }
+    .pm-filterrow.is-range .md-bar { flex-basis: 100%; }               /* From - To needs a whole line: it goes under the money list */
+    .pm-moneypick { display: inline-flex; align-items: center; gap: .6rem; min-width: 0; max-width: 100%; margin: 0; padding-bottom: .85rem; }
+    .pm-money-select { box-sizing: border-box; height: 2.5rem; min-width: 14rem; max-width: 100%; padding: .35rem .7rem; border: 1px solid #d0d5dd; border-radius: .6rem; background-color: #fff; color: #1d2939; font: inherit; font-size: .875rem; font-weight: 500; cursor: pointer; }
+    .pm-money-select.is-on { border-color: #465fff; box-shadow: 0 0 0 1px #465fff; }
+    .pm-money-select:focus-visible { outline: 2px solid #465fff; outline-offset: 1px; }
+    .dark .pm-money-select { background-color: #0c111d; border-color: #344054; color: #f2f4f7; }
+    .dark .pm-money-select.is-on { border-color: #465fff; }
+    .pm-filterrow.is-money .md-seg, .pm-filterrow.is-money .md-note:not(.is-wrong) { display: none !important; }
+    @media (max-width: 620px) { .pm-filterrow { padding-left: 1rem; padding-right: 0; } .pm-moneypick { width: 100%; padding-right: 1rem; } .pm-money-select { flex: 1 1 auto; min-width: 0; } }
+    /* A money choice adds its amount as one more column. */
+    .pm-list.is-money .pm-head, .pm-list.is-money .pm-line { grid-template-columns: minmax(6.5rem, 1.6fr) minmax(7rem, .75fr) minmax(5.75rem, .65fr) minmax(5.25rem, .55fr) minmax(8rem, .95fr) minmax(8rem, 1.1fr) minmax(7rem, .8fr) minmax(6rem, .75fr) 1.25rem; }
+    .pm-line > .pm-extra { font-weight: 700; }
+    @container (max-width: 61.99rem) {
+      .pm-list.is-money .pm-head { display: none; }
+      .pm-list.is-money .pm-line { grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-areas: "who who who stat stat" "ref paid bal dep fees" "extra extra extra extra extra"; align-items: start; row-gap: .55rem; column-gap: .75rem; }
+      .pm-list.is-money .pm-line > .ar-who { grid-area: who; }
+      .pm-list.is-money .pm-line > .pm-stat { grid-area: stat; justify-content: flex-end; }
+      .pm-list.is-money .pm-line > .ar-ref { grid-area: ref; }
+      .pm-list.is-money .pm-line > .pm-paid { grid-area: paid; }
+      .pm-list.is-money .pm-line > .pm-bal { grid-area: bal; }
+      .pm-list.is-money .pm-line > .pm-dep { grid-area: dep; }
+      .pm-list.is-money .pm-line > .pm-fees { grid-area: fees; }
+      .pm-list.is-money .pm-line > .pm-extra { grid-area: extra; text-align: left; }
+      .pm-list.is-money .pm-chev { display: none; }
+      .pm-list.is-money .pm-line > [data-label]:not(.pm-stat)::before { content: attr(data-label); display: block; flex: 0 0 100%; margin-bottom: .12rem; font-size: 0.8125rem; font-weight: 500; color: #667085; white-space: nowrap; }
+      .pm-list.is-money .pm-line > .pm-amt { text-align: left; }
+      .pm-list.is-money .pm-who .ar-name { white-space: normal; }
+    }
+    @container (max-width: 43.99rem) {
+      .pm-list.is-money .pm-line { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "who stat" "ref paid" "bal dep" "fees fees" "extra extra"; }
+    }
 
     /* A narrow list (a smaller laptop, or the largest text size): two lines per booking, each value with its small label above it. */
     @container (max-width: 53.99rem) {
@@ -1370,9 +1405,7 @@
             </div>
 
             {% if mode == "bookings" %}
-            <div @click="if ($event.target.closest('[data-giveback-link]')) { $event.preventDefault(); search = ''; datePick = 'any'; dateFrom = ''; dateTo = ''; statusFilter = 'refund'; }">
-              {% include "arabela_admin/partials/money_boxes.html" %}
-            </div>
+            {% include "arabela_admin/partials/money_boxes.html" %}
             <!-- What every booking still owes, its date change and overdue fees and the deposit it can give back: all worked out by the system (reservations/ledger.py). Click a booking to open its payments. -->
             <div class="pm-card">
               <div class="ar-toolbar">
@@ -1381,18 +1414,53 @@
                   <input type="text" class="ar-search-input" x-model="search" placeholder="Search by customer, booking number or gown..." aria-label="Search payments">
                 </div>
                 <div class="ar-filters" role="group" aria-label="Show bookings by payment status">
-                  <button type="button" class="ar-filter" :class="statusFilter === 'All' ? 'is-on' : ''" :aria-pressed="statusFilter === 'All' ? 'true' : 'false'" @click="statusFilter = 'All'">All <span class="ar-n" x-text="count('All')">{{ counts.all }}</span></button>
-                  <button type="button" class="ar-filter{% if counts.balance %} ar-filter--hot{% endif %}" :class="{ 'is-on': statusFilter === 'balance', 'ar-filter--hot': count('balance') > 0 }" :aria-pressed="statusFilter === 'balance' ? 'true' : 'false'" @click="statusFilter = 'balance'" title="Something is still to pay"><span class="ar-dot pm-dot--balance"></span>Balance due <span class="ar-n" x-text="count('balance')">{{ counts.balance }}</span></button>
-                  <button type="button" class="ar-filter" :class="statusFilter === 'late' ? 'is-on' : ''" :aria-pressed="statusFilter === 'late' ? 'true' : 'false'" @click="statusFilter = 'late'" title="A gown is past its return date: its overdue fee is growing each day"><span class="ar-dot ar-dot--overdue"></span>Overdue <span class="ar-n" x-text="count('late')">{{ counts.late }}</span></button>
-                  <button type="button" class="ar-filter" :class="statusFilter === 'refund' ? 'is-on' : ''" :aria-pressed="statusFilter === 'refund' ? 'true' : 'false'" @click="statusFilter = 'refund'" title="There is money to give back to the customer"><span class="ar-dot pm-dot--refund"></span>Refund due <span class="ar-n" x-text="count('refund')">{{ counts.refund }}</span></button>
-                  <button type="button" class="ar-filter" :class="statusFilter === 'done' ? 'is-on' : ''" :aria-pressed="statusFilter === 'done' ? 'true' : 'false'" @click="statusFilter = 'done'" title="Paid in full or settled"><span class="ar-dot pm-dot--paid"></span>Paid / settled</button>
+                  <button type="button" class="ar-filter" :class="statusFilter === 'All' && !moneyPick ? 'is-on' : ''" :aria-pressed="statusFilter === 'All' && !moneyPick ? 'true' : 'false'" @click="chooseStatus('All')">All <span class="ar-n" x-text="count('All')">{{ counts.all }}</span></button>
+                  <button type="button" class="ar-filter{% if counts.balance %} ar-filter--hot{% endif %}" :class="{ 'is-on': statusFilter === 'balance', 'ar-filter--hot': count('balance') > 0 }" :aria-pressed="statusFilter === 'balance' ? 'true' : 'false'" @click="chooseStatus('balance')" title="Something is still to pay"><span class="ar-dot pm-dot--balance"></span>Balance due <span class="ar-n" x-text="count('balance')">{{ counts.balance }}</span> <span class="pm-pillamt" x-text="pillAmount('balance')"></span></button>
+                  <button type="button" class="ar-filter" :class="statusFilter === 'late' ? 'is-on' : ''" :aria-pressed="statusFilter === 'late' ? 'true' : 'false'" @click="chooseStatus('late')" title="A gown is past its return date: its overdue fee is growing each day"><span class="ar-dot ar-dot--overdue"></span>Overdue <span class="ar-n" x-text="count('late')">{{ counts.late }}</span></button>
+                  <button type="button" class="ar-filter" :class="statusFilter === 'refund' ? 'is-on' : ''" :aria-pressed="statusFilter === 'refund' ? 'true' : 'false'" @click="chooseStatus('refund')" title="There is money to give back to the customer"><span class="ar-dot pm-dot--refund"></span>Refund due <span class="ar-n" x-text="count('refund')">{{ counts.refund }}</span> <span class="pm-pillamt" x-text="pillAmount('refund')"></span></button>
+                  <button type="button" class="ar-filter" :class="statusFilter === 'done' ? 'is-on' : ''" :aria-pressed="statusFilter === 'done' ? 'true' : 'false'" @click="chooseStatus('done')" title="Paid in full or settled"><span class="ar-dot pm-dot--paid"></span>Paid / settled</button>
                 </div>
               </div>
-              {# The dates: the status numbers, the list and the boxes above follow them. #}
-              {% include "arabela_admin/partials/money_dates.html" %}
+              {# The money list sorts the bookings by one kind of money; the dates: the status numbers, the list and the boxes above follow them. #}
+              <div class="pm-filterrow" :class="{ 'is-money': moneyPick !== '', 'is-range': datePick === 'range' }">
+                <label class="pm-moneypick"><span class="md-lbl">Money:</span>
+                  <select class="pm-money-select" x-model="moneyPick" @change="chooseMoney()" :class="moneyPick !== '' && 'is-on'" aria-label="Sort the list by a kind of money">
+                    <option value="">All bookings</option>
+                    {% if money.see_income %}
+                    <option value="income" data-name="Rental income" x-text="optionText('income', 'Rental income')">Rental income</option>
+                    <option value="kept" data-name="Fees &amp; deductions kept" x-text="optionText('kept', 'Fees &amp; deductions kept')">Fees &amp; deductions kept</option>
+                    <option value="cancelled" data-name="Kept from cancellations" x-text="optionText('cancelled', 'Kept from cancellations')">Kept from cancellations</option>
+                    <optgroup label="Paid by (money in, less money handed back)">
+                      <option value="method-Cash" data-name="Cash" x-text="optionText('method-Cash', 'Cash')">Cash</option>
+                      <option value="method-GCash" data-name="GCash" x-text="optionText('method-GCash', 'GCash')">GCash</option>
+                      <option value="method-Maya" data-name="Maya" x-text="optionText('method-Maya', 'Maya')">Maya</option>
+                      <option value="method-QR Ph" data-name="QR Ph" x-text="optionText('method-QR Ph', 'QR Ph')">QR Ph</option>
+                      {% if money.has_other %}<option value="method-Other" data-name="Other" x-text="optionText('method-Other', 'Other')">Other</option>{% endif %}
+                    </optgroup>
+                    {% else %}
+                    <option value="today" data-name="Today's money" x-text="optionText('today', 'Today\'s money')">Today's money</option>
+                    <optgroup label="Today, paid by">
+                      <option value="today-Cash" data-name="Cash today" x-text="optionText('today-Cash', 'Cash today')">Cash today</option>
+                      <option value="today-GCash" data-name="GCash today" x-text="optionText('today-GCash', 'GCash today')">GCash today</option>
+                      <option value="today-Maya" data-name="Maya today" x-text="optionText('today-Maya', 'Maya today')">Maya today</option>
+                      <option value="today-QR Ph" data-name="QR Ph today" x-text="optionText('today-QR Ph', 'QR Ph today')">QR Ph today</option>
+                      {% if money.has_other %}<option value="today-Other" data-name="Other today" x-text="optionText('today-Other', 'Other today')">Other today</option>{% endif %}
+                    </optgroup>
+                    {% endif %}
+                    <optgroup label="Security deposits">
+                      <option value="held" data-name="Deposit held" x-text="optionText('held', 'Deposits held now')">Deposits held now</option>
+                      <option value="collected" data-name="Deposit collected" x-text="optionText('collected', 'Deposits collected')">Deposits collected</option>
+                      <option value="returned" data-name="Deposit returned" x-text="optionText('returned', 'Deposits returned')">Deposits returned</option>
+                      {% if money.has_extra %}<option value="extra" data-name="Extra returned" x-text="optionText('extra', 'Extra money returned')">Extra money returned</option>{% endif %}
+                    </optgroup>
+                  </select>
+                </label>
+                {% include "arabela_admin/partials/money_dates.html" %}
+              </div>
+              <div class="pm-total" x-show="totalWords() !== ''" x-cloak><span class="pm-total-words" x-text="totalWords()"></span><b class="pm-total-num" x-text="totalText()"></b></div>
               <div class="ar-count pm-countrow"><span id="ar-count" aria-live="polite"></span></div>
 
-              <div class="custom-scrollbar pm-list overflow-y-auto" style="max-height: 760px;" data-arpg=".pm-row" data-arpg-noun="bookings" data-arpg-top="off" data-arpg-count="#ar-count">
+              <div class="custom-scrollbar pm-list overflow-y-auto" style="max-height: 760px;" :class="moneyPick !== '' && 'is-money'" data-arpg=".pm-row" data-arpg-noun="bookings" data-arpg-top="off" data-arpg-count="#ar-count">
                 <div class="pm-head">
                   <span>Customer</span>
                   <span>Booking no.</span>
@@ -1400,11 +1468,12 @@
                   <span class="r">Balance</span>
                   <span>Deposit</span>
                   <span>Fees</span>
+                  <span class="r" x-show="moneyPick !== ''" x-cloak x-text="moneyName()"></span>
                   <span>Status</span>
                   <span></span>
                 </div>
                 {% for r in rows %}
-                <div class="ar-booking pm-row" data-booking-id="{{ r.id }}" data-state="{{ r.stmt.state }}" data-late="{% if r.stmt.overdue_now %}1{% else %}0{% endif %}" data-giveback="{% if r.stmt.refund_available > 0 %}1{% else %}0{% endif %}" data-d-pickup="{{ r.bar.d_pickup }}" data-d-return="{{ r.bar.d_return }}" data-d-event="{{ r.bar.d_event }}" data-d-paid="{{ r.bar.d_paid }}" data-late-pickup="{{ r.bar.late_pickup }}" data-late-return="{{ r.bar.late_return }}" data-late-event="{{ r.bar.late_event }}" data-late-paid="{{ r.bar.late_paid }}" data-search="{{ r.search_text }}" x-show="matches($el)">
+                <div class="ar-booking pm-row" data-booking-id="{{ r.id }}" data-state="{{ r.stmt.state }}" data-late="{% if r.stmt.overdue_now %}1{% else %}0{% endif %}" data-giveback="{% if r.stmt.refund_available > 0 %}1{% else %}0{% endif %}" data-d-pickup="{{ r.bar.d_pickup }}" data-d-return="{{ r.bar.d_return }}" data-d-event="{{ r.bar.d_event }}" data-d-paid="{{ r.bar.d_paid }}" data-late-pickup="{{ r.bar.late_pickup }}" data-late-return="{{ r.bar.late_return }}" data-late-event="{{ r.bar.late_event }}" data-late-paid="{{ r.bar.late_paid }}" data-search="{{ r.search_text }}" data-money="{{ r.money_json }}" x-show="matches($el)">
                   <div class="pm-line" role="button" tabindex="0" @click="open({{ r.id }})" @keydown.enter.prevent="open({{ r.id }})" aria-label="Open the payments of {{ r.display_customer_name }}, {{ r.reference_code }}">
                     <div class="ar-who">
                       <span class="ar-dot pm-dot--{{ r.stmt.state }}" role="img" aria-label="{{ r.stmt.state_label }}" title="{{ r.stmt.state_label }}"></span>
@@ -1415,6 +1484,7 @@
                     <div class="pm-amt pm-bal{% if r.stmt.balance_due > 0 %} is-due{% endif %}" data-label="Balance">{% if r.stmt.cancelled %}<span class="pm-muted" title="Cancelled: nothing more is collected">&mdash;</span>{% else %}&#8369;{{ r.stmt.balance_due|floatformat:"2g" }}{% endif %}</div>
                     <div class="pm-dep" data-label="Deposit" title="{{ r.deposit_text }}">{% if r.deposit_lines|length > 1 %}<span class="pm-dep-main">{{ r.deposit_lines.0 }}</span><span class="pm-of">{{ r.deposit_lines.1 }}</span>{% else %}{{ r.deposit_text }}{% endif %}</div>
                     <div class="pm-fees" data-label="Fees">{% if r.fees %}<span class="pm-fee" title="{{ r.fee_note }}">&#8369;{{ r.stmt.late_fee|floatformat:"2g" }}</span><span class="pm-fee-what" title="{{ r.fee_note }}">{% if r.fees|length > 2 %}<span{% if r.fees.0.growing %} class="pm-fee-late"{% endif %}>{{ r.fees.0.name }}</span> &middot; <span>+{{ r.fees|length|add:"-1" }} more</span>{% else %}{% for fee in r.fees %}{% if not forloop.first %} &middot; {% endif %}<span{% if fee.growing %} class="pm-fee-late"{% endif %}>{{ fee.name }}</span>{% endfor %}{% endif %}</span>{% else %}<span class="pm-muted">&mdash;</span>{% endif %}</div>
+                    <div class="pm-amt pm-extra" x-show="moneyPick !== ''" x-cloak :data-label="moneyName()" x-text="rowText($el)"></div>
                     <div class="pm-stat" data-label="Status"><span class="pm-chip pm-chip--{{ r.stmt.state }}">{{ r.stmt.state_label }}</span></div>
                     <div class="pm-chev" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 5l5 5-5 5"/></svg></div>
                   </div>
@@ -1422,7 +1492,7 @@
                 {% empty %}
                 <p class="pm-empty">No booking has been approved yet, so there is nothing to collect or hand back.</p>
                 {% endfor %}
-                {% if rows %}<p class="pm-empty" x-show="shownCount() === 0" x-cloak x-text="search ? 'No booking matches your search.' : ((dateFrom || dateTo) ? 'No booking in this list matches those dates. Try other dates, or press All.' : 'No booking in this list.')"></p>{% endif %}
+                {% if rows %}<p class="pm-empty" x-show="shownCount() === 0" x-cloak x-text="moneyPick ? 'No booking has this money in these dates.' : search ? 'No booking matches your search.' : ((dateFrom || dateTo) ? 'No booking in this list matches those dates. Try other dates, or press All.' : 'No booking in this list.')"></p>{% endif %}
               </div>
             </div>
             {% elif mode == "online" %}
@@ -1541,8 +1611,8 @@
                 <div class="rc-sum"><span>Receipts</span><b data-total="count">{{ totals.count }}</b>{% if totals.voided %}<small>{{ totals.voided }} voided, not counted</small>{% endif %}</div>
                 <div class="rc-sum"><span>Received</span><b data-total="received">&#8369;{{ totals.received }}</b></div>
                 <div class="rc-sum"><span>Returned</span><b data-total="returned">&#8369;{{ totals.returned }}</b></div>
-                <div class="rc-sum rc-sum--net"><span>Net</span><b data-total="net">&#8369;{{ totals.net }}</b></div>
-                <div class="rc-methods">{% for name, amount in totals.methods %}<span>{{ name }}<b data-method="{{ name }}">&#8369;{{ amount }}</b></span>{% endfor %}</div>
+                <div class="rc-sum rc-sum--net"><span>Net</span><b data-total="net">{{ totals.net|signed_peso }}</b></div>
+                <div class="rc-methods">{% for name, amount in totals.methods %}<span>{{ name }}<b data-method="{{ name }}">{{ amount|signed_peso }}</b></span>{% endfor %}</div>
               </div>
               <div class="rc-list">
                 <div class="rc-head rc-grid" aria-hidden="true"><span>Receipt</span><span>Customer</span><span>Payment</span><span>Served by</span><span class="r">Amount</span><span></span></div>
@@ -1850,7 +1920,7 @@
       var OPEN_PAY = '{{ open_pay|escapejs }}';          // "cash" or "qr": opened to collect what is still owed
       return {
         page: 'payments', loaded: true, darkMode: false, stickyMenu: false, sidebarToggle: false, scrollTop: false,
-        search: '', statusFilter: 'All', dateFrom: '', dateTo: '', datePick: 'any', dateKind: 'return',
+        search: '', statusFilter: 'All', dateFrom: '', dateTo: '', datePick: 'any', dateKind: 'return', moneyPick: '',
         openId: 0, d: null, loading: false, loadError: '', changed: false, last: null,
         busy: false, formError: '', formWhere: '', voiding: null,
         rec: { purpose: '', amount: '', method: 'Cash', note: '', rid: '' },
@@ -1864,9 +1934,114 @@
         fmt: function (v) { return Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); },
         url: function (base, id) { return base.replace('999999', id); },
 
+        // The one list: a status button (with the dates), or a kind of money from the "Money" list (by the day it was paid), and the search.
         matches: function (el) {
-          return this.inStatus(el, this.statusFilter) && this.onDate(el, this.statusFilter)
-            && (this.search === '' || (el.getAttribute('data-search') || '').indexOf(String(this.search).toLowerCase()) !== -1);
+          var found = this.search === '' || (el.getAttribute('data-search') || '').indexOf(String(this.search).toLowerCase()) !== -1;
+          if (this.moneyPick) { return found && this.amount(el, this.moneyPick) !== null; }
+          return found && this.inStatus(el, this.statusFilter) && this.onDate(el, this.statusFilter);
+        },
+        // ---- every money figure on the page is added up from what each row was sent (arabela_admin/money_views.row_money), in centavos
+        rowData: function (el) {
+          if (!el.arabelaMoney) {
+            try { el.arabelaMoney = JSON.parse(el.getAttribute('data-money')); } catch (e) { el.arabelaMoney = { h: 0, g: 0, o: 0, e: [] }; }
+          }
+          return el.arabelaMoney;
+        },
+        moneyKind: function (pick) {
+          var base = String(pick).split('-')[0], method = String(pick).slice(base.length + 1);
+          var codes = { income: 'i', kept: 'k', cancelled: 'c', collected: 'd', returned: 'r', extra: 'x' };
+          if (base === 'method') { return { code: 'm:' + method }; }
+          if (base === 'today') { return { code: 't:' + method, today: true, every: method === '' }; }
+          if (base === 'held') { return { now: true }; }
+          return codes[base] ? { code: codes[base] } : null;
+        },
+        // What this booking has of that money in the chosen dates, or null when it has none ("held" and "today" don't follow the dates).
+        amount: function (el, pick) {
+          var kind = this.moneyKind(pick);
+          if (!kind) { return null; }
+          var data = this.rowData(el);
+          if (kind.now) { return data.h > 0 ? data.h : null; }
+          var low = '', high = '';
+          if (!kind.today) {
+            if (arabelaMD.wrong(this.dateFrom, this.dateTo)) { return null; }
+            low = arabelaMD.ok(this.dateFrom); high = arabelaMD.ok(this.dateTo);
+          }
+          var sum = 0, found = false;
+          for (var i = 0; i < data.e.length; i++) {
+            var line = data.e[i];
+            if ((kind.every ? line[1].indexOf('t:') === 0 : line[1] === kind.code) && (!low || line[0] >= low) && (!high || line[0] <= high)) {
+              sum += line[2]; found = true;
+            }
+          }
+          return found ? sum : null;
+        },
+        totalOf: function (pick) {
+          var self = this;
+          return this.bookingRows().reduce(function (sum, el) { return sum + (self.amount(el, pick) || 0); }, 0);
+        },
+        // "Balance due" adds up what is still owed, "Refund due" what is to give back: of the bookings the button counts.
+        statusSum: function (filter) {
+          var self = this, field = filter === 'refund' ? 'g' : 'o';
+          return this.bookingRows().filter(function (el) { return self.inStatus(el, filter) && self.onDate(el, filter); })
+            .reduce(function (sum, el) { return sum + self.rowData(el)[field]; }, 0);
+        },
+        pesoOf: function (cents, short) {
+          var text = (Math.abs(cents) / 100).toLocaleString('en-US', { minimumFractionDigits: short && cents % 100 === 0 ? 0 : 2, maximumFractionDigits: 2 });
+          return (cents < 0 ? '\u2212' : '') + '\u20b1' + text;
+        },
+        boxText: function (name) {
+          if (arabelaMD.wrong(this.dateFrom, this.dateTo)) { return '\u2014'; }
+          return this.pesoOf(name === 'owing' ? this.statusSum('balance') : this.totalOf(name));
+        },
+        pillAmount: function (filter) {
+          return arabelaMD.wrong(this.dateFrom, this.dateTo) ? '' : '\u00b7 ' + this.pesoOf(this.statusSum(filter), true);
+        },
+        optionText: function (pick, words) {
+          return words + (arabelaMD.wrong(this.dateFrom, this.dateTo) ? '' : ' \u00b7 ' + this.pesoOf(this.totalOf(pick)));
+        },
+        // The chosen money's short name (its column and total line), as its line in the "Money" list gives it.
+        moneyName: function () {
+          var pick = this.moneyPick;
+          var found = Array.prototype.filter.call(document.querySelectorAll('.pm-money-select option'), function (o) { return o.value === pick; })[0];
+          return found ? found.getAttribute('data-name') || '' : '';
+        },
+        rowText: function (cell) {
+          var value = this.amount(cell.closest('.pm-row'), this.moneyPick);
+          return value === null ? '\u2014' : this.pesoOf(value);
+        },
+        shownRows: function () {
+          var self = this;
+          return this.bookingRows().filter(function (el) { return self.matches(el); });
+        },
+        dateWords: function () {
+          var low = arabelaMD.ok(this.dateFrom), high = arabelaMD.ok(this.dateTo);
+          var say = function (day) { return arabelaDF.label(day); };
+          if (!low && !high) { return 'all dates'; }
+          if (low && high) { return low === high ? 'paid on ' + say(low) : 'paid from ' + say(low) + ' to ' + say(high); }
+          return low ? 'paid from ' + say(low) : 'paid until ' + say(high);
+        },
+        // The line above the list: what is listed, and its total.
+        totalWords: function () {
+          var kind = this.moneyPick ? this.moneyKind(this.moneyPick) : null;
+          if (!kind && this.statusFilter !== 'balance' && this.statusFilter !== 'refund') { return ''; }
+          var number = this.shownRows().length, count = number + ' booking' + (number === 1 ? '' : 's');
+          if (kind) { return this.moneyName() + ' \u00b7 ' + count + ' \u00b7 ' + (kind.now ? 'as of now' : kind.today ? 'today' : this.dateWords()); }
+          return (this.statusFilter === 'balance' ? 'Still to collect' : 'To give back') + ' \u00b7 ' + count;
+        },
+        totalText: function () {
+          var self = this, field = this.statusFilter === 'refund' ? 'g' : 'o';
+          return this.pesoOf(this.shownRows().reduce(function (sum, el) {
+            return sum + (self.moneyPick ? (self.amount(el, self.moneyPick) || 0) : self.rowData(el)[field]);
+          }, 0));
+        },
+        chooseStatus: function (filter) { this.moneyPick = ''; this.statusFilter = filter; },
+        chooseMoney: function () { if (this.moneyPick) { this.statusFilter = 'All'; } },
+        // A box sorts the list by its figure; the same box again shows every booking.
+        pickBox: function (name) {
+          if (name === 'owing') { this.chooseStatus(!this.moneyPick && this.statusFilter === 'balance' ? 'All' : 'balance'); return; }
+          var open = name === 'today' ? this.moneyPick.indexOf('today') === 0 : this.moneyPick === name;
+          this.statusFilter = 'All';
+          this.moneyPick = open ? '' : name;
         },
         inStatus: function (el, filter) {
           var state = el.getAttribute('data-state'), late = el.getAttribute('data-late') === '1';
@@ -1891,23 +2066,28 @@
           var self = this;
           return this.bookingRows().filter(function (el) { return self.matches(el); }).length;
         },
-        // The search, the status and the dates stay in the address, so a reload (this page's own after a change, or the browser's) shows the same
-        // list; the boxes above follow the dates.
+        // The search, the status, the money choice and the dates stay in the address, so a reload (this page's own after a change, or the browser's)
+        // shows the same list.
         initFilters: function () {
           var self = this, params = new URLSearchParams(window.location.search);
           if (params.get('search')) { this.search = params.get('search'); }
           if (['balance', 'late', 'refund', 'done'].indexOf(params.get('status')) !== -1) { this.statusFilter = params.get('status'); }
           var dates = arabelaMD.read(params);
           this.dateFrom = dates.from; this.dateTo = dates.to; this.datePick = dates.pick; this.dateKind = dates.kind;
-          ['search', 'statusFilter'].forEach(function (name) { self.$watch(name, function () { self.syncUrl(); }); });
-          ['dateFrom', 'dateTo', 'dateKind'].forEach(function (name) {
-            self.$watch(name, function () { self.syncUrl(); window.arabelaMoney.set(arabelaMD.ok(self.dateFrom), arabelaMD.ok(self.dateTo), self.dateKind); });
+          // (only a choice the "Money" list offers this account)
+          var money = params.get('money');
+          if (money && Array.prototype.some.call(document.querySelectorAll('.pm-money-select option'), function (o) { return o.value === money; })) {
+            this.moneyPick = money; this.statusFilter = 'All';
+          }
+          ['search', 'statusFilter', 'moneyPick', 'dateFrom', 'dateTo', 'dateKind'].forEach(function (name) {
+            self.$watch(name, function () { self.syncUrl(); });
           });
         },
         syncUrl: function () {
           var params = new URLSearchParams(window.location.search);
           if (this.search) { params.set('search', this.search); } else { params.delete('search'); }
           if (this.statusFilter !== 'All') { params.set('status', this.statusFilter); } else { params.delete('status'); }
+          if (this.moneyPick) { params.set('money', this.moneyPick); } else { params.delete('money'); }
           arabelaMD.write(params, this.dateFrom, this.dateTo, this.dateKind);
           var query = params.toString();
           window.history.replaceState(window.history.state, '', window.location.pathname + (query ? '?' + query : ''));
@@ -1980,7 +2160,6 @@
           var self = this;
           this.api(url, 'POST', body).then(function (data) {
             self.busy = false; self.changed = true;
-            if (window.arabelaMoney) { window.arabelaMoney.refresh(); }
             var printUrl = data.payment && data.payment.printUrl ? data.payment.printUrl : '';
             var shown = typeof message === 'function' ? message(data) : message;
             self.show(data.detail);

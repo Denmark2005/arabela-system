@@ -1,7 +1,7 @@
 {% comment %}
-  The date bar of the money pages (Payments, Security Deposits): All, Today, This month, One date or From - To, and what a date means (pick-up,
+  The date bar of the money pages (Payments, Security Deposits): All, Today or From - To (the same day twice for one day), and what a date means (pick-up,
   return, event, or the day money was paid or handed back). The page's Alpine scope holds dateFrom, dateTo ('' or YYYY-MM-DD, both counted),
-  datePick ('any' | 'today' | 'month' | 'day' | 'range') and dateKind ('pickup' | 'return' | 'event' | 'paid'). Rows carry their days in
+  datePick ('any' | 'today' | 'range') and dateKind ('pickup' | 'return' | 'event' | 'paid'). Rows carry their days in
   data-d-pickup / -return / -event / -paid; arabelaMD.has() says whether a row has one inside the chosen dates.
 {% endcomment %}
 <style>
@@ -14,10 +14,7 @@
   .md-chip.is-on { background: #465fff; border-color: #465fff; color: #fff; }
   .dark .md-chip { border-color: #344054; color: #d0d5dd; }
   .dark .md-chip.is-on { background: #465fff; border-color: #465fff; color: #fff; }
-  .md-step, .md-range { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
-  .md-arrow { display: inline-flex; align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; border: 1px solid #d0d5dd; border-radius: .6rem; background: transparent; color: #475467; font-size: 1.25rem; line-height: 1; cursor: pointer; }
-  .md-arrow:hover { background: rgba(152,162,179,.12); }
-  .dark .md-arrow { border-color: #344054; color: #d0d5dd; }
+  .md-range { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
   .md-date { box-sizing: border-box; width: 10.5rem; height: 2.5rem; padding: .4rem .7rem; border: 1px solid #d0d5dd; border-radius: .6rem; background-color: transparent; color: #1d2939; font: inherit; font-size: .875rem; }
   .dark .md-date { background-color: #0c111d; border-color: #344054; color: #f2f4f7; }
   .md-seg { display: inline-flex; flex-wrap: wrap; gap: .25rem; padding: .25rem; border-radius: .75rem; background: #f2f4f7; }
@@ -26,7 +23,7 @@
   .md-seg button.is-on { background: #fff; color: #1d2939; box-shadow: 0 1px 2px rgba(16,24,40,.08); }
   .dark .md-seg button { color: #98a2b3; }
   .dark .md-seg button.is-on { background: #1d2939; color: #f2f4f7; box-shadow: none; }
-  .md-chip:focus-visible, .md-arrow:focus-visible, .md-seg button:focus-visible, .md-date:focus { outline: 2px solid #465fff; outline-offset: 1px; }
+  .md-chip:focus-visible, .md-seg button:focus-visible, .md-date:focus { outline: 2px solid #465fff; outline-offset: 1px; }
   .md-note { flex: 1 1 100%; margin: 0; font-size: .8125rem; font-weight: 500; color: #465fff; }
   .dark .md-note { color: #9bb0ff; }
   .md-note.is-wrong { color: #b42318; }
@@ -55,13 +52,11 @@
         var days = (el.getAttribute('data-' + (prefix || 'd') + '-' + this.kind(kind)) || '').split(' ');
         return days.some(function (day) { return day && (!low || day >= low) && (!high || day <= high); });
       },
-      // The dates and the kind in the page's address (an older ?date= link: one exact day).
+      // The dates and the kind in the page's address (an older ?date= link: one exact day). Anything but all dates or today is a From - To.
       read: function (params) {
         var from = ok(params.get('from') || params.get('date')), to = ok(params.get('to') || params.get('date'));
         var pick = 'any';
-        if (from || to) {
-          pick = from === to ? (from === this.today() ? 'today' : 'day') : (from === this.monthStart() && to === this.monthEnd() ? 'month' : 'range');
-        }
+        if (from || to) { pick = from === to && from === this.today() ? 'today' : 'range'; }
         return { from: from, to: to, pick: pick, kind: this.kind(params.get('by') || params.get('kind')) };
       },
       write: function (params, from, to, kind) {
@@ -87,14 +82,7 @@
   <div class="md-quick">
     <button type="button" class="md-chip" :class="datePick === 'any' && 'is-on'" :aria-pressed="datePick === 'any' ? 'true' : 'false'" @click="datePick = 'any'; dateFrom = ''; dateTo = ''">All</button>
     <button type="button" class="md-chip" :class="datePick === 'today' && 'is-on'" :aria-pressed="datePick === 'today' ? 'true' : 'false'" @click="datePick = 'today'; dateFrom = arabelaMD.today(); dateTo = arabelaMD.today()">Today</button>
-    <button type="button" class="md-chip" :class="datePick === 'month' && 'is-on'" :aria-pressed="datePick === 'month' ? 'true' : 'false'" @click="datePick = 'month'; dateFrom = arabelaMD.monthStart(); dateTo = arabelaMD.monthEnd()">This month</button>
-    <button type="button" class="md-chip" :class="datePick === 'day' && 'is-on'" :aria-pressed="datePick === 'day' ? 'true' : 'false'" @click="datePick = 'day'; dateFrom = arabelaMD.ok(dateFrom) || arabelaMD.today(); dateTo = dateFrom">One date</button>
     <button type="button" class="md-chip" :class="datePick === 'range' && 'is-on'" :aria-pressed="datePick === 'range' ? 'true' : 'false'" @click="datePick = 'range'; dateFrom = arabelaMD.ok(dateFrom) || arabelaMD.monthStart(); dateTo = arabelaMD.ok(dateTo) && dateTo >= dateFrom ? dateTo : arabelaMD.today()">From &ndash; To</button>
-  </div>
-  <div class="md-step" x-show="datePick === 'day'" x-cloak>
-    <button type="button" class="md-arrow" @click="dateFrom = arabelaDF.shift(dateFrom, -1); dateTo = dateFrom" aria-label="The day before" title="The day before">&lsaquo;</button>
-    <input type="date" class="md-date md-date--one" x-model="dateFrom" @input="dateTo = dateFrom" aria-label="Pick one exact date">
-    <button type="button" class="md-arrow" @click="dateFrom = arabelaDF.shift(dateFrom, 1); dateTo = dateFrom" aria-label="The day after" title="The day after">&rsaquo;</button>
   </div>
   <div class="md-range" x-show="datePick === 'range'" x-cloak>
     <label class="md-lbl">From <input type="date" class="md-date md-date--from" x-model="dateFrom"></label>

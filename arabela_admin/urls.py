@@ -46,7 +46,6 @@ from .identity_views import (
     id_photo_view,
     id_setting_update_view,
 )
-from .money_views import money_boxes_view
 from .payments_views import (
     deduction_add_view,
     deduction_void_view,
@@ -275,6 +274,5 @@ urlpatterns = [
     path("api/payments/<int:payment_id>/send/", receipt_send_view, name="payment_send"),
     path("api/deductions/<int:deduction_id>/void/", deduction_void_view, name="deduction_void"),
     path("api/late-fee/", late_fee_setting_update_view, name="late_fee_setting_update"),
-    path("api/money-boxes/", money_boxes_view, name="money_boxes"),                    # the boxes on Payments and Security Deposits
     path("<str:page>.html", page_view, name="page"),
 ]

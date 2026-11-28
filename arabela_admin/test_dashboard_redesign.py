@@ -106,7 +106,9 @@ class OverviewCardTests(DashboardBase):
         self.assertEqual(len(re.findall(r'<span class="db-fig-num[^"]*">\d+</span>', card)), 5)
         self.assertEqual(card.count('class="db-fig"'), 5)                                   # each figure is its own box, each one a link
         catalog = reverse("arabela_admin:gown_catalog")
-        self.assertEqual(card.count('href="%s"' % catalog), 3)                              # Total, Available, Blocked: the whole catalog
+        self.assertEqual(card.count('href="%s"' % catalog), 1)                              # Total: the whole catalog
+        self.assertIn('href="%s?status=Available"' % catalog, card)                         # the others open it on exactly those gowns
+        self.assertIn('href="%s?status=Blocked"' % catalog, card)
         self.assertIn('href="%s?status=Reserved"' % catalog, card)                          # the catalog's own filter counts exactly these
         self.assertIn('href="%s?status=Out-of-Stock"' % catalog, card)
 

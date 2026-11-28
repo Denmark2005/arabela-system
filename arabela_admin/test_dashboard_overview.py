@@ -162,25 +162,29 @@ class DashboardTopTests(TestCase):
         self.assertIn("Pick-ups today", html)
         self.assertIn("Returns today", html)
 
-    def test_the_money_cards_say_what_they_count_and_open_their_pages(self):
+    def test_the_money_cards_are_a_name_and_a_figure_and_open_their_pages(self):
         pay(make_booking(), P.FULL, "5500")
-        _, html = self.page()
-        for piece in ("Rental Income", "&#8369;3,500.00", "from 1 booking &middot; deposits not included", "Fees &amp; deductions kept: <b>&#8369;0.00</b>",
-                      "Security Deposits Held", "&#8369;2,000.00", "for 1 booking &middot; goes back to the customers", "Nothing to hand back right now",
-                      'href="%s"' % reverse("arabela_admin:payments"), 'href="%s"' % reverse("arabela_admin:security_deposits")):
+        response, html = self.page()
+        month = response.context["month_range"].replace("&", "&amp;")
+        for piece in ("Rental Income", "&#8369;3,500.00", "Security Deposits Held", "&#8369;2,000.00",
+                      'href="%s?money=income&amp;%s"' % (reverse("arabela_admin:payments"), month),
+                      'href="%s"' % reverse("arabela_admin:security_deposits")):
             with self.subTest(piece=piece):
                 self.assertIn(piece, html)
+        cards = html[html.index('data-live-region="overview-top"'):html.index("db-row--figures")]
+        for gone in ("db-money-sub", "Fees &amp; deductions kept", "Kept from cancellations", "to hand back", "booking"):
+            with self.subTest(gone=gone):
+                self.assertNotIn(gone, cards.replace("sorted by it", ""))
 
-    def test_with_nothing_yet_the_cards_say_so(self):
+    def test_with_nothing_yet_the_cards_show_zero(self):
         _, html = self.page()
-        for piece in ("&#8369;0.00", "No rental paid yet this month", "No deposit is held right now", "Nothing to hand back right now"):
-            with self.subTest(piece=piece):
-                self.assertIn(piece, html)
+        self.assertEqual(html.count('<span class="db-money-num">&#8369;0.00</span>'), 2)
 
-    def test_a_deposit_waiting_to_go_back_is_called_out(self):
+    def test_a_deposit_waiting_to_go_back_is_still_in_the_held_figure(self):
         pay(make_booking(stage=S.RETURNED, ret=-3, returned_on=0), P.FULL, "5500")
-        _, html = self.page()
-        self.assertIn('<span class="db-due">&#8369;1,400.00 to hand back now</span> (1 booking)', html)
+        response, html = self.page()
+        self.assertEqual(response.context["deposits_held"]["due"], "1,400.00")
+        self.assertIn('<span class="db-money-num">&#8369;1,400.00</span>', html)
 
     def test_a_failing_money_card_is_left_out_and_the_rest_stays(self):
         with mock.patch("arabela_admin.views._deposits_held", side_effect=RuntimeError("boom")):

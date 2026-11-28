@@ -15,6 +15,12 @@ Pure arithmetic on what the caller already loaded: no queries and no imports of 
 
 AVAILABLE = "Available"
 RESERVED = "Reserved"
+BLOCKED = "Blocked"
+
+
+def box_of(status, blocked_today):
+    """The name the catalog's status filter lists a gown under: "Blocked" for an Available gown with a block today, else its own status."""
+    return BLOCKED if status == AVAILABLE and blocked_today else status
 
 
 def split(statuses, blocked_ids):

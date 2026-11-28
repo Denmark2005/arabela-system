@@ -71,7 +71,7 @@ class ThePageTests(Base):
         self.assertIn("5,500.00", row)
         self.assertIn("Balance due", row)
         owing = html[html.index('data-box="owing"'):]                              # the "Still to Collect" box above the list
-        self.assertIn("&#8369;5,500.00", owing[:owing.index("</section>")])
+        self.assertIn("&#8369;5,500.00", owing[:owing.index("</button>")])
 
     def test_the_filters_carry_the_counts(self):
         make_booking()                                                                 # balance due

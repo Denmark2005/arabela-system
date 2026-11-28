@@ -93,7 +93,7 @@ class TheCalmerRowTests(Base):
         self.assertIn('data-label="Paid">&#8369;2,000.00<span class="pm-of">of &#8369;5,500.00</span></div>', row)
         head = html[html.index('<div class="pm-head">'):html.index('data-booking-id="')]
         self.assertEqual(re.findall(r"<span[^>]*>([^<]*)</span>", head),
-                         ["Customer", "Booking no.", "Paid", "Balance", "Deposit", "Fees", "Status", ""])
+                         ["Customer", "Booking no.", "Paid", "Balance", "Deposit", "Fees", "", "Status", ""])     # "": the money choice's column
         self.assertNotIn('data-label="Total"', html)
 
     def test_a_cancelled_bookings_deposit_words_take_two_short_lines(self):
@@ -158,7 +158,7 @@ class TheDateBarTests(Base):
         self.assertEqual(html.count('class="md-bar"'), 1)
         self.assertIn("search: '', statusFilter: 'All', dateFrom: '', dateTo: '', datePick: 'any', dateKind: 'return',", html)
         self.assertIn("initFilters();", html)
-        self.assertEqual(re.findall(r'data-box="([a-z]+)"', html), ["income", "deposits", "owing"])
+        self.assertEqual(re.findall(r'data-box="([a-z]+)"', html), ["income", "held", "owing"])
         for words in ('x-text="count(\'All\')"', 'x-text="count(\'balance\')"', 'x-text="count(\'late\')"', 'x-text="count(\'refund\')"'):
             self.assertIn(words, html)
 

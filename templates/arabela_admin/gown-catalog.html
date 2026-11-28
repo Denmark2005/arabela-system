@@ -774,7 +774,7 @@
       },
       visibleGownIds() {
         return this.gownsMin
-          .filter(g => this.gownMatchesFilters(g.category, g.status, g.hay, g.check_days))
+          .filter(g => this.gownMatchesFilters(g.category, g.box || g.status, g.hay, g.check_days))
           .map(g => g.id);
       },
       matchingGownCount() {
@@ -2453,6 +2453,7 @@
                 <select x-model="status" aria-label="Filter by status" @change="onGownFilterChanged()" class="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800">
                     <option value="All">All Status</option>
                     <option value="Available">Available</option>
+                    <option value="Blocked">Blocked today</option>
                     <option value="Reserved">Reserved</option>
                     <option value="Out-of-Stock">Out-of-Stock</option>
                   </select>
@@ -2530,7 +2531,7 @@
                 {% for gown in gowns %}
                 <!-- One gown: a closed line (tick box, photo, status circle + ID + name, category and size, price, the eye and the pencil) and, hidden until it
                      is opened, its tag, details, physical check and who holds it. A click on the line opens it, except on the tick box, the photo and the two buttons. -->
-                <div class="ar-booking gc-row" data-gown-row data-sort-gown="{{ gown.category|lower }}-{{ gown.tag_number }}-{{ gown.gown_id|lower }}" data-sort-category="{{ gown.category|lower }}" data-sort-price="{{ gown.rental_price }}" data-fabric="{{ gown.fabric }}" data-description="{{ gown.description }}" data-sizes="{{ gown.design_sizes }}" data-photo="{{ gown.photo_url }}" data-side="{{ gown.side_photo_url }}" data-back="{{ gown.back_photo_url }}" x-show="gownMatchesFilters('{{ gown.category|escapejs }}', '{{ gown.status|escapejs }}', '{{ gown.search_hay|escapejs }}', {{ gown.days_since_check|default_if_none:'null' }})" :class="search !== '' && '{{ gown.gown_id|lower|escapejs }}' === search.toLowerCase() ? 'is-highlight' : ''">
+                <div class="ar-booking gc-row" data-gown-row data-sort-gown="{{ gown.category|lower }}-{{ gown.tag_number }}-{{ gown.gown_id|lower }}" data-sort-category="{{ gown.category|lower }}" data-sort-price="{{ gown.rental_price }}" data-fabric="{{ gown.fabric }}" data-description="{{ gown.description }}" data-sizes="{{ gown.design_sizes }}" data-photo="{{ gown.photo_url }}" data-side="{{ gown.side_photo_url }}" data-back="{{ gown.back_photo_url }}" x-show="gownMatchesFilters('{{ gown.category|escapejs }}', '{{ gown.filter_box|default:gown.status|escapejs }}', '{{ gown.search_hay|escapejs }}', {{ gown.days_since_check|default_if_none:'null' }})" :class="search !== '' && '{{ gown.gown_id|lower|escapejs }}' === search.toLowerCase() ? 'is-highlight' : ''">
                   <div class="ar-line gc-grid" :class="isGownOpen({{ gown.id }}) ? 'is-open' : ''" @click="if (!$event.target.closest('.gc-pick, .gc-photo, .gc-acts, a')) { toggleGown({{ gown.id }}) }">
                     <span class="gc-pick">
                       <input type="checkbox" class="admin-bulk-check" value="{{ gown.id }}" x-model.number="selectedGownIds" aria-label="Select {{ gown.gown_id }}" />
